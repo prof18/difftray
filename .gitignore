@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+dist/
+out/
+coverage/
+.vite/
+.turbo/
+.env
+.env.*
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
