@@ -17,11 +17,15 @@ Deliverables:
 - ESLint
 - Prettier
 - Vitest
+- Playwright or equivalent Electron app automation
 - root `pnpm check`
+- root `pnpm dev`
+- root `pnpm test:visual`
 
 Acceptance:
 
 - `pnpm check` runs locally
+- the desktop app can be launched locally
 - no app behavior yet
 - no skipped quality gate
 
@@ -158,6 +162,7 @@ Deliverables:
 Acceptance:
 
 - user can open a repo, review a file, and see progress update
+- app workflow can be launched and visually verified with screenshots
 
 ## Slice 7: Multi-Project Review
 
@@ -216,6 +221,7 @@ Acceptance:
 
 - v0 scope is complete
 - full local gate passes
+- representative app windows/screens are visually verified
 
 ## Stop Conditions
 

@@ -103,6 +103,26 @@ Cover:
 - switch projects
 - restart app and verify persisted state
 
+### Visual Verification
+
+For UI-facing changes, the agent should launch the app locally once it is runnable and verify the affected workflow visually before handoff.
+
+Visual verification should include:
+
+- opening the app
+- navigating to the changed surface
+- exercising the relevant interaction
+- capturing or inspecting screenshots
+- checking that the UI is not blank, clipped, overlapped, unreadable, or obviously broken
+
+Viewport/window coverage should match the change. For broad layout changes, check at least:
+
+- compact window
+- normal desktop window
+- wide desktop window
+
+Visual verification does not replace unit or workflow tests. It catches rendering and layout failures that tests often miss.
+
 ## TDD Workflow
 
 For core behavior:
@@ -133,6 +153,7 @@ These tests are mandatory before v0 is considered credible:
 - Renamed files show previous and current path.
 - A pure rename requires review once and remains reviewed only while the exact rename diff remains current.
 - Worktrees can be opened as separate projects.
+- UI-facing changes are launched and visually checked before handoff.
 
 ## Full Gate
 
@@ -144,5 +165,6 @@ The eventual `pnpm check` command should run:
 - unit tests
 - integration tests
 - app workflow tests where feasible
+- visual verification for UI-facing changes
 
 No handoff should happen without running the full gate once it exists.
