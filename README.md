@@ -27,6 +27,55 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - Vitest for unit/integration tests
 - Playwright for renderer and app workflow tests
 
+## Screenshots
+
+![Review workflow](docs/screenshots/review-workflow.png)
+
+![Project settings](docs/screenshots/settings.png)
+
+## Install And Run
+
+Prerequisites:
+
+- Node.js 22 or newer
+- pnpm 10.11.0 or newer
+- Git available on `PATH`
+- macOS for the intended desktop runtime
+
+Install dependencies:
+
+```sh
+pnpm install
+```
+
+Run the desktop app in development:
+
+```sh
+pnpm dev
+```
+
+Build the app:
+
+```sh
+pnpm build
+```
+
+Run the full local gate:
+
+```sh
+pnpm check
+```
+
+Useful focused checks:
+
+```sh
+pnpm format
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:visual
+```
+
 ## Documentation
 
 - [Product Brief](docs/product-brief.md)
@@ -38,6 +87,7 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - [Roadmap](docs/roadmap.md)
 - [Todo](docs/todo.md)
 - [Naming Notes](docs/naming.md)
+- [Contributing](CONTRIBUTING.md)
 - [Decisions](docs/decisions)
 
 ## Core Principles
@@ -57,4 +107,4 @@ Apache-2.0.
 
 ## Current Status
 
-Implementation has started. The pnpm workspace, Electron/Vite/React desktop shell, core package boundaries, and local quality gate are scaffolded.
+Implementation has started. Difftray can open local repositories, list changed files, preview diffs, mark files reviewed, persist review state, configure project settings, and run the local quality gate.

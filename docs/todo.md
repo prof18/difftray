@@ -71,9 +71,9 @@
 
 ## V0 Release Prep
 
-- [ ] Run full local gate.
-- [ ] Add screenshots.
-- [ ] Add install/run instructions.
-- [ ] Add contribution docs.
+- [x] Run full local gate.
+- [x] Add screenshots.
+- [x] Add install/run instructions.
+- [x] Add contribution docs.
 - [x] Add license.
 - [ ] Create public repository when ready.
