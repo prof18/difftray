@@ -48,13 +48,13 @@
 
 ## Storage
 
-- [ ] Add SQLite dependency.
-- [ ] Create migrations.
-- [ ] Persist projects.
+- [x] Add SQLite dependency/runtime.
+- [x] Create migrations.
+- [x] Persist projects.
 - [ ] Persist project settings.
-- [ ] Persist review targets.
-- [ ] Persist review marks.
-- [ ] Add storage tests.
+- [x] Persist review targets.
+- [x] Persist review marks.
+- [x] Add storage tests.
 
 ## Desktop App
 
