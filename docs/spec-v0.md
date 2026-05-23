@@ -203,15 +203,18 @@ Use Radix UI primitives only where the app benefits from built-in accessibility 
 
 Use lucide-react icons for standard actions.
 
-The visual direction is professional but opinionated:
+The visual direction is defined in `docs/professional-ui-redesign.md` and Decision 0015.
 
-- dense review workspace
-- strong project/sidebar hierarchy
-- restrained graphite base palette
-- warm amber review accent
-- clear red/yellow/green status colors
+The app should look like a professional local review console:
+
+- dense multi-pane review workspace
+- strong project, file, and diff hierarchy
+- restrained neutral graphite base palette
+- low-saturation operational accent
+- clear reviewed, invalidated, warning, and error colors
 - real bundled fonts, not system defaults
 - JetBrains Mono for diff/code content
+- no videogame-like glow, saturated gradient, decorative badge, or playful HUD treatment
 
 Font customization is out of scope for v0, but the styling architecture should allow future user-configurable UI and diff fonts.
 
