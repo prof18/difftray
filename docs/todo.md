@@ -39,12 +39,12 @@
 - [ ] Implement Git status parser.
 - [ ] Implement working tree diff loader.
 - [ ] Implement branch diff loader.
-- [ ] Implement per-file diff hash.
-- [ ] Implement generated-file detection.
-- [ ] Implement progress calculation.
-- [ ] Implement review target identity.
-- [ ] Implement review state lookup.
-- [ ] Implement review invalidation.
+- [x] Implement per-file diff hash.
+- [x] Implement generated-file detection.
+- [x] Implement progress calculation.
+- [x] Implement review target identity.
+- [x] Implement review state lookup.
+- [x] Implement review invalidation.
 
 ## Storage
 
