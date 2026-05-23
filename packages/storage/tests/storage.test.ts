@@ -135,4 +135,39 @@ describe("storage", () => {
     expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-a")).toBe(true);
     storage.close();
   });
+
+  it("returns default project settings when no settings are stored", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+
+    expect(storage.getProjectSettings(project.id)).toEqual({
+      projectId: project.id,
+      showGeneratedFiles: false
+    });
+    storage.close();
+  });
+
+  it("persists project settings", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+
+    storage.upsertProjectSettings({
+      editorLaunchConfig: {
+        args: ["--goto", "{path}:{line}"],
+        command: "code"
+      },
+      projectId: project.id,
+      showGeneratedFiles: true
+    });
+
+    expect(storage.getProjectSettings(project.id)).toEqual({
+      editorLaunchConfig: {
+        args: ["--goto", "{path}:{line}"],
+        command: "code"
+      },
+      projectId: project.id,
+      showGeneratedFiles: true
+    });
+    storage.close();
+  });
 });

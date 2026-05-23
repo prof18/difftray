@@ -31,6 +31,17 @@ export type StoredReviewTargetRecord = ReviewTargetRecord & {
   readonly lastUsedAt: string;
 };
 
+export type EditorLaunchConfig = {
+  readonly args: readonly string[];
+  readonly command: string;
+};
+
+export type ProjectSettingsRecord = {
+  readonly editorLaunchConfig?: EditorLaunchConfig;
+  readonly projectId: string;
+  readonly showGeneratedFiles: boolean;
+};
+
 export type ReviewMarkInput = {
   readonly path: string;
   readonly previousPath?: string;
@@ -61,6 +72,7 @@ export type DifftrayStorage = {
   readonly close: () => void;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
+  readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
   readonly isReviewed: (
     reviewTargetId: string,
@@ -69,6 +81,7 @@ export type DifftrayStorage = {
   ) => boolean;
   readonly markReviewed: (input: ReviewMarkInput) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
+  readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
   readonly verifyAndMarkReviewed: (
     input: VerifyAndMarkReviewedInput
@@ -86,6 +99,7 @@ export function openStorage(filename: string): DifftrayStorage {
     },
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
+    getProjectSettings: (projectId) => getProjectSettings(db, projectId),
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
@@ -94,6 +108,9 @@ export function openStorage(filename: string): DifftrayStorage {
     },
     upsertProject: (project) => {
       upsertProject(db, project);
+    },
+    upsertProjectSettings: (settings) => {
+      upsertProjectSettings(db, settings);
     },
     upsertReviewTarget: (target) => {
       upsertReviewTarget(db, target);
@@ -280,6 +297,43 @@ function getReviewTarget(db: DatabaseSync, id: string): StoredReviewTargetRecord
   return reviewTargetFromRow(row as ReviewTargetRow);
 }
 
+function upsertProjectSettings(db: DatabaseSync, settings: ProjectSettingsRecord): void {
+  db.prepare(
+    `
+    insert into project_settings (
+      project_id,
+      show_generated_files,
+      editor_launch_config_json,
+      updated_at
+    ) values (?, ?, ?, ?)
+    on conflict(project_id) do update set
+      show_generated_files = excluded.show_generated_files,
+      editor_launch_config_json = excluded.editor_launch_config_json,
+      updated_at = excluded.updated_at
+  `
+  ).run(
+    settings.projectId,
+    settings.showGeneratedFiles ? 1 : 0,
+    settings.editorLaunchConfig ? JSON.stringify(settings.editorLaunchConfig) : null,
+    currentTimestamp()
+  );
+}
+
+function getProjectSettings(db: DatabaseSync, projectId: string): ProjectSettingsRecord {
+  const row = db
+    .prepare("select * from project_settings where project_id = ?")
+    .get(projectId);
+
+  if (!row) {
+    return {
+      projectId,
+      showGeneratedFiles: false
+    };
+  }
+
+  return projectSettingsFromRow(row as ProjectSettingsRow);
+}
+
 function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
   const now = currentTimestamp();
   const id = reviewMarkId(input);
@@ -375,6 +429,12 @@ type ReviewTargetRow = {
   readonly project_id: string;
 };
 
+type ProjectSettingsRow = {
+  readonly editor_launch_config_json: null | string;
+  readonly project_id: string;
+  readonly show_generated_files: 0 | 1;
+};
+
 function projectFromRow(row: ProjectRow): StoredProjectRecord {
   return {
     createdAt: row.created_at,
@@ -401,4 +461,38 @@ function reviewTargetFromRow(row: ReviewTargetRow): StoredReviewTargetRecord {
     mode: row.mode,
     projectId: row.project_id
   };
+}
+
+function projectSettingsFromRow(row: ProjectSettingsRow): ProjectSettingsRecord {
+  const editorLaunchConfig = row.editor_launch_config_json
+    ? parseEditorLaunchConfig(row.editor_launch_config_json)
+    : undefined;
+
+  return {
+    ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
+    projectId: row.project_id,
+    showGeneratedFiles: row.show_generated_files === 1
+  };
+}
+
+function parseEditorLaunchConfig(value: string): EditorLaunchConfig {
+  const parsedValue = JSON.parse(value) as unknown;
+
+  if (!isEditorLaunchConfig(parsedValue)) {
+    throw new Error("Stored editor launch config is invalid.");
+  }
+
+  return parsedValue;
+}
+
+function isEditorLaunchConfig(value: unknown): value is EditorLaunchConfig {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "command" in value &&
+    "args" in value &&
+    typeof value.command === "string" &&
+    Array.isArray(value.args) &&
+    value.args.every((arg) => typeof arg === "string")
+  );
 }

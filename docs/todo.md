@@ -51,7 +51,7 @@
 - [x] Add SQLite dependency/runtime.
 - [x] Create migrations.
 - [x] Persist projects.
-- [ ] Persist project settings.
+- [x] Persist project settings.
 - [x] Persist review targets.
 - [x] Persist review marks.
 - [x] Add storage tests.
