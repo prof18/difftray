@@ -26,8 +26,10 @@ import {
   type GitWorkingTreeReviewTarget
 } from "@difftray/git";
 import {
+  type EditorLaunchConfig,
   openStorage,
   type DifftrayStorage,
+  type ProjectSettingsRecord,
   type ProjectRecord,
   type ReviewTargetRecord,
   type StoredProjectRecord
@@ -74,6 +76,14 @@ type ReviewWorkspaceView = {
     readonly id: string;
     readonly kind: ReviewTarget["kind"];
   };
+};
+
+type ProjectSettingsView = {
+  readonly editorArgs: string;
+  readonly editorCommand: string;
+  readonly editorMode: "custom" | "system";
+  readonly projectId: string;
+  readonly showGeneratedFiles: boolean;
 };
 
 type MarkReviewedResult =
@@ -153,6 +163,40 @@ ipcMain.handle("projects:load", async (_event: IpcMainInvokeEvent, input: unknow
 
   return loadProjectWorkspace(projectId);
 });
+ipcMain.handle(
+  "settings:getProject",
+  (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
+    const projectId = readStringProperty(input, "projectId");
+
+    assertStoredProject(projectId);
+
+    return settingsView(getStorage().getProjectSettings(projectId));
+  }
+);
+ipcMain.handle(
+  "settings:updateProject",
+  (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
+    const projectId = readStringProperty(input, "projectId");
+    const showGeneratedFiles = readBooleanProperty(input, "showGeneratedFiles");
+    const editorMode = readEnumProperty(input, "editorMode", ["custom", "system"]);
+    const editorCommand = readOptionalStringProperty(input, "editorCommand");
+    const editorArgs = readOptionalStringProperty(input, "editorArgs");
+
+    assertStoredProject(projectId);
+
+    const settings: ProjectSettingsRecord = {
+      ...(editorMode === "custom"
+        ? { editorLaunchConfig: editorConfigFromInput(editorCommand, editorArgs) }
+        : {}),
+      projectId,
+      showGeneratedFiles
+    };
+
+    getStorage().upsertProjectSettings(settings);
+
+    return settingsView(getStorage().getProjectSettings(projectId));
+  }
+);
 ipcMain.handle(
   "reviews:markFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<MarkReviewedResult> => {
@@ -468,6 +512,49 @@ function upsertOpenedProject(project: ProjectRecord): void {
   getStorage().upsertProject(project);
 }
 
+function assertStoredProject(projectId: string): StoredProjectRecord {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    throw new Error(`Project is not stored: ${projectId}`);
+  }
+
+  return project;
+}
+
+function settingsView(settings: ProjectSettingsRecord): ProjectSettingsView {
+  return {
+    editorArgs: settings.editorLaunchConfig?.args.join(" ") ?? "",
+    editorCommand: settings.editorLaunchConfig?.command ?? "",
+    editorMode: settings.editorLaunchConfig ? "custom" : "system",
+    projectId: settings.projectId,
+    showGeneratedFiles: settings.showGeneratedFiles
+  };
+}
+
+function editorConfigFromInput(
+  command: string | undefined,
+  args: string | undefined
+): EditorLaunchConfig {
+  const trimmedCommand = command?.trim();
+
+  if (!trimmedCommand) {
+    throw new Error("Custom editor command is required.");
+  }
+
+  return {
+    args: splitEditorArgs(args ?? ""),
+    command: trimmedCommand
+  };
+}
+
+function splitEditorArgs(value: string): readonly string[] {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter((arg) => arg.length > 0);
+}
+
 function projectView(project: StoredProjectRecord): RecentProjectView {
   return {
     id: project.id,
@@ -589,14 +676,64 @@ function isProjectContainedPath(projectPath: string, filePath: string): boolean 
 }
 
 function readStringProperty(input: unknown, property: string): string {
-  if (
-    typeof input !== "object" ||
-    input === null ||
-    !(property in input) ||
-    typeof input[property as keyof typeof input] !== "string"
-  ) {
+  const value = readUnknownProperty(input, property);
+
+  if (typeof value !== "string") {
     throw new Error(`Invalid IPC payload: missing ${property}`);
   }
 
-  return input[property as keyof typeof input];
+  return value;
+}
+
+function readOptionalStringProperty(
+  input: unknown,
+  property: string
+): string | undefined {
+  const value = readUnknownProperty(input, property);
+
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`Invalid IPC payload: ${property} must be a string`);
+  }
+
+  return value;
+}
+
+function readBooleanProperty(input: unknown, property: string): boolean {
+  const value = readUnknownProperty(input, property);
+
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid IPC payload: missing ${property}`);
+  }
+
+  return value;
+}
+
+function readEnumProperty<const T extends string>(
+  input: unknown,
+  property: string,
+  values: readonly T[]
+): T {
+  const value = readStringProperty(input, property);
+
+  if (!values.includes(value as T)) {
+    throw new Error(`Invalid IPC payload: unsupported ${property}`);
+  }
+
+  return value as T;
+}
+
+function readUnknownProperty(input: unknown, property: string): unknown {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    !Object.prototype.hasOwnProperty.call(input, property)
+  ) {
+    return undefined;
+  }
+
+  return (input as Record<string, unknown>)[property];
 }

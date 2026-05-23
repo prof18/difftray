@@ -8,7 +8,10 @@ import {
   FolderOpen,
   GitBranch,
   RefreshCw,
-  Search
+  Save,
+  Search,
+  Settings,
+  X
 } from "lucide-react";
 
 import styles from "./App.module.css";
@@ -22,6 +25,8 @@ export function App(): React.JSX.Element {
   const [recentProjects, setRecentProjects] = useState<readonly RecentProjectView[]>([]);
   const [reviewedExpanded, setReviewedExpanded] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
+  const [settingsDraft, setSettingsDraft] = useState<ProjectSettingsView | undefined>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const filterInputRef = useRef<HTMLInputElement>(null);
 
@@ -146,6 +151,8 @@ export function App(): React.JSX.Element {
       if (nextWorkspace) {
         setWorkspace(nextWorkspace);
         setSelectedPath(nextPath ?? firstVisiblePath(nextWorkspace));
+        setSettingsDraft(undefined);
+        setSettingsOpen(false);
         await refreshRecentProjects();
       }
     } catch (caughtError) {
@@ -172,6 +179,68 @@ export function App(): React.JSX.Element {
       () => window.difftray.loadProject(workspace.project.id),
       selectedFile?.path
     );
+  }
+
+  async function openSettings(): Promise<void> {
+    if (!workspace) {
+      return;
+    }
+
+    setError(undefined);
+    setLoadState("loading");
+
+    try {
+      setSettingsDraft(await window.difftray.getProjectSettings(workspace.project.id));
+      setSettingsOpen(true);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    } finally {
+      setLoadState("idle");
+    }
+  }
+
+  function updateSettingsDraft(patch: Partial<ProjectSettingsView>): void {
+    setSettingsDraft((draft) => (draft ? { ...draft, ...patch } : draft));
+  }
+
+  async function saveSettings(): Promise<void> {
+    if (!workspace || !settingsDraft) {
+      return;
+    }
+
+    if (
+      settingsDraft.editorMode === "custom" &&
+      settingsDraft.editorCommand.trim().length === 0
+    ) {
+      setError("Custom editor command is required.");
+      return;
+    }
+
+    const preferredPath = selectedPath;
+
+    setError(undefined);
+    setLoadState("loading");
+
+    try {
+      const savedSettings = await window.difftray.updateProjectSettings({
+        editorArgs: settingsDraft.editorArgs,
+        editorCommand: settingsDraft.editorCommand,
+        editorMode: settingsDraft.editorMode,
+        projectId: workspace.project.id,
+        showGeneratedFiles: settingsDraft.showGeneratedFiles
+      });
+      const nextWorkspace = await window.difftray.loadProject(workspace.project.id);
+
+      setSettingsDraft(savedSettings);
+      setSettingsOpen(false);
+      setWorkspace(nextWorkspace);
+      setSelectedPath(visiblePathOrFirst(nextWorkspace, preferredPath));
+      await refreshRecentProjects();
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    } finally {
+      setLoadState("idle");
+    }
   }
 
   function selectRelativeFile(offset: 1 | -1): void {
@@ -386,10 +455,37 @@ export function App(): React.JSX.Element {
             >
               <RefreshCw size={16} aria-hidden />
             </button>
+            <button
+              aria-label="Project settings"
+              className={styles.iconButton}
+              disabled={!workspace || loadState === "loading"}
+              onClick={() => {
+                void openSettings();
+              }}
+              title="Settings"
+              type="button"
+            >
+              <Settings size={16} aria-hidden />
+            </button>
           </div>
         </header>
 
         {error ? <div className={styles.errorBanner}>{error}</div> : null}
+
+        {settingsOpen && settingsDraft ? (
+          <SettingsPanel
+            disabled={loadState === "loading"}
+            onCancel={() => {
+              setSettingsOpen(false);
+              setSettingsDraft(undefined);
+            }}
+            onChange={updateSettingsDraft}
+            onSave={() => {
+              void saveSettings();
+            }}
+            settings={settingsDraft}
+          />
+        ) : null}
 
         {workspace ? (
           <div className={styles.reviewGrid}>
@@ -493,6 +589,127 @@ export function App(): React.JSX.Element {
   );
 }
 
+function SettingsPanel({
+  disabled,
+  onCancel,
+  onChange,
+  onSave,
+  settings
+}: {
+  readonly disabled: boolean;
+  readonly onCancel: () => void;
+  readonly onChange: (patch: Partial<ProjectSettingsView>) => void;
+  readonly onSave: () => void;
+  readonly settings: ProjectSettingsView;
+}): React.JSX.Element {
+  const customEditor = settings.editorMode === "custom";
+
+  return (
+    <section className={styles.settingsPanel} aria-label="Project settings">
+      <form
+        className={styles.settingsForm}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave();
+        }}
+      >
+        <div className={styles.settingsHeader}>
+          <div>
+            <div className={styles.settingsTitle}>Project settings</div>
+            <div className={styles.settingsMeta}>Stored per repository</div>
+          </div>
+          <button
+            aria-label="Close settings"
+            className={styles.iconButton}
+            disabled={disabled}
+            onClick={onCancel}
+            title="Close"
+            type="button"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+
+        <label className={styles.toggleRow}>
+          <input
+            checked={settings.showGeneratedFiles}
+            disabled={disabled}
+            onChange={(event) => {
+              onChange({ showGeneratedFiles: event.target.checked });
+            }}
+            type="checkbox"
+          />
+          <span>Show generated files</span>
+        </label>
+
+        <label className={styles.fieldGroup}>
+          <span className={styles.fieldLabel}>Editor</span>
+          <select
+            className={styles.selectInput}
+            disabled={disabled}
+            onChange={(event) => {
+              onChange({
+                editorMode: event.target.value === "custom" ? "custom" : "system"
+              });
+            }}
+            value={settings.editorMode}
+          >
+            <option value="system">System default</option>
+            <option value="custom">Custom command</option>
+          </select>
+        </label>
+
+        {customEditor ? (
+          <div className={styles.customEditorGrid}>
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Command</span>
+              <input
+                className={styles.textInput}
+                disabled={disabled}
+                onChange={(event) => {
+                  onChange({ editorCommand: event.target.value });
+                }}
+                placeholder="code"
+                type="text"
+                value={settings.editorCommand}
+              />
+            </label>
+
+            <label className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Arguments</span>
+              <input
+                className={styles.textInput}
+                disabled={disabled}
+                onChange={(event) => {
+                  onChange({ editorArgs: event.target.value });
+                }}
+                placeholder="--goto {path}:{line}"
+                type="text"
+                value={settings.editorArgs}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        <div className={styles.settingsActions}>
+          <button
+            className={styles.secondaryButton}
+            disabled={disabled}
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button className={styles.saveButton} disabled={disabled} type="submit">
+            <Save size={15} aria-hidden />
+            Save
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function FileButton({
   file,
   isSelected,
@@ -569,6 +786,15 @@ function cssClass(className: string | undefined): string {
 
 function firstVisiblePath(workspace: ReviewWorkspaceView): string | undefined {
   return workspace.files.find((file) => file.visible)?.path;
+}
+
+function visiblePathOrFirst(
+  workspace: ReviewWorkspaceView,
+  preferredPath: string | undefined
+): string | undefined {
+  return workspace.files.some((file) => file.path === preferredPath && file.visible)
+    ? preferredPath
+    : firstVisiblePath(workspace);
 }
 
 function nextPendingPath(

@@ -9,6 +9,10 @@ export type DifftrayApi = {
   ) => Promise<MarkReviewedResult>;
   readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
   readonly openProject: () => Promise<ReviewWorkspaceView | null>;
+  readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
+  readonly updateProjectSettings: (
+    input: UpdateProjectSettingsInput
+  ) => Promise<ProjectSettingsView>;
   readonly unmarkFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<UnmarkReviewedResult>;
@@ -93,6 +97,22 @@ export type OpenFileResult =
       readonly status: "opened";
     };
 
+export type ProjectSettingsView = {
+  readonly editorArgs: string;
+  readonly editorCommand: string;
+  readonly editorMode: "custom" | "system";
+  readonly projectId: string;
+  readonly showGeneratedFiles: boolean;
+};
+
+export type UpdateProjectSettingsInput = {
+  readonly editorArgs?: string;
+  readonly editorCommand?: string;
+  readonly editorMode: "custom" | "system";
+  readonly projectId: string;
+  readonly showGeneratedFiles: boolean;
+};
+
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
   listRecentProjects: async () =>
@@ -105,6 +125,12 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
   openProject: async () =>
     ipcRenderer.invoke("projects:open") as Promise<ReviewWorkspaceView | null>,
+  getProjectSettings: async (projectId) =>
+    ipcRenderer.invoke("settings:getProject", {
+      projectId
+    }) as Promise<ProjectSettingsView>,
+  updateProjectSettings: async (input) =>
+    ipcRenderer.invoke("settings:updateProject", input) as Promise<ProjectSettingsView>,
   unmarkFileReviewed: async (input) =>
     ipcRenderer.invoke(
       "reviews:unmarkFileReviewed",

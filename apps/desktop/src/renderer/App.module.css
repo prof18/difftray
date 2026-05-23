@@ -216,6 +216,128 @@
   color: var(--text-secondary);
 }
 
+.settingsPanel {
+  border-bottom: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(90deg, rgba(232, 176, 92, 0.1), transparent 42%),
+    rgba(15, 15, 14, 0.78);
+  padding: 14px 24px 16px;
+}
+
+.settingsForm {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 0.9fr) minmax(170px, 0.8fr) minmax(210px, 1fr)
+    auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.settingsHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsForm > .fieldGroup {
+  grid-column: 3;
+}
+
+.settingsTitle {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settingsMeta,
+.fieldLabel {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.toggleRow {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.toggleRow input {
+  accent-color: var(--accent);
+}
+
+.fieldGroup {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selectInput,
+.textInput {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font: inherit;
+  outline: 0;
+  padding: 0 10px;
+}
+
+.selectInput:focus,
+.textInput:focus {
+  border-color: rgba(232, 176, 92, 0.58);
+}
+
+.customEditorGrid {
+  display: grid;
+  grid-column: 1 / span 3;
+  min-width: 0;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(170px, 1fr);
+  gap: 10px;
+}
+
+.settingsActions {
+  display: inline-flex;
+  grid-column: 4;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secondaryButton,
+.saveButton {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-subtle);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 11px;
+}
+
+.secondaryButton {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.saveButton {
+  border-color: rgba(232, 176, 92, 0.52);
+  background: var(--accent);
+  color: #16110a;
+}
+
 .reviewGrid {
   display: grid;
   min-height: 0;

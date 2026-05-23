@@ -34,9 +34,31 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
+  await expectMissing(window, "button", "schema.generated.ts");
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
   });
+  await window.getByRole("button", { name: "Project settings" }).click();
+  await window.getByLabel("Show generated files", { exact: true }).check();
+  await window.getByRole("combobox", { name: /Editor/ }).selectOption("custom");
+  await window.getByRole("textbox", { exact: true, name: "Command" }).fill("code");
+  await window
+    .getByRole("textbox", { exact: true, name: "Arguments" })
+    .fill("--goto {path}:{line}");
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-settings.png")
+  });
+  await window.getByRole("button", { name: "Save" }).click();
+  await window
+    .getByRole("button", { name: /schema\.generated\.ts/ })
+    .waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: "Project settings" }).click();
+  await expectChecked(window, "Show generated files");
+  await expectComboboxValue(window, /Editor/, "custom");
+  await expectValue(window, "Command", "code");
+  await expectValue(window, "Arguments", "--goto {path}:{line}");
+  await window.getByRole("button", { name: "Close settings" }).click();
   await window.keyboard.press("f");
   await expectFocused(window, "input[placeholder='Filter files']");
   await window.getByPlaceholder("Filter files").fill("tracked");
@@ -85,6 +107,11 @@ async function createChangedRepository() {
   git(repo, ["add", "tracked.txt"]);
   git(repo, ["commit", "-m", "Initial"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\nafter\n", "utf8");
+  await writeFile(
+    path.join(repo, "schema.generated.ts"),
+    "export const value = 1;\n",
+    "utf8"
+  );
 
   return repo;
 }
@@ -115,4 +142,39 @@ async function expectEnabled(window, role, name) {
     },
     { accessibleName: name, roleName: role }
   );
+}
+
+async function expectMissing(window, role, text) {
+  await window.waitForFunction(
+    ({ roleName, accessibleText }) => {
+      return [...document.querySelectorAll(roleName)].every(
+        (element) => !element.textContent?.includes(accessibleText)
+      );
+    },
+    { accessibleText: text, roleName: role }
+  );
+}
+
+async function expectChecked(window, label) {
+  const checked = await window.getByLabel(label, { exact: true }).isChecked();
+
+  if (!checked) {
+    throw new Error(`Expected ${label} to be checked`);
+  }
+}
+
+async function expectValue(window, label, expectedValue) {
+  const actualValue = await window.getByLabel(label, { exact: true }).inputValue();
+
+  if (actualValue !== expectedValue) {
+    throw new Error(`Expected ${label} to be ${expectedValue}, got ${actualValue}`);
+  }
+}
+
+async function expectComboboxValue(window, name, expectedValue) {
+  const actualValue = await window.getByRole("combobox", { name }).inputValue();
+
+  if (actualValue !== expectedValue) {
+    throw new Error(`Expected combobox to be ${expectedValue}, got ${actualValue}`);
+  }
 }

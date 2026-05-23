@@ -67,7 +67,7 @@
 - [x] Implement collapse-on-review.
 - [x] Implement keyboard shortcuts.
 - [x] Implement external editor command.
-- [ ] Implement settings screen.
+- [x] Implement settings screen.
 
 ## V0 Release Prep
 

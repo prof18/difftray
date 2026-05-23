@@ -12,6 +12,10 @@ declare global {
     ) => Promise<MarkReviewedResult>;
     readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
     readonly openProject: () => Promise<ReviewWorkspaceView | null>;
+    readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
+    readonly updateProjectSettings: (
+      input: UpdateProjectSettingsInput
+    ) => Promise<ProjectSettingsView>;
     readonly unmarkFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<UnmarkReviewedResult>;
@@ -95,6 +99,22 @@ declare global {
     | {
         readonly status: "opened";
       };
+
+  type ProjectSettingsView = {
+    readonly editorArgs: string;
+    readonly editorCommand: string;
+    readonly editorMode: "custom" | "system";
+    readonly projectId: string;
+    readonly showGeneratedFiles: boolean;
+  };
+
+  type UpdateProjectSettingsInput = {
+    readonly editorArgs?: string;
+    readonly editorCommand?: string;
+    readonly editorMode: "custom" | "system";
+    readonly projectId: string;
+    readonly showGeneratedFiles: boolean;
+  };
 
   interface Window {
     readonly difftray: DifftrayApi;

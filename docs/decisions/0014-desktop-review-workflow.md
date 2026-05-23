@@ -8,9 +8,11 @@ Accepted
 
 The v0 desktop app opens local repositories through the native directory picker, stores opened repositories as recent projects, and loads working-tree review data through the main process.
 
-The renderer talks to a narrow preload API for project listing, project open/load, refresh, and marking a displayed file reviewed. The renderer does not read Git, SQLite, or the filesystem directly.
+The renderer talks to a narrow preload API for project listing, project open/load, refresh, project settings, editor launch, and marking a displayed file reviewed. The renderer does not read Git, SQLite, or the filesystem directly.
 
 Review marking is verified in the main process by reloading the current working-tree diff and comparing the displayed diff hash with the current diff hash before persisting the mark.
+
+Project settings are stored per repository. V0 exposes generated-file visibility and editor launch configuration from a settings panel. Saving settings reloads the current workspace so generated-file visibility and progress are recalculated from the persisted settings.
 
 ## Context
 
@@ -25,6 +27,7 @@ Positive:
 - Renderer-originated data is treated as untrusted command input.
 - Stale review marks are rejected before persistence.
 - Recent-project state and review marks share one storage boundary.
+- Settings changes use the same main-process storage boundary as review state.
 - The first UI can support real local review without adding network or PR concepts.
 
 Negative:
