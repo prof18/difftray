@@ -15,11 +15,14 @@ Cover:
 - review target identity
 - diff hash stability
 - diff hash invalidation
+- branch review identity using merge-base
 - reviewed state restoration when a hash returns
 - progress calculation
 - generated-file filtering
 - status normalization
 - rename handling
+- binary fingerprinting
+- stale mark-reviewed rejection
 
 ### Integration Tests
 
@@ -33,9 +36,21 @@ Cover:
 - deleted files
 - renamed files
 - working tree diffs
+- staged-only tracked changes
+- unstaged-only tracked changes
+- mixed staged and unstaged changes in the same file
 - branch diffs against base
+- branch review uses merge-base
+- base ref movement changes review target identity
 - worktree detection
 - base branch missing
+- untracked binary files
+- binary file invalidation
+- mode-only changes
+- symlinks
+- submodules
+- case-only renames
+- paths with spaces and unicode
 
 ### Storage Tests
 
@@ -62,6 +77,18 @@ Cover:
 - next unreviewed selection
 - project switching
 - filter focus
+
+### Main Process And IPC Tests
+
+Cover security-sensitive service boundaries.
+
+Cover:
+
+- renderer-facing API does not expose raw shell execution
+- editor launch config expands only supported tokens
+- editor launch uses command and args rather than shell strings
+- editor launch validates project-contained paths
+- mark-reviewed rejects stale displayed hashes
 
 ### App Workflow Tests
 
@@ -92,15 +119,24 @@ These tests are mandatory before v0 is considered credible:
 - A reviewed file becomes unreviewed after its diff changes.
 - A reviewed file becomes reviewed again when its diff hash returns.
 - Changing base branch scopes review state separately.
+- Branch review uses merge-base, not a naive two-dot range.
+- Working tree review includes staged, unstaged, mixed, deleted, renamed, and untracked files.
+- Marking reviewed rejects a stale displayed diff hash.
+- Binary file changes invalidate review state.
+- Mode-only changes are reviewable.
+- Symlink target changes are reviewable.
+- Submodule pointer changes are reviewable.
+- External editor launch is tokenized and not shell-executed.
 - Hidden generated files do not count toward progress.
 - Untracked files appear and can be reviewed.
 - Deleted files appear and can be reviewed.
 - Renamed files show previous and current path.
+- A pure rename requires review once and remains reviewed only while the exact rename diff remains current.
 - Worktrees can be opened as separate projects.
 
 ## Full Gate
 
-The eventual `npm run check` command should run:
+The eventual `pnpm check` command should run:
 
 - format check
 - lint

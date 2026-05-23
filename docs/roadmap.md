@@ -8,6 +8,10 @@
 - Define architecture.
 - Define data model.
 - Define TDD strategy.
+- Decide license.
+- Decide package manager.
+- Decide styling direction.
+- Decide generated-file and large-diff policies.
 
 ## Phase 1: Core Prototype
 
@@ -45,7 +49,7 @@
 
 ## Phase 4: Public Open Source Prep
 
-- Choose license.
+- Reconfirm license.
 - Rename package identifiers if needed.
 - Add contribution guide.
 - Add security policy.

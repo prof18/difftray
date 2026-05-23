@@ -16,10 +16,14 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - React
 - TypeScript
 - Vite
+- pnpm workspaces
 - `@pierre/diffs` from https://diffs.com for diff rendering
 - SQLite for local app state
 - Git CLI integration
 - Chokidar for file watching
+- CSS Modules with CSS custom properties
+- Radix UI primitives where accessible behavior is useful
+- lucide-react for icons
 - Vitest for unit/integration tests
 - Playwright for renderer and app workflow tests
 
@@ -30,6 +34,7 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - [Architecture](docs/architecture.md)
 - [Data Model](docs/data-model.md)
 - [Testing Strategy](docs/testing-strategy.md)
+- [Implementation Plan](docs/implementation-plan.md)
 - [Roadmap](docs/roadmap.md)
 - [Todo](docs/todo.md)
 - [Naming Notes](docs/naming.md)
@@ -44,7 +49,12 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - Exact diff changes invalidate reviewed state.
 - The app should be keyboard-friendly from the beginning.
 - Development should follow hard TDD for core behavior.
+- Keep the app private until the project is ready for an intentional open-source launch.
+
+## License
+
+Apache-2.0.
 
 ## Current Status
 
-Planning and specification phase. No application code has been scaffolded yet.
+Planning and specification phase is complete enough to start implementation. No application code has been scaffolded yet.

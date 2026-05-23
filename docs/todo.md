@@ -13,14 +13,14 @@
 
 ## Next Planning Decisions
 
-- [ ] Pick license for eventual open-source release.
-- [ ] Decide package manager: npm, pnpm, or yarn.
-- [ ] Decide monorepo tooling, if any.
-- [ ] Decide styling approach.
-- [ ] Decide initial icon/visual identity direction.
-- [ ] Decide exact generated-file detection rules for v0.
-- [ ] Decide large-diff thresholds.
-- [ ] Decide whether v0 supports branch review or starts with working tree only.
+- [x] Pick license for eventual open-source release: Apache-2.0.
+- [x] Decide package manager: pnpm.
+- [x] Decide monorepo tooling: pnpm workspaces only for v0.
+- [x] Decide styling approach: CSS Modules, CSS custom properties, Radix primitives where useful.
+- [x] Decide initial icon/visual identity direction: graphite workspace, amber review accent, JetBrains Mono for diffs, real bundled fonts, lucide icons.
+- [x] Decide exact generated-file detection rules for v0: conservative high-confidence detection only.
+- [x] Decide large-diff thresholds: fallback above 1 MB patch text or 5,000 changed lines.
+- [x] Decide whether v0 supports branch review or starts with working tree only: include working tree and branch review in v0.
 
 ## Scaffolding
 
@@ -29,7 +29,7 @@
 - [ ] Add Vitest.
 - [ ] Add Playwright or Electron app test harness.
 - [ ] Add ESLint.
-- [ ] Add Prettier or formatter decision.
+- [ ] Add Prettier.
 - [ ] Add CI workflow after repository is public or private remote exists.
 
 ## Core Implementation

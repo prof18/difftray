@@ -27,12 +27,15 @@ review_targets (
   id text primary key,
   project_id text not null,
   mode text not null,
-  base_ref text,
-  head_ref text,
+  base_ref_name text,
+  base_ref_sha text,
+  head_ref_name text,
+  head_ref_sha text,
+  merge_base_sha text,
   head_kind text not null,
   created_at text not null,
   last_used_at text not null,
-  unique(project_id, mode, base_ref, head_ref, head_kind)
+  unique(project_id, mode, base_ref_name, base_ref_sha, head_ref_name, head_ref_sha, merge_base_sha, head_kind)
 )
 ```
 
@@ -47,6 +50,23 @@ review_targets (
 - `working_tree`
 - `ref`
 - future: `commit`
+
+For working tree review:
+
+- `mode` is `working_tree`
+- `head_kind` is `working_tree`
+- `head_ref_name` should be the current branch name when available
+- `head_ref_sha` should be `HEAD`
+- `base_ref_name`, `base_ref_sha`, and `merge_base_sha` are null
+
+For branch review:
+
+- `mode` is `branch`
+- `base_ref_name` is the configured local base ref
+- `base_ref_sha` is the resolved base commit
+- `head_ref_name` is the current branch name when available
+- `head_ref_sha` is the resolved `HEAD`
+- `merge_base_sha` is `git merge-base base_ref HEAD`
 
 ### review_marks
 
@@ -72,7 +92,7 @@ This allows a file to become reviewed again if its diff returns to a previously 
 project_settings (
   project_id text primary key,
   show_generated_files integer not null default 0,
-  editor_command text,
+  editor_launch_config_json text,
   updated_at text not null
 )
 ```
@@ -91,23 +111,38 @@ app_settings (
 
 The diff hash identifies the exact reviewable content for a file under a review target.
 
-Inputs should include:
+The hash is a versioned SHA-256 fingerprint with prefix:
 
-- review target mode
-- base identity where applicable
+```text
+difftray-file-diff-v1
+```
+
+Inputs include:
+
+- fingerprint version
+- review target identity
 - normalized file status
-- current path
-- previous path for rename
-- normalized patch content
-- binary marker when no textual patch exists
+- old path, when applicable
+- new path
+- old mode, when available
+- new mode, when available
+- content kind: `text`, `binary`, `symlink`, `submodule`, or `mode_only`
+- canonical textual diff payload, for text
+- binary/content fingerprint payload, for binary
+- symlink target payload, for symlink changes
+- submodule commit payload, for submodule changes
 
 Use a stable cryptographic hash such as SHA-256.
 
+Text payloads normalize line endings to LF before hashing.
+
+Binary files must include real content identity. Working-tree binary content is fingerprinted with SHA-256 of file bytes plus byte size. Committed binary content should use Git object id plus byte size when available.
+
 ## Rename Behavior
 
-When Git reports a rename, Difftray should preserve review intent when the diff hash matches the reviewed content.
+For v0, review identity is path-sensitive. The model stores `previous_path` so the UI can explain the rename.
 
-For v0, review identity is still path-oriented. The model stores `previous_path` so the UI can explain the rename.
+A pure rename does not automatically inherit review from the old path. The rename itself must be reviewed once, then remains reviewed while the exact rename diff fingerprint remains current.
 
 Future work may add a stronger file identity abstraction if rename edge cases become painful.
 
@@ -127,3 +162,5 @@ Hidden generated files do not count toward progress.
 ## Important Invariant
 
 A file is considered reviewed if and only if there is a `review_marks` row for the current review target whose `reviewed_diff_hash` equals the file's current diff hash.
+
+When the user marks a file reviewed, the main process must verify that the currently computed diff hash still equals the hash displayed by the renderer before writing the review mark.

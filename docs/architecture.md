@@ -9,6 +9,8 @@
 
 ## Proposed Monorepo Shape
 
+Use pnpm workspaces.
+
 ```text
 apps/
   desktop/
@@ -40,6 +42,8 @@ packages/
 
 This split should stay pragmatic. Start with fewer packages if scaffolding overhead slows down v0, but keep the boundaries in code.
 
+Do not add Turborepo, Nx, or another monorepo task runner in v0. pnpm workspaces plus package scripts are enough until build orchestration becomes painful.
+
 ## Process Boundaries
 
 Electron main process:
@@ -63,6 +67,9 @@ IPC boundary:
 - typed request/response contracts
 - no raw shell command execution from renderer
 - no direct database access from renderer
+- context isolation enabled
+- Node integration disabled in the renderer
+- narrow typed preload API
 
 ## Core Concepts
 
@@ -114,10 +121,18 @@ Core commands will likely include:
 
 - `git status --porcelain=v2`
 - `git diff --patch --find-renames`
+- `git diff --patch --find-renames HEAD`
 - `git diff --name-status --find-renames`
 - `git ls-files --others --exclude-standard`
 - `git rev-parse`
+- `git merge-base`
 - `git worktree list --porcelain`
+
+Use NUL-delimited Git output where possible for paths.
+
+Branch review compares `git merge-base <base-ref> HEAD` to `HEAD`.
+
+Working tree review compares the effective working tree to `HEAD` and includes staged, unstaged, mixed, deleted, renamed, and untracked files. Untracked files require synthesized added-file diffs or file snapshots.
 
 ## Watching Strategy
 
@@ -140,6 +155,16 @@ Use `@pierre/diffs` for rendering.
 
 The app should keep a small adapter layer around the library so future API churn does not infect the rest of the codebase.
 
+## Styling Architecture
+
+Use CSS Modules for component-local styles and CSS custom properties for app-wide tokens.
+
+Use Radix UI primitives for accessible overlays and controls when native elements are not enough.
+
+Use lucide-react icons for action buttons and status indicators where an icon improves scan speed.
+
+Avoid adopting a broad component kit in v0. Difftray needs a distinctive review workspace, not a generic dashboard skin.
+
 ## Failure Modes
 
 The UI should handle:
@@ -152,6 +177,20 @@ The UI should handle:
 - file changed while open
 - huge diff fallback
 - binary file diff
+- stale displayed diff hash when marking reviewed
+- path quoting, spaces, and unicode
+- symlinks
+- submodules
+- mode-only changes
+
+## Mark-Reviewed Flow
+
+Marking a file reviewed is a main-process verified operation:
+
+1. Renderer sends project id, review target id, file path, and displayed diff hash.
+2. Main process recomputes or reloads the current file diff hash.
+3. If hashes match, storage writes the review mark.
+4. If hashes differ, storage is not changed and the renderer refreshes.
 
 ## Performance Notes
 
@@ -162,3 +201,4 @@ Large monorepos are not v0's primary target, but obvious traps should be avoided
 - virtualize large file lists
 - rely on diff viewer virtualization
 - avoid loading all huge diffs at once
+- use large-diff fallback above 1 MB of patch text or 5,000 changed lines
