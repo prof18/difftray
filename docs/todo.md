@@ -34,9 +34,9 @@
 
 ## Core Implementation
 
-- [ ] Implement Git repo detection.
-- [ ] Implement worktree detection.
-- [ ] Implement Git status parser.
+- [x] Implement Git repo detection.
+- [x] Implement worktree detection.
+- [x] Implement Git status parser.
 - [ ] Implement working tree diff loader.
 - [ ] Implement branch diff loader.
 - [x] Implement per-file diff hash.
