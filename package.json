@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --stream build",
-    "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm test:visual",
+    "check": "./ci.sh",
     "dev": "pnpm --filter @difftray/desktop dev",
     "format": "prettier --check .",
     "format:write": "prettier --write .",

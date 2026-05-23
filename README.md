@@ -60,11 +60,13 @@ Build the app:
 pnpm build
 ```
 
-Run the full local gate:
+Run the full local CI gate before committing:
 
 ```sh
-pnpm check
+./ci.sh
 ```
+
+`pnpm check` delegates to the same script.
 
 Useful focused checks:
 

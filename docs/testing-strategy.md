@@ -157,7 +157,7 @@ These tests are mandatory before v0 is considered credible:
 
 ## Full Gate
 
-The eventual `pnpm check` command should run:
+The root `./ci.sh` script is the full local CI gate. It runs:
 
 - format check
 - lint
@@ -167,4 +167,6 @@ The eventual `pnpm check` command should run:
 - app workflow tests where feasible
 - visual verification for UI-facing changes
 
-No handoff should happen without running the full gate once it exists.
+`pnpm check` delegates to `./ci.sh`.
+
+No commit or handoff should happen without running `./ci.sh`.

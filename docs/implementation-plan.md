@@ -18,13 +18,14 @@ Deliverables:
 - Prettier
 - Vitest
 - Playwright or equivalent Electron app automation
+- root `./ci.sh`
 - root `pnpm check`
 - root `pnpm dev`
 - root `pnpm test:visual`
 
 Acceptance:
 
-- `pnpm check` runs locally
+- `./ci.sh` runs locally
 - the desktop app can be launched locally
 - no app behavior yet
 - no skipped quality gate

@@ -8,7 +8,7 @@ Accepted
 
 Use strict TypeScript, ESLint, Prettier, Vitest, and Playwright or an equivalent Electron workflow test harness.
 
-The root `pnpm check` command should eventually run:
+The root `./ci.sh` script is the local CI gate. It runs:
 
 - format check
 - lint
@@ -16,6 +16,8 @@ The root `pnpm check` command should eventually run:
 - unit tests
 - integration tests
 - app workflow tests where feasible
+
+The root `pnpm check` command delegates to `./ci.sh`. Contributors and agents must run `./ci.sh` before committing.
 
 ## Context
 
@@ -30,11 +32,13 @@ Positive:
 - Review invariants are protected.
 - Refactors stay safer.
 - Electron-specific code remains thinner.
+- The pre-commit and handoff gate is one command.
 
 Negative:
 
 - More setup work before visible UI progress.
 - Some app workflow tests may be slower than unit tests.
+- Hosted CI still needs a future repository/remote decision.
 
 ## Notes
 

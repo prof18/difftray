@@ -29,12 +29,15 @@ Project commands:
 - `pnpm typecheck`
 - `pnpm test:visual`
 - `pnpm check`
+- `./ci.sh`
 
 Use pnpm for dependency management once the project is scaffolded.
 
+`pnpm check` delegates to `./ci.sh`.
+
 ## Before Handoff
 
-Run the full local gate once it exists:
+Run `./ci.sh` before committing and before handoff. It is the full local CI gate:
 
 - formatting
 - lint

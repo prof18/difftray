@@ -30,7 +30,7 @@
 - [x] Add Playwright or Electron app test harness.
 - [x] Add ESLint.
 - [x] Add Prettier.
-- [ ] Add CI workflow after repository is public or private remote exists.
+- [x] Add local CI script.
 
 ## Core Implementation
 

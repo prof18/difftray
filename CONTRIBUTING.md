@@ -16,10 +16,10 @@ Run the desktop app:
 pnpm dev
 ```
 
-Run the full local gate before handing off changes:
+Run the full local CI gate before committing or handing off changes:
 
 ```sh
-pnpm check
+./ci.sh
 ```
 
 ## Quality Bar
@@ -43,7 +43,7 @@ pnpm test
 pnpm test:visual
 ```
 
-Use `pnpm check` before handoff. It runs formatting, lint, typecheck, unit tests, and the Electron visual smoke test.
+Use `./ci.sh` before every commit and handoff. It runs formatting, lint, typecheck, unit tests, and the Electron visual smoke test. `pnpm check` delegates to the same script.
 
 ## Visual Changes
 
@@ -53,4 +53,4 @@ Visual smoke screenshots are generated under `artifacts/screenshots/`. Release s
 
 ## Git
 
-Keep commits small and reviewable. Do not mix unrelated refactors with feature work. Avoid destructive Git operations unless they are explicitly requested.
+Run `./ci.sh` before committing. Keep commits small and reviewable. Do not mix unrelated refactors with feature work. Avoid destructive Git operations unless they are explicitly requested.
