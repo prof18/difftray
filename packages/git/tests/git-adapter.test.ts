@@ -10,6 +10,8 @@ import {
   findGitRepository,
   getGitStatus,
   getWorktreeInfo,
+  loadBranchDiffs,
+  loadWorkingTreeDiffs,
   parseStatusPorcelainV2
 } from "../src/index.js";
 
@@ -116,6 +118,108 @@ describe("Git status parsing", () => {
   });
 });
 
+describe("working tree diff loading", () => {
+  it("loads modified, deleted, and untracked text files", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "modified.txt"), "before\n");
+    await git(repo, "add", "modified.txt");
+    await git(repo, "commit", "-m", "add modified fixture");
+    await git(repo, "rm", "tracked.txt");
+    await writeFile(path.join(repo, "modified.txt"), "after\n");
+    await writeFile(path.join(repo, "untracked.txt"), "new\n");
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.reviewTarget).toEqual(
+      expect.objectContaining({
+        headRefName: "main",
+        kind: "working_tree",
+        projectId: repo
+      })
+    );
+    expect(result.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.objectContaining({
+            kind: "text",
+            patch: expect.stringContaining("+after")
+          }),
+          newPath: "modified.txt",
+          status: "modified"
+        }),
+        expect.objectContaining({
+          newPath: "tracked.txt",
+          status: "deleted"
+        }),
+        expect.objectContaining({
+          content: expect.objectContaining({
+            kind: "text",
+            patch: expect.stringContaining("+new")
+          }),
+          newPath: "untracked.txt",
+          status: "added"
+        })
+      ])
+    );
+  });
+
+  it("loads Git-reported renames", async () => {
+    const repo = await createRepo();
+    await git(repo, "mv", "tracked.txt", "renamed.txt");
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        newPath: "renamed.txt",
+        oldPath: "tracked.txt",
+        status: "renamed"
+      })
+    ]);
+  });
+});
+
+describe("branch diff loading", () => {
+  it("compares merge-base to HEAD for a branch", async () => {
+    const repo = await createRepo();
+    await git(repo, "checkout", "-b", "feature/change");
+    await writeFile(path.join(repo, "tracked.txt"), "branch\n");
+    await git(repo, "commit", "-am", "change tracked");
+    const headSha = await gitOutput(repo, "rev-parse", "HEAD");
+    const mergeBaseSha = await gitOutput(repo, "merge-base", "main", "HEAD");
+
+    const result = await loadBranchDiffs(repo, "main");
+
+    expect(result.reviewTarget).toEqual({
+      baseRefName: "main",
+      baseSha: mergeBaseSha,
+      headRefName: "feature/change",
+      headSha,
+      kind: "branch",
+      mergeBaseSha,
+      projectId: repo
+    });
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          patch: expect.stringContaining("+branch")
+        }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+  });
+
+  it("throws a clear error when the base ref is missing", async () => {
+    const repo = await createRepo();
+
+    await expect(loadBranchDiffs(repo, "missing/base")).rejects.toThrow(
+      /Unable to resolve base ref/
+    );
+  });
+});
+
 async function createTempRoot(): Promise<string> {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "difftray-git-"));
   const realTempRoot = await realpath(tempRoot);
@@ -136,4 +240,9 @@ async function createRepo(): Promise<string> {
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
+}
+
+async function gitOutput(cwd: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf8" });
+  return stdout.trim();
 }

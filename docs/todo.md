@@ -37,8 +37,8 @@
 - [x] Implement Git repo detection.
 - [x] Implement worktree detection.
 - [x] Implement Git status parser.
-- [ ] Implement working tree diff loader.
-- [ ] Implement branch diff loader.
+- [x] Implement working tree diff loader.
+- [x] Implement branch diff loader.
 - [x] Implement per-file diff hash.
 - [x] Implement generated-file detection.
 - [x] Implement progress calculation.
