@@ -264,4 +264,26 @@ describe("storage", () => {
     });
     storage.close();
   });
+
+  it("returns default app settings when no app settings are stored", () => {
+    const storage = openStorage(":memory:");
+
+    expect(storage.getAppSettings()).toEqual({
+      themeMode: "system"
+    });
+    storage.close();
+  });
+
+  it("persists app settings", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertAppSettings({
+      themeMode: "light"
+    });
+
+    expect(storage.getAppSettings()).toEqual({
+      themeMode: "light"
+    });
+    storage.close();
+  });
 });

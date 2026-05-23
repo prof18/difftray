@@ -5,6 +5,7 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly getAppSettings: () => Promise<AppSettingsView>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
     readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView>;
     readonly markFileReviewed: (
@@ -16,9 +17,18 @@ declare global {
     readonly updateProjectSettings: (
       input: UpdateProjectSettingsInput
     ) => Promise<ProjectSettingsView>;
+    readonly updateAppSettings: (
+      input: UpdateAppSettingsInput
+    ) => Promise<AppSettingsView>;
     readonly unmarkFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<UnmarkReviewedResult>;
+  };
+
+  type ThemeMode = "dark" | "light" | "system";
+
+  type AppSettingsView = {
+    readonly themeMode: ThemeMode;
   };
 
   type RecentProjectView = {
@@ -33,6 +43,7 @@ declare global {
     readonly deletions: number;
     readonly diffHash: string;
     readonly generated: boolean;
+    readonly invalidated: boolean;
     readonly path: string;
     readonly patch: string;
     readonly previousPath?: string;
@@ -114,6 +125,10 @@ declare global {
     readonly editorMode: "custom" | "system";
     readonly projectId: string;
     readonly showGeneratedFiles: boolean;
+  };
+
+  type UpdateAppSettingsInput = {
+    readonly themeMode: ThemeMode;
   };
 
   interface Window {

@@ -40,6 +40,7 @@ try {
   });
   await window.getByRole("button", { name: "Project settings" }).click();
   await window.getByLabel("Show generated files", { exact: true }).check();
+  await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
   await window.getByRole("combobox", { name: /Editor/ }).selectOption("custom");
   await window.getByRole("textbox", { exact: true, name: "Command" }).fill("code");
   await window
@@ -55,10 +56,17 @@ try {
     .waitFor({ timeout: 10_000 });
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectChecked(window, "Show generated files");
+  await expectComboboxValue(window, /Appearance/, "light");
   await expectComboboxValue(window, /Editor/, "custom");
   await expectValue(window, "Command", "code");
   await expectValue(window, "Arguments", "--goto {path}:{line}");
   await window.getByRole("button", { name: "Close settings" }).click();
+  await window.getByRole("button", { name: "Hide sidebar" }).click();
+  await expectMissing(window, "button", "visual-repo");
+  await window.getByRole("button", { name: "Show sidebar" }).click();
+  await window.getByRole("button", { name: /visual-repo/ }).waitFor({
+    timeout: 10_000
+  });
   await window.keyboard.press("f");
   await expectFocused(window, "input[placeholder='Filter files']");
   await window.getByPlaceholder("Filter files").fill("tracked");
@@ -90,6 +98,15 @@ try {
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-marked.png")
+  });
+  await writeFile(path.join(repoPath, "tracked.txt"), "before\nafter\nagain\n", "utf8");
+  await window.getByRole("button", { name: "Refresh project" }).click();
+  await window
+    .getByRole("button", { name: /tracked\.txt modified .* changed after review/ })
+    .waitFor({ timeout: 10_000 });
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
 } finally {
   await app.close();

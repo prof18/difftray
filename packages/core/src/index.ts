@@ -84,6 +84,7 @@ export type FileReviewState = {
   readonly diff: FileDiff;
   readonly diffHash: string;
   readonly generated: boolean;
+  readonly invalidated: boolean;
   readonly path: string;
   readonly reviewable: boolean;
   readonly reviewed: boolean;
@@ -159,17 +160,17 @@ export function resolveReviewStates(
     const generated =
       diff.generated ?? detectGeneratedFile({ path: diff.newPath }).isGenerated;
     const visible = input.showGeneratedFiles === true || !generated;
-    const reviewed = input.marks.some(
-      (mark) =>
-        mark.reviewTargetId === reviewTargetId &&
-        mark.path === diff.newPath &&
-        mark.reviewedDiffHash === diffHash
+    const pathMarks = input.marks.filter(
+      (mark) => mark.reviewTargetId === reviewTargetId && mark.path === diff.newPath
     );
+    const reviewed = pathMarks.some((mark) => mark.reviewedDiffHash === diffHash);
 
     return {
       diff,
       diffHash,
       generated,
+      invalidated:
+        !reviewed && pathMarks.some((mark) => mark.reviewedDiffHash !== diffHash),
       path: diff.newPath,
       reviewable: true,
       reviewed,

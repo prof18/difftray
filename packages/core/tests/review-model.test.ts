@@ -211,7 +211,9 @@ describe("review state and progress", () => {
       reviewTarget: workingTreeTarget
     });
 
-    expect(states[0]).toEqual(expect.objectContaining({ reviewed: false }));
+    expect(states[0]).toEqual(
+      expect.objectContaining({ invalidated: true, reviewed: false })
+    );
   });
 
   it("excludes hidden generated files from progress by default", () => {

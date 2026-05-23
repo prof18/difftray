@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
+  ExternalLink,
   FolderOpen,
   GitBranch,
+  PanelLeft,
   RefreshCw,
   Save,
   Search,
@@ -22,17 +25,45 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | undefined>();
   const [filter, setFilter] = useState("");
   const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [appSettings, setAppSettings] = useState<AppSettingsView>({
+    themeMode: "system"
+  });
+  const [appSettingsDraft, setAppSettingsDraft] = useState<AppSettingsView>({
+    themeMode: "system"
+  });
   const [recentProjects, setRecentProjects] = useState<readonly RecentProjectView[]>([]);
   const [reviewedExpanded, setReviewedExpanded] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
   const [settingsDraft, setSettingsDraft] = useState<ProjectSettingsView | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const filterInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
     void refreshRecentProjects();
+    void refreshAppSettings();
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function applyTheme(): void {
+      document.documentElement.dataset.theme =
+        appSettings.themeMode === "system"
+          ? media.matches
+            ? "dark"
+            : "light"
+          : appSettings.themeMode;
+    }
+
+    applyTheme();
+    media.addEventListener("change", applyTheme);
+
+    return () => {
+      media.removeEventListener("change", applyTheme);
+    };
+  }, [appSettings.themeMode]);
 
   const visibleFiles = useMemo(() => {
     const normalizedFilter = filter.trim().toLowerCase();
@@ -51,6 +82,7 @@ export function App(): React.JSX.Element {
   const keyboardFiles = reviewedExpanded ? visibleFiles : pendingFiles;
   const selectedFile =
     visibleFiles.find((file) => file.path === selectedPath) ?? visibleFiles[0];
+  const projectRailVisible = !workspace || sidebarOpen;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -64,6 +96,17 @@ export function App(): React.JSX.Element {
         target instanceof HTMLTextAreaElement ||
         (target instanceof HTMLElement && target.isContentEditable);
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.code;
+
+      if (settingsOpen) {
+        if (key === "Escape") {
+          event.preventDefault();
+          setSettingsOpen(false);
+          setSettingsDraft(undefined);
+          setAppSettingsDraft(appSettings);
+        }
+
+        return;
+      }
 
       if (event.metaKey && event.key.toLowerCase() === "r") {
         event.preventDefault();
@@ -138,6 +181,13 @@ export function App(): React.JSX.Element {
     setRecentProjects(await window.difftray.listRecentProjects());
   }
 
+  async function refreshAppSettings(): Promise<void> {
+    const settings = await window.difftray.getAppSettings();
+
+    setAppSettings(settings);
+    setAppSettingsDraft(settings);
+  }
+
   async function runWorkspaceLoad(
     loadWorkspace: () => Promise<ReviewWorkspaceView | null>,
     nextPath?: string
@@ -190,7 +240,14 @@ export function App(): React.JSX.Element {
     setLoadState("loading");
 
     try {
-      setSettingsDraft(await window.difftray.getProjectSettings(workspace.project.id));
+      const [nextAppSettings, nextProjectSettings] = await Promise.all([
+        window.difftray.getAppSettings(),
+        window.difftray.getProjectSettings(workspace.project.id)
+      ]);
+
+      setAppSettings(nextAppSettings);
+      setAppSettingsDraft(nextAppSettings);
+      setSettingsDraft(nextProjectSettings);
       setSettingsOpen(true);
     } catch (caughtError) {
       setError(errorMessage(caughtError));
@@ -201,6 +258,10 @@ export function App(): React.JSX.Element {
 
   function updateSettingsDraft(patch: Partial<ProjectSettingsView>): void {
     setSettingsDraft((draft) => (draft ? { ...draft, ...patch } : draft));
+  }
+
+  function updateAppSettingsDraft(patch: Partial<AppSettingsView>): void {
+    setAppSettingsDraft((draft) => ({ ...draft, ...patch }));
   }
 
   async function saveSettings(): Promise<void> {
@@ -222,15 +283,22 @@ export function App(): React.JSX.Element {
     setLoadState("loading");
 
     try {
-      const savedSettings = await window.difftray.updateProjectSettings({
-        editorArgs: settingsDraft.editorArgs,
-        editorCommand: settingsDraft.editorCommand,
-        editorMode: settingsDraft.editorMode,
-        projectId: workspace.project.id,
-        showGeneratedFiles: settingsDraft.showGeneratedFiles
-      });
+      const [savedAppSettings, savedSettings] = await Promise.all([
+        window.difftray.updateAppSettings({
+          themeMode: appSettingsDraft.themeMode
+        }),
+        window.difftray.updateProjectSettings({
+          editorArgs: settingsDraft.editorArgs,
+          editorCommand: settingsDraft.editorCommand,
+          editorMode: settingsDraft.editorMode,
+          projectId: workspace.project.id,
+          showGeneratedFiles: settingsDraft.showGeneratedFiles
+        })
+      ]);
       const nextWorkspace = await window.difftray.loadProject(workspace.project.id);
 
+      setAppSettings(savedAppSettings);
+      setAppSettingsDraft(savedAppSettings);
       setSettingsDraft(savedSettings);
       setSettingsOpen(false);
       setWorkspace(nextWorkspace);
@@ -371,69 +439,149 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar} aria-label="Projects">
-        <div className={styles.brandRow}>
-          <div className={styles.brandMark}>D</div>
-          <div>
-            <div className={styles.brandName}>Difftray</div>
-            <div className={styles.brandSubtle}>local review desk</div>
-          </div>
-        </div>
-
-        <button
-          className={styles.openButton}
-          disabled={loadState === "loading"}
-          onClick={() => {
-            void openProject();
-          }}
-          type="button"
-        >
-          <FolderOpen size={16} aria-hidden />
-          Open Repository
-        </button>
-
-        <div className={styles.projectList}>
-          {recentProjects.map((project) => (
-            <button
-              className={styles.projectItem}
-              data-active={workspace?.project.id === project.id}
-              key={project.id}
-              onClick={() => {
-                void loadProject(project.id);
-              }}
-              type="button"
-            >
-              <span className={styles.projectGlyph} />
-              <span className={styles.projectCopy}>
-                <span className={styles.projectName}>{project.name}</span>
-                <span className={styles.projectMeta}>{project.path}</span>
-              </span>
-              <ChevronRight size={15} aria-hidden />
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <section className={styles.workspace} aria-label="Review workspace">
-        <header className={styles.toolbar}>
-          <div className={styles.targetBlock}>
-            <div className={styles.targetTitle}>
-              {workspace ? workspace.project.name : "No repository open"}
-            </div>
-            <div className={styles.targetMeta}>
-              <GitBranch size={14} aria-hidden />
-              {workspace
-                ? `${workspace.reviewTarget.headRefName ?? "detached"} · working tree`
-                : "open a local Git repository"}
-            </div>
+    <main className={styles.shell} data-sidebar-open={projectRailVisible}>
+      {projectRailVisible ? (
+        <aside className={styles.projectRail} aria-label="Projects">
+          <div className={styles.railChrome}>
+            <span className={styles.chromeSpacer} />
+            {workspace ? (
+              <button
+                aria-label="Hide sidebar"
+                className={styles.chromeButton}
+                onClick={() => {
+                  setSidebarOpen(false);
+                }}
+                title="Hide sidebar"
+                type="button"
+              >
+                <PanelLeft size={17} aria-hidden />
+              </button>
+            ) : null}
           </div>
 
-          <div className={styles.toolbarActions}>
+          <div className={styles.railHeader}>
+            <div>
+              <div className={styles.productName}>Difftray</div>
+              <div className={styles.productMeta}>local diff review</div>
+            </div>
+            {workspace ? <div className={styles.modeLabel}>Worktree</div> : null}
+          </div>
+
+          {workspace ? (
+            <div className={styles.projectSummary}>
+              <div className={styles.summaryTopline}>
+                <span className={styles.summaryTitle}>{workspace.project.name}</span>
+                <span className={styles.summaryCount}>
+                  {workspace.progress.reviewedVisibleFiles}/
+                  {workspace.progress.totalVisibleReviewableFiles}
+                </span>
+              </div>
+              <div className={styles.progressTrack}>
+                <span
+                  className={styles.progressFill}
+                  style={{
+                    width: `${String(progressPercent(workspace.progress))}%`
+                  }}
+                />
+              </div>
+              <div className={styles.projectMeta}>{workspace.project.path}</div>
+            </div>
+          ) : null}
+
+          <button
+            className={styles.openButton}
+            disabled={loadState === "loading"}
+            onClick={() => {
+              void openProject();
+            }}
+            type="button"
+          >
+            <FolderOpen size={16} aria-hidden />
+            Open Repository
+          </button>
+
+          <div className={styles.railSectionLabel}>Projects</div>
+          <div className={styles.projectList}>
+            {recentProjects.map((project) => (
+              <button
+                className={styles.projectItem}
+                data-active={workspace?.project.id === project.id}
+                key={project.id}
+                onClick={() => {
+                  void loadProject(project.id);
+                }}
+                type="button"
+              >
+                <span className={styles.projectAccent} />
+                <span className={styles.projectCopy}>
+                  <span className={styles.projectName}>{project.name}</span>
+                  <span className={styles.projectMeta}>{project.path}</span>
+                </span>
+                <ChevronRight size={15} aria-hidden />
+              </button>
+            ))}
+          </div>
+        </aside>
+      ) : null}
+
+      {error ? <div className={styles.errorBanner}>{error}</div> : null}
+
+      {workspace ? (
+        <>
+          <nav className={styles.fileQueue} aria-label="Changed files">
+            <div className={styles.queueToolbar}>
+              <div className={styles.queueHeading}>
+                {!projectRailVisible ? (
+                  <button
+                    aria-label="Show sidebar"
+                    className={styles.iconButton}
+                    onClick={() => {
+                      setSidebarOpen(true);
+                    }}
+                    title="Show sidebar"
+                    type="button"
+                  >
+                    <PanelLeft size={16} aria-hidden />
+                  </button>
+                ) : null}
+                <div className={styles.queueTitleBlock}>
+                  <div className={styles.queueTitle}>Changed files</div>
+                  <div className={styles.queueMeta}>
+                    {pendingFiles.length} waiting · {reviewedFiles.length} reviewed
+                  </div>
+                </div>
+              </div>
+              <div className={styles.queueActions}>
+                <button
+                  aria-label="Refresh project"
+                  className={styles.iconButton}
+                  disabled={loadState === "loading"}
+                  onClick={() => {
+                    void refreshWorkspace();
+                  }}
+                  title="Refresh"
+                  type="button"
+                >
+                  <RefreshCw size={16} aria-hidden />
+                </button>
+                <button
+                  aria-label="Project settings"
+                  className={styles.iconButton}
+                  disabled={loadState === "loading"}
+                  onClick={() => {
+                    void openSettings();
+                  }}
+                  title="Settings"
+                  type="button"
+                >
+                  <Settings size={16} aria-hidden />
+                </button>
+              </div>
+            </div>
+
             <label className={styles.searchBox}>
               <Search size={15} aria-hidden />
               <input
-                disabled={!workspace}
                 ref={filterInputRef}
                 onChange={(event) => {
                   setFilter(event.target.value);
@@ -443,108 +591,76 @@ export function App(): React.JSX.Element {
                 value={filter}
               />
             </label>
-            <button
-              aria-label="Refresh project"
-              className={styles.iconButton}
-              disabled={!workspace || loadState === "loading"}
-              onClick={() => {
-                void refreshWorkspace();
-              }}
-              title="Refresh"
-              type="button"
-            >
-              <RefreshCw size={16} aria-hidden />
-            </button>
-            <button
-              aria-label="Project settings"
-              className={styles.iconButton}
-              disabled={!workspace || loadState === "loading"}
-              onClick={() => {
-                void openSettings();
-              }}
-              title="Settings"
-              type="button"
-            >
-              <Settings size={16} aria-hidden />
-            </button>
-          </div>
-        </header>
 
-        {error ? <div className={styles.errorBanner}>{error}</div> : null}
+            <div className={styles.fileList}>
+              {pendingFiles.map((file) => (
+                <FileButton
+                  file={file}
+                  isSelected={selectedFile?.path === file.path}
+                  key={file.path}
+                  onSelect={setSelectedPath}
+                />
+              ))}
 
-        {settingsOpen && settingsDraft ? (
-          <SettingsPanel
-            disabled={loadState === "loading"}
-            onCancel={() => {
-              setSettingsOpen(false);
-              setSettingsDraft(undefined);
-            }}
-            onChange={updateSettingsDraft}
-            onSave={() => {
-              void saveSettings();
-            }}
-            settings={settingsDraft}
-          />
-        ) : null}
+              {reviewedFiles.length > 0 ? (
+                <div className={styles.reviewedGroup}>
+                  <button
+                    className={styles.reviewedToggle}
+                    onClick={() => {
+                      setReviewedExpanded((expanded) => !expanded);
+                    }}
+                    type="button"
+                  >
+                    {reviewedExpanded ? (
+                      <ChevronDown size={15} aria-hidden />
+                    ) : (
+                      <ChevronRight size={15} aria-hidden />
+                    )}
+                    <span>{reviewedFiles.length} reviewed</span>
+                  </button>
 
-        {workspace ? (
-          <div className={styles.reviewGrid}>
-            <nav className={styles.filePane} aria-label="Changed files">
-              <div className={styles.filePaneHeader}>
-                <span>Changed files</span>
-                <span className={styles.progressPill}>
-                  {workspace.progress.reviewedVisibleFiles}/
-                  {workspace.progress.totalVisibleReviewableFiles}
-                </span>
-              </div>
+                  {reviewedExpanded
+                    ? reviewedFiles.map((file) => (
+                        <FileButton
+                          file={file}
+                          isSelected={selectedFile?.path === file.path}
+                          key={file.path}
+                          onSelect={setSelectedPath}
+                        />
+                      ))
+                    : null}
+                </div>
+              ) : null}
+            </div>
+          </nav>
 
-              <div className={styles.fileList}>
-                {pendingFiles.map((file) => (
-                  <FileButton
-                    file={file}
-                    isSelected={selectedFile?.path === file.path}
-                    key={file.path}
-                    onSelect={setSelectedPath}
-                  />
-                ))}
-
-                {reviewedFiles.length > 0 ? (
-                  <div className={styles.reviewedGroup}>
+          <article className={styles.diffCanvas} aria-label="Diff preview">
+            {selectedFile ? (
+              <>
+                <div className={styles.diffToolbar}>
+                  <div className={styles.diffTitleBlock}>
+                    <span className={styles.diffPath}>{selectedFile.path}</span>
+                    <span className={styles.diffMeta}>
+                      <GitBranch size={14} aria-hidden />
+                      {workspace.reviewTarget.headRefName ?? "detached"} ·{" "}
+                      {selectedFile.status} · +{selectedFile.additions} -
+                      {selectedFile.deletions}
+                      {selectedFile.invalidated ? " · changed after review" : ""}
+                    </span>
+                  </div>
+                  <div className={styles.diffActions}>
                     <button
-                      className={styles.reviewedToggle}
+                      aria-label="Open selected file in editor"
+                      className={styles.iconButton}
+                      disabled={loadState === "loading"}
                       onClick={() => {
-                        setReviewedExpanded((expanded) => !expanded);
+                        void openSelectedInEditor();
                       }}
+                      title="Open in editor"
                       type="button"
                     >
-                      {reviewedExpanded ? (
-                        <ChevronDown size={15} aria-hidden />
-                      ) : (
-                        <ChevronRight size={15} aria-hidden />
-                      )}
-                      <span>{reviewedFiles.length} reviewed</span>
+                      <ExternalLink size={16} aria-hidden />
                     </button>
-
-                    {reviewedExpanded
-                      ? reviewedFiles.map((file) => (
-                          <FileButton
-                            file={file}
-                            isSelected={selectedFile?.path === file.path}
-                            key={file.path}
-                            onSelect={setSelectedPath}
-                          />
-                        ))
-                      : null}
-                  </div>
-                ) : null}
-              </div>
-            </nav>
-
-            <article className={styles.diffPane} aria-label="Diff preview">
-              {selectedFile ? (
-                <>
-                  <div className={styles.diffHeader}>
-                    <span className={styles.diffPath}>{selectedFile.path}</span>
                     <button
                       className={styles.reviewButton}
                       data-reviewed={selectedFile.reviewed}
@@ -562,14 +678,36 @@ export function App(): React.JSX.Element {
                       {selectedFile.reviewed ? "Reviewed" : "Mark reviewed"}
                     </button>
                   </div>
-                  <DiffSurface patch={selectedFile.patch} />
-                </>
-              ) : (
-                <div className={styles.emptyState}>No changed files</div>
-              )}
-            </article>
-          </div>
-        ) : (
+                </div>
+                <DiffSurface patch={selectedFile.patch} />
+              </>
+            ) : (
+              <div className={styles.emptyState}>No changed files</div>
+            )}
+          </article>
+
+          {settingsOpen && settingsDraft ? (
+            <div className={styles.settingsOverlay}>
+              <SettingsPanel
+                appSettings={appSettingsDraft}
+                disabled={loadState === "loading"}
+                onCancel={() => {
+                  setSettingsOpen(false);
+                  setSettingsDraft(undefined);
+                  setAppSettingsDraft(appSettings);
+                }}
+                onChangeAppSettings={updateAppSettingsDraft}
+                onChange={updateSettingsDraft}
+                onSave={() => {
+                  void saveSettings();
+                }}
+                settings={settingsDraft}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <section className={styles.emptyWorkspace} aria-label="Review workspace">
           <div className={styles.emptyState}>
             <button
               className={styles.emptyOpenButton}
@@ -583,21 +721,25 @@ export function App(): React.JSX.Element {
               Open Repository
             </button>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </main>
   );
 }
 
 function SettingsPanel({
+  appSettings,
   disabled,
   onCancel,
+  onChangeAppSettings,
   onChange,
   onSave,
   settings
 }: {
+  readonly appSettings: AppSettingsView;
   readonly disabled: boolean;
   readonly onCancel: () => void;
+  readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
   readonly onChange: (patch: Partial<ProjectSettingsView>) => void;
   readonly onSave: () => void;
   readonly settings: ProjectSettingsView;
@@ -605,7 +747,12 @@ function SettingsPanel({
   const customEditor = settings.editorMode === "custom";
 
   return (
-    <section className={styles.settingsPanel} aria-label="Project settings">
+    <section
+      aria-labelledby="project-settings-title"
+      aria-modal="true"
+      className={styles.settingsPanel}
+      role="dialog"
+    >
       <form
         className={styles.settingsForm}
         onSubmit={(event) => {
@@ -615,7 +762,9 @@ function SettingsPanel({
       >
         <div className={styles.settingsHeader}>
           <div>
-            <div className={styles.settingsTitle}>Project settings</div>
+            <div className={styles.settingsTitle} id="project-settings-title">
+              Project settings
+            </div>
             <div className={styles.settingsMeta}>Stored per repository</div>
           </div>
           <button
@@ -640,6 +789,24 @@ function SettingsPanel({
             type="checkbox"
           />
           <span>Show generated files</span>
+        </label>
+
+        <label className={styles.fieldGroup}>
+          <span className={styles.fieldLabel}>Appearance</span>
+          <select
+            className={styles.selectInput}
+            disabled={disabled}
+            onChange={(event) => {
+              onChangeAppSettings({
+                themeMode: themeModeFromValue(event.target.value)
+              });
+            }}
+            value={appSettings.themeMode}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
         </label>
 
         <label className={styles.fieldGroup}>
@@ -722,13 +889,17 @@ function FileButton({
   return (
     <button
       className={styles.fileItem}
+      data-generated={file.generated}
+      data-invalidated={file.invalidated}
       data-selected={isSelected}
       onClick={() => {
         onSelect(file.path);
       }}
       type="button"
     >
-      {file.reviewed ? (
+      {file.invalidated ? (
+        <AlertTriangle className={styles.invalidatedIcon} size={17} aria-hidden />
+      ) : file.reviewed ? (
         <CheckCircle2 className={styles.reviewedIcon} size={17} aria-hidden />
       ) : (
         <Circle className={styles.pendingIcon} size={17} aria-hidden />
@@ -737,6 +908,7 @@ function FileButton({
         <span className={styles.filePath}>{file.path}</span>
         <span className={styles.fileMeta}>
           {file.status} · +{file.additions} -{file.deletions}
+          {file.invalidated ? " · changed after review" : ""}
           {file.generated ? " · generated" : ""}
         </span>
       </span>
@@ -746,42 +918,31 @@ function FileButton({
 }
 
 function DiffSurface({ patch }: { readonly patch: string }): React.JSX.Element {
+  const rows = useMemo(() => parseUnifiedDiff(patch), [patch]);
+
   return (
     <div className={styles.diffSurface}>
-      <pre>
-        {patch.split("\n").map((line, index) => (
-          <span className={lineClassName(line)} key={`${String(index)}-${line}`}>
-            {line.length > 0 ? line : " "}
-            {"\n"}
-          </span>
-        ))}
-      </pre>
+      <div className={styles.diffTable}>
+        {rows.map((row) =>
+          isCodeDiffRow(row) ? (
+            <div className={styles.diffRow} data-kind={row.kind} key={row.key}>
+              <span className={styles.diffNumber}>{row.oldNumber ?? ""}</span>
+              <code className={styles.diffCode}>{row.oldText ?? ""}</code>
+              <span className={styles.diffNumber}>{row.newNumber ?? ""}</span>
+              <code className={styles.diffCode}>{row.newText ?? ""}</code>
+            </div>
+          ) : (
+            <div
+              className={row.kind === "hunk" ? styles.diffHunkRow : styles.diffMetaRow}
+              key={row.key}
+            >
+              {row.text}
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
-}
-
-function lineClassName(line: string): string {
-  if (line.startsWith("@@")) {
-    return cssClass(styles.diffHunk);
-  }
-
-  if (line.startsWith("+") && !line.startsWith("+++")) {
-    return cssClass(styles.diffAdded);
-  }
-
-  if (line.startsWith("-") && !line.startsWith("---")) {
-    return cssClass(styles.diffDeleted);
-  }
-
-  if (line.startsWith("diff --git") || line.startsWith("index ")) {
-    return cssClass(styles.diffMetaLine);
-  }
-
-  return cssClass(styles.diffLine);
-}
-
-function cssClass(className: string | undefined): string {
-  return className ?? "";
 }
 
 function firstVisiblePath(workspace: ReviewWorkspaceView): string | undefined {
@@ -835,4 +996,113 @@ function clampIndex(index: number, length: number): number {
   }
 
   return index;
+}
+
+type ParsedDiffRow =
+  | {
+      readonly key: string;
+      readonly kind: "meta" | "hunk";
+      readonly text: string;
+    }
+  | {
+      readonly key: string;
+      readonly kind: "added" | "context" | "deleted";
+      readonly newNumber: number | undefined;
+      readonly newText: string | undefined;
+      readonly oldNumber: number | undefined;
+      readonly oldText: string | undefined;
+    };
+
+function isCodeDiffRow(
+  row: ParsedDiffRow
+): row is Extract<ParsedDiffRow, { readonly kind: "added" | "context" | "deleted" }> {
+  return row.kind === "added" || row.kind === "context" || row.kind === "deleted";
+}
+
+function parseUnifiedDiff(patch: string): readonly ParsedDiffRow[] {
+  const rows: ParsedDiffRow[] = [];
+  let oldLine: number | undefined;
+  let newLine: number | undefined;
+
+  for (const [index, line] of patch.split("\n").entries()) {
+    const key = `${String(index)}-${line}`;
+
+    if (line.startsWith("@@")) {
+      const hunk = /^@@ -(?<oldStart>\d+)(?:,\d+)? \+(?<newStart>\d+)(?:,\d+)? @@/.exec(
+        line
+      );
+
+      oldLine = hunk?.groups?.oldStart ? Number(hunk.groups.oldStart) : undefined;
+      newLine = hunk?.groups?.newStart ? Number(hunk.groups.newStart) : undefined;
+      rows.push({ key, kind: "hunk", text: line });
+      continue;
+    }
+
+    if (line.startsWith("diff --git") || line.startsWith("index ")) {
+      rows.push({ key, kind: "meta", text: line });
+      continue;
+    }
+
+    if (line.startsWith("---") || line.startsWith("+++")) {
+      rows.push({ key, kind: "meta", text: line });
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      rows.push({
+        key,
+        kind: "added",
+        newNumber: newLine,
+        newText: line.slice(1),
+        oldNumber: undefined,
+        oldText: undefined
+      });
+      newLine = incrementLine(newLine);
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      rows.push({
+        key,
+        kind: "deleted",
+        newNumber: undefined,
+        newText: undefined,
+        oldNumber: oldLine,
+        oldText: line.slice(1)
+      });
+      oldLine = incrementLine(oldLine);
+      continue;
+    }
+
+    rows.push({
+      key,
+      kind: "context",
+      newNumber: newLine,
+      newText: line.startsWith(" ") ? line.slice(1) : line,
+      oldNumber: oldLine,
+      oldText: line.startsWith(" ") ? line.slice(1) : line
+    });
+    oldLine = incrementLine(oldLine);
+    newLine = incrementLine(newLine);
+  }
+
+  return rows;
+}
+
+function incrementLine(line: number | undefined): number | undefined {
+  return line === undefined ? undefined : line + 1;
+}
+
+function progressPercent(progress: ReviewWorkspaceView["progress"]): number {
+  if (progress.totalVisibleReviewableFiles === 0) {
+    return 0;
+  }
+
+  return Math.round(
+    (progress.reviewedVisibleFiles / progress.totalVisibleReviewableFiles) * 100
+  );
+}
+
+function themeModeFromValue(value: string): ThemeMode {
+  return value === "dark" || value === "light" || value === "system" ? value : "system";
 }

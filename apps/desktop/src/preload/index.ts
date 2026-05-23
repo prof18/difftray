@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly getAppSettings: () => Promise<AppSettingsView>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView>;
   readonly markFileReviewed: (
@@ -13,9 +14,16 @@ export type DifftrayApi = {
   readonly updateProjectSettings: (
     input: UpdateProjectSettingsInput
   ) => Promise<ProjectSettingsView>;
+  readonly updateAppSettings: (input: UpdateAppSettingsInput) => Promise<AppSettingsView>;
   readonly unmarkFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<UnmarkReviewedResult>;
+};
+
+export type ThemeMode = "dark" | "light" | "system";
+
+export type AppSettingsView = {
+  readonly themeMode: ThemeMode;
 };
 
 export type RecentProjectView = {
@@ -30,6 +38,7 @@ export type ReviewFileView = {
   readonly deletions: number;
   readonly diffHash: string;
   readonly generated: boolean;
+  readonly invalidated: boolean;
   readonly path: string;
   readonly patch: string;
   readonly previousPath?: string;
@@ -113,8 +122,14 @@ export type UpdateProjectSettingsInput = {
   readonly showGeneratedFiles: boolean;
 };
 
+export type UpdateAppSettingsInput = {
+  readonly themeMode: ThemeMode;
+};
+
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  getAppSettings: async () =>
+    ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
   loadProject: async (projectId) =>
@@ -131,6 +146,8 @@ const api: DifftrayApi = {
     }) as Promise<ProjectSettingsView>,
   updateProjectSettings: async (input) =>
     ipcRenderer.invoke("settings:updateProject", input) as Promise<ProjectSettingsView>,
+  updateAppSettings: async (input) =>
+    ipcRenderer.invoke("settings:updateApp", input) as Promise<AppSettingsView>,
   unmarkFileReviewed: async (input) =>
     ipcRenderer.invoke(
       "reviews:unmarkFileReviewed",

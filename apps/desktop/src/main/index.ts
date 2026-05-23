@@ -26,6 +26,7 @@ import {
   type GitWorkingTreeReviewTarget
 } from "@difftray/git";
 import {
+  type AppSettingsRecord,
   type EditorLaunchConfig,
   openStorage,
   type DifftrayStorage,
@@ -54,6 +55,7 @@ type ReviewFileView = {
   readonly deletions: number;
   readonly diffHash: string;
   readonly generated: boolean;
+  readonly invalidated: boolean;
   readonly path: string;
   readonly patch: string;
   readonly previousPath?: string;
@@ -84,6 +86,12 @@ type ProjectSettingsView = {
   readonly editorMode: "custom" | "system";
   readonly projectId: string;
   readonly showGeneratedFiles: boolean;
+};
+
+type ThemeMode = "dark" | "light" | "system";
+
+type AppSettingsView = {
+  readonly themeMode: ThemeMode;
 };
 
 type MarkReviewedResult =
@@ -152,6 +160,21 @@ const createMainWindow = async (): Promise<void> => {
 };
 
 ipcMain.handle("app:version", () => app.getVersion());
+ipcMain.handle(
+  "settings:getApp",
+  (): AppSettingsView => appSettingsView(getStorage().getAppSettings())
+);
+ipcMain.handle(
+  "settings:updateApp",
+  (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
+    const themeMode = readEnumProperty(input, "themeMode", ["dark", "light", "system"]);
+    const settings: AppSettingsRecord = { themeMode };
+
+    getStorage().upsertAppSettings(settings);
+
+    return appSettingsView(getStorage().getAppSettings());
+  }
+);
 ipcMain.handle("projects:listRecent", () =>
   getStorage()
     .listRecentProjects()
@@ -428,6 +451,7 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
         deletions: summary.deletions,
         diffHash: state.diffHash,
         generated: state.generated,
+        invalidated: state.invalidated,
         path: state.path,
         patch,
         ...(state.diff.oldPath ? { previousPath: state.diff.oldPath } : {}),
@@ -529,6 +553,12 @@ function settingsView(settings: ProjectSettingsRecord): ProjectSettingsView {
     editorMode: settings.editorLaunchConfig ? "custom" : "system",
     projectId: settings.projectId,
     showGeneratedFiles: settings.showGeneratedFiles
+  };
+}
+
+function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
+  return {
+    themeMode: settings.themeMode
   };
 }
 

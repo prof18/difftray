@@ -42,6 +42,12 @@ export type ProjectSettingsRecord = {
   readonly showGeneratedFiles: boolean;
 };
 
+export type ThemeMode = "dark" | "light" | "system";
+
+export type AppSettingsRecord = {
+  readonly themeMode: ThemeMode;
+};
+
 export type ReviewMarkInput = {
   readonly path: string;
   readonly previousPath?: string;
@@ -93,6 +99,7 @@ export type VerifyAndUnmarkReviewedResult =
 
 export type DifftrayStorage = {
   readonly close: () => void;
+  readonly getAppSettings: () => AppSettingsRecord;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
@@ -111,6 +118,7 @@ export type DifftrayStorage = {
     reviewedDiffHash: string
   ) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
+  readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
   readonly verifyAndMarkReviewed: (
@@ -130,6 +138,7 @@ export function openStorage(filename: string): DifftrayStorage {
     close: () => {
       db.close();
     },
+    getAppSettings: () => getAppSettings(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
@@ -146,6 +155,9 @@ export function openStorage(filename: string): DifftrayStorage {
     },
     upsertProject: (project) => {
       upsertProject(db, project);
+    },
+    upsertAppSettings: (settings) => {
+      upsertAppSettings(db, settings);
     },
     upsertProjectSettings: (settings) => {
       upsertProjectSettings(db, settings);
@@ -401,6 +413,39 @@ function getProjectSettings(db: DatabaseSync, projectId: string): ProjectSetting
   return projectSettingsFromRow(row as ProjectSettingsRow);
 }
 
+function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord): void {
+  upsertAppSetting(db, "theme_mode", settings.themeMode);
+}
+
+function getAppSettings(db: DatabaseSync): AppSettingsRecord {
+  const themeMode = getAppSetting(db, "theme_mode");
+
+  return {
+    themeMode: isThemeMode(themeMode) ? themeMode : "system"
+  };
+}
+
+function upsertAppSetting(db: DatabaseSync, key: string, value: string): void {
+  db.prepare(
+    `
+    insert into app_settings (
+      key,
+      value,
+      updated_at
+    ) values (?, ?, ?)
+    on conflict(key) do update set
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `
+  ).run(key, value, currentTimestamp());
+}
+
+function getAppSetting(db: DatabaseSync, key: string): string | undefined {
+  const row = db.prepare("select value from app_settings where key = ?").get(key);
+
+  return row ? (row as AppSettingsRow).value : undefined;
+}
+
 function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
   const now = currentTimestamp();
   const id = reviewMarkId(input);
@@ -536,6 +581,10 @@ type ProjectSettingsRow = {
   readonly show_generated_files: 0 | 1;
 };
 
+type AppSettingsRow = {
+  readonly value: string;
+};
+
 type ReviewMarkRow = {
   readonly path: string;
   readonly previous_path: null | string;
@@ -612,4 +661,8 @@ function isEditorLaunchConfig(value: unknown): value is EditorLaunchConfig {
     Array.isArray(value.args) &&
     value.args.every((arg) => typeof arg === "string")
   );
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "dark" || value === "light" || value === "system";
 }
