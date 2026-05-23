@@ -58,15 +58,15 @@
 
 ## Desktop App
 
-- [ ] Implement project open flow.
-- [ ] Implement recent projects.
-- [ ] Implement project sidebar.
-- [ ] Implement changed file list.
-- [ ] Implement diff viewer adapter.
-- [ ] Implement review checkbox.
-- [ ] Implement collapse-on-review.
-- [ ] Implement keyboard shortcuts.
-- [ ] Implement external editor command.
+- [x] Implement project open flow.
+- [x] Implement recent projects.
+- [x] Implement project sidebar.
+- [x] Implement changed file list.
+- [x] Implement diff viewer adapter.
+- [x] Implement review checkbox.
+- [x] Implement collapse-on-review.
+- [x] Implement keyboard shortcuts.
+- [x] Implement external editor command.
 - [ ] Implement settings screen.
 
 ## V0 Release Prep
@@ -75,5 +75,5 @@
 - [ ] Add screenshots.
 - [ ] Add install/run instructions.
 - [ ] Add contribution docs.
-- [ ] Add license.
+- [x] Add license.
 - [ ] Create public repository when ready.

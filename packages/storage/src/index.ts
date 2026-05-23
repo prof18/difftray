@@ -50,6 +50,13 @@ export type ReviewMarkInput = {
   readonly reviewTargetId: string;
 };
 
+export type ReviewMarkRecord = {
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly reviewedDiffHash: string;
+  readonly reviewTargetId: string;
+};
+
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
   readonly displayedDiffHash: string;
@@ -68,6 +75,22 @@ export type VerifyAndMarkReviewedResult =
       readonly marked: true;
     };
 
+export type VerifyAndUnmarkReviewedInput = {
+  readonly currentDiffHash: string;
+  readonly displayedDiffHash: string;
+  readonly path: string;
+  readonly reviewTargetId: string;
+};
+
+export type VerifyAndUnmarkReviewedResult =
+  | {
+      readonly reason: "stale_diff";
+      readonly unmarked: false;
+    }
+  | {
+      readonly unmarked: true;
+    };
+
 export type DifftrayStorage = {
   readonly close: () => void;
   readonly getProject: (id: string) => StoredProjectRecord | null;
@@ -79,13 +102,23 @@ export type DifftrayStorage = {
     path: string,
     currentDiffHash: string
   ) => boolean;
+  readonly listRecentProjects: () => readonly StoredProjectRecord[];
+  readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
   readonly markReviewed: (input: ReviewMarkInput) => void;
+  readonly unmarkReviewed: (
+    reviewTargetId: string,
+    path: string,
+    reviewedDiffHash: string
+  ) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
   readonly verifyAndMarkReviewed: (
     input: VerifyAndMarkReviewedInput
   ) => VerifyAndMarkReviewedResult;
+  readonly verifyAndUnmarkReviewed: (
+    input: VerifyAndUnmarkReviewedInput
+  ) => VerifyAndUnmarkReviewedResult;
 };
 
 export function openStorage(filename: string): DifftrayStorage {
@@ -103,8 +136,13 @@ export function openStorage(filename: string): DifftrayStorage {
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
+    listRecentProjects: () => listRecentProjects(db),
+    listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
     markReviewed: (input) => {
       markReviewed(db, input);
+    },
+    unmarkReviewed: (reviewTargetId, filePath, reviewedDiffHash) => {
+      unmarkReviewed(db, reviewTargetId, filePath, reviewedDiffHash);
     },
     upsertProject: (project) => {
       upsertProject(db, project);
@@ -132,6 +170,18 @@ export function openStorage(filename: string): DifftrayStorage {
       });
 
       return { marked: true };
+    },
+    verifyAndUnmarkReviewed: (input) => {
+      if (input.currentDiffHash !== input.displayedDiffHash) {
+        return {
+          reason: "stale_diff",
+          unmarked: false
+        };
+      }
+
+      unmarkReviewed(db, input.reviewTargetId, input.path, input.currentDiffHash);
+
+      return { unmarked: true };
     }
   };
 }
@@ -242,6 +292,23 @@ function getProject(
   }
 
   return projectFromRow(row as ProjectRow);
+}
+
+function listRecentProjects(db: DatabaseSync): readonly StoredProjectRecord[] {
+  const rows = db
+    .prepare(
+      `
+        select *
+        from projects
+        order by
+          last_opened_at is null,
+          last_opened_at desc,
+          updated_at desc
+      `
+    )
+    .all();
+
+  return rows.map((row) => projectFromRow(row as ProjectRow));
 }
 
 function upsertReviewTarget(db: DatabaseSync, target: ReviewTargetRecord): void {
@@ -365,6 +432,22 @@ function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
   );
 }
 
+function unmarkReviewed(
+  db: DatabaseSync,
+  reviewTargetId: string,
+  filePath: string,
+  reviewedDiffHash: string
+): void {
+  db.prepare(
+    `
+      delete from review_marks
+      where review_target_id = ?
+        and path = ?
+        and reviewed_diff_hash = ?
+    `
+  ).run(reviewTargetId, filePath, reviewedDiffHash);
+}
+
 function isReviewed(
   db: DatabaseSync,
   reviewTargetId: string,
@@ -385,6 +468,24 @@ function isReviewed(
     .get(reviewTargetId, filePath, currentDiffHash);
 
   return row !== undefined;
+}
+
+function listReviewMarks(
+  db: DatabaseSync,
+  reviewTargetId: string
+): readonly ReviewMarkRecord[] {
+  const rows = db
+    .prepare(
+      `
+        select path, previous_path, reviewed_diff_hash, review_target_id
+        from review_marks
+        where review_target_id = ?
+        order by path asc, reviewed_at desc
+      `
+    )
+    .all(reviewTargetId);
+
+  return rows.map((row) => reviewMarkFromRow(row as ReviewMarkRow));
 }
 
 function reviewMarkId(input: ReviewMarkInput): string {
@@ -435,6 +536,13 @@ type ProjectSettingsRow = {
   readonly show_generated_files: 0 | 1;
 };
 
+type ReviewMarkRow = {
+  readonly path: string;
+  readonly previous_path: null | string;
+  readonly reviewed_diff_hash: string;
+  readonly review_target_id: string;
+};
+
 function projectFromRow(row: ProjectRow): StoredProjectRecord {
   return {
     createdAt: row.created_at,
@@ -472,6 +580,15 @@ function projectSettingsFromRow(row: ProjectSettingsRow): ProjectSettingsRecord 
     ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
     projectId: row.project_id,
     showGeneratedFiles: row.show_generated_files === 1
+  };
+}
+
+function reviewMarkFromRow(row: ReviewMarkRow): ReviewMarkRecord {
+  return {
+    path: row.path,
+    ...(row.previous_path ? { previousPath: row.previous_path } : {}),
+    reviewedDiffHash: row.reviewed_diff_hash,
+    reviewTargetId: row.review_target_id
   };
 }
 

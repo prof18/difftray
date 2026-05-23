@@ -50,6 +50,14 @@
   font-size: 12px;
 }
 
+.projectMeta,
+.fileMeta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .openButton {
   display: inline-flex;
   min-height: 36px;
@@ -61,6 +69,13 @@
   color: #16110a;
   font: inherit;
   font-weight: 600;
+}
+
+.openButton:disabled,
+.emptyOpenButton:disabled,
+.iconButton:disabled,
+.reviewButton:disabled {
+  opacity: 0.52;
 }
 
 .projectList,
@@ -89,7 +104,7 @@
   padding: 9px;
 }
 
-.projectItem:first-child {
+.projectItem[data-active="true"] {
   border-color: var(--border-strong);
   background: rgba(255, 255, 255, 0.04);
 }
@@ -111,15 +126,14 @@
 }
 
 .projectName,
-.filePath {
+.filePath,
+.diffPath {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.projectStatus,
-.progressPill,
-.diffBadge {
+.progressPill {
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 11px;
@@ -130,6 +144,14 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
+}
+
+.errorBanner {
+  border-bottom: 1px solid rgba(232, 92, 92, 0.35);
+  background: rgba(104, 30, 25, 0.42);
+  color: #ffd2cc;
+  font-size: 13px;
+  padding: 9px 24px;
 }
 
 .toolbar {
@@ -226,9 +248,31 @@
   padding: 9px 8px;
 }
 
-.fileItem:first-child {
+.fileItem[data-selected="true"] {
   border-color: rgba(232, 176, 92, 0.38);
   background: rgba(232, 176, 92, 0.08);
+}
+
+.reviewedGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.reviewedToggle {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
 }
 
 .reviewedIcon {
@@ -246,6 +290,31 @@
   padding: 16px 20px 20px;
 }
 
+.diffHeader {
+  min-width: 0;
+}
+
+.reviewButton {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(232, 176, 92, 0.48);
+  background: rgba(232, 176, 92, 0.12);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 10px;
+}
+
+.reviewButton[data-reviewed="true"] {
+  border-color: rgba(111, 202, 143, 0.42);
+  background: rgba(111, 202, 143, 0.1);
+  color: var(--status-reviewed);
+}
+
 .diffSurface {
   min-height: 0;
   flex: 1;
@@ -261,4 +330,55 @@
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.diffLine,
+.diffMetaLine,
+.diffHunk,
+.diffAdded,
+.diffDeleted {
+  display: block;
+  min-height: 22px;
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.diffMetaLine {
+  color: #a9a196;
+}
+
+.diffHunk {
+  background: rgba(93, 141, 210, 0.14);
+  color: #9fc1ee;
+}
+
+.diffAdded {
+  background: rgba(111, 202, 143, 0.1);
+  color: #a8e1b9;
+}
+
+.diffDeleted {
+  background: rgba(229, 104, 91, 0.12);
+  color: #f0aba3;
+}
+
+.emptyState {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.emptyOpenButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-strong);
+  background: rgba(232, 176, 92, 0.12);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  padding: 0 14px;
 }

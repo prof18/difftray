@@ -40,6 +40,29 @@ describe("storage", () => {
     storage.close();
   });
 
+  it("lists recent projects by last open time", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      id: "older-project",
+      lastOpenedAt: "2026-01-01T00:00:00.000Z",
+      name: "Older",
+      path: "/tmp/older"
+    });
+    storage.upsertProject({
+      id: "newer-project",
+      lastOpenedAt: "2026-01-02T00:00:00.000Z",
+      name: "Newer",
+      path: "/tmp/newer"
+    });
+
+    expect(storage.listRecentProjects()).toEqual([
+      expect.objectContaining({ id: "newer-project" }),
+      expect.objectContaining({ id: "older-project" })
+    ]);
+    storage.close();
+  });
+
   it("upserts review targets", () => {
     const storage = openStorage(":memory:");
     storage.upsertProject(project);
@@ -73,6 +96,13 @@ describe("storage", () => {
 
     expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-a")).toBe(true);
     expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-b")).toBe(false);
+    expect(storage.listReviewMarks(reviewTarget.id)).toEqual([
+      {
+        path: "src/app.ts",
+        reviewedDiffHash: "hash-a",
+        reviewTargetId: reviewTarget.id
+      }
+    ]);
     storage.close();
   });
 
@@ -96,6 +126,70 @@ describe("storage", () => {
 
     expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-a")).toBe(true);
     expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-b")).toBe(true);
+    storage.close();
+  });
+
+  it("unmarks a reviewed diff hash", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+
+    storage.markReviewed({
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewedDiffHash: "hash-a",
+      reviewTargetId: reviewTarget.id
+    });
+    storage.unmarkReviewed(reviewTarget.id, "src/app.ts", "hash-a");
+
+    expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-a")).toBe(false);
+    expect(storage.listReviewMarks(reviewTarget.id)).toEqual([]);
+    storage.close();
+  });
+
+  it("rejects stale displayed hashes when unmarking reviewed", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+    storage.markReviewed({
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewedDiffHash: "new-hash",
+      reviewTargetId: reviewTarget.id
+    });
+
+    const result = storage.verifyAndUnmarkReviewed({
+      currentDiffHash: "new-hash",
+      displayedDiffHash: "old-hash",
+      path: "src/app.ts",
+      reviewTargetId: reviewTarget.id
+    });
+
+    expect(result).toEqual({ unmarked: false, reason: "stale_diff" });
+    expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "new-hash")).toBe(true);
+    storage.close();
+  });
+
+  it("unmarks reviewed when displayed and current hashes match", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+    storage.markReviewed({
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewedDiffHash: "hash-a",
+      reviewTargetId: reviewTarget.id
+    });
+
+    const result = storage.verifyAndUnmarkReviewed({
+      currentDiffHash: "hash-a",
+      displayedDiffHash: "hash-a",
+      path: "src/app.ts",
+      reviewTargetId: reviewTarget.id
+    });
+
+    expect(result).toEqual({ unmarked: true });
+    expect(storage.isReviewed(reviewTarget.id, "src/app.ts", "hash-a")).toBe(false);
     storage.close();
   });
 

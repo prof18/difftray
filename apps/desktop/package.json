@@ -8,7 +8,7 @@
     "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts",
     "dev": "node scripts/dev.mjs",
     "test": "vitest run --passWithNoTests",
-    "test:visual": "pnpm build && node tests/visual-smoke.mjs",
+    "test:visual": "pnpm --filter @difftray/core build && pnpm --filter @difftray/git build && pnpm --filter @difftray/storage build && pnpm build && node tests/visual-smoke.mjs",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },
   "dependencies": {
