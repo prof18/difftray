@@ -17,15 +17,16 @@
 
 When the project is scaffolded, all commands should be documented in `package.json` and mirrored in this file.
 
-Expected future commands:
+Project commands:
 
 - `pnpm install`
+- `pnpm build`
 - `pnpm dev`
+- `pnpm format`
+- `pnpm format:write`
 - `pnpm test`
-- `pnpm test:watch`
 - `pnpm lint`
 - `pnpm typecheck`
-- `pnpm e2e`
 - `pnpm test:visual`
 - `pnpm check`
 

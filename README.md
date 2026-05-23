@@ -57,4 +57,4 @@ Apache-2.0.
 
 ## Current Status
 
-Planning and specification phase is complete enough to start implementation. No application code has been scaffolded yet.
+Implementation has started. The pnpm workspace, Electron/Vite/React desktop shell, core package boundaries, and local quality gate are scaffolded.

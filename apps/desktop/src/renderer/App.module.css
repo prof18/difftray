@@ -1,0 +1,264 @@
+.shell {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(232, 176, 92, 0.14), transparent 32rem),
+    linear-gradient(135deg, var(--surface-ink), var(--surface-raised) 45%, #10100f);
+  color: var(--text-primary);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-right: 1px solid var(--border-subtle);
+  background: rgba(19, 19, 18, 0.84);
+  padding: 20px 14px;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px;
+}
+
+.brandMark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgba(232, 176, 92, 0.46);
+  background: linear-gradient(145deg, #3a2d19, #161410);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.brandName,
+.targetTitle {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.brandSubtle,
+.projectMeta,
+.targetMeta,
+.fileMeta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.openButton {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(232, 176, 92, 0.52);
+  background: var(--accent);
+  color: #16110a;
+  font: inherit;
+  font-weight: 600;
+}
+
+.projectList,
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projectItem,
+.fileItem {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.projectItem {
+  min-height: 54px;
+  padding: 9px;
+}
+
+.projectItem:first-child {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.projectGlyph {
+  width: 8px;
+  height: 32px;
+  flex: 0 0 auto;
+  background: var(--accent);
+}
+
+.projectCopy,
+.fileCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.projectName,
+.filePath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectStatus,
+.progressPill,
+.diffBadge {
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.workspace {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 24px;
+}
+
+.targetBlock {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.targetMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchBox {
+  display: flex;
+  width: min(32vw, 320px);
+  min-width: 180px;
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 10px;
+  color: var(--text-muted);
+}
+
+.searchBox input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  outline: 0;
+}
+
+.iconButton {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.reviewGrid {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
+}
+
+.filePane {
+  min-width: 0;
+  border-right: 1px solid var(--border-subtle);
+  background: rgba(12, 12, 11, 0.28);
+  padding: 16px;
+}
+
+.filePaneHeader,
+.diffHeader {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.fileItem {
+  min-height: 52px;
+  padding: 9px 8px;
+}
+
+.fileItem:first-child {
+  border-color: rgba(232, 176, 92, 0.38);
+  background: rgba(232, 176, 92, 0.08);
+}
+
+.reviewedIcon {
+  color: var(--status-reviewed);
+}
+
+.pendingIcon {
+  color: var(--text-muted);
+}
+
+.diffPane {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+}
+
+.diffSurface {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(90deg, rgba(232, 176, 92, 0.05), transparent 38%), #111110;
+}
+
+.diffSurface pre {
+  margin: 0;
+  padding: 20px;
+  color: #d8d0c4;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}

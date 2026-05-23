@@ -24,12 +24,12 @@
 
 ## Scaffolding
 
-- [ ] Scaffold Electron + React + TypeScript + Vite.
-- [ ] Add strict TypeScript.
-- [ ] Add Vitest.
-- [ ] Add Playwright or Electron app test harness.
-- [ ] Add ESLint.
-- [ ] Add Prettier.
+- [x] Scaffold Electron + React + TypeScript + Vite.
+- [x] Add strict TypeScript.
+- [x] Add Vitest.
+- [x] Add Playwright or Electron app test harness.
+- [x] Add ESLint.
+- [x] Add Prettier.
 - [ ] Add CI workflow after repository is public or private remote exists.
 
 ## Core Implementation

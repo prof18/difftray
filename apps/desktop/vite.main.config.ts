@@ -1,0 +1,18 @@
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: {
+    emptyOutDir: false,
+    outDir: "dist/main",
+    rollupOptions: {
+      external: ["electron", "node:path"],
+      output: {
+        entryFileNames: "index.cjs",
+        format: "cjs"
+      }
+    },
+    ssr: "src/main/index.ts",
+    sourcemap: true,
+    target: "node22"
+  }
+});

@@ -1,0 +1,44 @@
+:root {
+  color-scheme: dark;
+  font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+  --accent: #e8b05c;
+  --border-strong: rgba(232, 176, 92, 0.34);
+  --border-subtle: rgba(255, 255, 255, 0.11);
+  --status-reviewed: #6fca8f;
+  --surface-ink: #171716;
+  --surface-raised: #20201e;
+  --text-muted: #8d8980;
+  --text-primary: #f1ece3;
+  --text-secondary: #c2b9aa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 900px;
+  background: var(--surface-ink);
+}
+
+button,
+input {
+  border-radius: 0;
+}
+
+button {
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
