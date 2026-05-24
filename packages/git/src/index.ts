@@ -130,6 +130,26 @@ export async function getGitStatus(
   return parseStatusPorcelainV2(stdout);
 }
 
+export async function listBranchRefs(repoPath: string): Promise<readonly string[]> {
+  const output = await gitOutput(repoPath, [
+    "for-each-ref",
+    "--format=%(refname)",
+    "--sort=refname",
+    "refs/heads",
+    "refs/remotes"
+  ]);
+
+  return Array.from(
+    new Set(
+      output
+        .split("\n")
+        .map((ref) => ref.trim())
+        .map(shortBranchRefFromFullRef)
+        .filter((ref): ref is string => ref !== undefined)
+    )
+  );
+}
+
 export async function loadWorkingTreeDiffs(
   repoPath: string
 ): Promise<WorkingTreeDiffResult> {
@@ -229,6 +249,18 @@ export function parseStatusPorcelainV2(output: string): readonly GitPorcelainSta
   }
 
   return statuses;
+}
+
+function shortBranchRefFromFullRef(ref: string): string | undefined {
+  if (ref.startsWith("refs/heads/")) {
+    return ref.slice("refs/heads/".length);
+  }
+
+  if (ref.startsWith("refs/remotes/") && !ref.endsWith("/HEAD")) {
+    return ref.slice("refs/remotes/".length);
+  }
+
+  return undefined;
 }
 
 function parseOrdinaryRecord(record: string): GitPorcelainStatus {

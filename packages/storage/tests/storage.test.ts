@@ -45,6 +45,66 @@ describe("storage", () => {
     storage.close();
   });
 
+  it("persists a project default base ref", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      ...project,
+      defaultBaseRef: "main"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultBaseRef: "main",
+        id: project.id
+      })
+    );
+    storage.close();
+  });
+
+  it("preserves the default base ref when reopening a project", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      ...project,
+      defaultBaseRef: "main"
+    });
+    storage.upsertProject({
+      ...project,
+      lastOpenedAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultBaseRef: "main",
+        lastOpenedAt: "2026-01-01T00:00:00.000Z"
+      })
+    );
+    storage.close();
+  });
+
+  it("updates and clears a project default base ref", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+
+    storage.updateProjectDefaultBaseRef(project.id, "origin/main");
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultBaseRef: "origin/main"
+      })
+    );
+
+    storage.updateProjectDefaultBaseRef(project.id, undefined);
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.not.objectContaining({
+        defaultBaseRef: expect.any(String)
+      })
+    );
+    storage.close();
+  });
+
   it("lists recent projects by last open time", () => {
     const storage = openStorage(":memory:");
 

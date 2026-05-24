@@ -6,11 +6,11 @@ Accepted
 
 ## Decision
 
-The v0 desktop app opens local repositories through the native directory picker, stores opened repositories as recent projects, and loads working-tree review data through the main process.
+The v0 desktop app opens local repositories through the native directory picker, stores opened repositories as recent projects, and loads the selected repository diff target through the main process.
 
 The renderer talks to a narrow preload API for project listing, project open/load, refresh, project settings, editor launch, and marking a displayed file reviewed. The renderer does not read Git, SQLite, or the filesystem directly.
 
-Review marking is verified in the main process by reloading the current working-tree diff and comparing the displayed diff hash with the current diff hash before persisting the mark.
+Review marking is verified in the main process by reloading the current repository diff target and comparing the displayed diff hash with the current diff hash before persisting the mark.
 
 Repository records keep project-local workspace state. App settings store generated-file visibility, editor launch configuration, and review defaults. Saving settings reloads the current workspace so generated-file visibility and progress are recalculated from the persisted app setting.
 
@@ -32,5 +32,4 @@ Positive:
 
 Negative:
 
-- The first workflow is working-tree only until branch review controls are added.
 - Refresh is explicit for now; file watching remains a later main-process service.

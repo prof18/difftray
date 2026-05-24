@@ -73,11 +73,20 @@ try {
   await expectValue(window, "Command", "code");
   await expectValuePrefix(window, "Arguments", "--goto {path}:{line}");
   await window.getByRole("button", { name: "Close settings" }).click();
+  await window.getByLabel("Compare against branch").selectOption("main");
+  await window.getByText("against main").waitFor({ timeout: 10_000 });
+  await expectComboboxValue(window, "Compare against branch", "main");
+  await window.getByRole("button", { name: "Reset to Git changes" }).click();
+  await window
+    .getByRole("button", { name: /schema\.generated\.ts/ })
+    .waitFor({ timeout: 10_000 });
+  await expectComboboxValue(window, "Compare against branch", "");
+  await expectButtonEnabled(window, "Mark reviewed");
   await window.getByRole("button", { name: "Hide file list" }).click();
   await window.getByRole("button", { name: "Show file list" }).waitFor({
     timeout: 10_000
   });
-  await window.keyboard.press("Meta+Digit1");
+  await window.keyboard.press("Meta+1");
   await window.getByRole("button", { name: "Hide file list" }).waitFor({
     timeout: 10_000
   });
@@ -111,7 +120,11 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-marked.png")
   });
-  await writeFile(path.join(repoPath, "tracked.txt"), "before\nafter\nagain\n", "utf8");
+  await writeFile(
+    path.join(repoPath, "tracked.txt"),
+    "before\nbranch\nafter\nagain\n",
+    "utf8"
+  );
   await window.evaluate(() => {
     window.dispatchEvent(new Event("focus"));
   });
@@ -146,7 +159,10 @@ async function createChangedRepository(name = "visual-repo") {
   await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf8");
   git(repo, ["add", "tracked.txt"]);
   git(repo, ["commit", "-m", "Initial"]);
-  await writeFile(path.join(repo, "tracked.txt"), "before\nafter\n", "utf8");
+  git(repo, ["checkout", "-b", "feature/review"]);
+  await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\n", "utf8");
+  git(repo, ["commit", "-am", "Branch change"]);
+  await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\nafter\n", "utf8");
   await writeFile(
     path.join(repo, "schema.generated.ts"),
     "export const value = 1;\n",
@@ -263,6 +279,14 @@ async function expectValuePrefix(window, label, expectedValue) {
       `Expected ${label} to start with ${expectedValue}, got ${actualValue}`
     );
   }
+}
+
+async function expectButtonEnabled(window, text) {
+  await window.waitForFunction((targetText) => {
+    return [...document.querySelectorAll("button")].some((button) => {
+      return button.textContent?.includes(targetText) && !button.disabled;
+    });
+  }, text);
 }
 
 async function expectComboboxValue(window, name, expectedValue) {

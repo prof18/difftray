@@ -7,6 +7,7 @@ declare global {
     readonly appVersion: () => Promise<string>;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
+    readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
     readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
     readonly markFileReviewed: (
@@ -18,6 +19,9 @@ declare global {
     readonly updateProjectSettings: (
       input: UpdateProjectSettingsInput
     ) => Promise<ProjectSettingsView>;
+    readonly updateProjectDiffTarget: (
+      input: UpdateProjectDiffTargetInput
+    ) => Promise<ReviewWorkspaceView>;
     readonly updateAppSettings: (
       input: UpdateAppSettingsInput
     ) => Promise<AppSettingsView>;
@@ -42,6 +46,7 @@ declare global {
   };
 
   type RecentProjectView = {
+    readonly defaultBaseRef?: string;
     readonly id: string;
     readonly lastOpenedAt?: string;
     readonly name: string;
@@ -79,6 +84,7 @@ declare global {
     readonly project: RecentProjectView;
     readonly progress: ReviewProgressView;
     readonly reviewTarget: {
+      readonly baseRefName?: string;
       readonly headRefName?: string;
       readonly headSha: string;
       readonly id: string;
@@ -140,6 +146,17 @@ declare global {
     readonly fileListWidth: number;
     readonly projectId: string;
   };
+
+  type UpdateProjectDiffTargetInput =
+    | {
+        readonly mode: "working_tree";
+        readonly projectId: string;
+      }
+    | {
+        readonly baseRefName: string;
+        readonly mode: "branch";
+        readonly projectId: string;
+      };
 
   type UpdateAppSettingsInput = {
     readonly autoCollapseHunksOver: number;

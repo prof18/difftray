@@ -36,6 +36,7 @@ import {
 
 type LoadState = "idle" | "loading";
 type DiffMode = "split" | "unified";
+type ReviewDiffTargetMode = "branch" | "working_tree";
 type ReviewState = "attention" | "pending" | "reviewed";
 type PaletteMode = "all" | "files";
 type CommandKind = "action" | "file" | "project";
@@ -94,6 +95,8 @@ export function App(): React.JSX.Element {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(defaultAppSettings);
   const [appSettingsDraft, setAppSettingsDraft] =
     useState<AppSettingsView>(defaultAppSettings);
+  const [baseRefDraft, setBaseRefDraft] = useState("");
+  const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
   const [error, setError] = useState<string | undefined>();
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
@@ -420,12 +423,19 @@ export function App(): React.JSX.Element {
     nextPath?: string,
     nextAppSettings = appSettings
   ): Promise<void> {
-    const nextSettings = await window.difftray.getProjectSettings(
-      nextWorkspace.project.id
-    );
+    const [nextSettings, nextBranchRefs] = await Promise.all([
+      window.difftray.getProjectSettings(nextWorkspace.project.id),
+      window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
+    ]);
 
     setWorkspace(nextWorkspace);
     setProjectSettings(nextSettings);
+    setBranchRefs(nextBranchRefs);
+    setBaseRefDraft(
+      nextWorkspace.reviewTarget.baseRefName ??
+        suggestedBaseRef(nextBranchRefs, nextWorkspace.reviewTarget.headRefName) ??
+        ""
+    );
     setDiffMode(nextAppSettings.defaultDiffMode);
     setFileListWidth(nextSettings.fileListWidth);
     setFileListCollapsed(nextSettings.fileListCollapsed);
@@ -508,6 +518,8 @@ export function App(): React.JSX.Element {
       setWorkspace(undefined);
       setSelectedPath(undefined);
       setProjectSettings(defaultProjectSettings);
+      setBranchRefs([]);
+      setBaseRefDraft("");
       setDiffMode(appSettings.defaultDiffMode);
       setFileListWidth(defaultProjectSettings.fileListWidth);
       setFileListCollapsed(defaultProjectSettings.fileListCollapsed);
@@ -624,11 +636,16 @@ export function App(): React.JSX.Element {
       setFileListCollapsed(savedSettings.fileListCollapsed);
       setSettingsOpen(false);
       if (nextWorkspace) {
-        setWorkspace(nextWorkspace);
-        setSelectedPath(visiblePathOrFirst(nextWorkspace, selectedPath));
+        await applyWorkspace(
+          nextWorkspace,
+          visiblePathOrFirst(nextWorkspace, selectedPath),
+          savedAppSettings
+        );
       } else {
         setWorkspace(undefined);
         setSelectedPath(undefined);
+        setBranchRefs([]);
+        setBaseRefDraft("");
       }
       await refreshRecentProjects();
     } catch (caughtError) {
@@ -703,6 +720,45 @@ export function App(): React.JSX.Element {
       }
     }, 0);
     void persistAppSettings({ defaultDiffMode: mode });
+  }
+
+  async function setProjectDiffTarget(
+    mode: ReviewDiffTargetMode,
+    baseRefName?: string
+  ): Promise<void> {
+    if (!workspace) {
+      return;
+    }
+
+    if (mode === "branch") {
+      const nextBaseRef = (baseRefName ?? baseRefDraft).trim();
+
+      if (nextBaseRef.length === 0) {
+        setError("Choose a base branch before switching to branch diff.");
+        return;
+      }
+
+      setBaseRefDraft(nextBaseRef);
+      await runWorkspaceLoad(
+        () =>
+          window.difftray.updateProjectDiffTarget({
+            baseRefName: nextBaseRef,
+            mode: "branch",
+            projectId: workspace.project.id
+          }),
+        selectedFile?.path
+      );
+      return;
+    }
+
+    await runWorkspaceLoad(
+      () =>
+        window.difftray.updateProjectDiffTarget({
+          mode: "working_tree",
+          projectId: workspace.project.id
+        }),
+      selectedFile?.path
+    );
   }
 
   function toggleFileListCollapsed(): void {
@@ -938,12 +994,23 @@ export function App(): React.JSX.Element {
             >
               <FileListHeader
                 attentionCount={attentionFiles.length}
+                baseRefDraft={baseRefDraft}
+                branchRefs={branchRefs}
+                disabled={loadState === "loading"}
                 files={visibleFiles}
+                onBaseRefDraftChange={setBaseRefDraft}
                 onCollapse={toggleFileListCollapsed}
+                onUseBranchDiff={(baseRefName) => {
+                  void setProjectDiffTarget("branch", baseRefName);
+                }}
+                onUseWorkingTreeDiff={() => {
+                  void setProjectDiffTarget("working_tree");
+                }}
                 onRefresh={() => {
                   void refreshWorkspace();
                 }}
                 progress={workspace.progress}
+                reviewTarget={workspace.reviewTarget}
               />
               <div className={styles.fileList}>
                 {visibleFiles.map((file) => (
@@ -986,7 +1053,7 @@ export function App(): React.JSX.Element {
                   onOpenEditor={() => {
                     void openSelectedInEditor();
                   }}
-                  refName={workspace.reviewTarget.headRefName ?? "worktree"}
+                  refName={diffTargetLabel(workspace.reviewTarget)}
                 />
                 <DiffSurface
                   diffMode={diffMode}
@@ -1295,16 +1362,30 @@ function ProjectTabBar({
 
 function FileListHeader({
   attentionCount,
+  baseRefDraft,
+  branchRefs,
+  disabled,
   files,
+  onBaseRefDraftChange,
   onCollapse,
+  onUseBranchDiff,
+  onUseWorkingTreeDiff,
   onRefresh,
-  progress
+  progress,
+  reviewTarget
 }: {
   readonly attentionCount: number;
+  readonly baseRefDraft: string;
+  readonly branchRefs: readonly string[];
+  readonly disabled: boolean;
   readonly files: readonly ReviewFileView[];
+  readonly onBaseRefDraftChange: (baseRefName: string) => void;
   readonly onCollapse: () => void;
+  readonly onUseBranchDiff: (baseRefName: string) => void;
+  readonly onUseWorkingTreeDiff: () => void;
   readonly onRefresh: () => void;
   readonly progress: ReviewWorkspaceView["progress"];
+  readonly reviewTarget: ReviewWorkspaceView["reviewTarget"];
 }): React.JSX.Element {
   const pendingCount = files.filter((file) => reviewState(file) === "pending").length;
   const reviewedCount = files.filter((file) => reviewState(file) === "reviewed").length;
@@ -1343,6 +1424,15 @@ function FileListHeader({
           </button>
         </div>
       </div>
+      <DiffTargetControl
+        baseRefDraft={baseRefDraft}
+        branchRefs={branchRefs}
+        disabled={disabled}
+        mode={reviewTarget.kind}
+        onBaseRefDraftChange={onBaseRefDraftChange}
+        onUseBranchDiff={onUseBranchDiff}
+        onUseWorkingTreeDiff={onUseWorkingTreeDiff}
+      />
       <div className={styles.progressTrack}>
         <span
           className={styles.progressReviewed}
@@ -1370,6 +1460,79 @@ function FileListHeader({
         {progress.reviewedVisibleFiles} of {progress.totalVisibleReviewableFiles} files
         reviewed
       </span>
+    </div>
+  );
+}
+
+function DiffTargetControl({
+  baseRefDraft,
+  branchRefs,
+  disabled,
+  mode,
+  onBaseRefDraftChange,
+  onUseBranchDiff,
+  onUseWorkingTreeDiff
+}: {
+  readonly baseRefDraft: string;
+  readonly branchRefs: readonly string[];
+  readonly disabled: boolean;
+  readonly mode: ReviewDiffTargetMode;
+  readonly onBaseRefDraftChange: (baseRefName: string) => void;
+  readonly onUseBranchDiff: (baseRefName: string) => void;
+  readonly onUseWorkingTreeDiff: () => void;
+}): React.JSX.Element {
+  const selectedBaseRef = mode === "branch" ? baseRefDraft : "";
+  const selectBranchRefs = [
+    ...new Set([...(baseRefDraft.length > 0 ? [baseRefDraft] : []), ...branchRefs])
+  ];
+
+  return (
+    <div
+      className={classList(
+        styles.diffTargetControl,
+        mode === "branch" ? styles.diffTargetControlWithReset : undefined
+      )}
+    >
+      <span className={styles.diffTargetLabel}>
+        <GitBranch size={13} strokeWidth={1.4} aria-hidden />
+        Against
+      </span>
+      <select
+        aria-label="Compare against branch"
+        className={styles.baseRefSelect}
+        disabled={disabled || selectBranchRefs.length === 0}
+        onChange={(event) => {
+          const nextBaseRef = event.target.value;
+
+          onBaseRefDraftChange(nextBaseRef);
+          if (nextBaseRef.length > 0) {
+            onUseBranchDiff(nextBaseRef);
+          } else {
+            onUseWorkingTreeDiff();
+          }
+        }}
+        title="Compare current state against branch"
+        value={selectedBaseRef}
+      >
+        <option value="">Git changes</option>
+        {selectBranchRefs.map((branchRef) => (
+          <option key={branchRef} value={branchRef}>
+            {branchRef}
+          </option>
+        ))}
+      </select>
+      {mode === "branch" ? (
+        <button
+          aria-label="Reset to Git changes"
+          className={styles.iconButton}
+          disabled={disabled}
+          onClick={onUseWorkingTreeDiff}
+          title="Reset to Git changes"
+          type="button"
+        >
+          <X size={14} strokeWidth={1.4} aria-hidden />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -2630,6 +2793,27 @@ function visiblePathOrFirst(
   return workspace.files.some((file) => file.path === preferredPath && file.visible)
     ? preferredPath
     : firstVisiblePath(workspace);
+}
+
+function diffTargetLabel(target: ReviewWorkspaceView["reviewTarget"]): string {
+  if (target.kind === "branch") {
+    return `against ${target.baseRefName ?? "base"}`;
+  }
+
+  return target.headRefName ?? "worktree";
+}
+
+function suggestedBaseRef(
+  branchRefs: readonly string[],
+  headRefName: string | undefined
+): string | undefined {
+  const preferredRefs = ["origin/main", "main", "origin/master", "master", "develop"];
+
+  return (
+    preferredRefs.find(
+      (branchRef) => branchRef !== headRefName && branchRefs.includes(branchRef)
+    ) ?? branchRefs.find((branchRef) => branchRef !== headRefName)
+  );
 }
 
 function reviewState(file: ReviewFileView): ReviewState {

@@ -4,6 +4,7 @@ export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly getAppSettings: () => Promise<AppSettingsView>;
+  readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
   readonly markFileReviewed: (
@@ -15,6 +16,9 @@ export type DifftrayApi = {
   readonly updateProjectSettings: (
     input: UpdateProjectSettingsInput
   ) => Promise<ProjectSettingsView>;
+  readonly updateProjectDiffTarget: (
+    input: UpdateProjectDiffTargetInput
+  ) => Promise<ReviewWorkspaceView>;
   readonly updateAppSettings: (input: UpdateAppSettingsInput) => Promise<AppSettingsView>;
   readonly unmarkFileReviewed: (
     input: MarkFileReviewedInput
@@ -37,6 +41,7 @@ export type AppSettingsView = {
 };
 
 export type RecentProjectView = {
+  readonly defaultBaseRef?: string;
   readonly id: string;
   readonly lastOpenedAt?: string;
   readonly name: string;
@@ -74,6 +79,7 @@ export type ReviewWorkspaceView = {
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
   readonly reviewTarget: {
+    readonly baseRefName?: string;
     readonly headRefName?: string;
     readonly headSha: string;
     readonly id: string;
@@ -136,6 +142,17 @@ export type UpdateProjectSettingsInput = {
   readonly projectId: string;
 };
 
+export type UpdateProjectDiffTargetInput =
+  | {
+      readonly mode: "working_tree";
+      readonly projectId: string;
+    }
+  | {
+      readonly baseRefName: string;
+      readonly mode: "branch";
+      readonly projectId: string;
+    };
+
 export type UpdateAppSettingsInput = {
   readonly autoCollapseHunksOver: number;
   readonly defaultDiffMode: "split" | "unified";
@@ -157,6 +174,10 @@ const api: DifftrayApi = {
     }) as Promise<readonly RecentProjectView[]>,
   getAppSettings: async () =>
     ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
+  listProjectBranchRefs: async (projectId) =>
+    ipcRenderer.invoke("projects:listBranchRefs", {
+      projectId
+    }) as Promise<readonly string[]>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
   loadProject: async (projectId) =>
@@ -175,6 +196,11 @@ const api: DifftrayApi = {
     }) as Promise<ProjectSettingsView>,
   updateProjectSettings: async (input) =>
     ipcRenderer.invoke("settings:updateProject", input) as Promise<ProjectSettingsView>,
+  updateProjectDiffTarget: async (input) =>
+    ipcRenderer.invoke(
+      "projects:updateDiffTarget",
+      input
+    ) as Promise<ReviewWorkspaceView>,
   updateAppSettings: async (input) =>
     ipcRenderer.invoke("settings:updateApp", input) as Promise<AppSettingsView>,
   unmarkFileReviewed: async (input) =>

@@ -20,6 +20,10 @@ projects (
 )
 ```
 
+`default_base_ref` is the repository-local diff target selected from the review UI.
+When it is null, Difftray reviews working-tree Git changes. When it is set,
+Difftray reviews the current `HEAD` branch against the merge base with that base ref.
+
 ### review_targets
 
 ```sql

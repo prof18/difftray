@@ -10,6 +10,7 @@ import {
   findGitRepository,
   getGitStatus,
   getWorktreeInfo,
+  listBranchRefs,
   loadBranchDiffs,
   loadWorkingTreeDiffs,
   parseStatusPorcelainV2
@@ -180,6 +181,24 @@ describe("working tree diff loading", () => {
 });
 
 describe("branch diff loading", () => {
+  it("lists local and remote branch refs for branch selection", async () => {
+    const repo = await createRepo();
+    await git(repo, "checkout", "-b", "feature/change");
+    await git(repo, "update-ref", "refs/remotes/origin/main", "main");
+    await git(
+      repo,
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+      "refs/remotes/origin/main"
+    );
+
+    await expect(listBranchRefs(repo)).resolves.toEqual([
+      "feature/change",
+      "main",
+      "origin/main"
+    ]);
+  });
+
   it("compares merge-base to HEAD for a branch", async () => {
     const repo = await createRepo();
     await git(repo, "checkout", "-b", "feature/change");

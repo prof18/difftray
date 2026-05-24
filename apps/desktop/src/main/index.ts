@@ -23,7 +23,10 @@ import {
 } from "@difftray/core";
 import {
   findGitRepository,
+  listBranchRefs,
+  loadBranchDiffs,
   loadWorkingTreeDiffs,
+  type GitBranchReviewTarget,
   type GitLoadedFileDiff,
   type GitWorkingTreeReviewTarget
 } from "@difftray/git";
@@ -46,6 +49,7 @@ let mainWindow: BrowserWindow | undefined;
 let storage: DifftrayStorage | undefined;
 
 type RecentProjectView = {
+  readonly defaultBaseRef?: string;
   readonly id: string;
   readonly lastOpenedAt?: string;
   readonly name: string;
@@ -91,6 +95,7 @@ type ReviewWorkspaceView = {
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
   readonly reviewTarget: {
+    readonly baseRefName?: string;
     readonly headRefName?: string;
     readonly headSha: string;
     readonly id: string;
@@ -238,6 +243,15 @@ ipcMain.handle(
 );
 ipcMain.handle("projects:listRecent", async () => listAvailableRecentProjectViews());
 ipcMain.handle(
+  "projects:listBranchRefs",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<readonly string[]> => {
+    const projectId = readStringProperty(input, "projectId");
+    const project = assertStoredProject(projectId);
+
+    return listBranchRefs(project.path);
+  }
+);
+ipcMain.handle(
   "projects:close",
   async (
     _event: IpcMainInvokeEvent,
@@ -260,6 +274,29 @@ ipcMain.handle(
     const projectId = readStringProperty(input, "projectId");
 
     return loadProjectWorkspaceIfAvailable(projectId);
+  }
+);
+ipcMain.handle(
+  "projects:updateDiffTarget",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
+    const projectId = readStringProperty(input, "projectId");
+    const mode = readEnumProperty(input, "mode", ["branch", "working_tree"]);
+    const project = assertStoredProject(projectId);
+
+    if (mode === "branch") {
+      const baseRefName = readStringProperty(input, "baseRefName").trim();
+
+      if (baseRefName.length === 0) {
+        throw new Error("Base branch is required.");
+      }
+
+      await loadBranchDiffs(project.path, baseRefName);
+      getStorage().updateProjectDefaultBaseRef(projectId, baseRefName);
+    } else {
+      getStorage().updateProjectDefaultBaseRef(projectId, undefined);
+    }
+
+    return loadProjectWorkspace(projectId);
   }
 );
 ipcMain.handle(
@@ -535,6 +572,9 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
     progress,
     project: projectView(project),
     reviewTarget: {
+      ...(reviewTarget.kind === "branch"
+        ? { baseRefName: reviewTarget.baseRefName }
+        : {}),
       ...(reviewTarget.headRefName ? { headRefName: reviewTarget.headRefName } : {}),
       headSha: reviewTarget.headSha,
       id: reviewTargetId,
@@ -564,7 +604,9 @@ async function loadProjectReviewState(project: StoredProjectRecord): Promise<{
   readonly reviewTargetId: string;
   readonly states: readonly FileReviewState[];
 }> {
-  const diffResult = await loadWorkingTreeDiffs(project.path);
+  const diffResult = project.defaultBaseRef
+    ? await loadBranchDiffs(project.path, project.defaultBaseRef)
+    : await loadWorkingTreeDiffs(project.path);
   const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
   const reviewTargetId = createReviewTargetId(reviewTarget);
   const settings = getStorage().getAppSettings();
@@ -732,6 +774,7 @@ function projectView(
   reviewSummary?: ProjectReviewSummaryView
 ): RecentProjectView {
   return {
+    ...(project.defaultBaseRef ? { defaultBaseRef: project.defaultBaseRef } : {}),
     id: project.id,
     ...(project.lastOpenedAt ? { lastOpenedAt: project.lastOpenedAt } : {}),
     name: project.name,
@@ -747,13 +790,28 @@ function progressView(progress: ReviewProgress): ReviewProgressView {
   };
 }
 
-function reviewTargetFromGit(target: GitWorkingTreeReviewTarget): ReviewTarget {
-  return {
-    ...(target.headRefName ? { headRefName: target.headRefName } : {}),
-    headSha: target.headSha,
-    kind: "working_tree",
-    projectId: target.projectId
-  };
+function reviewTargetFromGit(
+  target: GitBranchReviewTarget | GitWorkingTreeReviewTarget
+): ReviewTarget {
+  switch (target.kind) {
+    case "branch":
+      return {
+        baseRefName: target.baseRefName,
+        baseSha: target.baseSha,
+        ...(target.headRefName ? { headRefName: target.headRefName } : {}),
+        headSha: target.headSha,
+        kind: "branch",
+        mergeBaseSha: target.mergeBaseSha,
+        projectId: target.projectId
+      };
+    case "working_tree":
+      return {
+        ...(target.headRefName ? { headRefName: target.headRefName } : {}),
+        headSha: target.headSha,
+        kind: "working_tree",
+        projectId: target.projectId
+      };
+  }
 }
 
 function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTargetRecord {

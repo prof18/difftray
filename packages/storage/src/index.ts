@@ -127,6 +127,10 @@ export type DifftrayStorage = {
     path: string,
     reviewedDiffHash: string
   ) => void;
+  readonly updateProjectDefaultBaseRef: (
+    projectId: string,
+    defaultBaseRef: string | undefined
+  ) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
@@ -165,6 +169,9 @@ export function openStorage(filename: string): DifftrayStorage {
     },
     unmarkReviewed: (reviewTargetId, filePath, reviewedDiffHash) => {
       unmarkReviewed(db, reviewTargetId, filePath, reviewedDiffHash);
+    },
+    updateProjectDefaultBaseRef: (projectId, defaultBaseRef) => {
+      updateProjectDefaultBaseRef(db, projectId, defaultBaseRef);
     },
     upsertProject: (project) => {
       upsertProject(db, project);
@@ -334,7 +341,10 @@ function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
     on conflict(id) do update set
       name = excluded.name,
       path = excluded.path,
-      default_base_ref = excluded.default_base_ref,
+      default_base_ref = case
+        when excluded.default_base_ref is null then projects.default_base_ref
+        else excluded.default_base_ref
+      end,
       updated_at = excluded.updated_at,
       last_opened_at = excluded.last_opened_at
   `
@@ -347,6 +357,21 @@ function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
     now,
     project.lastOpenedAt ?? null
   );
+}
+
+function updateProjectDefaultBaseRef(
+  db: DatabaseSync,
+  projectId: string,
+  defaultBaseRef: string | undefined
+): void {
+  db.prepare(
+    `
+      update projects
+      set default_base_ref = ?,
+          updated_at = ?
+      where id = ?
+    `
+  ).run(defaultBaseRef ?? null, currentTimestamp(), projectId);
 }
 
 function deleteProject(db: DatabaseSync, projectId: string): void {
