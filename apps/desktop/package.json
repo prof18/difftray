@@ -17,7 +17,6 @@
     "@difftray/storage": "workspace:*",
     "@fontsource/ibm-plex-sans": "^5.2.6",
     "@fontsource/jetbrains-mono": "^5.2.6",
-    "@pierre/diffs": "^1.2.0",
     "@radix-ui/react-tooltip": "^1.2.7",
     "chokidar": "^4.0.3",
     "lucide-react": "^0.511.0",

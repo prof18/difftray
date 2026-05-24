@@ -537,7 +537,7 @@ function getAppSettings(db: DatabaseSync): AppSettingsRecord {
     editorLaunchConfigJson === undefined
       ? legacySettings.editorLaunchConfig
       : editorLaunchConfigJson.length > 0
-        ? parseEditorLaunchConfig(editorLaunchConfigJson)
+        ? parseOptionalEditorLaunchConfig(editorLaunchConfigJson)
         : undefined;
 
   return {
@@ -840,9 +840,9 @@ function latestLegacyProjectAppSettings(db: DatabaseSync): AppSettingsRecord {
     return defaultAppSettings();
   }
 
-  const editorLaunchConfig = row.editor_launch_config_json
-    ? parseEditorLaunchConfig(row.editor_launch_config_json)
-    : undefined;
+  const editorLaunchConfig = parseOptionalEditorLaunchConfig(
+    row.editor_launch_config_json
+  );
 
   return {
     autoCollapseHunksOver: clampAutoCollapseHunks(row.auto_collapse_hunks_over),
@@ -878,13 +878,33 @@ function reviewMarkFromRow(row: ReviewMarkRow): ReviewMarkRecord {
 }
 
 function parseEditorLaunchConfig(value: string): EditorLaunchConfig {
-  const parsedValue = JSON.parse(value) as unknown;
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(value) as unknown;
+  } catch {
+    throw new Error("Stored editor launch config is invalid.");
+  }
 
   if (!isEditorLaunchConfig(parsedValue)) {
     throw new Error("Stored editor launch config is invalid.");
   }
 
   return parsedValue;
+}
+
+function parseOptionalEditorLaunchConfig(
+  value: string | undefined | null
+): EditorLaunchConfig | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return parseEditorLaunchConfig(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function isEditorLaunchConfig(value: unknown): value is EditorLaunchConfig {

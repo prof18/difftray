@@ -39,9 +39,23 @@ try {
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
   await window
+    .locator('[data-project-tab-name="visual-repo"][draggable="true"]')
+    .waitFor({ timeout: 10_000 });
+  const secondaryTabBox = await window
+    .locator('[data-project-tab-name="visual-secondary-repo"]')
+    .boundingBox();
+
+  if (!secondaryTabBox) {
+    throw new Error("Expected secondary project tab to be visible");
+  }
+
+  await window
     .locator('[data-project-tab-name="visual-repo"]')
     .dragTo(window.locator('[data-project-tab-name="visual-secondary-repo"]'), {
-      targetPosition: { x: 120, y: 14 }
+      targetPosition: {
+        x: Math.max(1, secondaryTabBox.width - 4),
+        y: Math.min(14, Math.max(1, secondaryTabBox.height - 4))
+      }
     });
   await expectProjectTabOrder(window, ["visual-secondary-repo", "visual-repo"]);
   await expectMissing(window, "button", "schema.generated.ts");
@@ -56,11 +70,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-editor-picker.png")
   });
-  await window.getByRole("option", { name: "Custom command" }).click();
-  await window.getByRole("textbox", { exact: true, name: "Command" }).fill("code");
-  await window
-    .getByRole("textbox", { exact: true, name: "Arguments" })
-    .fill("--goto {path}:{line}");
+  await window.getByRole("option", { name: "System default" }).click();
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-settings.png")
@@ -74,9 +84,7 @@ try {
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectChecked(window, "Show generated files");
   await expectComboboxValue(window, /Appearance/, "light");
-  await expectEditorChoice(window, "Custom command");
-  await expectValue(window, "Command", "code");
-  await expectValuePrefix(window, "Arguments", "--goto {path}:{line}");
+  await expectEditorChoice(window, "System default");
   await window.getByRole("button", { name: "Close settings" }).click();
   await window.getByLabel("Compare against branch").selectOption("main");
   await window.getByText("against main").waitFor({ timeout: 10_000 });
@@ -259,15 +267,30 @@ async function expectProjectTabSummary(window, projectName, count, state) {
 }
 
 async function expectProjectTabOrder(window, projectNames) {
-  await window.waitForFunction((expectedProjectNames) => {
-    const actualProjectNames = [...document.querySelectorAll("[data-project-tab-name]")]
-      .map((tab) => tab.getAttribute("data-project-tab-name"))
-      .filter(Boolean);
+  const deadline = Date.now() + 30_000;
+  let actualProjectNames = [];
 
-    return expectedProjectNames.every(
-      (projectName, index) => actualProjectNames[index] === projectName
-    );
-  }, projectNames);
+  while (Date.now() < deadline) {
+    actualProjectNames = await window
+      .locator("[data-project-tab-name]")
+      .evaluateAll((tabs) =>
+        tabs.map((tab) => tab.getAttribute("data-project-tab-name")).filter(Boolean)
+      );
+
+    if (
+      projectNames.every(
+        (projectName, index) => actualProjectNames[index] === projectName
+      )
+    ) {
+      return;
+    }
+
+    await window.waitForTimeout(100);
+  }
+
+  throw new Error(
+    `Expected project tab order ${projectNames.join(", ")}, got ${actualProjectNames.join(", ")}`
+  );
 }
 
 async function expectFileReviewState(window, filename, state) {
@@ -296,24 +319,6 @@ async function expectChecked(window, label) {
 
   if (!checked) {
     throw new Error(`Expected ${label} to be checked`);
-  }
-}
-
-async function expectValue(window, label, expectedValue) {
-  const actualValue = await window.getByLabel(label, { exact: true }).inputValue();
-
-  if (actualValue !== expectedValue) {
-    throw new Error(`Expected ${label} to be ${expectedValue}, got ${actualValue}`);
-  }
-}
-
-async function expectValuePrefix(window, label, expectedValue) {
-  const actualValue = await window.getByLabel(label, { exact: true }).inputValue();
-
-  if (!actualValue.startsWith(expectedValue)) {
-    throw new Error(
-      `Expected ${label} to start with ${expectedValue}, got ${actualValue}`
-    );
   }
 }
 

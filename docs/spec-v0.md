@@ -112,8 +112,8 @@ The viewer should support:
 
 Large diff fallback applies when a single file diff exceeds either:
 
-- 1 MB of patch text
-- 5,000 changed lines
+- 2 MB of patch text
+- 2 MB of old or new text snapshot payload
 
 In fallback mode, the file still appears in the review list and can still be marked reviewed, but the UI should show a summary instead of rendering the full side-by-side diff by default.
 
@@ -125,30 +125,24 @@ It must provide an "open in editor" action. The editor is configurable:
 
 - system default
 - installed common editor app presets
-- custom command template
 
 On macOS, Difftray discovers common installed editor apps from local application
 directories and shows matching presets with app icons. Presets are still stored as
 structured command/args launch configs.
 
-Custom editor commands are stored as tokenized launch configs, not raw shell strings. The renderer may present a friendly template UI, but the main process launches an executable with an argument array.
-
-Example custom command:
-
-```text
-code --goto {path}:{line}
-```
-
-Internal representation:
+Example preset representation:
 
 ```json
 {
-  "command": "code",
-  "args": ["--goto", "{path}:{line}"]
+  "command": "open",
+  "args": ["-b", "com.microsoft.VSCode", "{path}"]
 }
 ```
 
-The main process expands only supported tokens and never executes editor commands through a shell.
+The main process expands only supported preset tokens and never executes editor
+commands through a shell. Stored launch configs that do not match a built-in
+preset are ignored. Free-form custom editor commands are out of scope until a
+separate product and security decision is made.
 
 ## Keyboard Shortcuts
 

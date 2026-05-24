@@ -52,8 +52,13 @@ import {
   type ProjectWatchChangeEvent,
   type WatchedProject
 } from "./project-watch-service.js";
+import {
+  resolveRendererDevUrl,
+  resolveSafeProjectFilePath,
+  trustedEditorLaunchConfig
+} from "./security.js";
 
-const rendererDevUrl = process.env.DIFFTRAY_RENDERER_URL;
+const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
 
@@ -132,7 +137,7 @@ type AppSettingsView = {
   readonly editorArgs: string;
   readonly editorArgList: readonly string[];
   readonly editorCommand: string;
-  readonly editorMode: "custom" | "system";
+  readonly editorMode: "preset" | "system";
   readonly hideWhitespaceOnlyChanges: boolean;
   readonly notifyOnDrift: boolean;
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
@@ -212,6 +217,8 @@ const createMainWindow = async (): Promise<void> => {
 
   await syncProjectWatchers(listAvailableRecentProjects());
 
+  const rendererDevUrl = resolveRendererDevUrl(rendererDevUrlFromEnv, app.isPackaged);
+
   if (rendererDevUrl) {
     await window.loadURL(rendererDevUrl);
   } else {
@@ -249,7 +256,7 @@ ipcMain.handle(
       "diff_content",
       "line_count"
     ]);
-    const editorMode = readEnumProperty(input, "editorMode", ["custom", "system"]);
+    const editorMode = readEnumProperty(input, "editorMode", ["preset", "system"]);
     const editorCommand = readOptionalStringProperty(input, "editorCommand");
     const editorArgs = readOptionalStringProperty(input, "editorArgs");
     const editorArgList = readOptionalStringArrayProperty(input, "editorArgList");
@@ -257,7 +264,7 @@ ipcMain.handle(
     const settings: AppSettingsRecord = {
       autoCollapseHunksOver,
       defaultDiffMode,
-      ...(editorMode === "custom"
+      ...(editorMode === "preset"
         ? {
             editorLaunchConfig: editorConfigFromInput(
               editorCommand,
@@ -753,9 +760,9 @@ async function openFileInEditor(
     };
   }
 
-  const absoluteFilePath = path.resolve(project.path, file.path);
+  const absoluteFilePath = await resolveSafeProjectFilePath(project.path, file.path);
 
-  if (!isProjectContainedPath(project.path, absoluteFilePath)) {
+  if (!absoluteFilePath) {
     return {
       reason: "file_missing",
       status: "rejected"
@@ -764,7 +771,9 @@ async function openFileInEditor(
 
   const settings = getStorage().getAppSettings();
 
-  if (!settings.editorLaunchConfig) {
+  const editorLaunchConfig = trustedEditorLaunchConfig(settings.editorLaunchConfig);
+
+  if (!editorLaunchConfig) {
     const launchError = await shell.openPath(absoluteFilePath);
 
     return launchError.length === 0
@@ -773,8 +782,8 @@ async function openFileInEditor(
   }
 
   const child = spawn(
-    settings.editorLaunchConfig.command,
-    settings.editorLaunchConfig.args.map((arg) =>
+    editorLaunchConfig.command,
+    editorLaunchConfig.args.map((arg) =>
       expandEditorArg(arg, {
         column: 1,
         filePath: absoluteFilePath,
@@ -816,13 +825,15 @@ function settingsView(settings: ProjectSettingsRecord): ProjectSettingsView {
 }
 
 function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
+  const editorLaunchConfig = trustedEditorLaunchConfig(settings.editorLaunchConfig);
+
   return {
     autoCollapseHunksOver: settings.autoCollapseHunksOver,
     defaultDiffMode: settings.defaultDiffMode,
-    editorArgs: settings.editorLaunchConfig?.args.join(" ") ?? "",
-    editorArgList: settings.editorLaunchConfig?.args ?? [],
-    editorCommand: settings.editorLaunchConfig?.command ?? "",
-    editorMode: settings.editorLaunchConfig ? "custom" : "system",
+    editorArgs: editorLaunchConfig?.args.join(" ") ?? "",
+    editorArgList: editorLaunchConfig?.args ?? [],
+    editorCommand: editorLaunchConfig?.command ?? "",
+    editorMode: editorLaunchConfig ? "preset" : "system",
     hideWhitespaceOnlyChanges: settings.hideWhitespaceOnlyChanges,
     notifyOnDrift: settings.notifyOnDrift,
     reviewResetTrigger: settings.reviewResetTrigger,
@@ -838,7 +849,7 @@ function editorConfigFromInput(
   const trimmedCommand = command?.trim();
 
   if (!trimmedCommand) {
-    throw new Error("Custom editor command is required.");
+    throw new Error("Editor preset command is required.");
   }
 
   const normalizedArgs =
@@ -846,10 +857,17 @@ function editorConfigFromInput(
       ? splitEditorArgs(args ?? "")
       : normalizeEditorArgs(args);
 
-  return {
+  const launchConfig = {
     args: normalizedArgs,
     command: trimmedCommand
   };
+  const trustedConfig = trustedEditorLaunchConfig(launchConfig);
+
+  if (!trustedConfig) {
+    throw new Error("Only built-in editor presets are supported.");
+  }
+
+  return trustedConfig;
 }
 
 function splitEditorArgs(value: string): readonly string[] {
@@ -1114,7 +1132,9 @@ function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTargetRecor
 function fileDiffFromGit(file: GitLoadedFileDiff): FileDiff {
   return {
     content: file.content,
+    ...(file.newMode ? { newMode: file.newMode } : {}),
     newPath: file.newPath,
+    ...(file.oldMode ? { oldMode: file.oldMode } : {}),
     ...(file.oldPath ? { oldPath: file.oldPath } : {}),
     status: file.status
   };
@@ -1176,15 +1196,6 @@ function expandEditorArg(
     .replaceAll("{line}", String(input.line))
     .replaceAll("{column}", String(input.column))
     .replaceAll("{project}", input.projectPath);
-}
-
-function isProjectContainedPath(projectPath: string, filePath: string): boolean {
-  const relativePath = path.relative(projectPath, filePath);
-
-  return (
-    relativePath.length === 0 ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  );
 }
 
 function readStringProperty(input: unknown, property: string): string {

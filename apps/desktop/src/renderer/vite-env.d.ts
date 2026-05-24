@@ -40,7 +40,7 @@ declare global {
     readonly editorArgs: string;
     readonly editorArgList: readonly string[];
     readonly editorCommand: string;
-    readonly editorMode: "custom" | "system";
+    readonly editorMode: "preset" | "system";
     readonly hideWhitespaceOnlyChanges: boolean;
     readonly notifyOnDrift: boolean;
     readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
@@ -189,7 +189,7 @@ declare global {
     readonly editorArgList?: readonly string[];
     readonly editorArgs?: string;
     readonly editorCommand?: string;
-    readonly editorMode: "custom" | "system";
+    readonly editorMode: "preset" | "system";
     readonly hideWhitespaceOnlyChanges: boolean;
     readonly notifyOnDrift: boolean;
     readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";

@@ -190,9 +190,15 @@ explicit setting if native filesystem events prove unreliable for a user.
 
 ## Diff Rendering
 
-Use `@pierre/diffs` for rendering.
+The current renderer uses a small React diff viewer backed by the core
+`parseDiffSegments` parser. Keep parsing and context-expansion behavior in
+`packages/core` so renderer components stay mostly presentational.
 
-The app should keep a small adapter layer around the library so future API churn does not infect the rest of the codebase.
+Do not keep unused diff-rendering dependencies in the release build.
+`@pierre/diffs` is tracked as a proposed migration in
+[Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md) and
+[the migration plan](pierre-diffs-migration-plan.md), but it should not be a
+runtime dependency until a real adapter replaces the local renderer.
 
 ## Styling Architecture
 
@@ -240,5 +246,5 @@ Large monorepos are not v0's primary target, but obvious traps should be avoided
 - virtualize large file lists
 - rely on diff viewer virtualization
 - avoid loading all huge diffs at once
-- use large-diff fallback above 1 MB of patch text or 5,000 changed lines
-
+- use per-file large-diff fallback above 2 MB of patch text or text snapshot
+  payload, with bounded Git output buffers for aggregate metadata

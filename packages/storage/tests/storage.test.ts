@@ -405,6 +405,51 @@ describe("storage", () => {
     storage.close();
   });
 
+  it("ignores malformed stored editor launch configs", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertAppSettings({
+        autoCollapseHunksOver: 120,
+        defaultDiffMode: "split",
+        editorLaunchConfig: {
+          args: ["{path}"],
+          command: "open"
+        },
+        hideWhitespaceOnlyChanges: false,
+        notifyOnDrift: true,
+        reviewResetTrigger: "diff_content",
+        showGeneratedFiles: false,
+        themeMode: "system"
+      });
+      storage.close();
+
+      const db = new DatabaseSync(storagePath);
+      db.prepare("update app_settings set value = ? where key = ?").run(
+        "{not-json",
+        "editor_launch_config_json"
+      );
+      db.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.getAppSettings()).toEqual({
+        autoCollapseHunksOver: 120,
+        defaultDiffMode: "split",
+        hideWhitespaceOnlyChanges: false,
+        notifyOnDrift: true,
+        reviewResetTrigger: "diff_content",
+        showGeneratedFiles: false,
+        themeMode: "system"
+      });
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
   it("uses the latest customized legacy project review settings as app defaults", () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
     const storagePath = path.join(storageDir, "difftray.sqlite");

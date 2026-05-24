@@ -166,7 +166,8 @@ Acceptance:
 - renderer never executes raw shell commands
 - renderer never reads SQLite directly
 - renderer has no Node integration
-- custom editor launch uses command + args, not shell strings
+- editor launch uses system default opening or built-in command/args presets, not
+  shell strings
 - live project-change notifications use the existing main-process refresh path as
   the source of truth
 - watcher failure leaves manual and focus-driven refresh available
@@ -181,7 +182,7 @@ Deliverables:
 - project sidebar shell
 - file list
 - file selection
-- side-by-side diff viewer adapter
+- Pierre-backed split/unified diff viewer adapter
 - review checkbox
 - progress display
 
@@ -256,7 +257,7 @@ Deliverables:
 - large diff fallback
 - binary file fallback
 - settings screen
-- editor command templates
+- installed editor preset selection
 - empty states
 - error states
 - app icon placeholder

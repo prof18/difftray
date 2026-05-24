@@ -6,7 +6,7 @@ export default defineConfig({
   build: {
     emptyOutDir: false,
     outDir: "dist/renderer",
-    sourcemap: true
+    sourcemap: false
   },
   plugins: [react()],
   root: ".",

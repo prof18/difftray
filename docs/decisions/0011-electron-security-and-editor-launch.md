@@ -8,7 +8,12 @@ Accepted
 
 Use a locked-down Electron renderer and a narrow typed preload API.
 
-External editor launch must use tokenized command configuration and direct process spawning, not raw shell execution.
+Development renderer URLs are allowed only for unpackaged builds and must point
+to loopback HTTP origins.
+
+External editor launch must use system default opening or built-in editor preset
+configuration. Arbitrary custom editor commands are disabled until there is an
+explicit product and security decision to support them.
 
 ## Electron Security
 
@@ -42,12 +47,15 @@ The renderer must not send arbitrary shell commands, SQL, or filesystem operatio
 
 ## External Editor Launch
 
-External editors are configured as structured launch configs:
+External editors are configured as either:
+
+- system default open
+- a built-in structured launch preset
 
 ```json
 {
-  "command": "code",
-  "args": ["--goto", "{path}:{line}"]
+  "command": "open",
+  "args": ["-b", "com.microsoft.VSCode", "{path}"]
 }
 ```
 
@@ -61,14 +69,23 @@ Supported tokens:
 
 The main process expands tokens after validating the target path belongs to the selected project.
 
-The main process launches the editor with an executable and argument array. It must not pass the command through a shell.
+The main process validates project containment lexically and through realpath
+resolution before opening a file. Symlinks that resolve outside the selected
+project are rejected.
 
-Built-in editor presets should be preferred for common editors:
+The main process launches preset editors with an executable and argument array.
+It must not pass the command through a shell.
+
+Built-in editor presets are preferred for common editors:
 
 - system default
 - VS Code
 - Cursor
 - Zed
+
+Stored editor launch configs are matched back to known presets before use. A
+config that does not match a preset is treated as system default in the UI and is
+not spawned as a process.
 
 ## Consequences
 
@@ -76,9 +93,13 @@ Positive:
 
 - Reduces Electron attack surface.
 - Prevents renderer-originated shell execution.
-- Keeps custom editor support without unsafe raw command strings.
+- Prevents persisted arbitrary command execution through corrupted or stale
+  settings.
+- Prevents renderer dev URL environment variables from loading remote content in
+  packaged builds.
 
 Negative:
 
-- Custom editor configuration is less free-form.
-- Some unusual editor commands may need explicit support or careful token parsing.
+- Custom editor configuration is not available yet.
+- Some unusual editor commands need explicit preset support or a future reviewed
+  custom-command design.

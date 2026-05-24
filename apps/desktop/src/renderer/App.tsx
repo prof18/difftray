@@ -631,10 +631,10 @@ export function App(): React.JSX.Element {
     }
 
     if (
-      appSettingsDraft.editorMode === "custom" &&
+      appSettingsDraft.editorMode === "preset" &&
       appSettingsDraft.editorCommand.trim().length === 0
     ) {
-      setError("Custom editor command is required.");
+      setError("Editor preset is required.");
       return;
     }
 
@@ -1331,6 +1331,7 @@ function ProjectTabBar({
               <button
                 className={styles.projectTabSelect}
                 disabled={disabled}
+                draggable={!disabled}
                 onClick={() => {
                   onSelectProject(project.id);
                 }}
@@ -2232,7 +2233,6 @@ function EmptyState({
         Open Repository
         <kbd>⌘O</kbd>
       </button>
-      <div className={styles.dragHint}>Drag a folder anywhere to add it</div>
       {projects.length > 0 ? (
         <div className={styles.recentBox}>
           <div className={styles.sectionLabel}>Recent</div>
@@ -2361,8 +2361,6 @@ function SettingsPanel({
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
   readonly onSave: () => void;
 }): React.JSX.Element {
-  const selectedEditorValue = editorSelectionValue(appSettings, editorOptions);
-
   return (
     <div className={styles.settingsOverlay}>
       <section className={styles.settingsWindow} aria-modal="true" role="dialog">
@@ -2418,33 +2416,6 @@ function SettingsPanel({
                 onChangeAppSettings={onChangeAppSettings}
               />
             </div>
-            {selectedEditorValue === "custom" ? (
-              <>
-                <label className={styles.settingRow}>
-                  <span>Command</span>
-                  <input
-                    onChange={(event) => {
-                      onChangeAppSettings({ editorCommand: event.target.value });
-                    }}
-                    type="text"
-                    value={appSettings.editorCommand}
-                  />
-                </label>
-                <label className={styles.settingRow}>
-                  <span>Arguments</span>
-                  <input
-                    onChange={(event) => {
-                      onChangeAppSettings({
-                        editorArgList: splitEditorArgs(event.target.value),
-                        editorArgs: event.target.value
-                      });
-                    }}
-                    type="text"
-                    value={appSettings.editorArgs}
-                  />
-                </label>
-              </>
-            ) : null}
           </SettingsSection>
 
           <SettingsSection title="Review">
@@ -2558,8 +2529,7 @@ function EditorPicker({
         ...(option.iconDataUrl ? { iconDataUrl: option.iconDataUrl } : {}),
         label: option.name,
         value: `preset:${option.id}`
-      })),
-      { label: "Custom command", value: "custom" }
+      }))
     ],
     [editorOptions]
   );
@@ -2686,7 +2656,7 @@ function editorSelectionValue(
     editorOptionMatchesSettings(option, appSettings)
   );
 
-  return matchingOption ? `preset:${matchingOption.id}` : "custom";
+  return matchingOption ? `preset:${matchingOption.id}` : "system";
 }
 
 function editorPatchForSelection(
@@ -2703,27 +2673,23 @@ function editorPatchForSelection(
     };
   }
 
-  if (value === "custom") {
-    return {
-      editorArgList: appSettings.editorMode === "system" ? [] : appSettings.editorArgList,
-      editorArgs: appSettings.editorMode === "system" ? "" : appSettings.editorArgs,
-      editorCommand: appSettings.editorMode === "system" ? "" : appSettings.editorCommand,
-      editorMode: "custom"
-    };
-  }
-
   const presetId = value.replace(/^preset:/, "");
   const option = editorOptions.find((candidate) => candidate.id === presetId);
 
   if (!option) {
-    return { editorMode: "custom" };
+    return {
+      editorArgList: [],
+      editorArgs: "",
+      editorCommand: "",
+      editorMode: "system"
+    };
   }
 
   return {
     editorArgList: option.args,
     editorArgs: option.args.join(" "),
     editorCommand: option.command,
-    editorMode: "custom"
+    editorMode: "preset"
   };
 }
 
@@ -2735,13 +2701,6 @@ function editorOptionMatchesSettings(
     option.command === appSettings.editorCommand.trim() &&
     arraysAreEqual(option.args, appSettings.editorArgList)
   );
-}
-
-function splitEditorArgs(value: string): readonly string[] {
-  return value
-    .trim()
-    .split(/\s+/)
-    .filter((arg) => arg.length > 0);
 }
 
 function arraysAreEqual(left: readonly string[], right: readonly string[]): boolean {

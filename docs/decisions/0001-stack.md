@@ -12,7 +12,7 @@ Use:
 - React
 - TypeScript
 - Vite
-- `@pierre/diffs`
+- custom React diff viewer backed by `@difftray/core` patch parsing
 - SQLite
 - Git CLI
 - Chokidar
@@ -31,7 +31,7 @@ Positive:
 
 - Fast path to macOS desktop app.
 - Easy React integration.
-- Can use `@pierre/diffs` directly.
+- Diff rendering stays local, testable, and scoped to Difftray's review model.
 - Node ecosystem works well for Git CLI, SQLite, and file watching.
 
 Negative:
@@ -42,4 +42,9 @@ Negative:
 
 ## Notes
 
-Tauri can be reconsidered later if app size becomes a serious problem, but it adds Rust integration cost before the product is proven.
+Tauri can be reconsidered later if app size becomes a serious problem, but it
+adds Rust integration cost before the product is proven.
+
+`@pierre/diffs` remains a proposed renderer migration in
+[Decision 0023](0023-pierre-diffs-rendering-engine.md). It should be added back
+only when a real adapter replaces the current local text diff renderer.

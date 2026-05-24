@@ -362,6 +362,66 @@ describe("working tree diff loading", () => {
     ]);
   });
 
+  it("treats oversized tracked text changes as fingerprint-only content", async () => {
+    const repo = await createRepo();
+    const originalBytes = Buffer.alloc(2_200_000, "a");
+    const changedBytes = Buffer.concat([Buffer.from("changed\n"), originalBytes]);
+    await writeFile(path.join(repo, "large.txt"), originalBytes);
+    await git(repo, "add", "large.txt");
+    await git(repo, "commit", "-m", "add large text fixture");
+    await writeFile(path.join(repo, "large.txt"), changedBytes);
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: {
+          byteSize: changedBytes.byteLength,
+          digest: sha256(changedBytes),
+          kind: "binary"
+        },
+        newPath: "large.txt",
+        status: "modified"
+      })
+    ]);
+  });
+
+  it("loads aggregate oversized tracked patches as per-file fingerprints", async () => {
+    const repo = await createRepo();
+    const originalBytes = Buffer.alloc(2_200_000, "m");
+    const changedBytes = Buffer.concat([Buffer.from("changed\n"), originalBytes]);
+    const fileNames = Array.from({ length: 10 }, (_, index) => `large-${index}.txt`);
+
+    for (const fileName of fileNames) {
+      await writeFile(path.join(repo, fileName), originalBytes);
+    }
+    await git(repo, "add", ...fileNames);
+    await git(repo, "commit", "-m", "add large text fixtures");
+
+    for (const fileName of fileNames) {
+      await writeFile(path.join(repo, fileName), changedBytes);
+    }
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.files).toHaveLength(fileNames.length);
+    expect(result.files).toEqual(
+      expect.arrayContaining(
+        fileNames.map((fileName) =>
+          expect.objectContaining({
+            content: {
+              byteSize: changedBytes.byteLength,
+              digest: sha256(changedBytes),
+              kind: "binary"
+            },
+            newPath: fileName,
+            status: "modified"
+          })
+        )
+      )
+    );
+  });
+
   it("loads mode-only changes explicitly", async () => {
     const repo = await createRepo();
     await chmod(path.join(repo, "tracked.txt"), 0o755);
@@ -375,6 +435,47 @@ describe("working tree diff loading", () => {
         newPath: "tracked.txt",
         oldMode: "100644",
         status: "mode_changed"
+      })
+    ]);
+  });
+
+  it("loads untracked symlinks without reading the link target", async () => {
+    const repo = await createRepo();
+    const outsideFile = path.join(await createTempRoot(), "outside.txt");
+    await writeFile(outsideFile, "outside secret\n");
+    await symlink(outsideFile, path.join(repo, "outside-link"));
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: {
+          kind: "symlink",
+          newTarget: outsideFile
+        },
+        newMode: "120000",
+        newPath: "outside-link",
+        status: "added"
+      })
+    ]);
+  });
+
+  it("treats oversized untracked text files as fingerprint-only content", async () => {
+    const repo = await createRepo();
+    const bytes = Buffer.alloc(2_200_000, "u");
+    await writeFile(path.join(repo, "large-untracked.txt"), bytes);
+
+    const result = await loadWorkingTreeDiffs(repo);
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: {
+          byteSize: bytes.byteLength,
+          digest: sha256(bytes),
+          kind: "binary"
+        },
+        newPath: "large-untracked.txt",
+        status: "added"
       })
     ]);
   });

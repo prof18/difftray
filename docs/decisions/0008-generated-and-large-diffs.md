@@ -10,10 +10,15 @@ Generated files are hidden by default only when detection is high-confidence.
 
 Hidden generated files do not count toward review progress.
 
-Large file diffs fall back to a summary view when a single file diff exceeds:
+Large file diffs fall back to fingerprint-only summary content when a single
+file exceeds:
 
-- 1 MB of patch text
-- 5,000 changed lines
+- 2 MB of patch text
+- 2 MB of old or new text snapshot payload
+
+Git metadata and status output still use bounded process buffers. Patch text is
+loaded per file so a single huge file cannot make the whole workspace fail after
+Git has already identified the changed paths.
 
 ## Context
 
@@ -40,6 +45,9 @@ A large file still appears in the file list and still counts in progress if visi
 The user can mark it reviewed.
 
 The renderer should not attempt to eagerly render the full side-by-side diff by default.
+
+The review fingerprint remains content-sensitive in fallback mode by hashing the
+file bytes or committed blob bytes with SHA-256 and including the byte size.
 
 ## Consequences
 

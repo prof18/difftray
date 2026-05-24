@@ -1,10 +1,16 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, readFile, readlink, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { lstat, readFile, readlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const maxGitOutputBuffer = 20 * 1024 * 1024;
+const maxTextSnapshotBytes = 2 * 1024 * 1024;
+const maxPatchBytesPerFile = 2 * 1024 * 1024;
+const patchReadBufferPadding = 256 * 1024;
+const oversizedPatchMarker = "__difftray_patch_too_large__";
 
 export type GitRepository = {
   readonly gitDir: string;
@@ -141,7 +147,7 @@ export async function getGitStatus(
   const { stdout } = await execFileAsync(
     "git",
     ["-C", repoPath, "status", "--porcelain=v2", "-z", "--untracked-files=all"],
-    { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
+    { encoding: "utf8", maxBuffer: maxGitOutputBuffer }
   );
 
   return parseStatusPorcelainV2(stdout);
@@ -381,21 +387,11 @@ async function loadTrackedDiffs(
   diffArgs: readonly string[],
   snapshotSource: TrackedDiffSnapshotSource
 ): Promise<readonly GitLoadedFileDiff[]> {
-  const [nameStatuses, patchOutput] = await Promise.all([
-    loadRawDiffs(repoPath, diffArgs),
-    gitOutput(repoPath, [
-      "diff",
-      "--patch",
-      "--find-renames",
-      "--no-ext-diff",
-      ...diffArgs
-    ])
-  ]);
-  const patches = splitPatchOutput(patchOutput);
+  const nameStatuses = await loadRawDiffs(repoPath, diffArgs);
 
   return Promise.all(
-    nameStatuses.map(async (nameStatus, index) => {
-      const patch = patches[index] ?? "";
+    nameStatuses.map(async (nameStatus) => {
+      const patch = await loadPatchForDiff(repoPath, diffArgs, nameStatus);
       const content = await loadTrackedDiffContent(
         repoPath,
         nameStatus,
@@ -492,21 +488,33 @@ function parseRawDiffs(output: string): readonly NameStatusDiff[] {
   return diffs;
 }
 
-function splitPatchOutput(output: string): readonly string[] {
-  if (output.length === 0) {
-    return [];
-  }
-
-  return output
-    .split("\ndiff --git ")
-    .map((section, index) => (index === 0 ? section : `diff --git ${section}`))
-    .map((section) => section.trimEnd());
-}
-
 type TrackedDiffSnapshotSource = {
   readonly newRef?: string;
   readonly oldRef: string;
 };
+
+async function loadPatchForDiff(
+  repoPath: string,
+  diffArgs: readonly string[],
+  diff: NameStatusDiff
+): Promise<string> {
+  const output = await gitOutputOrMaxBuffer(repoPath, [
+    "--literal-pathspecs",
+    "diff",
+    "--patch",
+    "--find-renames",
+    "--no-ext-diff",
+    ...diffArgs,
+    "--",
+    ...patchPathspecs(diff)
+  ]);
+
+  return output ?? oversizedPatchMarker;
+}
+
+function patchPathspecs(diff: NameStatusDiff): readonly string[] {
+  return [...new Set([diff.oldPath, diff.newPath].filter(isDefined))];
+}
 
 async function loadTrackedDiffContent(
   repoPath: string,
@@ -529,6 +537,13 @@ async function loadTrackedDiffContent(
       kind: "symlink",
       ...(snapshots.newText !== undefined ? { newTarget: snapshots.newText } : {}),
       ...(snapshots.oldText !== undefined ? { oldTarget: snapshots.oldText } : {})
+    };
+  }
+
+  if (patchTooLarge(patch)) {
+    return {
+      kind: "binary",
+      ...(await loadBinaryFingerprint(repoPath, diff, source))
     };
   }
 
@@ -575,6 +590,12 @@ async function readCommittedTextSnapshot(
   relativePath: string
 ): Promise<string | undefined> {
   try {
+    const byteSize = await committedSnapshotByteSize(repoPath, ref, relativePath);
+
+    if (byteSize === undefined || byteSize > maxTextSnapshotBytes) {
+      return undefined;
+    }
+
     const bytes = await gitBuffer(repoPath, ["show", `${ref}:${relativePath}`]);
 
     return textFromSnapshotBytes(bytes);
@@ -595,6 +616,10 @@ async function readWorktreeTextSnapshot(
       return await readlink(absolutePath);
     }
 
+    if (fileStat.size > maxTextSnapshotBytes) {
+      return undefined;
+    }
+
     const bytes = await readFile(absolutePath);
 
     return textFromSnapshotBytes(bytes);
@@ -609,42 +634,119 @@ async function loadBinaryFingerprint(
   source: TrackedDiffSnapshotSource
 ): Promise<{ readonly byteSize: number; readonly digest: string }> {
   const oldPath = diff.oldPath ?? diff.newPath;
-  const bytes =
-    diff.status === "deleted"
-      ? await readCommittedBytes(repoPath, source.oldRef, oldPath)
-      : ((source.newRef
-          ? await readCommittedBytes(repoPath, source.newRef, diff.newPath)
-          : await readWorktreeBytes(repoPath, diff.newPath)) ??
-        (await readCommittedBytes(repoPath, source.oldRef, oldPath)));
 
-  if (!bytes) {
+  const fingerprint =
+    diff.status === "deleted"
+      ? await committedBinaryFingerprint(repoPath, source.oldRef, oldPath)
+      : ((source.newRef
+          ? await committedBinaryFingerprint(repoPath, source.newRef, diff.newPath)
+          : await worktreeBinaryFingerprint(repoPath, diff.newPath)) ??
+        (await committedBinaryFingerprint(repoPath, source.oldRef, oldPath)));
+
+  if (!fingerprint) {
     throw new Error(`Unable to fingerprint binary diff for ${diff.newPath}`);
   }
 
-  return binaryFingerprint(bytes);
+  return fingerprint;
 }
 
-async function readCommittedBytes(
+async function committedBinaryFingerprint(
   repoPath: string,
   ref: string,
   relativePath: string
-): Promise<Buffer | undefined> {
+): Promise<{ readonly byteSize: number; readonly digest: string } | undefined> {
+  const byteSize = await committedSnapshotByteSize(repoPath, ref, relativePath);
+
+  if (byteSize === undefined) {
+    return undefined;
+  }
+
+  return {
+    byteSize,
+    digest: await sha256GitBlob(repoPath, ref, relativePath)
+  };
+}
+
+async function worktreeBinaryFingerprint(
+  repoPath: string,
+  relativePath: string
+): Promise<{ readonly byteSize: number; readonly digest: string } | undefined> {
   try {
-    return await gitBuffer(repoPath, ["show", `${ref}:${relativePath}`]);
+    return await fingerprintFile(path.join(repoPath, relativePath));
   } catch {
     return undefined;
   }
 }
 
-async function readWorktreeBytes(
+async function committedSnapshotByteSize(
   repoPath: string,
+  ref: string,
   relativePath: string
-): Promise<Buffer | undefined> {
-  try {
-    return await readFile(path.join(repoPath, relativePath));
-  } catch {
-    return undefined;
-  }
+): Promise<number | undefined> {
+  const output = await gitOutputOrNull(repoPath, [
+    "cat-file",
+    "-s",
+    `${ref}:${relativePath}`
+  ]);
+  const byteSize = output ? Number(output) : Number.NaN;
+
+  return Number.isSafeInteger(byteSize) && byteSize >= 0 ? byteSize : undefined;
+}
+
+async function sha256GitBlob(
+  repoPath: string,
+  ref: string,
+  relativePath: string
+): Promise<string> {
+  return sha256Command("git", ["-C", repoPath, "show", `${ref}:${relativePath}`]);
+}
+
+async function fingerprintFile(
+  filePath: string
+): Promise<{ readonly byteSize: number; readonly digest: string }> {
+  const fileStat = await lstat(filePath);
+
+  return {
+    byteSize: fileStat.size,
+    digest: await sha256File(filePath)
+  };
+}
+
+async function sha256File(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  const stream = createReadStream(filePath);
+
+  return new Promise<string>((resolve, reject) => {
+    stream.on("data", (chunk: Buffer | string) => {
+      hash.update(chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
+}
+
+async function sha256Command(command: string, args: readonly string[]): Promise<string> {
+  const hash = createHash("sha256");
+  const child = spawn(command, [...args], {
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+
+  return new Promise<string>((resolve, reject) => {
+    child.stdout.on("data", (chunk: Buffer | string) => {
+      hash.update(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(hash.digest("hex"));
+        return;
+      }
+
+      reject(new Error(`${command} exited with status ${String(code)}`));
+    });
+  });
 }
 
 function binaryFingerprint(bytes: Buffer): {
@@ -697,10 +799,33 @@ async function synthesizeUntrackedDiff(
   relativePath: string
 ): Promise<GitLoadedFileDiff | undefined> {
   const filePath = path.join(repoPath, relativePath);
-  const fileStat = await stat(filePath);
+  const fileStat = await lstat(filePath);
+
+  if (fileStat.isSymbolicLink()) {
+    return {
+      content: {
+        kind: "symlink",
+        newTarget: await readlink(filePath)
+      },
+      newMode: "120000",
+      newPath: relativePath,
+      status: "added"
+    };
+  }
 
   if (!fileStat.isFile()) {
     return undefined;
+  }
+
+  if (fileStat.size > maxTextSnapshotBytes) {
+    return {
+      content: {
+        kind: "binary",
+        ...(await fingerprintFile(filePath))
+      },
+      newPath: relativePath,
+      status: "added"
+    };
   }
 
   const bytes = await readFile(filePath);
@@ -800,6 +925,13 @@ function patchLooksBinary(patch: string): boolean {
   return /\bBinary files? .+ differ\b/.test(patch);
 }
 
+function patchTooLarge(patch: string): boolean {
+  return (
+    patch === oversizedPatchMarker ||
+    Buffer.byteLength(patch, "utf8") > maxPatchBytesPerFile
+  );
+}
+
 function fullObjectId(objectId: string | undefined): objectId is string {
   return objectId !== undefined && /^[0-9a-f]{40}$/i.test(objectId);
 }
@@ -843,6 +975,26 @@ async function gitOutputOrNull(
   }
 }
 
+async function gitOutputOrMaxBuffer(
+  cwd: string,
+  args: readonly string[]
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      maxBuffer: maxPatchBytesPerFile + patchReadBufferPadding
+    });
+
+    return stdout.trimEnd();
+  } catch (error) {
+    if (isMaxBufferError(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 async function gitLines(
   cwd: string,
   args: readonly string[]
@@ -860,7 +1012,7 @@ async function gitLines(
 async function gitOutput(cwd: string, args: readonly string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
-    maxBuffer: 50 * 1024 * 1024
+    maxBuffer: maxGitOutputBuffer
   });
 
   return stdout.trimEnd();
@@ -868,10 +1020,20 @@ async function gitOutput(cwd: string, args: readonly string[]): Promise<string> 
 
 async function gitBuffer(cwd: string, args: readonly string[]): Promise<Buffer> {
   const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
-    maxBuffer: 50 * 1024 * 1024
+    maxBuffer: maxGitOutputBuffer
   });
 
   return Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout);
+}
+
+function isMaxBufferError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("maxBuffer") ||
+      ("code" in error &&
+        (error as { readonly code?: unknown }).code ===
+          "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"))
+  );
 }
 
 function absolutizeGitPath(root: string, gitPath: string): string {

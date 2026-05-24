@@ -12,7 +12,7 @@ export default defineConfig({
       }
     },
     ssr: "src/preload/index.ts",
-    sourcemap: true,
+    sourcemap: false,
     target: "node22"
   }
 });

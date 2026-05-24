@@ -17,7 +17,7 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - TypeScript
 - Vite
 - pnpm workspaces
-- `@pierre/diffs` from https://diffs.com for diff rendering
+- custom React diff viewer backed by `@difftray/core` patch parsing
 - SQLite for local app state
 - Git CLI integration
 - Chokidar for file watching
