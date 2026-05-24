@@ -8,7 +8,7 @@ import {
   type OpenDialogOptions
 } from "electron";
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -16,7 +16,9 @@ import {
   createReviewTargetId,
   resolveReviewStates,
   type FileDiff,
+  type FileReviewState,
   type ReviewMark,
+  type ReviewProgress,
   type ReviewTarget
 } from "@difftray/core";
 import {
@@ -48,6 +50,25 @@ type RecentProjectView = {
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
+  readonly reviewSummary?: ProjectReviewSummaryView;
+};
+
+type ProjectReviewSummaryView = {
+  readonly attentionCount: number;
+  readonly progress: ReviewProgressView;
+};
+
+type ReviewProgressView = {
+  readonly reviewedVisibleFiles: number;
+  readonly totalVisibleReviewableFiles: number;
+};
+
+const emptyProjectReviewSummary: ProjectReviewSummaryView = {
+  attentionCount: 0,
+  progress: {
+    reviewedVisibleFiles: 0,
+    totalVisibleReviewableFiles: 0
+  }
 };
 
 type ReviewFileView = {
@@ -68,10 +89,7 @@ type ReviewFileView = {
 type ReviewWorkspaceView = {
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
-  readonly progress: {
-    readonly reviewedVisibleFiles: number;
-    readonly totalVisibleReviewableFiles: number;
-  };
+  readonly progress: ReviewProgressView;
   readonly reviewTarget: {
     readonly headRefName?: string;
     readonly headSha: string;
@@ -81,16 +99,23 @@ type ReviewWorkspaceView = {
 };
 
 type ProjectSettingsView = {
-  readonly editorArgs: string;
-  readonly editorCommand: string;
-  readonly editorMode: "custom" | "system";
+  readonly fileListCollapsed: boolean;
+  readonly fileListWidth: number;
   readonly projectId: string;
-  readonly showGeneratedFiles: boolean;
 };
 
 type ThemeMode = "dark" | "light" | "system";
 
 type AppSettingsView = {
+  readonly autoCollapseHunksOver: number;
+  readonly defaultDiffMode: "split" | "unified";
+  readonly editorArgs: string;
+  readonly editorCommand: string;
+  readonly editorMode: "custom" | "system";
+  readonly hideWhitespaceOnlyChanges: boolean;
+  readonly notifyOnDrift: boolean;
+  readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
+  readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
 };
 
@@ -127,12 +152,18 @@ type OpenFileInEditorResult =
 
 const createMainWindow = async (): Promise<void> => {
   const window = new BrowserWindow({
-    backgroundColor: "#151515",
+    backgroundColor: "#ffffff",
     height: 820,
     minHeight: 600,
     minWidth: 900,
     show: false,
     title: "Difftray",
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 16, y: 15 }
+        }
+      : {}),
     width: 1220,
     webPreferences: {
       contextIsolation: true,
@@ -167,25 +198,70 @@ ipcMain.handle(
 ipcMain.handle(
   "settings:updateApp",
   (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
+    const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
+    const defaultDiffMode = readEnumProperty(input, "defaultDiffMode", [
+      "split",
+      "unified"
+    ]);
+    const showGeneratedFiles = readBooleanProperty(input, "showGeneratedFiles");
+    const hideWhitespaceOnlyChanges = readBooleanProperty(
+      input,
+      "hideWhitespaceOnlyChanges"
+    );
+    const notifyOnDrift = readBooleanProperty(input, "notifyOnDrift");
+    const reviewResetTrigger = readEnumProperty(input, "reviewResetTrigger", [
+      "commit_sha",
+      "diff_content",
+      "line_count"
+    ]);
+    const editorMode = readEnumProperty(input, "editorMode", ["custom", "system"]);
+    const editorCommand = readOptionalStringProperty(input, "editorCommand");
+    const editorArgs = readOptionalStringProperty(input, "editorArgs");
     const themeMode = readEnumProperty(input, "themeMode", ["dark", "light", "system"]);
-    const settings: AppSettingsRecord = { themeMode };
+    const settings: AppSettingsRecord = {
+      autoCollapseHunksOver,
+      defaultDiffMode,
+      ...(editorMode === "custom"
+        ? { editorLaunchConfig: editorConfigFromInput(editorCommand, editorArgs) }
+        : {}),
+      hideWhitespaceOnlyChanges,
+      notifyOnDrift,
+      reviewResetTrigger,
+      showGeneratedFiles,
+      themeMode
+    };
 
     getStorage().upsertAppSettings(settings);
 
     return appSettingsView(getStorage().getAppSettings());
   }
 );
-ipcMain.handle("projects:listRecent", () =>
-  getStorage()
-    .listRecentProjects()
-    .map((project) => projectView(project))
+ipcMain.handle("projects:listRecent", async () => listAvailableRecentProjectViews());
+ipcMain.handle(
+  "projects:close",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<readonly RecentProjectView[]> => {
+    const projectId = readStringProperty(input, "projectId");
+
+    getStorage().deleteProject(projectId);
+
+    return listAvailableRecentProjectViews();
+  }
 );
 ipcMain.handle("projects:open", async () => openProjectFromDialog());
-ipcMain.handle("projects:load", async (_event: IpcMainInvokeEvent, input: unknown) => {
-  const projectId = readStringProperty(input, "projectId");
+ipcMain.handle(
+  "projects:load",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const projectId = readStringProperty(input, "projectId");
 
-  return loadProjectWorkspace(projectId);
-});
+    return loadProjectWorkspaceIfAvailable(projectId);
+  }
+);
 ipcMain.handle(
   "settings:getProject",
   (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
@@ -200,19 +276,15 @@ ipcMain.handle(
   "settings:updateProject",
   (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
     const projectId = readStringProperty(input, "projectId");
-    const showGeneratedFiles = readBooleanProperty(input, "showGeneratedFiles");
-    const editorMode = readEnumProperty(input, "editorMode", ["custom", "system"]);
-    const editorCommand = readOptionalStringProperty(input, "editorCommand");
-    const editorArgs = readOptionalStringProperty(input, "editorArgs");
+    const fileListCollapsed = readBooleanProperty(input, "fileListCollapsed");
+    const fileListWidth = readNumberProperty(input, "fileListWidth");
 
     assertStoredProject(projectId);
 
     const settings: ProjectSettingsRecord = {
-      ...(editorMode === "custom"
-        ? { editorLaunchConfig: editorConfigFromInput(editorCommand, editorArgs) }
-        : {}),
-      projectId,
-      showGeneratedFiles
+      fileListCollapsed,
+      fileListWidth,
+      projectId
     };
 
     getStorage().upsertProjectSettings(settings);
@@ -365,6 +437,28 @@ function getStorage(): DifftrayStorage {
   return storage;
 }
 
+function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
+  const projects = getStorage().listRecentProjects();
+
+  for (const project of projects) {
+    if (!existsSync(project.path)) {
+      getStorage().deleteProject(project.id);
+    }
+  }
+
+  return getStorage().listRecentProjects();
+}
+
+async function listAvailableRecentProjectViews(): Promise<readonly RecentProjectView[]> {
+  const projects = listAvailableRecentProjects();
+
+  return Promise.all(
+    projects.map(async (project) =>
+      projectView(project, await loadProjectReviewSummary(project))
+    )
+  );
+}
+
 async function openProjectFromDialog(): Promise<ReviewWorkspaceView | null> {
   const dialogOptions: OpenDialogOptions = {
     buttonLabel: "Open Repository",
@@ -415,31 +509,8 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
-  upsertOpenedProject({
-    id: project.id,
-    lastOpenedAt: new Date().toISOString(),
-    name: project.name,
-    path: project.path
-  });
-
-  const diffResult = await loadWorkingTreeDiffs(project.path);
-  const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
-  const reviewTargetId = createReviewTargetId(reviewTarget);
-  const settings = getStorage().getProjectSettings(project.id);
-
-  getStorage().upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
-
-  const diffs = diffResult.files.map((file) => fileDiffFromGit(file));
-  const marks = getStorage().listReviewMarks(
-    reviewTargetId
-  ) satisfies readonly ReviewMark[];
-  const states = resolveReviewStates({
-    diffs,
-    marks,
-    reviewTarget,
-    showGeneratedFiles: settings.showGeneratedFiles
-  });
-  const progress = calculateProgress(states);
+  const { progress, reviewTarget, reviewTargetId, states } =
+    await loadProjectReviewState(project);
 
   return {
     files: states.map((state) => {
@@ -472,6 +543,70 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
   };
 }
 
+async function loadProjectReviewSummary(
+  project: StoredProjectRecord
+): Promise<ProjectReviewSummaryView> {
+  try {
+    const { progress, states } = await loadProjectReviewState(project);
+
+    return {
+      attentionCount: states.filter((state) => state.visible && state.invalidated).length,
+      progress: progressView(progress)
+    };
+  } catch {
+    return emptyProjectReviewSummary;
+  }
+}
+
+async function loadProjectReviewState(project: StoredProjectRecord): Promise<{
+  readonly progress: ReviewProgress;
+  readonly reviewTarget: ReviewTarget;
+  readonly reviewTargetId: string;
+  readonly states: readonly FileReviewState[];
+}> {
+  const diffResult = await loadWorkingTreeDiffs(project.path);
+  const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
+  const reviewTargetId = createReviewTargetId(reviewTarget);
+  const settings = getStorage().getAppSettings();
+
+  getStorage().upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
+
+  const diffs = diffResult.files.map((file) => fileDiffFromGit(file));
+  const marks = getStorage().listReviewMarks(
+    reviewTargetId
+  ) satisfies readonly ReviewMark[];
+  const states = resolveReviewStates({
+    diffs,
+    marks,
+    reviewTarget,
+    showGeneratedFiles: settings.showGeneratedFiles
+  });
+
+  return {
+    progress: calculateProgress(states),
+    reviewTarget,
+    reviewTargetId,
+    states
+  };
+}
+
+async function loadProjectWorkspaceIfAvailable(
+  projectId: string
+): Promise<ReviewWorkspaceView | null> {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    return null;
+  }
+
+  if (!existsSync(project.path)) {
+    getStorage().deleteProject(project.id);
+    return null;
+  }
+
+  return loadProjectWorkspace(projectId);
+}
+
 async function openFileInEditor(
   projectId: string,
   pathName: string
@@ -501,7 +636,7 @@ async function openFileInEditor(
     };
   }
 
-  const settings = getStorage().getProjectSettings(projectId);
+  const settings = getStorage().getAppSettings();
 
   if (!settings.editorLaunchConfig) {
     const launchError = await shell.openPath(absoluteFilePath);
@@ -548,16 +683,23 @@ function assertStoredProject(projectId: string): StoredProjectRecord {
 
 function settingsView(settings: ProjectSettingsRecord): ProjectSettingsView {
   return {
-    editorArgs: settings.editorLaunchConfig?.args.join(" ") ?? "",
-    editorCommand: settings.editorLaunchConfig?.command ?? "",
-    editorMode: settings.editorLaunchConfig ? "custom" : "system",
-    projectId: settings.projectId,
-    showGeneratedFiles: settings.showGeneratedFiles
+    fileListCollapsed: settings.fileListCollapsed,
+    fileListWidth: settings.fileListWidth,
+    projectId: settings.projectId
   };
 }
 
 function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
   return {
+    autoCollapseHunksOver: settings.autoCollapseHunksOver,
+    defaultDiffMode: settings.defaultDiffMode,
+    editorArgs: settings.editorLaunchConfig?.args.join(" ") ?? "",
+    editorCommand: settings.editorLaunchConfig?.command ?? "",
+    editorMode: settings.editorLaunchConfig ? "custom" : "system",
+    hideWhitespaceOnlyChanges: settings.hideWhitespaceOnlyChanges,
+    notifyOnDrift: settings.notifyOnDrift,
+    reviewResetTrigger: settings.reviewResetTrigger,
+    showGeneratedFiles: settings.showGeneratedFiles,
     themeMode: settings.themeMode
   };
 }
@@ -585,12 +727,23 @@ function splitEditorArgs(value: string): readonly string[] {
     .filter((arg) => arg.length > 0);
 }
 
-function projectView(project: StoredProjectRecord): RecentProjectView {
+function projectView(
+  project: StoredProjectRecord,
+  reviewSummary?: ProjectReviewSummaryView
+): RecentProjectView {
   return {
     id: project.id,
     ...(project.lastOpenedAt ? { lastOpenedAt: project.lastOpenedAt } : {}),
     name: project.name,
-    path: project.path
+    path: project.path,
+    ...(reviewSummary ? { reviewSummary } : {})
+  };
+}
+
+function progressView(progress: ReviewProgress): ReviewProgressView {
+  return {
+    reviewedVisibleFiles: progress.reviewedVisibleFiles,
+    totalVisibleReviewableFiles: progress.totalVisibleReviewableFiles
   };
 }
 
@@ -736,6 +889,16 @@ function readBooleanProperty(input: unknown, property: string): boolean {
   const value = readUnknownProperty(input, property);
 
   if (typeof value !== "boolean") {
+    throw new Error(`Invalid IPC payload: missing ${property}`);
+  }
+
+  return value;
+}
+
+function readNumberProperty(input: unknown, property: string): number {
+  const value = readUnknownProperty(input, property);
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`Invalid IPC payload: missing ${property}`);
   }
 

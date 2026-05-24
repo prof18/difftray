@@ -2,9 +2,10 @@ import { contextBridge, ipcRenderer } from "electron";
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly getAppSettings: () => Promise<AppSettingsView>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
-  readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView>;
+  readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
   readonly markFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<MarkReviewedResult>;
@@ -23,6 +24,15 @@ export type DifftrayApi = {
 export type ThemeMode = "dark" | "light" | "system";
 
 export type AppSettingsView = {
+  readonly autoCollapseHunksOver: number;
+  readonly defaultDiffMode: "split" | "unified";
+  readonly editorArgs: string;
+  readonly editorCommand: string;
+  readonly editorMode: "custom" | "system";
+  readonly hideWhitespaceOnlyChanges: boolean;
+  readonly notifyOnDrift: boolean;
+  readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
+  readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
 };
 
@@ -31,6 +41,17 @@ export type RecentProjectView = {
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
+  readonly reviewSummary?: ProjectReviewSummaryView;
+};
+
+export type ProjectReviewSummaryView = {
+  readonly attentionCount: number;
+  readonly progress: ReviewProgressView;
+};
+
+export type ReviewProgressView = {
+  readonly reviewedVisibleFiles: number;
+  readonly totalVisibleReviewableFiles: number;
 };
 
 export type ReviewFileView = {
@@ -51,10 +72,7 @@ export type ReviewFileView = {
 export type ReviewWorkspaceView = {
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
-  readonly progress: {
-    readonly reviewedVisibleFiles: number;
-    readonly totalVisibleReviewableFiles: number;
-  };
+  readonly progress: ReviewProgressView;
   readonly reviewTarget: {
     readonly headRefName?: string;
     readonly headSha: string;
@@ -107,33 +125,44 @@ export type OpenFileResult =
     };
 
 export type ProjectSettingsView = {
-  readonly editorArgs: string;
-  readonly editorCommand: string;
-  readonly editorMode: "custom" | "system";
+  readonly fileListCollapsed: boolean;
+  readonly fileListWidth: number;
   readonly projectId: string;
-  readonly showGeneratedFiles: boolean;
 };
 
 export type UpdateProjectSettingsInput = {
-  readonly editorArgs?: string;
-  readonly editorCommand?: string;
-  readonly editorMode: "custom" | "system";
+  readonly fileListCollapsed: boolean;
+  readonly fileListWidth: number;
   readonly projectId: string;
-  readonly showGeneratedFiles: boolean;
 };
 
 export type UpdateAppSettingsInput = {
+  readonly autoCollapseHunksOver: number;
+  readonly defaultDiffMode: "split" | "unified";
+  readonly editorArgs?: string;
+  readonly editorCommand?: string;
+  readonly editorMode: "custom" | "system";
+  readonly hideWhitespaceOnlyChanges: boolean;
+  readonly notifyOnDrift: boolean;
+  readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
+  readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
 };
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  closeProject: async (projectId) =>
+    ipcRenderer.invoke("projects:close", {
+      projectId
+    }) as Promise<readonly RecentProjectView[]>,
   getAppSettings: async () =>
     ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
   loadProject: async (projectId) =>
-    ipcRenderer.invoke("projects:load", { projectId }) as Promise<ReviewWorkspaceView>,
+    ipcRenderer.invoke("projects:load", {
+      projectId
+    }) as Promise<ReviewWorkspaceView | null>,
   markFileReviewed: async (input) =>
     ipcRenderer.invoke("reviews:markFileReviewed", input) as Promise<MarkReviewedResult>,
   openFileInEditor: async (input) =>

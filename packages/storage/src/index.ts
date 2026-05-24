@@ -36,15 +36,24 @@ export type EditorLaunchConfig = {
   readonly command: string;
 };
 
-export type ProjectSettingsRecord = {
-  readonly editorLaunchConfig?: EditorLaunchConfig;
-  readonly projectId: string;
-  readonly showGeneratedFiles: boolean;
-};
-
+export type DiffMode = "split" | "unified";
+export type ReviewResetTrigger = "commit_sha" | "diff_content" | "line_count";
 export type ThemeMode = "dark" | "light" | "system";
 
+export type ProjectSettingsRecord = {
+  readonly fileListCollapsed: boolean;
+  readonly fileListWidth: number;
+  readonly projectId: string;
+};
+
 export type AppSettingsRecord = {
+  readonly autoCollapseHunksOver: number;
+  readonly defaultDiffMode: DiffMode;
+  readonly editorLaunchConfig?: EditorLaunchConfig;
+  readonly hideWhitespaceOnlyChanges: boolean;
+  readonly notifyOnDrift: boolean;
+  readonly reviewResetTrigger: ReviewResetTrigger;
+  readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
 };
 
@@ -99,6 +108,7 @@ export type VerifyAndUnmarkReviewedResult =
 
 export type DifftrayStorage = {
   readonly close: () => void;
+  readonly deleteProject: (id: string) => void;
   readonly getAppSettings: () => AppSettingsRecord;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
@@ -137,6 +147,9 @@ export function openStorage(filename: string): DifftrayStorage {
   return {
     close: () => {
       db.close();
+    },
+    deleteProject: (id) => {
+      deleteProject(db, id);
     },
     getAppSettings: () => getAppSettings(db),
     getProject: (id) => getProject(db, "id", id),
@@ -250,6 +263,13 @@ function runMigrations(db: DatabaseSync): void {
       project_id text primary key references projects(id) on delete cascade,
       show_generated_files integer not null default 0,
       editor_launch_config_json text,
+      file_list_width integer not null default 340,
+      file_list_collapsed integer not null default 0,
+      default_diff_mode text not null default 'split',
+      hide_whitespace_only_changes integer not null default 0,
+      auto_collapse_hunks_over integer not null default 120,
+      notify_on_drift integer not null default 1,
+      review_reset_trigger text not null default 'diff_content',
       updated_at text not null
     );
 
@@ -259,6 +279,43 @@ function runMigrations(db: DatabaseSync): void {
       updated_at text not null
     );
   `);
+  ensureProjectSettingsColumn(db, "file_list_width", "integer not null default 340");
+  ensureProjectSettingsColumn(db, "file_list_collapsed", "integer not null default 0");
+  ensureProjectSettingsColumn(db, "default_diff_mode", "text not null default 'split'");
+  ensureProjectSettingsColumn(
+    db,
+    "hide_whitespace_only_changes",
+    "integer not null default 0"
+  );
+  ensureProjectSettingsColumn(
+    db,
+    "auto_collapse_hunks_over",
+    "integer not null default 120"
+  );
+  ensureProjectSettingsColumn(db, "notify_on_drift", "integer not null default 1");
+  ensureProjectSettingsColumn(
+    db,
+    "review_reset_trigger",
+    "text not null default 'diff_content'"
+  );
+}
+
+function ensureProjectSettingsColumn(
+  db: DatabaseSync,
+  columnName: string,
+  columnDefinition: string
+): void {
+  const rows = db
+    .prepare("pragma table_info(project_settings)")
+    .all() as unknown as readonly {
+    readonly name: string;
+  }[];
+
+  if (rows.some((row) => row.name === columnName)) {
+    return;
+  }
+
+  db.exec(`alter table project_settings add column ${columnName} ${columnDefinition}`);
 }
 
 function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
@@ -290,6 +347,10 @@ function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
     now,
     project.lastOpenedAt ?? null
   );
+}
+
+function deleteProject(db: DatabaseSync, projectId: string): void {
+  db.prepare("delete from projects where id = ?").run(projectId);
 }
 
 function getProject(
@@ -381,19 +442,19 @@ function upsertProjectSettings(db: DatabaseSync, settings: ProjectSettingsRecord
     `
     insert into project_settings (
       project_id,
-      show_generated_files,
-      editor_launch_config_json,
+      file_list_width,
+      file_list_collapsed,
       updated_at
     ) values (?, ?, ?, ?)
     on conflict(project_id) do update set
-      show_generated_files = excluded.show_generated_files,
-      editor_launch_config_json = excluded.editor_launch_config_json,
+      file_list_width = excluded.file_list_width,
+      file_list_collapsed = excluded.file_list_collapsed,
       updated_at = excluded.updated_at
   `
   ).run(
     settings.projectId,
-    settings.showGeneratedFiles ? 1 : 0,
-    settings.editorLaunchConfig ? JSON.stringify(settings.editorLaunchConfig) : null,
+    clampFileListWidth(settings.fileListWidth),
+    settings.fileListCollapsed ? 1 : 0,
     currentTimestamp()
   );
 }
@@ -405,8 +466,9 @@ function getProjectSettings(db: DatabaseSync, projectId: string): ProjectSetting
 
   if (!row) {
     return {
-      projectId,
-      showGeneratedFiles: false
+      fileListCollapsed: false,
+      fileListWidth: 340,
+      projectId
     };
   }
 
@@ -414,13 +476,65 @@ function getProjectSettings(db: DatabaseSync, projectId: string): ProjectSetting
 }
 
 function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord): void {
+  upsertAppSetting(
+    db,
+    "auto_collapse_hunks_over",
+    String(clampAutoCollapseHunks(settings.autoCollapseHunksOver))
+  );
+  upsertAppSetting(db, "default_diff_mode", settings.defaultDiffMode);
+  upsertAppSetting(
+    db,
+    "editor_launch_config_json",
+    settings.editorLaunchConfig ? JSON.stringify(settings.editorLaunchConfig) : ""
+  );
+  upsertAppSetting(
+    db,
+    "hide_whitespace_only_changes",
+    settings.hideWhitespaceOnlyChanges ? "1" : "0"
+  );
+  upsertAppSetting(db, "notify_on_drift", settings.notifyOnDrift ? "1" : "0");
+  upsertAppSetting(db, "review_reset_trigger", settings.reviewResetTrigger);
+  upsertAppSetting(db, "show_generated_files", settings.showGeneratedFiles ? "1" : "0");
   upsertAppSetting(db, "theme_mode", settings.themeMode);
 }
 
 function getAppSettings(db: DatabaseSync): AppSettingsRecord {
+  const legacySettings = latestLegacyProjectAppSettings(db);
+  const autoCollapseHunksOver = getAppSetting(db, "auto_collapse_hunks_over");
+  const defaultDiffMode = getAppSetting(db, "default_diff_mode");
+  const editorLaunchConfigJson = getAppSetting(db, "editor_launch_config_json");
+  const hideWhitespaceOnlyChanges = getAppSetting(db, "hide_whitespace_only_changes");
+  const notifyOnDrift = getAppSetting(db, "notify_on_drift");
+  const reviewResetTrigger = getAppSetting(db, "review_reset_trigger");
+  const showGeneratedFiles = getAppSetting(db, "show_generated_files");
   const themeMode = getAppSetting(db, "theme_mode");
+  const editorLaunchConfig =
+    editorLaunchConfigJson === undefined
+      ? legacySettings.editorLaunchConfig
+      : editorLaunchConfigJson.length > 0
+        ? parseEditorLaunchConfig(editorLaunchConfigJson)
+        : undefined;
 
   return {
+    autoCollapseHunksOver: appNumberSetting(
+      autoCollapseHunksOver,
+      legacySettings.autoCollapseHunksOver,
+      clampAutoCollapseHunks
+    ),
+    defaultDiffMode: diffModeFromValue(defaultDiffMode ?? legacySettings.defaultDiffMode),
+    ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
+    hideWhitespaceOnlyChanges: appBooleanSetting(
+      hideWhitespaceOnlyChanges,
+      legacySettings.hideWhitespaceOnlyChanges
+    ),
+    notifyOnDrift: appBooleanSetting(notifyOnDrift, legacySettings.notifyOnDrift),
+    reviewResetTrigger: reviewResetTriggerFromValue(
+      reviewResetTrigger ?? legacySettings.reviewResetTrigger
+    ),
+    showGeneratedFiles: appBooleanSetting(
+      showGeneratedFiles,
+      legacySettings.showGeneratedFiles
+    ),
     themeMode: isThemeMode(themeMode) ? themeMode : "system"
   };
 }
@@ -576,8 +690,15 @@ type ReviewTargetRow = {
 };
 
 type ProjectSettingsRow = {
+  readonly auto_collapse_hunks_over: number;
+  readonly default_diff_mode: string;
   readonly editor_launch_config_json: null | string;
+  readonly file_list_collapsed: 0 | 1;
+  readonly file_list_width: number;
+  readonly hide_whitespace_only_changes: 0 | 1;
+  readonly notify_on_drift: 0 | 1;
   readonly project_id: string;
+  readonly review_reset_trigger: string;
   readonly show_generated_files: 0 | 1;
 };
 
@@ -621,14 +742,104 @@ function reviewTargetFromRow(row: ReviewTargetRow): StoredReviewTargetRecord {
 }
 
 function projectSettingsFromRow(row: ProjectSettingsRow): ProjectSettingsRecord {
+  return {
+    fileListCollapsed: row.file_list_collapsed === 1,
+    fileListWidth: clampFileListWidth(row.file_list_width),
+    projectId: row.project_id
+  };
+}
+
+function clampFileListWidth(value: number): number {
+  return Math.min(540, Math.max(220, Math.round(value)));
+}
+
+function clampAutoCollapseHunks(value: number): number {
+  return Math.min(999, Math.max(20, Math.round(value)));
+}
+
+function reviewResetTriggerFromValue(value: string): ReviewResetTrigger {
+  return value === "line_count" || value === "commit_sha" ? value : "diff_content";
+}
+
+function diffModeFromValue(value: string): DiffMode {
+  return value === "unified" ? "unified" : "split";
+}
+
+function appBooleanSetting(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  return value === "1";
+}
+
+function appNumberSetting(
+  value: string | undefined,
+  fallback: number,
+  clamp: (input: number) => number
+): number {
+  if (value === undefined) {
+    return clamp(fallback);
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) ? clamp(parsedValue) : clamp(fallback);
+}
+
+function latestLegacyProjectAppSettings(db: DatabaseSync): AppSettingsRecord {
+  const row = db
+    .prepare(
+      `
+        select *
+        from project_settings
+        order by
+          case
+            when show_generated_files != 0
+              or editor_launch_config_json is not null
+              or default_diff_mode != 'split'
+              or hide_whitespace_only_changes != 0
+              or auto_collapse_hunks_over != 120
+              or notify_on_drift != 1
+              or review_reset_trigger != 'diff_content'
+            then 0
+            else 1
+          end,
+          updated_at desc
+        limit 1
+      `
+    )
+    .get() as ProjectSettingsRow | undefined;
+
+  if (!row) {
+    return defaultAppSettings();
+  }
+
   const editorLaunchConfig = row.editor_launch_config_json
     ? parseEditorLaunchConfig(row.editor_launch_config_json)
     : undefined;
 
   return {
+    autoCollapseHunksOver: clampAutoCollapseHunks(row.auto_collapse_hunks_over),
+    defaultDiffMode: diffModeFromValue(row.default_diff_mode),
     ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
-    projectId: row.project_id,
-    showGeneratedFiles: row.show_generated_files === 1
+    hideWhitespaceOnlyChanges: row.hide_whitespace_only_changes === 1,
+    notifyOnDrift: row.notify_on_drift === 1,
+    reviewResetTrigger: reviewResetTriggerFromValue(row.review_reset_trigger),
+    showGeneratedFiles: row.show_generated_files === 1,
+    themeMode: "system"
+  };
+}
+
+function defaultAppSettings(): AppSettingsRecord {
+  return {
+    autoCollapseHunksOver: 120,
+    defaultDiffMode: "split",
+    hideWhitespaceOnlyChanges: false,
+    notifyOnDrift: true,
+    reviewResetTrigger: "diff_content",
+    showGeneratedFiles: false,
+    themeMode: "system"
   };
 }
 

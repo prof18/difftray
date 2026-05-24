@@ -12,7 +12,7 @@ The renderer talks to a narrow preload API for project listing, project open/loa
 
 Review marking is verified in the main process by reloading the current working-tree diff and comparing the displayed diff hash with the current diff hash before persisting the mark.
 
-Project settings are stored per repository. V0 exposes generated-file visibility and editor launch configuration from a settings panel. Saving settings reloads the current workspace so generated-file visibility and progress are recalculated from the persisted settings.
+Repository records keep project-local workspace state. App settings store generated-file visibility, editor launch configuration, and review defaults. Saving settings reloads the current workspace so generated-file visibility and progress are recalculated from the persisted app setting.
 
 ## Context
 

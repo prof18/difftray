@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { openStorage } from "@difftray/storage";
 import { _electron as electron } from "playwright";
 
 const require = createRequire(import.meta.url);
@@ -11,9 +12,11 @@ const cwd = path.resolve(import.meta.dirname, "..");
 const artifactsDir = path.resolve(cwd, "../../artifacts/screenshots");
 const executablePath = require("electron");
 const repoPath = await createChangedRepository();
+const secondaryRepoPath = await createChangedRepository("visual-secondary-repo");
 const userDataPath = await mkdtemp(path.join(tmpdir(), "difftray-user-data-"));
 
 await mkdir(artifactsDir, { recursive: true });
+await seedRecentProject(userDataPath, secondaryRepoPath);
 
 const app = await electron.launch({
   args: [path.resolve(cwd, "dist/main/index.cjs")],
@@ -29,11 +32,18 @@ const app = await electron.launch({
 try {
   const window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded");
-  await window.locator("text=Difftray").first().waitFor({ timeout: 10_000 });
-  await window.getByRole("button", { name: /visual-repo/ }).click();
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
+  await expectProjectTabSummary(window, "visual-secondary-repo", "0/1", "pending");
+  await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
+  await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
+  await window
+    .locator('[data-project-tab-name="visual-repo"]')
+    .dragTo(window.locator('[data-project-tab-name="visual-secondary-repo"]'), {
+      targetPosition: { x: 120, y: 14 }
+    });
+  await expectProjectTabOrder(window, ["visual-secondary-repo", "visual-repo"]);
   await expectMissing(window, "button", "schema.generated.ts");
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
@@ -54,67 +64,80 @@ try {
   await window
     .getByRole("button", { name: /schema\.generated\.ts/ })
     .waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: /schema\.generated\.ts/ }).click();
+  await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectChecked(window, "Show generated files");
   await expectComboboxValue(window, /Appearance/, "light");
   await expectComboboxValue(window, /Editor/, "custom");
   await expectValue(window, "Command", "code");
-  await expectValue(window, "Arguments", "--goto {path}:{line}");
+  await expectValuePrefix(window, "Arguments", "--goto {path}:{line}");
   await window.getByRole("button", { name: "Close settings" }).click();
-  await window.getByRole("button", { name: "Hide sidebar" }).click();
-  await expectMissing(window, "button", "visual-repo");
-  await window.getByRole("button", { name: "Show sidebar" }).click();
-  await window.getByRole("button", { name: /visual-repo/ }).waitFor({
+  await window.getByRole("button", { name: "Hide file list" }).click();
+  await window.getByRole("button", { name: "Show file list" }).waitFor({
     timeout: 10_000
   });
-  await window.keyboard.press("f");
-  await expectFocused(window, "input[placeholder='Filter files']");
-  await window.getByPlaceholder("Filter files").fill("tracked");
-  await window.keyboard.press("Escape");
+  await window.keyboard.press("Meta+Digit1");
+  await window.getByRole("button", { name: "Hide file list" }).waitFor({
+    timeout: 10_000
+  });
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await window.keyboard.press("Meta+KeyK");
+  await window.getByRole("dialog", { name: "Command palette" }).waitFor({
+    timeout: 10_000
+  });
+  await window.keyboard.type("tracked");
+  await window.keyboard.press("Enter");
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await expectSelectedFile(window, "tracked.txt");
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-workflow.png")
   });
-  await window.keyboard.press("Space");
-  await window.getByRole("button", { name: "Reviewed" }).waitFor({
+  await window.getByRole("button", { name: "Mark reviewed" }).click();
+  await expectFileReviewState(window, "tracked.txt", "reviewed");
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await window.getByRole("button", { name: "Unmark reviewed" }).waitFor({
     timeout: 10_000
   });
-  await expectEnabled(window, "button", "Reviewed");
-  await window.getByRole("button", { name: "1 reviewed" }).waitFor({
-    timeout: 10_000
-  });
-  await window.getByLabel("Diff preview").click();
-  await window.keyboard.press("KeyU");
+  await window.getByRole("button", { name: "Unmark reviewed" }).click();
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
   });
-  await expectEnabled(window, "button", "Mark reviewed");
-  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
-  await window.keyboard.press("Space");
-  await window.getByRole("button", { exact: true, name: "Reviewed" }).waitFor({
-    timeout: 10_000
-  });
+  await window.getByRole("button", { name: "Mark reviewed" }).click();
+  await expectFileReviewState(window, "tracked.txt", "reviewed");
+  await window.waitForTimeout(250);
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-marked.png")
   });
   await writeFile(path.join(repoPath, "tracked.txt"), "before\nafter\nagain\n", "utf8");
-  await window.getByRole("button", { name: "Refresh project" }).click();
+  await window.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
   await window
-    .getByRole("button", { name: /tracked\.txt modified .* changed after review/ })
+    .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
+  await window.getByText("reviewed files drifted").waitFor({ timeout: 10_000 });
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
+  });
+  await window.getByRole("button", { name: "Close repository" }).click();
+  await window
+    .getByRole("button", { name: /visual-secondary-repo/ })
+    .waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: "Close repository" }).click();
+  await window.getByRole("heading", { name: "No repository open" }).waitFor({
+    timeout: 10_000
   });
 } finally {
   await app.close();
 }
 
-async function createChangedRepository() {
+async function createChangedRepository(name = "visual-repo") {
   const parent = await mkdtemp(path.join(tmpdir(), "difftray-visual-"));
-  const repo = path.join(parent, "visual-repo");
+  const repo = path.join(parent, name);
 
   await mkdir(repo);
   git(repo, ["init", "--initial-branch=main"]);
@@ -133,32 +156,28 @@ async function createChangedRepository() {
   return repo;
 }
 
+async function seedRecentProject(userDataPath, repoPath) {
+  const dataDir = path.join(userDataPath, "data");
+  await mkdir(dataDir, { recursive: true });
+  const storage = openStorage(path.join(dataDir, "difftray.sqlite"));
+
+  try {
+    storage.upsertProject({
+      id: repoPath,
+      lastOpenedAt: "2026-01-01T00:00:00.000Z",
+      name: path.basename(repoPath),
+      path: repoPath
+    });
+  } finally {
+    storage.close();
+  }
+}
+
 function git(cwd, args) {
   execFileSync("git", args, {
     cwd,
     stdio: "ignore"
   });
-}
-
-async function expectFocused(window, selector) {
-  await window.waitForFunction((cssSelector) => {
-    return document.activeElement === document.querySelector(cssSelector);
-  }, selector);
-}
-
-async function expectEnabled(window, role, name) {
-  await window.waitForFunction(
-    ({ roleName, accessibleName }) => {
-      const elements = [...document.querySelectorAll(roleName)];
-
-      return elements.some(
-        (element) =>
-          element.textContent?.trim() === accessibleName &&
-          !element.hasAttribute("disabled")
-      );
-    },
-    { accessibleName: name, roleName: role }
-  );
 }
 
 async function expectMissing(window, role, text) {
@@ -170,6 +189,54 @@ async function expectMissing(window, role, text) {
     },
     { accessibleText: text, roleName: role }
   );
+}
+
+async function expectProjectTabSummary(window, projectName, count, state) {
+  await window.waitForFunction(
+    ({ expectedCount, expectedState, targetProjectName }) => {
+      const projectTab = [...document.querySelectorAll("button")].find((button) => {
+        const text = button.textContent ?? "";
+
+        return text.includes(targetProjectName) && text.includes(expectedCount);
+      });
+
+      return Boolean(projectTab?.querySelector(`[data-state="${expectedState}"]`));
+    },
+    { expectedCount: count, expectedState: state, targetProjectName: projectName }
+  );
+}
+
+async function expectProjectTabOrder(window, projectNames) {
+  await window.waitForFunction((expectedProjectNames) => {
+    const actualProjectNames = [...document.querySelectorAll("[data-project-tab-name]")]
+      .map((tab) => tab.getAttribute("data-project-tab-name"))
+      .filter(Boolean);
+
+    return expectedProjectNames.every(
+      (projectName, index) => actualProjectNames[index] === projectName
+    );
+  }, projectNames);
+}
+
+async function expectFileReviewState(window, filename, state) {
+  await window.waitForFunction(
+    ({ expectedState, targetFilename }) => {
+      const fileButton = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes(targetFilename)
+      );
+
+      return Boolean(fileButton?.querySelector(`[data-state="${expectedState}"]`));
+    },
+    { expectedState: state, targetFilename: filename }
+  );
+}
+
+async function expectSelectedFile(window, filename) {
+  await window.waitForFunction((targetFilename) => {
+    const selectedButton = document.querySelector('button[data-selected="true"]');
+
+    return selectedButton?.textContent?.includes(targetFilename);
+  }, filename);
 }
 
 async function expectChecked(window, label) {
@@ -185,6 +252,16 @@ async function expectValue(window, label, expectedValue) {
 
   if (actualValue !== expectedValue) {
     throw new Error(`Expected ${label} to be ${expectedValue}, got ${actualValue}`);
+  }
+}
+
+async function expectValuePrefix(window, label, expectedValue) {
+  const actualValue = await window.getByLabel(label, { exact: true }).inputValue();
+
+  if (!actualValue.startsWith(expectedValue)) {
+    throw new Error(
+      `Expected ${label} to start with ${expectedValue}, got ${actualValue}`
+    );
   }
 }
 

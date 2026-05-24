@@ -5,9 +5,10 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
-    readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView>;
+    readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
     readonly markFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<MarkReviewedResult>;
@@ -28,6 +29,15 @@ declare global {
   type ThemeMode = "dark" | "light" | "system";
 
   type AppSettingsView = {
+    readonly autoCollapseHunksOver: number;
+    readonly defaultDiffMode: "split" | "unified";
+    readonly editorArgs: string;
+    readonly editorCommand: string;
+    readonly editorMode: "custom" | "system";
+    readonly hideWhitespaceOnlyChanges: boolean;
+    readonly notifyOnDrift: boolean;
+    readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
+    readonly showGeneratedFiles: boolean;
     readonly themeMode: ThemeMode;
   };
 
@@ -36,6 +46,17 @@ declare global {
     readonly lastOpenedAt?: string;
     readonly name: string;
     readonly path: string;
+    readonly reviewSummary?: ProjectReviewSummaryView;
+  };
+
+  type ProjectReviewSummaryView = {
+    readonly attentionCount: number;
+    readonly progress: ReviewProgressView;
+  };
+
+  type ReviewProgressView = {
+    readonly reviewedVisibleFiles: number;
+    readonly totalVisibleReviewableFiles: number;
   };
 
   type ReviewFileView = {
@@ -56,10 +77,7 @@ declare global {
   type ReviewWorkspaceView = {
     readonly files: readonly ReviewFileView[];
     readonly project: RecentProjectView;
-    readonly progress: {
-      readonly reviewedVisibleFiles: number;
-      readonly totalVisibleReviewableFiles: number;
-    };
+    readonly progress: ReviewProgressView;
     readonly reviewTarget: {
       readonly headRefName?: string;
       readonly headSha: string;
@@ -112,22 +130,27 @@ declare global {
       };
 
   type ProjectSettingsView = {
-    readonly editorArgs: string;
-    readonly editorCommand: string;
-    readonly editorMode: "custom" | "system";
+    readonly fileListCollapsed: boolean;
+    readonly fileListWidth: number;
     readonly projectId: string;
-    readonly showGeneratedFiles: boolean;
   };
 
   type UpdateProjectSettingsInput = {
-    readonly editorArgs?: string;
-    readonly editorCommand?: string;
-    readonly editorMode: "custom" | "system";
+    readonly fileListCollapsed: boolean;
+    readonly fileListWidth: number;
     readonly projectId: string;
-    readonly showGeneratedFiles: boolean;
   };
 
   type UpdateAppSettingsInput = {
+    readonly autoCollapseHunksOver: number;
+    readonly defaultDiffMode: "split" | "unified";
+    readonly editorArgs?: string;
+    readonly editorCommand?: string;
+    readonly editorMode: "custom" | "system";
+    readonly hideWhitespaceOnlyChanges: boolean;
+    readonly notifyOnDrift: boolean;
+    readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
+    readonly showGeneratedFiles: boolean;
     readonly themeMode: ThemeMode;
   };
 

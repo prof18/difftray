@@ -93,9 +93,20 @@ project_settings (
   project_id text primary key,
   show_generated_files integer not null default 0,
   editor_launch_config_json text,
+  file_list_width integer not null default 340,
+  file_list_collapsed integer not null default 0,
+  default_diff_mode text not null default 'split',
+  hide_whitespace_only_changes integer not null default 0,
+  auto_collapse_hunks_over integer not null default 120,
+  notify_on_drift integer not null default 1,
+  review_reset_trigger text not null default 'diff_content',
   updated_at text not null
 )
 ```
+
+Only repository-local workspace layout is actively stored per repository: file-list
+width and collapsed state. The older review/editor columns remain in the table for
+compatibility with existing databases, but new review behavior is app-level.
 
 ### app_settings
 
@@ -106,6 +117,22 @@ app_settings (
   updated_at text not null
 )
 ```
+
+App settings store user-level preferences that should follow the user across
+repositories:
+
+- `theme_mode`
+- `editor_launch_config_json`
+- `default_diff_mode`
+- `show_generated_files`
+- `hide_whitespace_only_changes`
+- `auto_collapse_hunks_over`
+- `notify_on_drift`
+- `review_reset_trigger`
+
+If an existing database has no app-level review settings yet, Difftray seeds the
+runtime defaults from the most recently updated legacy `project_settings` row. Once
+app settings are saved, app-level values are the source of truth.
 
 ## Diff Hashing
 
@@ -157,7 +184,8 @@ Sources can include:
 - common generated directories
 - project-level ignore patterns in future versions
 
-Hidden generated files do not count toward progress.
+Hidden generated files do not count toward progress. Generated-file visibility is an
+app-level review preference.
 
 ## Important Invariant
 

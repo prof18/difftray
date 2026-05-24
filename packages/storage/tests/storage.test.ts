@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -60,6 +65,38 @@ describe("storage", () => {
       expect.objectContaining({ id: "newer-project" }),
       expect.objectContaining({ id: "older-project" })
     ]);
+    storage.close();
+  });
+
+  it("deletes projects and cascades project-owned records", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+    storage.upsertProjectSettings({
+      fileListCollapsed: false,
+      fileListWidth: 340,
+      projectId: project.id
+    });
+    storage.markReviewed({
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewedDiffHash: "hash-a",
+      reviewTargetId: reviewTarget.id
+    });
+
+    storage.deleteProject(project.id);
+
+    expect(storage.getProject(project.id)).toBeNull();
+    expect(storage.listRecentProjects()).toEqual([]);
+    expect(storage.getReviewTarget(reviewTarget.id)).toBeNull();
+    expect(storage.listReviewMarks(reviewTarget.id)).toEqual([]);
+    expect(storage.getProjectSettings(project.id)).toEqual(
+      expect.objectContaining({
+        fileListCollapsed: false,
+        fileListWidth: 340,
+        projectId: project.id
+      })
+    );
     storage.close();
   });
 
@@ -235,32 +272,27 @@ describe("storage", () => {
     storage.upsertProject(project);
 
     expect(storage.getProjectSettings(project.id)).toEqual({
-      projectId: project.id,
-      showGeneratedFiles: false
+      fileListCollapsed: false,
+      fileListWidth: 340,
+      projectId: project.id
     });
     storage.close();
   });
 
-  it("persists project settings", () => {
+  it("persists project layout settings", () => {
     const storage = openStorage(":memory:");
     storage.upsertProject(project);
 
     storage.upsertProjectSettings({
-      editorLaunchConfig: {
-        args: ["--goto", "{path}:{line}"],
-        command: "code"
-      },
-      projectId: project.id,
-      showGeneratedFiles: true
+      fileListCollapsed: true,
+      fileListWidth: 420,
+      projectId: project.id
     });
 
     expect(storage.getProjectSettings(project.id)).toEqual({
-      editorLaunchConfig: {
-        args: ["--goto", "{path}:{line}"],
-        command: "code"
-      },
-      projectId: project.id,
-      showGeneratedFiles: true
+      fileListCollapsed: true,
+      fileListWidth: 420,
+      projectId: project.id
     });
     storage.close();
   });
@@ -269,6 +301,12 @@ describe("storage", () => {
     const storage = openStorage(":memory:");
 
     expect(storage.getAppSettings()).toEqual({
+      autoCollapseHunksOver: 120,
+      defaultDiffMode: "split",
+      hideWhitespaceOnlyChanges: false,
+      notifyOnDrift: true,
+      reviewResetTrigger: "diff_content",
+      showGeneratedFiles: false,
       themeMode: "system"
     });
     storage.close();
@@ -278,12 +316,131 @@ describe("storage", () => {
     const storage = openStorage(":memory:");
 
     storage.upsertAppSettings({
+      autoCollapseHunksOver: 200,
+      defaultDiffMode: "unified",
+      editorLaunchConfig: {
+        args: ["--goto", "{path}:{line}"],
+        command: "code"
+      },
+      hideWhitespaceOnlyChanges: true,
+      notifyOnDrift: false,
+      reviewResetTrigger: "line_count",
+      showGeneratedFiles: true,
       themeMode: "light"
     });
 
     expect(storage.getAppSettings()).toEqual({
+      autoCollapseHunksOver: 200,
+      defaultDiffMode: "unified",
+      editorLaunchConfig: {
+        args: ["--goto", "{path}:{line}"],
+        command: "code"
+      },
+      hideWhitespaceOnlyChanges: true,
+      notifyOnDrift: false,
+      reviewResetTrigger: "line_count",
+      showGeneratedFiles: true,
       themeMode: "light"
     });
     storage.close();
+  });
+
+  it("uses the latest customized legacy project review settings as app defaults", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const secondProject = {
+      id: "project-2",
+      name: "Second",
+      path: "/tmp/second"
+    } satisfies ProjectRecord;
+    const thirdProject = {
+      id: "project-3",
+      name: "Third",
+      path: "/tmp/third"
+    } satisfies ProjectRecord;
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertProject(project);
+      storage.upsertProject(secondProject);
+      storage.upsertProject(thirdProject);
+      storage.close();
+
+      const db = new DatabaseSync(storagePath);
+      const insertSettings = db.prepare(`
+        insert into project_settings (
+          project_id,
+          show_generated_files,
+          editor_launch_config_json,
+          file_list_width,
+          file_list_collapsed,
+          default_diff_mode,
+          hide_whitespace_only_changes,
+          auto_collapse_hunks_over,
+          notify_on_drift,
+          review_reset_trigger,
+          updated_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      insertSettings.run(
+        project.id,
+        0,
+        null,
+        340,
+        0,
+        "split",
+        0,
+        120,
+        1,
+        "diff_content",
+        "2026-01-01T00:00:00.000Z"
+      );
+      insertSettings.run(
+        secondProject.id,
+        1,
+        JSON.stringify({ args: ["--goto", "{path}:{line}"], command: "code" }),
+        420,
+        1,
+        "unified",
+        1,
+        300,
+        0,
+        "commit_sha",
+        "2026-01-02T00:00:00.000Z"
+      );
+      insertSettings.run(
+        thirdProject.id,
+        0,
+        null,
+        460,
+        0,
+        "split",
+        0,
+        120,
+        1,
+        "diff_content",
+        "2026-01-03T00:00:00.000Z"
+      );
+      db.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.getAppSettings()).toEqual({
+        autoCollapseHunksOver: 300,
+        defaultDiffMode: "unified",
+        editorLaunchConfig: {
+          args: ["--goto", "{path}:{line}"],
+          command: "code"
+        },
+        hideWhitespaceOnlyChanges: true,
+        notifyOnDrift: false,
+        reviewResetTrigger: "commit_sha",
+        showGeneratedFiles: true,
+        themeMode: "system"
+      });
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
   });
 });
