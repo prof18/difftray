@@ -1,5 +1,22 @@
 import { createHash } from "node:crypto";
 
+export {
+  parseDiffSegments,
+  type CollapsedDiffContextSegment,
+  type ParsedDiffHunkSegment,
+  type ParsedDiffLine,
+  type ParsedDiffSegment,
+  type ParseDiffSegmentsInput
+} from "./diff-context.js";
+export {
+  commonEditorPresets,
+  findEditorPresetByLaunchConfig,
+  listInstalledEditorPresets,
+  type EditorLaunchConfigPreset,
+  type EditorPreset,
+  type InstalledEditorPresetInput
+} from "./editor-presets.js";
+
 const reviewTargetFingerprintVersion = "difftray-review-target-v1";
 const fileDiffFingerprintVersion = "difftray-file-diff-v1";
 
@@ -31,6 +48,8 @@ export type FileDiffStatus =
 
 export type TextDiffContent = {
   readonly kind: "text";
+  readonly newText?: string;
+  readonly oldText?: string;
   readonly patch: string;
 };
 
@@ -157,8 +176,13 @@ export function resolveReviewStates(
 
   return input.diffs.map((diff) => {
     const diffHash = createDiffHash(input.reviewTarget, diff);
+    const generatedSample = generatedDetectionSample(diff);
     const generated =
-      diff.generated ?? detectGeneratedFile({ path: diff.newPath }).isGenerated;
+      diff.generated ??
+      detectGeneratedFile({
+        path: diff.newPath,
+        ...(generatedSample !== undefined ? { sample: generatedSample } : {})
+      }).isGenerated;
     const visible = input.showGeneratedFiles === true || !generated;
     const pathMarks = input.marks.filter(
       (mark) => mark.reviewTargetId === reviewTargetId && mark.path === diff.newPath
@@ -224,6 +248,14 @@ function canonicalFileDiff(diff: FileDiff): readonly unknown[] {
     diff.newMode ?? null,
     canonicalContent(diff.content)
   ];
+}
+
+function generatedDetectionSample(diff: FileDiff): string | undefined {
+  if (diff.content.kind !== "text") {
+    return undefined;
+  }
+
+  return diff.content.newText ?? diff.content.oldText ?? diff.content.patch;
 }
 
 function canonicalContent(content: FileDiffContent): readonly unknown[] {

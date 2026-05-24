@@ -7,6 +7,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./diff-context": {
+      "types": "./src/diff-context.ts",
+      "default": "./dist/diff-context.js"
+    },
+    "./editor-presets": {
+      "types": "./src/editor-presets.ts",
+      "default": "./dist/editor-presets.js"
     }
   },
   "types": "./src/index.ts",

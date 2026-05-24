@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -51,16 +51,33 @@ export type GitLoadedFileDiff = {
   readonly content:
     | {
         readonly kind: "text";
+        readonly newText?: string;
+        readonly oldText?: string;
         readonly patch: string;
       }
     | {
         readonly byteSize: number;
         readonly digest: string;
         readonly kind: "binary";
+      }
+    | {
+        readonly kind: "symlink";
+        readonly newTarget?: string;
+        readonly oldTarget?: string;
+      }
+    | {
+        readonly kind: "submodule";
+        readonly newCommit?: string;
+        readonly oldCommit?: string;
+      }
+    | {
+        readonly kind: "mode_only";
       };
+  readonly newMode?: string;
   readonly newPath: string;
+  readonly oldMode?: string;
   readonly oldPath?: string;
-  readonly status: "added" | "deleted" | "modified" | "renamed";
+  readonly status: "added" | "deleted" | "mode_changed" | "modified" | "renamed";
 };
 
 export type WorkingTreeDiffResult = {
@@ -162,7 +179,9 @@ export async function loadWorkingTreeDiffs(
   };
 
   const status = await getGitStatus(repoPath);
-  const trackedDiffs = await loadTrackedDiffs(repoPath, ["HEAD"]);
+  const trackedDiffs = await loadTrackedDiffs(repoPath, ["HEAD"], {
+    oldRef: reviewTarget.headSha
+  });
   const trackedPaths = new Set(trackedDiffs.map((diff) => diff.newPath));
   const untrackedDiffs = await Promise.all(
     status
@@ -171,7 +190,7 @@ export async function loadWorkingTreeDiffs(
   );
 
   return {
-    files: [...trackedDiffs, ...untrackedDiffs],
+    files: [...trackedDiffs, ...untrackedDiffs.filter(isDefined)],
     reviewTarget
   };
 }
@@ -208,7 +227,10 @@ export async function loadBranchDiffs(
   };
 
   return {
-    files: await loadTrackedDiffs(repoPath, [mergeBaseSha, "HEAD"]),
+    files: await loadTrackedDiffs(repoPath, [mergeBaseSha, "HEAD"], {
+      newRef: headSha,
+      oldRef: mergeBaseSha
+    }),
     reviewTarget
   };
 }
@@ -345,17 +367,22 @@ function statusCodeFromPorcelainCode(
 }
 
 type NameStatusDiff = {
+  readonly newMode?: string;
+  readonly newObjectId?: string;
   readonly newPath: string;
+  readonly oldMode?: string;
+  readonly oldObjectId?: string;
   readonly oldPath?: string;
   readonly status: GitLoadedFileDiff["status"];
 };
 
 async function loadTrackedDiffs(
   repoPath: string,
-  diffArgs: readonly string[]
+  diffArgs: readonly string[],
+  snapshotSource: TrackedDiffSnapshotSource
 ): Promise<readonly GitLoadedFileDiff[]> {
   const [nameStatuses, patchOutput] = await Promise.all([
-    loadNameStatus(repoPath, diffArgs),
+    loadRawDiffs(repoPath, diffArgs),
     gitOutput(repoPath, [
       "diff",
       "--patch",
@@ -366,57 +393,98 @@ async function loadTrackedDiffs(
   ]);
   const patches = splitPatchOutput(patchOutput);
 
-  return nameStatuses.map((nameStatus, index) => ({
-    content: {
-      kind: "text",
-      patch: patches[index] ?? ""
-    },
-    newPath: nameStatus.newPath,
-    ...(nameStatus.oldPath ? { oldPath: nameStatus.oldPath } : {}),
-    status: nameStatus.status
-  }));
+  return Promise.all(
+    nameStatuses.map(async (nameStatus, index) => {
+      const patch = patches[index] ?? "";
+      const content = await loadTrackedDiffContent(
+        repoPath,
+        nameStatus,
+        snapshotSource,
+        patch
+      );
+
+      return {
+        content,
+        ...(nameStatus.newMode ? { newMode: nameStatus.newMode } : {}),
+        newPath: nameStatus.newPath,
+        ...(nameStatus.oldMode ? { oldMode: nameStatus.oldMode } : {}),
+        ...(nameStatus.oldPath ? { oldPath: nameStatus.oldPath } : {}),
+        status: content.kind === "mode_only" ? "mode_changed" : nameStatus.status
+      };
+    })
+  );
 }
 
-async function loadNameStatus(
+async function loadRawDiffs(
   repoPath: string,
   diffArgs: readonly string[]
 ): Promise<readonly NameStatusDiff[]> {
   const output = await gitOutput(repoPath, [
     "diff",
-    "--name-status",
+    "--raw",
+    "--full-index",
     "--find-renames",
     "-z",
     ...diffArgs
   ]);
+
+  return parseRawDiffs(output);
+}
+
+function parseRawDiffs(output: string): readonly NameStatusDiff[] {
   const records = output.split("\0").filter((record) => record.length > 0);
   const diffs: NameStatusDiff[] = [];
 
   for (let index = 0; index < records.length; index += 1) {
-    const code = records[index];
-    const pathRecord = records[index + 1];
+    const header = records[index];
 
-    if (!code || !pathRecord) {
+    if (!header) {
       continue;
     }
 
-    if (code.startsWith("R")) {
+    if (!header.startsWith(":")) {
+      throw new Error(`Malformed Git raw diff record: ${header}`);
+    }
+
+    const [oldMode, newMode, oldObjectId, newObjectId, rawStatus] = header
+      .slice(1)
+      .split(" ");
+    const statusCode = rawStatus?.[0] ?? "M";
+
+    if (statusCode === "R") {
+      const oldPath = records[index + 1];
       const newPath = records[index + 2];
-      if (!newPath) {
-        throw new Error("Git rename diff is missing the new path.");
+
+      if (!oldPath || !newPath) {
+        throw new Error("Git rename diff is missing a path.");
       }
 
       diffs.push({
+        ...(newMode ? { newMode } : {}),
+        ...(newObjectId ? { newObjectId } : {}),
         newPath,
-        oldPath: pathRecord,
+        ...(oldMode ? { oldMode } : {}),
+        ...(oldObjectId ? { oldObjectId } : {}),
+        oldPath,
         status: "renamed"
       });
       index += 2;
       continue;
     }
 
+    const pathRecord = records[index + 1];
+
+    if (!pathRecord) {
+      continue;
+    }
+
     diffs.push({
+      ...(newMode ? { newMode } : {}),
+      ...(newObjectId ? { newObjectId } : {}),
       newPath: pathRecord,
-      status: statusFromNameStatusCode(code)
+      ...(oldMode ? { oldMode } : {}),
+      ...(oldObjectId ? { oldObjectId } : {}),
+      status: statusFromRawStatusCode(statusCode)
     });
     index += 1;
   }
@@ -435,19 +503,213 @@ function splitPatchOutput(output: string): readonly string[] {
     .map((section) => section.trimEnd());
 }
 
+type TrackedDiffSnapshotSource = {
+  readonly newRef?: string;
+  readonly oldRef: string;
+};
+
+async function loadTrackedDiffContent(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource,
+  patch: string
+): Promise<GitLoadedFileDiff["content"]> {
+  if (isSubmoduleDiff(diff)) {
+    return loadSubmoduleContent(repoPath, diff, source);
+  }
+
+  if (isModeOnlyDiff(diff, patch)) {
+    return { kind: "mode_only" };
+  }
+
+  const snapshots = await loadTextSnapshots(repoPath, diff, source);
+
+  if (isSymlinkDiff(diff)) {
+    return {
+      kind: "symlink",
+      ...(snapshots.newText !== undefined ? { newTarget: snapshots.newText } : {}),
+      ...(snapshots.oldText !== undefined ? { oldTarget: snapshots.oldText } : {})
+    };
+  }
+
+  if (
+    snapshots.newText !== undefined ||
+    snapshots.oldText !== undefined ||
+    !patchLooksBinary(patch)
+  ) {
+    return {
+      kind: "text",
+      ...snapshots,
+      patch
+    };
+  }
+
+  return {
+    kind: "binary",
+    ...(await loadBinaryFingerprint(repoPath, diff, source))
+  };
+}
+
+async function loadTextSnapshots(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource
+): Promise<{ readonly newText?: string; readonly oldText?: string }> {
+  const oldPath = diff.oldPath ?? diff.newPath;
+  const [oldText, newText] = await Promise.all([
+    readCommittedTextSnapshot(repoPath, source.oldRef, oldPath),
+    source.newRef
+      ? readCommittedTextSnapshot(repoPath, source.newRef, diff.newPath)
+      : readWorktreeTextSnapshot(repoPath, diff.newPath)
+  ]);
+
+  return {
+    ...(newText !== undefined ? { newText } : {}),
+    ...(oldText !== undefined ? { oldText } : {})
+  };
+}
+
+async function readCommittedTextSnapshot(
+  repoPath: string,
+  ref: string,
+  relativePath: string
+): Promise<string | undefined> {
+  try {
+    const bytes = await gitBuffer(repoPath, ["show", `${ref}:${relativePath}`]);
+
+    return textFromSnapshotBytes(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
+async function readWorktreeTextSnapshot(
+  repoPath: string,
+  relativePath: string
+): Promise<string | undefined> {
+  try {
+    const absolutePath = path.join(repoPath, relativePath);
+    const fileStat = await lstat(absolutePath);
+
+    if (fileStat.isSymbolicLink()) {
+      return await readlink(absolutePath);
+    }
+
+    const bytes = await readFile(absolutePath);
+
+    return textFromSnapshotBytes(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadBinaryFingerprint(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource
+): Promise<{ readonly byteSize: number; readonly digest: string }> {
+  const oldPath = diff.oldPath ?? diff.newPath;
+  const bytes =
+    diff.status === "deleted"
+      ? await readCommittedBytes(repoPath, source.oldRef, oldPath)
+      : ((source.newRef
+          ? await readCommittedBytes(repoPath, source.newRef, diff.newPath)
+          : await readWorktreeBytes(repoPath, diff.newPath)) ??
+        (await readCommittedBytes(repoPath, source.oldRef, oldPath)));
+
+  if (!bytes) {
+    throw new Error(`Unable to fingerprint binary diff for ${diff.newPath}`);
+  }
+
+  return binaryFingerprint(bytes);
+}
+
+async function readCommittedBytes(
+  repoPath: string,
+  ref: string,
+  relativePath: string
+): Promise<Buffer | undefined> {
+  try {
+    return await gitBuffer(repoPath, ["show", `${ref}:${relativePath}`]);
+  } catch {
+    return undefined;
+  }
+}
+
+async function readWorktreeBytes(
+  repoPath: string,
+  relativePath: string
+): Promise<Buffer | undefined> {
+  try {
+    return await readFile(path.join(repoPath, relativePath));
+  } catch {
+    return undefined;
+  }
+}
+
+function binaryFingerprint(bytes: Buffer): {
+  readonly byteSize: number;
+  readonly digest: string;
+} {
+  return {
+    byteSize: bytes.byteLength,
+    digest: createHash("sha256").update(bytes).digest("hex")
+  };
+}
+
+async function loadSubmoduleContent(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource
+): Promise<Extract<GitLoadedFileDiff["content"], { readonly kind: "submodule" }>> {
+  const oldPath = diff.oldPath ?? diff.newPath;
+  const [oldCommit, newCommit] = await Promise.all([
+    diff.status === "added"
+      ? Promise.resolve(undefined)
+      : fullSubmoduleCommit(repoPath, source.oldRef, oldPath, diff.oldObjectId),
+    diff.status === "deleted"
+      ? Promise.resolve(undefined)
+      : source.newRef
+        ? fullSubmoduleCommit(repoPath, source.newRef, diff.newPath, diff.newObjectId)
+        : worktreeSubmoduleCommit(repoPath, diff.newPath)
+  ]);
+
+  return {
+    kind: "submodule",
+    ...(newCommit ? { newCommit } : {}),
+    ...(oldCommit ? { oldCommit } : {})
+  };
+}
+
+async function fullSubmoduleCommit(
+  repoPath: string,
+  ref: string,
+  relativePath: string,
+  fallbackObjectId: string | undefined
+): Promise<string | undefined> {
+  const commit = await gitOutputOrNull(repoPath, ["rev-parse", `${ref}:${relativePath}`]);
+
+  return commit ?? (fullObjectId(fallbackObjectId) ? fallbackObjectId : undefined);
+}
+
 async function synthesizeUntrackedDiff(
   repoPath: string,
   relativePath: string
-): Promise<GitLoadedFileDiff> {
+): Promise<GitLoadedFileDiff | undefined> {
   const filePath = path.join(repoPath, relativePath);
+  const fileStat = await stat(filePath);
+
+  if (!fileStat.isFile()) {
+    return undefined;
+  }
+
   const bytes = await readFile(filePath);
 
   if (isBinary(bytes)) {
     return {
       content: {
-        byteSize: bytes.byteLength,
-        digest: createHash("sha256").update(bytes).digest("hex"),
-        kind: "binary"
+        kind: "binary",
+        ...binaryFingerprint(bytes)
       },
       newPath: relativePath,
       status: "added"
@@ -459,6 +721,7 @@ async function synthesizeUntrackedDiff(
   return {
     content: {
       kind: "text",
+      newText: text,
       patch: synthesizeAddedPatch(relativePath, text)
     },
     newPath: relativePath,
@@ -485,7 +748,15 @@ function isBinary(bytes: Buffer): boolean {
   return bytes.includes(0);
 }
 
-function statusFromNameStatusCode(code: string): GitLoadedFileDiff["status"] {
+function textFromSnapshotBytes(bytes: Buffer): string | undefined {
+  return isBinary(bytes) ? undefined : bytes.toString("utf8");
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
+function statusFromRawStatusCode(code: string): GitLoadedFileDiff["status"] {
   switch (code[0]) {
     case "A":
       return "added";
@@ -496,6 +767,51 @@ function statusFromNameStatusCode(code: string): GitLoadedFileDiff["status"] {
     default:
       return "modified";
   }
+}
+
+function isSubmoduleDiff(diff: NameStatusDiff): boolean {
+  return isSubmoduleMode(diff.oldMode) || isSubmoduleMode(diff.newMode);
+}
+
+function isSubmoduleMode(mode: string | undefined): boolean {
+  return mode === "160000";
+}
+
+function isSymlinkDiff(diff: NameStatusDiff): boolean {
+  return isSymlinkMode(diff.oldMode) || isSymlinkMode(diff.newMode);
+}
+
+function isSymlinkMode(mode: string | undefined): boolean {
+  return mode === "120000";
+}
+
+function isModeOnlyDiff(diff: NameStatusDiff, patch: string): boolean {
+  return (
+    diff.status === "modified" &&
+    diff.oldMode !== undefined &&
+    diff.newMode !== undefined &&
+    diff.oldMode !== diff.newMode &&
+    !patch.includes("@@") &&
+    !patchLooksBinary(patch)
+  );
+}
+
+function patchLooksBinary(patch: string): boolean {
+  return /\bBinary files? .+ differ\b/.test(patch);
+}
+
+function fullObjectId(objectId: string | undefined): objectId is string {
+  return objectId !== undefined && /^[0-9a-f]{40}$/i.test(objectId);
+}
+
+async function worktreeSubmoduleCommit(
+  repoPath: string,
+  relativePath: string
+): Promise<string | undefined> {
+  return (
+    (await gitOutputOrNull(path.join(repoPath, relativePath), ["rev-parse", "HEAD"])) ??
+    undefined
+  );
 }
 
 async function currentBranchName(repoPath: string): Promise<string | undefined> {
@@ -548,6 +864,14 @@ async function gitOutput(cwd: string, args: readonly string[]): Promise<string> 
   });
 
   return stdout.trimEnd();
+}
+
+async function gitBuffer(cwd: string, args: readonly string[]): Promise<Buffer> {
+  const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
+    maxBuffer: 50 * 1024 * 1024
+  });
+
+  return Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout);
 }
 
 function absolutizeGitPath(root: string, gitPath: string): string {

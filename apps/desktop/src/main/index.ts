@@ -3,18 +3,22 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeImage,
   shell,
   type IpcMainInvokeEvent,
+  type NativeImage,
   type OpenDialogOptions
 } from "electron";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import {
   calculateProgress,
   createReviewTargetId,
+  listInstalledEditorPresets,
   resolveReviewStates,
+  type EditorPreset,
   type FileDiff,
   type FileReviewState,
   type ReviewMark,
@@ -41,11 +45,20 @@ import {
   type StoredProjectRecord
 } from "@difftray/storage";
 
+import {
+  ProjectWatchService,
+  createChokidarProjectWatcherFactory,
+  resolveGitProjectWatchPaths,
+  type ProjectWatchChangeEvent,
+  type WatchedProject
+} from "./project-watch-service.js";
+
 const rendererDevUrl = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
 
 let mainWindow: BrowserWindow | undefined;
+let projectWatchService: ProjectWatchService | undefined;
 let storage: DifftrayStorage | undefined;
 
 type RecentProjectView = {
@@ -81,6 +94,8 @@ type ReviewFileView = {
   readonly diffHash: string;
   readonly generated: boolean;
   readonly invalidated: boolean;
+  readonly newText?: string;
+  readonly oldText?: string;
   readonly path: string;
   readonly patch: string;
   readonly previousPath?: string;
@@ -115,6 +130,7 @@ type AppSettingsView = {
   readonly autoCollapseHunksOver: number;
   readonly defaultDiffMode: "split" | "unified";
   readonly editorArgs: string;
+  readonly editorArgList: readonly string[];
   readonly editorCommand: string;
   readonly editorMode: "custom" | "system";
   readonly hideWhitespaceOnlyChanges: boolean;
@@ -122,6 +138,14 @@ type AppSettingsView = {
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+};
+
+type EditorPresetView = {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly iconDataUrl?: string;
+  readonly id: string;
+  readonly name: string;
 };
 
 type MarkReviewedResult =
@@ -186,6 +210,8 @@ const createMainWindow = async (): Promise<void> => {
     await storeRepositoryAtPath(bootProjectPath);
   }
 
+  await syncProjectWatchers(listAvailableRecentProjects());
+
   if (rendererDevUrl) {
     await window.loadURL(rendererDevUrl);
   } else {
@@ -196,6 +222,10 @@ const createMainWindow = async (): Promise<void> => {
 };
 
 ipcMain.handle("app:version", () => app.getVersion());
+ipcMain.handle(
+  "editors:listInstalled",
+  async (): Promise<readonly EditorPresetView[]> => listInstalledEditorPresetViews()
+);
 ipcMain.handle(
   "settings:getApp",
   (): AppSettingsView => appSettingsView(getStorage().getAppSettings())
@@ -222,12 +252,18 @@ ipcMain.handle(
     const editorMode = readEnumProperty(input, "editorMode", ["custom", "system"]);
     const editorCommand = readOptionalStringProperty(input, "editorCommand");
     const editorArgs = readOptionalStringProperty(input, "editorArgs");
+    const editorArgList = readOptionalStringArrayProperty(input, "editorArgList");
     const themeMode = readEnumProperty(input, "themeMode", ["dark", "light", "system"]);
     const settings: AppSettingsRecord = {
       autoCollapseHunksOver,
       defaultDiffMode,
       ...(editorMode === "custom"
-        ? { editorLaunchConfig: editorConfigFromInput(editorCommand, editorArgs) }
+        ? {
+            editorLaunchConfig: editorConfigFromInput(
+              editorCommand,
+              editorArgList ?? editorArgs
+            )
+          }
         : {}),
       hideWhitespaceOnlyChanges,
       notifyOnDrift,
@@ -260,6 +296,7 @@ ipcMain.handle(
     const projectId = readStringProperty(input, "projectId");
 
     getStorage().deleteProject(projectId);
+    await getProjectWatchService().stopProject(projectId);
 
     return listAvailableRecentProjectViews();
   }
@@ -442,6 +479,8 @@ ipcMain.handle(
 );
 
 app.on("before-quit", () => {
+  void projectWatchService?.close();
+  projectWatchService = undefined;
   storage?.close();
   storage = undefined;
 });
@@ -474,6 +513,43 @@ function getStorage(): DifftrayStorage {
   return storage;
 }
 
+function getProjectWatchService(): ProjectWatchService {
+  if (projectWatchService) {
+    return projectWatchService;
+  }
+
+  projectWatchService = new ProjectWatchService({
+    createWatcher: createChokidarProjectWatcherFactory(),
+    emitProjectChange,
+    resolveWatchPaths: async (project) => resolveGitProjectWatchPaths(project.path)
+  });
+
+  return projectWatchService;
+}
+
+function emitProjectChange(change: ProjectWatchChangeEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("projects:changed", change);
+    }
+  }
+}
+
+async function syncProjectWatchers(
+  projects: readonly StoredProjectRecord[]
+): Promise<void> {
+  await getProjectWatchService().syncProjects(projects.map(projectWatchTarget));
+}
+
+function projectWatchTarget(
+  project: Pick<StoredProjectRecord, "id" | "path">
+): WatchedProject {
+  return {
+    id: project.id,
+    path: project.path
+  };
+}
+
 function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
   const projects = getStorage().listRecentProjects();
 
@@ -488,6 +564,8 @@ function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
 
 async function listAvailableRecentProjectViews(): Promise<readonly RecentProjectView[]> {
   const projects = listAvailableRecentProjects();
+
+  await syncProjectWatchers(projects);
 
   return Promise.all(
     projects.map(async (project) =>
@@ -535,6 +613,7 @@ async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecor
   };
 
   upsertOpenedProject(project);
+  await getProjectWatchService().watchProject(projectWatchTarget(project));
 
   return project;
 }
@@ -553,6 +632,8 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
     files: states.map((state) => {
       const patch = patchForDiff(state.diff);
       const summary = summarizePatch(patch);
+      const textContent =
+        state.diff.content.kind === "text" ? state.diff.content : undefined;
 
       return {
         additions: summary.additions,
@@ -560,6 +641,8 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
         diffHash: state.diffHash,
         generated: state.generated,
         invalidated: state.invalidated,
+        ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
+        ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
         path: state.path,
         patch,
         ...(state.diff.oldPath ? { previousPath: state.diff.oldPath } : {}),
@@ -643,6 +726,7 @@ async function loadProjectWorkspaceIfAvailable(
 
   if (!existsSync(project.path)) {
     getStorage().deleteProject(project.id);
+    await getProjectWatchService().stopProject(project.id);
     return null;
   }
 
@@ -736,6 +820,7 @@ function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
     autoCollapseHunksOver: settings.autoCollapseHunksOver,
     defaultDiffMode: settings.defaultDiffMode,
     editorArgs: settings.editorLaunchConfig?.args.join(" ") ?? "",
+    editorArgList: settings.editorLaunchConfig?.args ?? [],
     editorCommand: settings.editorLaunchConfig?.command ?? "",
     editorMode: settings.editorLaunchConfig ? "custom" : "system",
     hideWhitespaceOnlyChanges: settings.hideWhitespaceOnlyChanges,
@@ -748,7 +833,7 @@ function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
 
 function editorConfigFromInput(
   command: string | undefined,
-  args: string | undefined
+  args: readonly string[] | string | undefined
 ): EditorLaunchConfig {
   const trimmedCommand = command?.trim();
 
@@ -756,17 +841,203 @@ function editorConfigFromInput(
     throw new Error("Custom editor command is required.");
   }
 
+  const normalizedArgs =
+    typeof args === "string" || args === undefined
+      ? splitEditorArgs(args ?? "")
+      : normalizeEditorArgs(args);
+
   return {
-    args: splitEditorArgs(args ?? ""),
+    args: normalizedArgs,
     command: trimmedCommand
   };
 }
 
 function splitEditorArgs(value: string): readonly string[] {
+  return normalizeEditorArgs(
+    value
+      .trim()
+      .split(/\s+/)
+      .filter((arg) => arg.length > 0)
+  );
+}
+
+function normalizeEditorArgs(args: readonly string[]): readonly string[] {
+  return args.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+}
+
+async function listInstalledEditorPresetViews(): Promise<readonly EditorPresetView[]> {
+  const appPathByName = discoverMacOSApplicationPathsByName();
+  const presets = listInstalledEditorPresets({
+    installedMacOSAppNames: [...appPathByName.keys()],
+    platform: process.platform
+  });
+
+  return Promise.all(
+    presets.map(async (preset) => {
+      const appPath = appPathForPreset(preset, appPathByName);
+      const iconDataUrl = appPath ? await iconDataUrlForAppPath(appPath) : undefined;
+
+      return {
+        args: preset.launchConfig.args,
+        command: preset.launchConfig.command,
+        ...(iconDataUrl ? { iconDataUrl } : {}),
+        id: preset.id,
+        name: preset.name
+      };
+    })
+  );
+}
+
+function discoverMacOSApplicationPathsByName(): Map<string, string> {
+  if (process.platform !== "darwin") {
+    return new Map();
+  }
+
+  const applicationDirectories = [
+    "/Applications",
+    "/System/Applications",
+    path.join(app.getPath("home"), "Applications")
+  ];
+  const appPathsByName = new Map<string, string>();
+
+  for (const directory of applicationDirectories) {
+    for (const candidate of macOSApplicationCandidates(directory)) {
+      if (!appPathsByName.has(candidate.appName)) {
+        appPathsByName.set(candidate.appName, candidate.appPath);
+      }
+    }
+  }
+
+  return appPathsByName;
+}
+
+function macOSApplicationCandidates(
+  directory: string
+): readonly { readonly appName: string; readonly appPath: string }[] {
+  if (!existsSync(directory)) {
+    return [];
+  }
+
+  try {
+    return readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.name.endsWith(".app"))
+      .map((entry) => ({
+        appName: entry.name,
+        appPath: path.join(directory, entry.name)
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function appPathForPreset(
+  preset: EditorPreset,
+  appPathByName: ReadonlyMap<string, string>
+): string | undefined {
+  for (const appName of preset.macOS.appNames) {
+    const appPath = appPathByName.get(appName);
+
+    if (appPath) {
+      return appPath;
+    }
+  }
+
+  return undefined;
+}
+
+async function iconDataUrlForAppPath(appPath: string): Promise<string | undefined> {
+  const bundledIconDataUrl = await iconDataUrlFromBundle(appPath);
+
+  if (bundledIconDataUrl) {
+    return bundledIconDataUrl;
+  }
+
+  try {
+    const icon = await nativeImageWithTimeout(
+      app.getFileIcon(appPath, { size: "normal" }),
+      300
+    );
+    const dataUrl = icon?.toDataURL() ?? "";
+
+    return dataUrl.length > 0 ? dataUrl : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function iconDataUrlFromBundle(appPath: string): Promise<string | undefined> {
+  const iconPath = macOSBundleIconPath(appPath);
+
+  if (!iconPath) {
+    return undefined;
+  }
+
+  const thumbnail = await nativeImageWithTimeout(
+    nativeImage.createThumbnailFromPath(iconPath, { height: 48, width: 48 }),
+    300
+  );
+
+  if (thumbnail && !thumbnail.isEmpty()) {
+    return thumbnail.toDataURL();
+  }
+
+  const icon = nativeImage.createFromPath(iconPath);
+
+  if (icon.isEmpty()) {
+    return undefined;
+  }
+
+  return icon.resize({ height: 48, width: 48 }).toDataURL();
+}
+
+async function nativeImageWithTimeout(
+  promise: Promise<NativeImage>,
+  timeoutMs: number
+): Promise<NativeImage | undefined> {
+  return Promise.race([
+    promise,
+    new Promise<undefined>((resolve) => {
+      setTimeout(() => {
+        resolve(undefined);
+      }, timeoutMs);
+    })
+  ]);
+}
+
+function macOSBundleIconPath(appPath: string): string | undefined {
+  const iconFile = macOSBundleIconFile(appPath);
+
+  if (!iconFile) {
+    return undefined;
+  }
+
+  const normalizedIconFile = iconFile.endsWith(".icns") ? iconFile : `${iconFile}.icns`;
+  const iconPath = path.join(appPath, "Contents", "Resources", normalizedIconFile);
+
+  return existsSync(iconPath) ? iconPath : undefined;
+}
+
+function macOSBundleIconFile(appPath: string): string | undefined {
+  try {
+    const infoPlist = readFileSync(path.join(appPath, "Contents", "Info.plist"), "utf8");
+    const match =
+      /<key>CFBundleIconFile<\/key>\s*<string>(?<iconFile>[^<]+)<\/string>/u.exec(
+        infoPlist
+      );
+
+    return match?.groups?.iconFile ? decodeXmlText(match.groups.iconFile) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeXmlText(value: string): string {
   return value
-    .trim()
-    .split(/\s+/)
-    .filter((arg) => arg.length > 0);
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'");
 }
 
 function projectView(
@@ -941,6 +1212,27 @@ function readOptionalStringProperty(
   }
 
   return value;
+}
+
+function readOptionalStringArrayProperty(
+  input: unknown,
+  property: string
+): readonly string[] | undefined {
+  const value = readUnknownProperty(input, property);
+
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!isStringArray(value)) {
+    throw new Error(`Invalid IPC payload: ${property} must be a string array`);
+  }
+
+  return value;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function readBooleanProperty(input: unknown, property: string): boolean {

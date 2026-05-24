@@ -7,9 +7,11 @@ declare global {
     readonly appVersion: () => Promise<string>;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
+    readonly listInstalledEditors: () => Promise<readonly EditorPresetView[]>;
     readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
     readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+    readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
     readonly markFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<MarkReviewedResult>;
@@ -36,6 +38,7 @@ declare global {
     readonly autoCollapseHunksOver: number;
     readonly defaultDiffMode: "split" | "unified";
     readonly editorArgs: string;
+    readonly editorArgList: readonly string[];
     readonly editorCommand: string;
     readonly editorMode: "custom" | "system";
     readonly hideWhitespaceOnlyChanges: boolean;
@@ -43,6 +46,14 @@ declare global {
     readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
     readonly showGeneratedFiles: boolean;
     readonly themeMode: ThemeMode;
+  };
+
+  type EditorPresetView = {
+    readonly args: readonly string[];
+    readonly command: string;
+    readonly iconDataUrl?: string;
+    readonly id: string;
+    readonly name: string;
   };
 
   type RecentProjectView = {
@@ -59,6 +70,18 @@ declare global {
     readonly progress: ReviewProgressView;
   };
 
+  type ProjectWatchReason = "deleted" | "git_metadata" | "watcher_error" | "worktree";
+
+  type ProjectChangedEvent = {
+    readonly errorMessage?: string;
+    readonly projectId: string;
+    readonly projectPath: string;
+    readonly reasons: readonly ProjectWatchReason[];
+    readonly sequence: number;
+  };
+
+  type ProjectChangedListener = (event: ProjectChangedEvent) => void;
+
   type ReviewProgressView = {
     readonly reviewedVisibleFiles: number;
     readonly totalVisibleReviewableFiles: number;
@@ -70,6 +93,8 @@ declare global {
     readonly diffHash: string;
     readonly generated: boolean;
     readonly invalidated: boolean;
+    readonly newText?: string;
+    readonly oldText?: string;
     readonly path: string;
     readonly patch: string;
     readonly previousPath?: string;
@@ -161,6 +186,7 @@ declare global {
   type UpdateAppSettingsInput = {
     readonly autoCollapseHunksOver: number;
     readonly defaultDiffMode: "split" | "unified";
+    readonly editorArgList?: readonly string[];
     readonly editorArgs?: string;
     readonly editorCommand?: string;
     readonly editorMode: "custom" | "system";

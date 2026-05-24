@@ -1,4 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  parseDiffSegments,
+  type CollapsedDiffContextSegment,
+  type ParsedDiffHunkSegment,
+  type ParsedDiffLine,
+  type ParsedDiffSegment
+} from "@difftray/core/diff-context";
 import { createHighlighterCore } from "shiki/core";
 import type { HighlighterCore, ThemedToken } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
@@ -9,6 +16,7 @@ import githubLightTheme from "shiki/themes/github-light.mjs";
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   ChevronRight,
   Code2,
   Diff,
@@ -17,6 +25,7 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -59,6 +68,7 @@ const defaultAppSettings: AppSettingsView = {
   autoCollapseHunksOver: 120,
   defaultDiffMode: "split",
   editorArgs: "",
+  editorArgList: [],
   editorCommand: "",
   editorMode: "system",
   hideWhitespaceOnlyChanges: false,
@@ -99,6 +109,7 @@ export function App(): React.JSX.Element {
   const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
   const [error, setError] = useState<string | undefined>();
+  const [editorOptions, setEditorOptions] = useState<readonly EditorPresetView[]>([]);
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
   const [fileListWidth, setFileListWidth] = useState(340);
   const [hasBootstrapped, setHasBootstrapped] = useState(false);
@@ -319,6 +330,12 @@ export function App(): React.JSX.Element {
     };
   });
 
+  useEffect(() => {
+    return window.difftray.onProjectChanged((event) => {
+      void handleProjectChanged(event);
+    });
+  }, [loadState, paletteOpen, selectedFile, settingsOpen, workspace]);
+
   const commands = useMemo(
     () =>
       buildCommands({
@@ -380,14 +397,16 @@ export function App(): React.JSX.Element {
     setLoadState("loading");
 
     try {
-      const [projects, settings] = await Promise.all([
+      const [projects, settings, installedEditors] = await Promise.all([
         window.difftray.listRecentProjects(),
-        window.difftray.getAppSettings()
+        window.difftray.getAppSettings(),
+        window.difftray.listInstalledEditors()
       ]);
 
       setRecentProjects(projects);
       setAppSettings(settings);
       setAppSettingsDraft(settings);
+      setEditorOptions(installedEditors);
       setDiffMode(settings.defaultDiffMode);
 
       for (const project of projects) {
@@ -439,7 +458,7 @@ export function App(): React.JSX.Element {
     setDiffMode(nextAppSettings.defaultDiffMode);
     setFileListWidth(nextSettings.fileListWidth);
     setFileListCollapsed(nextSettings.fileListCollapsed);
-    setSelectedPath(nextPath ?? firstVisiblePath(nextWorkspace));
+    setSelectedPath(visiblePathOrFirst(nextWorkspace, nextPath));
     setSettingsOpen(false);
   }
 
@@ -545,6 +564,22 @@ export function App(): React.JSX.Element {
     );
   }
 
+  async function handleProjectChanged(event: ProjectChangedEvent): Promise<void> {
+    if (loadState === "loading") {
+      return;
+    }
+
+    if (workspace?.project.id === event.projectId && !settingsOpen && !paletteOpen) {
+      await runWorkspaceLoad(
+        () => window.difftray.loadProject(event.projectId),
+        selectedFile?.path
+      );
+      return;
+    }
+
+    await refreshRecentProjects();
+  }
+
   async function openSettings(): Promise<void> {
     if (!workspace) {
       return;
@@ -611,6 +646,7 @@ export function App(): React.JSX.Element {
         window.difftray.updateAppSettings({
           autoCollapseHunksOver: appSettingsDraft.autoCollapseHunksOver,
           defaultDiffMode: appSettingsDraft.defaultDiffMode,
+          editorArgList: appSettingsDraft.editorArgList,
           editorArgs: appSettingsDraft.editorArgs,
           editorCommand: appSettingsDraft.editorCommand,
           editorMode: appSettingsDraft.editorMode,
@@ -694,6 +730,7 @@ export function App(): React.JSX.Element {
       const savedSettings = await window.difftray.updateAppSettings({
         autoCollapseHunksOver: nextSettings.autoCollapseHunksOver,
         defaultDiffMode: nextSettings.defaultDiffMode,
+        editorArgList: nextSettings.editorArgList,
         editorArgs: nextSettings.editorArgs,
         editorCommand: nextSettings.editorCommand,
         editorMode: nextSettings.editorMode,
@@ -1058,6 +1095,8 @@ export function App(): React.JSX.Element {
                 <DiffSurface
                   diffMode={diffMode}
                   filePath={selectedFile.path}
+                  newText={selectedFile.newText}
+                  oldText={selectedFile.oldText}
                   patch={selectedFile.patch}
                   resolvedTheme={resolvedTheme}
                   status={selectedFile.status}
@@ -1114,6 +1153,7 @@ export function App(): React.JSX.Element {
         <SettingsPanel
           appSettings={appSettingsDraft}
           disabled={loadState === "loading"}
+          editorOptions={editorOptions}
           onCancel={closeSettings}
           onChangeAppSettings={updateAppSettingsDraft}
           onSave={() => {
@@ -1679,6 +1719,8 @@ function DiffToolbar({
 function DiffSurface({
   diffMode,
   filePath,
+  newText,
+  oldText,
   patch,
   resolvedTheme,
   status,
@@ -1686,18 +1728,58 @@ function DiffSurface({
 }: {
   readonly diffMode: DiffMode;
   readonly filePath: string;
+  readonly newText: string | undefined;
+  readonly oldText: string | undefined;
   readonly patch: string;
   readonly resolvedTheme: ResolvedTheme;
   readonly status: ReviewFileView["status"];
   readonly refObject: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
-  const hunks = useMemo(() => parseDiffHunks(patch), [patch]);
+  const segments = useMemo(
+    () =>
+      parseDiffSegments({
+        ...(newText !== undefined ? { newText } : {}),
+        ...(oldText !== undefined ? { oldText } : {}),
+        patch
+      }),
+    [newText, oldText, patch]
+  );
+  const [expandedContextKeys, setExpandedContextKeys] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const visibleSegments = useMemo<readonly ParsedDiffSegment[]>(
+    () =>
+      segments.map((segment) =>
+        segment.kind === "collapsed_context" && !expandedContextKeys.has(segment.key)
+          ? { ...segment, lines: [] }
+          : segment
+      ),
+    [expandedContextKeys, segments]
+  );
   const highlightedLines = useHighlightedLines({
     filePath,
-    hunks,
+    segments: visibleSegments,
     resolvedTheme
   });
   const forceSingleFile = status === "added";
+
+  useEffect(() => {
+    setExpandedContextKeys(new Set());
+  }, [filePath, newText, oldText, patch]);
+
+  function toggleContext(key: string): void {
+    setExpandedContextKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys);
+
+      if (nextKeys.has(key)) {
+        nextKeys.delete(key);
+      } else {
+        nextKeys.add(key);
+      }
+
+      return nextKeys;
+    });
+  }
 
   return (
     <div
@@ -1705,22 +1787,123 @@ function DiffSurface({
       data-diff-layout={forceSingleFile ? "single" : diffMode}
       ref={refObject}
     >
-      {hunks.map((hunk) => (
-        <section className={styles.hunk} key={hunk.key}>
-          <div className={styles.hunkHeader}>
-            <Diff size={13} strokeWidth={1.4} aria-hidden />
-            <span>{hunk.header}</span>
-          </div>
-          {forceSingleFile ? (
-            <AddedFileHunk highlightedLines={highlightedLines} lines={hunk.lines} />
-          ) : diffMode === "split" ? (
-            <SplitHunk highlightedLines={highlightedLines} lines={hunk.lines} />
-          ) : (
-            <UnifiedHunk highlightedLines={highlightedLines} lines={hunk.lines} />
-          )}
-        </section>
-      ))}
+      {segments.map((segment) =>
+        segment.kind === "collapsed_context" ? (
+          <CollapsedContextBlock
+            diffMode={diffMode}
+            forceSingleFile={forceSingleFile}
+            highlightedLines={highlightedLines}
+            isExpanded={expandedContextKeys.has(segment.key)}
+            key={segment.key}
+            onToggle={() => {
+              toggleContext(segment.key);
+            }}
+            segment={segment}
+          />
+        ) : (
+          <DiffHunk
+            diffMode={diffMode}
+            forceSingleFile={forceSingleFile}
+            highlightedLines={highlightedLines}
+            hunk={segment}
+            key={segment.key}
+          />
+        )
+      )}
+      <div className={styles.diffEndSpacer} aria-hidden />
     </div>
+  );
+}
+
+function DiffHunk({
+  diffMode,
+  forceSingleFile,
+  highlightedLines,
+  hunk
+}: {
+  readonly diffMode: DiffMode;
+  readonly forceSingleFile: boolean;
+  readonly highlightedLines: HighlightedLineMap;
+  readonly hunk: ParsedDiffHunkSegment;
+}): React.JSX.Element {
+  return (
+    <section className={styles.hunk}>
+      <div className={styles.hunkHeader}>
+        <Diff size={13} strokeWidth={1.4} aria-hidden />
+        <span>{hunk.header}</span>
+      </div>
+      <DiffLineBlock
+        diffMode={diffMode}
+        forceSingleFile={forceSingleFile}
+        highlightedLines={highlightedLines}
+        lines={hunk.lines}
+      />
+    </section>
+  );
+}
+
+function CollapsedContextBlock({
+  diffMode,
+  forceSingleFile,
+  highlightedLines,
+  isExpanded,
+  onToggle,
+  segment
+}: {
+  readonly diffMode: DiffMode;
+  readonly forceSingleFile: boolean;
+  readonly highlightedLines: HighlightedLineMap;
+  readonly isExpanded: boolean;
+  readonly onToggle: () => void;
+  readonly segment: CollapsedDiffContextSegment;
+}): React.JSX.Element {
+  const lineLabel = segment.lineCount === 1 ? "line" : "lines";
+
+  return (
+    <section className={styles.contextBlock} data-expanded={isExpanded}>
+      <button
+        aria-expanded={isExpanded}
+        className={styles.contextExpander}
+        onClick={onToggle}
+        title={`${isExpanded ? "Hide" : "Show"} ${String(segment.lineCount)} unchanged ${lineLabel}`}
+        type="button"
+      >
+        <MoreHorizontal size={14} strokeWidth={1.5} aria-hidden />
+        <span>
+          {isExpanded ? "Hide" : "Show"} {segment.lineCount} unchanged {lineLabel}
+        </span>
+      </button>
+      {isExpanded ? (
+        <DiffLineBlock
+          diffMode={diffMode}
+          forceSingleFile={forceSingleFile}
+          highlightedLines={highlightedLines}
+          lines={segment.lines}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function DiffLineBlock({
+  diffMode,
+  forceSingleFile,
+  highlightedLines,
+  lines
+}: {
+  readonly diffMode: DiffMode;
+  readonly forceSingleFile: boolean;
+  readonly highlightedLines: HighlightedLineMap;
+  readonly lines: readonly ParsedDiffLine[];
+}): React.JSX.Element {
+  if (forceSingleFile) {
+    return <AddedFileHunk highlightedLines={highlightedLines} lines={lines} />;
+  }
+
+  return diffMode === "split" ? (
+    <SplitHunk highlightedLines={highlightedLines} lines={lines} />
+  ) : (
+    <UnifiedHunk highlightedLines={highlightedLines} lines={lines} />
   );
 }
 
@@ -1729,7 +1912,7 @@ function AddedFileHunk({
   lines
 }: {
   readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedCodeLine[];
+  readonly lines: readonly ParsedDiffLine[];
 }) {
   return (
     <div className={styles.singleFileDiff}>
@@ -1753,7 +1936,7 @@ function SplitHunk({
   lines
 }: {
   readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedCodeLine[];
+  readonly lines: readonly ParsedDiffLine[];
 }) {
   const rows = pairSplitLines(lines);
   const oldContentColumns = maxLineColumns(rows.map((row) => row.oldLine));
@@ -1799,7 +1982,7 @@ function SplitCell({
 }: {
   readonly contentColumns: number;
   readonly highlightedTokens: readonly ThemedToken[] | undefined;
-  readonly line: ParsedCodeLine | undefined;
+  readonly line: ParsedDiffLine | undefined;
   readonly side: "new" | "old";
 }) {
   return (
@@ -1826,7 +2009,7 @@ function UnifiedHunk({
   lines
 }: {
   readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedCodeLine[];
+  readonly lines: readonly ParsedDiffLine[];
 }) {
   return (
     <div className={styles.unifiedDiff}>
@@ -1867,11 +2050,11 @@ function CodeText({
 
 function useHighlightedLines({
   filePath,
-  hunks,
+  segments,
   resolvedTheme
 }: {
   readonly filePath: string;
-  readonly hunks: readonly ParsedHunk[];
+  readonly segments: readonly ParsedDiffSegment[];
   readonly resolvedTheme: ResolvedTheme;
 }): HighlightedLineMap {
   const [highlightedLines, setHighlightedLines] = useState<HighlightedLineMap>(
@@ -1895,16 +2078,20 @@ function useHighlightedLines({
 
         const nextLines = new Map<string, readonly ThemedToken[]>();
 
-        for (const hunk of hunks) {
+        for (const segment of segments) {
+          if (segment.lines.length === 0) {
+            continue;
+          }
+
           const tokenized = highlighter.codeToTokens(
-            hunk.lines.map((line) => line.text).join("\n"),
+            segment.lines.map((line) => line.text).join("\n"),
             {
               lang: language,
               theme
             }
           ).tokens;
 
-          for (const [index, line] of hunk.lines.entries()) {
+          for (const [index, line] of segment.lines.entries()) {
             nextLines.set(line.key, tokenized[index] ?? []);
           }
         }
@@ -1924,7 +2111,7 @@ function useHighlightedLines({
     return () => {
       cancelled = true;
     };
-  }, [filePath, hunks, resolvedTheme]);
+  }, [filePath, segments, resolvedTheme]);
 
   return highlightedLines;
 }
@@ -2162,16 +2349,20 @@ function CommandPalette({
 function SettingsPanel({
   appSettings,
   disabled,
+  editorOptions,
   onCancel,
   onChangeAppSettings,
   onSave
 }: {
   readonly appSettings: AppSettingsView;
   readonly disabled: boolean;
+  readonly editorOptions: readonly EditorPresetView[];
   readonly onCancel: () => void;
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
   readonly onSave: () => void;
 }): React.JSX.Element {
+  const selectedEditorValue = editorSelectionValue(appSettings, editorOptions);
+
   return (
     <div className={styles.settingsOverlay}>
       <section className={styles.settingsWindow} aria-modal="true" role="dialog">
@@ -2217,22 +2408,17 @@ function SettingsPanel({
             </label>
           </SettingsSection>
 
-          <SettingsSection title="Editor">
-            <label className={styles.settingRow}>
+          <SettingsSection allowOverflow title="Editor">
+            <div className={styles.settingRow}>
               <span>Editor</span>
-              <select
-                onChange={(event) => {
-                  onChangeAppSettings({
-                    editorMode: event.target.value === "custom" ? "custom" : "system"
-                  });
-                }}
-                value={appSettings.editorMode}
-              >
-                <option value="system">System default</option>
-                <option value="custom">Custom command</option>
-              </select>
-            </label>
-            {appSettings.editorMode === "custom" ? (
+              <EditorPicker
+                appSettings={appSettings}
+                disabled={disabled}
+                editorOptions={editorOptions}
+                onChangeAppSettings={onChangeAppSettings}
+              />
+            </div>
+            {selectedEditorValue === "custom" ? (
               <>
                 <label className={styles.settingRow}>
                   <span>Command</span>
@@ -2248,7 +2434,10 @@ function SettingsPanel({
                   <span>Arguments</span>
                   <input
                     onChange={(event) => {
-                      onChangeAppSettings({ editorArgs: event.target.value });
+                      onChangeAppSettings({
+                        editorArgList: splitEditorArgs(event.target.value),
+                        editorArgs: event.target.value
+                      });
                     }}
                     type="text"
                     value={appSettings.editorArgs}
@@ -2319,17 +2508,245 @@ function SettingsPanel({
 }
 
 function SettingsSection({
+  allowOverflow = false,
   children,
   title
 }: {
+  readonly allowOverflow?: boolean;
   readonly children: React.ReactNode;
   readonly title: string;
 }): React.JSX.Element {
   return (
-    <section className={styles.settingsSection}>
+    <section
+      className={styles.settingsSection}
+      data-overflow={allowOverflow ? "visible" : undefined}
+    >
       <div className={styles.sectionLabel}>{title}</div>
-      <div className={styles.settingsCard}>{children}</div>
+      <div
+        className={styles.settingsCard}
+        data-overflow={allowOverflow ? "visible" : undefined}
+      >
+        {children}
+      </div>
     </section>
+  );
+}
+
+type EditorChoice = {
+  readonly iconDataUrl?: string;
+  readonly label: string;
+  readonly value: string;
+};
+
+function EditorPicker({
+  appSettings,
+  disabled,
+  editorOptions,
+  onChangeAppSettings
+}: {
+  readonly appSettings: AppSettingsView;
+  readonly disabled: boolean;
+  readonly editorOptions: readonly EditorPresetView[];
+  readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const choices = useMemo(
+    () => [
+      { label: "System default", value: "system" },
+      ...editorOptions.map((option) => ({
+        ...(option.iconDataUrl ? { iconDataUrl: option.iconDataUrl } : {}),
+        label: option.name,
+        value: `preset:${option.id}`
+      })),
+      { label: "Custom command", value: "custom" }
+    ],
+    [editorOptions]
+  );
+  const selectedValue = editorSelectionValue(appSettings, editorOptions);
+  const selectedChoice =
+    choices.find((choice) => choice.value === selectedValue) ??
+    ({
+      label: "System default",
+      value: "system"
+    } satisfies EditorChoice);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function closeOnOutsidePointer(event: PointerEvent): void {
+      const target = event.target;
+
+      if (
+        target instanceof Node &&
+        containerRef.current &&
+        !containerRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", closeOnOutsidePointer);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [open]);
+
+  return (
+    <div className={styles.editorPicker} ref={containerRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={`Editor: ${selectedChoice.label}`}
+        className={styles.editorPickerButton}
+        disabled={disabled}
+        onClick={() => {
+          setOpen((isOpen) => !isOpen);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+          }
+          if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        type="button"
+      >
+        <EditorChoiceIcon choice={selectedChoice} />
+        <span>{selectedChoice.label}</span>
+        <ChevronDown size={14} strokeWidth={1.5} aria-hidden />
+      </button>
+      {open ? (
+        <div aria-label="Editor" className={styles.editorPickerMenu} role="listbox">
+          {choices.map((choice) => (
+            <button
+              aria-selected={choice.value === selectedValue}
+              className={styles.editorPickerOption}
+              data-selected={choice.value === selectedValue}
+              key={choice.value}
+              onClick={() => {
+                onChangeAppSettings(
+                  editorPatchForSelection(choice.value, appSettings, editorOptions)
+                );
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <EditorChoiceIcon choice={choice} />
+              <span>{choice.label}</span>
+              {choice.value === selectedValue ? (
+                <Check size={13} strokeWidth={1.6} aria-hidden />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditorChoiceIcon({
+  choice
+}: {
+  readonly choice: EditorChoice;
+}): React.JSX.Element {
+  if (choice.iconDataUrl) {
+    return (
+      <img
+        alt=""
+        className={styles.editorPickerIcon}
+        draggable={false}
+        src={choice.iconDataUrl}
+      />
+    );
+  }
+
+  return (
+    <span className={styles.editorPickerIcon} data-fallback="true">
+      <Code2 size={14} strokeWidth={1.5} aria-hidden />
+    </span>
+  );
+}
+
+function editorSelectionValue(
+  appSettings: AppSettingsView,
+  editorOptions: readonly EditorPresetView[]
+): string {
+  if (appSettings.editorMode === "system") {
+    return "system";
+  }
+
+  const matchingOption = editorOptions.find((option) =>
+    editorOptionMatchesSettings(option, appSettings)
+  );
+
+  return matchingOption ? `preset:${matchingOption.id}` : "custom";
+}
+
+function editorPatchForSelection(
+  value: string,
+  appSettings: AppSettingsView,
+  editorOptions: readonly EditorPresetView[]
+): Partial<AppSettingsView> {
+  if (value === "system") {
+    return {
+      editorArgList: [],
+      editorArgs: "",
+      editorCommand: "",
+      editorMode: "system"
+    };
+  }
+
+  if (value === "custom") {
+    return {
+      editorArgList: appSettings.editorMode === "system" ? [] : appSettings.editorArgList,
+      editorArgs: appSettings.editorMode === "system" ? "" : appSettings.editorArgs,
+      editorCommand: appSettings.editorMode === "system" ? "" : appSettings.editorCommand,
+      editorMode: "custom"
+    };
+  }
+
+  const presetId = value.replace(/^preset:/, "");
+  const option = editorOptions.find((candidate) => candidate.id === presetId);
+
+  if (!option) {
+    return { editorMode: "custom" };
+  }
+
+  return {
+    editorArgList: option.args,
+    editorArgs: option.args.join(" "),
+    editorCommand: option.command,
+    editorMode: "custom"
+  };
+}
+
+function editorOptionMatchesSettings(
+  option: EditorPresetView,
+  appSettings: AppSettingsView
+): boolean {
+  return (
+    option.command === appSettings.editorCommand.trim() &&
+    arraysAreEqual(option.args, appSettings.editorArgList)
+  );
+}
+
+function splitEditorArgs(value: string): readonly string[] {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter((arg) => arg.length > 0);
+}
+
+function arraysAreEqual(left: readonly string[], right: readonly string[]): boolean {
+  return (
+    left.length === right.length && left.every((value, index) => value === right[index])
   );
 }
 
@@ -2620,113 +3037,13 @@ function commandKindSearchWeight(kind: CommandKind): number {
   }
 }
 
-type ParsedHunk = {
-  readonly header: string;
-  readonly key: string;
-  readonly lines: readonly ParsedCodeLine[];
-};
-
-type ParsedCodeLine = {
-  readonly key: string;
-  readonly kind: "added" | "context" | "deleted";
-  readonly newNumber: number | undefined;
-  readonly oldNumber: number | undefined;
-  readonly text: string;
-};
-
-function parseDiffHunks(patch: string): readonly ParsedHunk[] {
-  const hunks: ParsedHunk[] = [];
-  let current: { header: string; lines: ParsedCodeLine[] } | undefined;
-  let oldLine: number | undefined;
-  let newLine: number | undefined;
-
-  for (const [index, line] of patch.split("\n").entries()) {
-    if (line.startsWith("diff --git") || line.startsWith("index ")) {
-      continue;
-    }
-
-    if (line.startsWith("@@")) {
-      if (current) {
-        hunks.push({
-          header: current.header,
-          key: `${String(hunks.length)}-${current.header}`,
-          lines: current.lines
-        });
-      }
-
-      const parsedHeader =
-        /^@@ -(?<oldStart>\d+)(?:,\d+)? \+(?<newStart>\d+)(?:,\d+)? @@/.exec(line);
-      oldLine = parsedHeader?.groups?.oldStart
-        ? Number(parsedHeader.groups.oldStart)
-        : undefined;
-      newLine = parsedHeader?.groups?.newStart
-        ? Number(parsedHeader.groups.newStart)
-        : undefined;
-      current = { header: line, lines: [] };
-      continue;
-    }
-
-    current ??= { header: "File summary", lines: [] };
-
-    if (line.startsWith("---") || line.startsWith("+++")) {
-      continue;
-    }
-
-    if (line.startsWith("+")) {
-      current.lines.push({
-        key: `${String(index)}-${line}`,
-        kind: "added",
-        newNumber: newLine,
-        oldNumber: undefined,
-        text: line.slice(1)
-      });
-      newLine = incrementLine(newLine);
-      continue;
-    }
-
-    if (line.startsWith("-")) {
-      current.lines.push({
-        key: `${String(index)}-${line}`,
-        kind: "deleted",
-        oldNumber: oldLine,
-        newNumber: undefined,
-        text: line.slice(1)
-      });
-      oldLine = incrementLine(oldLine);
-      continue;
-    }
-
-    current.lines.push({
-      key: `${String(index)}-${line}`,
-      kind: "context",
-      newNumber: newLine,
-      oldNumber: oldLine,
-      text: line.startsWith(" ") ? line.slice(1) : line
-    });
-    oldLine = incrementLine(oldLine);
-    newLine = incrementLine(newLine);
-  }
-
-  if (current) {
-    hunks.push({
-      header: current.header,
-      key: `${String(hunks.length)}-${current.header}`,
-      lines: current.lines
-    });
-  }
-
-  return hunks.length > 0
-    ? hunks
-    : [{ header: "No textual diff", key: "empty", lines: [] }];
-}
-
-function pairSplitLines(lines: readonly ParsedCodeLine[]) {
+function pairSplitLines(lines: readonly ParsedDiffLine[]) {
   const rows: {
     key: string;
-    newLine: ParsedCodeLine | undefined;
-    oldLine: ParsedCodeLine | undefined;
+    newLine: ParsedDiffLine | undefined;
+    oldLine: ParsedDiffLine | undefined;
   }[] = [];
-  let pendingDeleted: ParsedCodeLine[] = [];
+  let pendingDeleted: ParsedDiffLine[] = [];
 
   for (const line of lines) {
     if (line.kind === "deleted") {
@@ -2853,7 +3170,7 @@ function splitPath(path: string): {
   };
 }
 
-function lineGlyph(kind: ParsedCodeLine["kind"]): string {
+function lineGlyph(kind: ParsedDiffLine["kind"]): string {
   switch (kind) {
     case "added":
       return "+";
@@ -2864,15 +3181,11 @@ function lineGlyph(kind: ParsedCodeLine["kind"]): string {
   }
 }
 
-function maxLineColumns(lines: readonly (ParsedCodeLine | undefined)[]): number {
+function maxLineColumns(lines: readonly (ParsedDiffLine | undefined)[]): number {
   return Math.max(
     1,
     ...lines.map((line) => (line ? line.text.replaceAll("\t", "    ").length : 0))
   );
-}
-
-function incrementLine(line: number | undefined): number | undefined {
-  return line === undefined ? undefined : line + 1;
 }
 
 function clampIndex(index: number, length: number): number {

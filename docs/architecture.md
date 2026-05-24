@@ -53,6 +53,7 @@ Electron main process:
 - project file watching
 - SQLite access
 - external editor launch
+- installed editor preset discovery and app icon lookup
 
 Renderer process:
 
@@ -65,6 +66,8 @@ Renderer process:
 IPC boundary:
 
 - typed request/response contracts
+- installed editor preset responses are read-only app metadata, while saved editor
+  preferences remain structured launch configs
 - no raw shell command execution from renderer
 - no direct database access from renderer
 - context isolation enabled
@@ -99,6 +102,7 @@ Includes:
 - previous path for renames
 - status
 - patch text or structured diff
+- optional old/new text snapshots for expandable unchanged context
 - binary flag
 - generated flag
 - diff hash
@@ -123,6 +127,7 @@ Core commands will likely include:
 - `git diff --patch --find-renames`
 - `git diff --patch --find-renames HEAD`
 - `git diff --name-status --find-renames`
+- `git show <ref>:<path>` for committed text snapshots used by expandable context
 - `git ls-files --others --exclude-standard`
 - `git rev-parse`
 - `git merge-base`
@@ -136,18 +141,52 @@ Working tree review compares the effective working tree to `HEAD` and includes s
 
 ## Watching Strategy
 
-Use Chokidar to monitor opened projects.
+Use Chokidar from the Electron main process to monitor opened projects. The renderer
+subscribes to typed project-change notifications through preload, but it does not
+watch files or read Git metadata directly.
 
-Events should debounce into a project refresh. The app should not recompute large diffs on every filesystem event.
+The watcher is a freshness signal, not the source of truth. Raw filesystem events
+debounce into project-change notifications. The renderer then asks the existing
+main-process project loader for current Git state, review state, and progress. The
+app should not recompute large diffs on every filesystem event.
 
-The watcher should ignore:
+Watch each opened project, including inactive projects, so project tabs and
+summaries can become stale-aware without requiring focus changes. Keep manual and
+focus-driven refresh as fallbacks when filesystem events are missed or the watcher
+reports an error.
 
-- `.git` internals where safe
+Per project, watch:
+
+- the worktree root
+- resolved Git metadata paths such as `HEAD`, `index`, `refs`, `packed-refs`, and
+  merge/rebase/cherry-pick marker files
+- linked-worktree Git directories resolved from Git instead of assuming `.git` is a
+  directory
+
+Use conservative Chokidar options:
+
+```ts
+{
+  ignoreInitial: true,
+  persistent: true,
+  followSymlinks: false,
+  atomic: true,
+  awaitWriteFinish: false,
+  ignorePermissionErrors: true,
+  usePolling: false
+}
+```
+
+The watcher should ignore high-noise paths:
+
 - `node_modules`
-- build outputs
-- common cache directories
+- build outputs such as `build`, `dist`, and `out`
+- common cache directories such as `.cache`, `.turbo`, `.next`, and `.gradle`
+- recursive symlink traversal
 
-The ignore list must not affect Git's source of truth for changed files. It only reduces watcher noise.
+The ignore list must not affect Git's source of truth for changed files. It only
+reduces watcher noise. Polling should remain off by default and only become an
+explicit setting if native filesystem events prove unreliable for a user.
 
 ## Diff Rendering
 
@@ -202,3 +241,4 @@ Large monorepos are not v0's primary target, but obvious traps should be avoided
 - rely on diff viewer virtualization
 - avoid loading all huge diffs at once
 - use large-diff fallback above 1 MB of patch text or 5,000 changed lines
+

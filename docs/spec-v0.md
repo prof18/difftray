@@ -124,10 +124,12 @@ Difftray does not edit code.
 It must provide an "open in editor" action. The editor is configurable:
 
 - system default
-- VS Code
-- Cursor
-- Zed
+- installed common editor app presets
 - custom command template
+
+On macOS, Difftray discovers common installed editor apps from local application
+directories and shows matching presets with app icons. Presets are still stored as
+structured command/args launch configs.
 
 Custom editor commands are stored as tokenized launch configs, not raw shell strings. The renderer may present a friendly template UI, but the main process launches an executable with an argument array.
 
@@ -150,18 +152,32 @@ The main process expands only supported tokens and never executes editor command
 
 ## Keyboard Shortcuts
 
-Initial shortcuts:
+Initial implemented shortcuts:
 
 ```text
-j / k        next / previous file
-Enter        open selected file
-Space        mark selected file reviewed
-u            toggle reviewed state
-o            open in external editor
-f            focus file filter
-Cmd+R        refresh selected project
-Cmd+1..9     switch project
+j / k            next / previous file
+ArrowDown / Up   next / previous file
+R                toggle selected file reviewed state
+Cmd+O            open repository
+Cmd+K            open command palette
+Cmd+P            open file-only command palette
+Cmd+1            collapse or expand the file list
+Escape           dismiss drift notification or close the active overlay
 ```
+
+Command palette shortcuts:
+
+```text
+ArrowDown / Up   next / previous palette item
+Enter            run selected palette item
+Escape           close command palette
+```
+
+Refresh, project switching, file selection, settings, and diff-mode switching are
+available from visible controls and the command palette. Direct global shortcuts
+for refresh, project switching, opening the selected file in an external editor,
+and focusing a file filter are not part of the current implemented keyboard
+contract.
 
 ## UI Behavior
 

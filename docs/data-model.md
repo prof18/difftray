@@ -134,6 +134,10 @@ repositories:
 - `notify_on_drift`
 - `review_reset_trigger`
 
+Installed editor presets are not stored as separate rows. Selecting a preset writes
+the existing `editor_launch_config_json` command/args shape, so custom commands and
+friendly app choices share the same launch path.
+
 If an existing database has no app-level review settings yet, Difftray seeds the
 runtime defaults from the most recently updated legacy `project_settings` row. Once
 app settings are saved, app-level values are the source of truth.
@@ -166,6 +170,10 @@ Inputs include:
 Use a stable cryptographic hash such as SHA-256.
 
 Text payloads normalize line endings to LF before hashing.
+
+Text diffs may also carry old and new file snapshot text so the UI can expand
+unchanged context omitted from the compact patch. Snapshot text is display-only
+context and is intentionally excluded from the diff hash.
 
 Binary files must include real content identity. Working-tree binary content is fingerprinted with SHA-256 of file bytes plus byte size. Committed binary content should use Git object id plus byte size when available.
 

@@ -75,8 +75,9 @@ Cover:
 - checkbox behavior
 - reviewed file collapse
 - next unreviewed selection
-- project switching
-- filter focus
+- project switching from tabs and the command palette
+- command palette opening, keyboard navigation, file search, and selection
+- file-list collapse/expand shortcut
 
 ### Main Process And IPC Tests
 
@@ -89,6 +90,55 @@ Cover:
 - editor launch uses command and args rather than shell strings
 - editor launch validates project-contained paths
 - mark-reviewed rejects stale displayed hashes
+- preload project-change subscriptions return an unsubscribe function
+- renderer-facing watcher events are typed and validated
+
+### Project Watch Tests
+
+Cover live-monitoring behavior without depending on real filesystem timing where
+possible.
+
+Unit tests should cover:
+
+- raw watcher events debounce into a single project-change notification
+- worktree and Git metadata reasons coalesce in one debounced notification
+- separate projects have independent debounce timers
+- sequence numbers increase monotonically per project
+- a maximum wait prevents continuous file churn from starving notifications
+- watcher errors emit bounded status events without crashing the service
+- watcher restart backoff is bounded and does not spin
+- noisy dependency, build, and cache paths are ignored
+- selected Git metadata paths are not ignored
+- symlink traversal is disabled
+
+Main-process service tests should use a fake watcher adapter and cover:
+
+- a watcher starts for each opened project
+- duplicate starts for the same project do not create duplicate watchers
+- changing a project path restarts that project's watcher
+- closing or removing a project closes its watcher
+- app shutdown closes all active watchers
+- project deletion or missing repository state stops the watcher after refresh
+- linked worktree Git directories are resolved from Git metadata, not `.git`
+  directory assumptions
+
+Chokidar adapter tests should stay narrow and cover:
+
+- configured options are conservative: `ignoreInitial`, `followSymlinks`,
+  `atomic`, `ignorePermissionErrors`, and non-polling defaults
+- adapter close awaits the underlying watcher close operation
+- raw `add`, `change`, `unlink`, `addDir`, and `unlinkDir` events are normalized
+  into project events
+
+Renderer tests should cover:
+
+- active-project watcher events call the existing workspace reload path
+- file selection is preserved after watcher refresh when possible
+- a missing selected file moves selection to a deterministic next file
+- inactive-project watcher events refresh summaries without switching projects
+- watcher events received while settings or the command palette are open are queued
+  or applied without interrupting the overlay
+- subscription cleanup prevents duplicate refreshes after remount
 
 ### App Workflow Tests
 
@@ -100,6 +150,10 @@ Cover:
 - review a file
 - modify the file externally
 - verify the file becomes unreviewed
+- verify the file becomes unreviewed while the app stays focused and no synthetic
+  focus event is dispatched
+- modify an inactive project and verify its tab or summary updates without
+  switching projects
 - switch projects
 - restart app and verify persisted state
 
@@ -153,6 +207,9 @@ These tests are mandatory before v0 is considered credible:
 - Renamed files show previous and current path.
 - A pure rename requires review once and remains reviewed only while the exact rename diff remains current.
 - Worktrees can be opened as separate projects.
+- External file changes invalidate review state without requiring window focus.
+- Inactive projects receive live-monitoring updates without stealing focus.
+- Watcher failure leaves manual and focus-driven refresh available.
 - UI-facing changes are launched and visually checked before handoff.
 
 ## Full Gate

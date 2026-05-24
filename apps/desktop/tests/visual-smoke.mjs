@@ -51,7 +51,12 @@ try {
   await window.getByRole("button", { name: "Project settings" }).click();
   await window.getByLabel("Show generated files", { exact: true }).check();
   await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
-  await window.getByRole("combobox", { name: /Editor/ }).selectOption("custom");
+  await window.getByRole("button", { name: /Editor:/ }).click();
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-editor-picker.png")
+  });
+  await window.getByRole("option", { name: "Custom command" }).click();
   await window.getByRole("textbox", { exact: true, name: "Command" }).fill("code");
   await window
     .getByRole("textbox", { exact: true, name: "Arguments" })
@@ -69,7 +74,7 @@ try {
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectChecked(window, "Show generated files");
   await expectComboboxValue(window, /Appearance/, "light");
-  await expectComboboxValue(window, /Editor/, "custom");
+  await expectEditorChoice(window, "Custom command");
   await expectValue(window, "Command", "code");
   await expectValuePrefix(window, "Arguments", "--goto {path}:{line}");
   await window.getByRole("button", { name: "Close settings" }).click();
@@ -97,6 +102,20 @@ try {
   });
   await window.keyboard.type("tracked");
   await window.keyboard.press("Enter");
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await expectSelectedFile(window, "tracked.txt");
+  await window.getByRole("button", { name: /context\.txt modified/ }).click();
+  await window
+    .getByRole("button", { name: /Show \d+ unchanged lines/ })
+    .first()
+    .click();
+  await window.getByText("context line 1", { exact: true }).first().waitFor({
+    timeout: 10_000
+  });
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-expanded-context.png")
+  });
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
   await window.screenshot({
@@ -151,18 +170,35 @@ try {
 async function createChangedRepository(name = "visual-repo") {
   const parent = await mkdtemp(path.join(tmpdir(), "difftray-visual-"));
   const repo = path.join(parent, name);
+  const includeContextFile = name === "visual-repo";
+  const contextLines = Array.from(
+    { length: 20 },
+    (_, index) => `context line ${index + 1}`
+  );
 
   await mkdir(repo);
   git(repo, ["init", "--initial-branch=main"]);
   git(repo, ["config", "user.email", "visual@example.invalid"]);
   git(repo, ["config", "user.name", "Visual Smoke"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf8");
-  git(repo, ["add", "tracked.txt"]);
+  if (includeContextFile) {
+    await writeFile(path.join(repo, "context.txt"), `${contextLines.join("\n")}\n`);
+  }
+  git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "Initial"]);
   git(repo, ["checkout", "-b", "feature/review"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\n", "utf8");
   git(repo, ["commit", "-am", "Branch change"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\nafter\n", "utf8");
+  if (includeContextFile) {
+    const changedContextLines = [...contextLines];
+    changedContextLines[11] = "changed context line 12";
+    await writeFile(
+      path.join(repo, "context.txt"),
+      `${changedContextLines.join("\n")}\n`,
+      "utf8"
+    );
+  }
   await writeFile(
     path.join(repo, "schema.generated.ts"),
     "export const value = 1;\n",
@@ -295,4 +331,10 @@ async function expectComboboxValue(window, name, expectedValue) {
   if (actualValue !== expectedValue) {
     throw new Error(`Expected combobox to be ${expectedValue}, got ${actualValue}`);
   }
+}
+
+async function expectEditorChoice(window, expectedValue) {
+  await window
+    .getByRole("button", { name: `Editor: ${expectedValue}` })
+    .waitFor({ timeout: 10_000 });
 }

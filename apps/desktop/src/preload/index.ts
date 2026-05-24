@@ -1,12 +1,14 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly getAppSettings: () => Promise<AppSettingsView>;
+  readonly listInstalledEditors: () => Promise<readonly EditorPresetView[]>;
   readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+  readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
   readonly markFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<MarkReviewedResult>;
@@ -31,6 +33,7 @@ export type AppSettingsView = {
   readonly autoCollapseHunksOver: number;
   readonly defaultDiffMode: "split" | "unified";
   readonly editorArgs: string;
+  readonly editorArgList: readonly string[];
   readonly editorCommand: string;
   readonly editorMode: "custom" | "system";
   readonly hideWhitespaceOnlyChanges: boolean;
@@ -38,6 +41,14 @@ export type AppSettingsView = {
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+};
+
+export type EditorPresetView = {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly iconDataUrl?: string;
+  readonly id: string;
+  readonly name: string;
 };
 
 export type RecentProjectView = {
@@ -54,6 +65,22 @@ export type ProjectReviewSummaryView = {
   readonly progress: ReviewProgressView;
 };
 
+export type ProjectWatchReason =
+  | "deleted"
+  | "git_metadata"
+  | "watcher_error"
+  | "worktree";
+
+export type ProjectChangedEvent = {
+  readonly errorMessage?: string;
+  readonly projectId: string;
+  readonly projectPath: string;
+  readonly reasons: readonly ProjectWatchReason[];
+  readonly sequence: number;
+};
+
+export type ProjectChangedListener = (event: ProjectChangedEvent) => void;
+
 export type ReviewProgressView = {
   readonly reviewedVisibleFiles: number;
   readonly totalVisibleReviewableFiles: number;
@@ -65,6 +92,8 @@ export type ReviewFileView = {
   readonly diffHash: string;
   readonly generated: boolean;
   readonly invalidated: boolean;
+  readonly newText?: string;
+  readonly oldText?: string;
   readonly path: string;
   readonly patch: string;
   readonly previousPath?: string;
@@ -156,6 +185,7 @@ export type UpdateProjectDiffTargetInput =
 export type UpdateAppSettingsInput = {
   readonly autoCollapseHunksOver: number;
   readonly defaultDiffMode: "split" | "unified";
+  readonly editorArgList?: readonly string[];
   readonly editorArgs?: string;
   readonly editorCommand?: string;
   readonly editorMode: "custom" | "system";
@@ -174,6 +204,8 @@ const api: DifftrayApi = {
     }) as Promise<readonly RecentProjectView[]>,
   getAppSettings: async () =>
     ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
+  listInstalledEditors: async () =>
+    ipcRenderer.invoke("editors:listInstalled") as Promise<readonly EditorPresetView[]>,
   listProjectBranchRefs: async (projectId) =>
     ipcRenderer.invoke("projects:listBranchRefs", {
       projectId
@@ -186,6 +218,21 @@ const api: DifftrayApi = {
     }) as Promise<ReviewWorkspaceView | null>,
   markFileReviewed: async (input) =>
     ipcRenderer.invoke("reviews:markFileReviewed", input) as Promise<MarkReviewedResult>,
+  onProjectChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      const projectChangedEvent = parseProjectChangedEvent(payload);
+
+      if (projectChangedEvent) {
+        listener(projectChangedEvent);
+      }
+    };
+
+    ipcRenderer.on("projects:changed", handler);
+
+    return () => {
+      ipcRenderer.removeListener("projects:changed", handler);
+    };
+  },
   openFileInEditor: async (input) =>
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
   openProject: async () =>
@@ -211,3 +258,42 @@ const api: DifftrayApi = {
 };
 
 contextBridge.exposeInMainWorld("difftray", api);
+
+function parseProjectChangedEvent(payload: unknown): ProjectChangedEvent | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const { errorMessage, projectId, projectPath, reasons, sequence } = payload;
+
+  if (
+    typeof projectId !== "string" ||
+    typeof projectPath !== "string" ||
+    typeof sequence !== "number" ||
+    !Array.isArray(reasons) ||
+    !reasons.every(isProjectWatchReason)
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...(typeof errorMessage === "string" ? { errorMessage } : {}),
+    projectId,
+    projectPath,
+    reasons,
+    sequence
+  };
+}
+
+function isProjectWatchReason(value: unknown): value is ProjectWatchReason {
+  return (
+    value === "deleted" ||
+    value === "git_metadata" ||
+    value === "watcher_error" ||
+    value === "worktree"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}

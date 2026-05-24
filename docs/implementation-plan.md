@@ -128,12 +128,34 @@ Acceptance:
 
 Goal: expose safe app services to the renderer.
 
+Test-first cases:
+
+- renderer-facing APIs do not expose raw shell execution
+- editor launch config expands only supported tokens
+- editor launch uses command and args rather than shell strings
+- editor launch validates project-contained paths
+- mark-reviewed rejects stale displayed hashes
+- project watcher service starts one watcher per opened project
+- project watcher service stops watchers when projects close or are removed
+- project watcher service closes all watchers during app shutdown
+- watcher events debounce per project
+- watcher events coalesce worktree and Git metadata reasons
+- watcher event sequences increase monotonically per project
+- separate projects have independent debounce timers and sequences
+- watcher ignore matcher excludes noisy dependency, build, and cache paths
+- watcher ignore matcher does not hide selected Git metadata paths
+- linked worktree Git metadata paths are resolved from Git
+- watcher errors emit a bounded status event without crashing the app
+
 Deliverables:
 
 - typed IPC contracts
 - project open service
 - project refresh service
-- file watch service
+- project watch service
+- Chokidar adapter isolated behind a testable watcher interface
+- debounced project-change event coordinator
+- preload subscription API with unsubscribe support
 - external editor service
 - settings service
 - locked-down Electron window config
@@ -145,6 +167,9 @@ Acceptance:
 - renderer never reads SQLite directly
 - renderer has no Node integration
 - custom editor launch uses command + args, not shell strings
+- live project-change notifications use the existing main-process refresh path as
+  the source of truth
+- watcher failure leaves manual and focus-driven refresh available
 
 ## Slice 6: First UI
 
@@ -169,11 +194,26 @@ Acceptance:
 
 Goal: support the actual target workflow.
 
+Test-first cases:
+
+- active project reloads after an external file change while the window remains
+  focused
+- active project preserves selected file after a watcher-driven refresh when the
+  file still exists
+- active project selects a sensible next file when the selected file disappears
+- inactive project summary refreshes after a watcher event without stealing focus
+- closing a project unsubscribes renderer state from future watcher events
+- deleting or moving a repository stops its watcher after the project is removed
+- focus refresh still works when the watcher is unavailable or unhealthy
+
 Deliverables:
 
 - multiple opened projects
 - recent projects
 - live monitoring for all projects
+- active-project watcher refresh
+- inactive-project summary refresh
+- watcher health/error surfacing
 - project-specific base branch
 - project switching shortcuts
 
@@ -181,6 +221,7 @@ Acceptance:
 
 - two repos can be monitored in one window
 - changed files in one repo do not affect review state in another
+- external changes invalidate reviewed files without requiring window focus
 
 ## Slice 8: Keyboard And Review Flow
 
@@ -189,17 +230,20 @@ Goal: make review fast.
 Deliverables:
 
 - `j` / `k` navigation
-- `Enter` open selected file
-- `Space` mark reviewed
-- `u` toggle reviewed
-- `o` open in editor
-- `f` focus filter
+- arrow key navigation
+- `R` toggle reviewed
+- `Cmd+O` open repository
+- `Cmd+K` command palette
+- `Cmd+P` file-only command palette
+- `Cmd+1` collapse or expand file list
+- palette arrow/enter/escape handling
 - collapse-on-review
 - advance to next unreviewed file
 
 Acceptance:
 
 - a review session can be completed without mouse interaction after opening the project
+- project/file/action discovery is available from the command palette
 
 ## Slice 9: V0 Polish
 
