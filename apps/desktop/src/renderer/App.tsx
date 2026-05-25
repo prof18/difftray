@@ -43,6 +43,7 @@ import {
 } from "./project-tabs.js";
 import {
   carryLoadedDiffsForward,
+  shouldRefreshCachedWorkspaceAfterTabSwitch,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
 import {
@@ -759,6 +760,7 @@ export function App(): React.JSX.Element {
       projectSettings: nextSettings,
       workspace: workspaceToApply
     });
+    workspaceRef.current = workspaceToApply;
     setWorkspace(workspaceToApply);
     setProjectSettings(nextSettings);
     setBranchRefs(nextBranchRefs);
@@ -770,7 +772,10 @@ export function App(): React.JSX.Element {
     setDiffMode(nextAppSettings.defaultDiffMode);
     setFileListWidth(nextSettings.fileListWidth);
     setFileListCollapsed(nextSettings.fileListCollapsed);
-    setSelectedPath(visiblePathOrFirst(workspaceToApply, nextPath));
+    const nextSelectedPath = visiblePathOrFirst(workspaceToApply, nextPath);
+
+    selectedPathRef.current = nextSelectedPath;
+    setSelectedPath(nextSelectedPath);
     updateRecentProjectReviewSummary(
       workspaceToApply.project.id,
       projectReviewSummary(workspaceToApply)
@@ -901,6 +906,14 @@ export function App(): React.JSX.Element {
     const cachedWorkspace = workspaceCacheRef.current.get(projectId);
 
     if (cachedWorkspace) {
+      const refreshAfterSwitch = shouldRefreshCachedWorkspaceAfterTabSwitch({
+        activeProjectId: workspaceRef.current?.project.id,
+        loadState: loadStateRef.current,
+        nextProjectId: projectId,
+        paletteOpen: paletteOpenRef.current,
+        settingsOpen: settingsOpenRef.current
+      });
+
       invalidatePendingSilentWorkspaceRefreshes();
       setError(undefined);
       await applyWorkspace(
@@ -911,6 +924,11 @@ export function App(): React.JSX.Element {
           projectSettings: cachedWorkspace.projectSettings
         }
       );
+
+      if (refreshAfterSwitch) {
+        void refreshWorkspaceSilently(projectId);
+      }
+
       return;
     }
 

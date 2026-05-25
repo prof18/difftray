@@ -140,6 +140,8 @@ Renderer tests should cover:
   or applied without interrupting the overlay
 - focus-triggered refresh runs silently, ignores stale completions, and preserves
   loaded patch content when the refreshed diff hash is unchanged
+- cached tab switches apply the cached workspace immediately, then run the same
+  guarded silent refresh as focus refresh
 - subscription cleanup prevents duplicate refreshes after remount
 
 ### App Workflow Tests

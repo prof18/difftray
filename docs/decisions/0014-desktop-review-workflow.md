@@ -19,7 +19,8 @@ same summary-only Git path used by workspace loading. A stale or missing summary
 must not trigger full patch-body loading, hidden diff rendering, or tab switching.
 
 Once a repository has been loaded in the renderer, tab switches back to that
-repository reuse the in-memory workspace snapshot. Explicit refresh, project
+repository reuse the in-memory workspace snapshot immediately, then trigger the
+same silent main-process reload used by focus refresh. Explicit refresh, project
 watch events, settings changes, diff-target changes, and review marking still
 reload through the main process when they need authoritative Git state.
 
@@ -35,6 +36,11 @@ interactive, and applies the refreshed workspace only if the same project is
 still active and no newer workspace update has started. Loaded patch bodies are
 carried forward when their diff hash still matches, so a no-op focus refresh
 does not replace the diff pane with a loader.
+
+Cached tab-switch refreshes use the same silent application guard. The cached
+workspace appears first so tab changes stay instant, and the fresh workspace is
+applied only if the switched-to project is still active when the background load
+finishes.
 
 When switching to a repository tab whose workspace is not already cached, the
 renderer selects the target tab immediately while keeping the existing review
@@ -84,7 +90,8 @@ Positive:
   lightweight summaries finish loading.
 - Switching back to an already-opened repository is immediate.
 - Large active-repository reloads have visible progress instead of looking hung.
-- Refocusing the app can validate drift without flashing a loading state.
+- Refocusing the app or returning to a cached tab can validate drift without
+  flashing a loading state.
 - Large file sets can be opened and navigated before every patch body is loaded.
 - Thousand-file reviews do not require rendering every file row at once.
 
@@ -93,8 +100,8 @@ Negative:
 - Refresh is explicit for now; file watching remains a later main-process service.
 - Inactive repository tabs can briefly show unknown progress while their summary
   queue catches up.
-- Cached tab content may be stale until refresh or a guarded review action
-  reloads current Git state.
+- Cached tab content may be briefly stale until the tab-switch revalidation
+  completes.
 - Focus-triggered refresh failures are reported only if the original project is
   still active when the background refresh completes.
 - Existing review marks created from older patch-body hashes may need to be

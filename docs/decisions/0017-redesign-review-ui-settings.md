@@ -30,6 +30,9 @@ strip.
 Selecting an uncached project tab makes that tab active immediately. During the
 load, the previous repository's review controls remain visible but blocked, with
 the selected tab's loading state shown in a compact banner above the workspace.
+Selecting a cached inactive project tab applies its in-memory workspace
+immediately and starts a silent refresh, using the same stale-completion guard as
+focus refresh.
 
 For small known review sets, the selected-tab loading state is delayed briefly so
 quick switches can complete without a loader flash. Larger known review sets show
@@ -48,6 +51,8 @@ When the app window regains focus, the active workspace refreshes through the sa
 path as manual refresh so review invalidation and drift notifications react to
 changes made while Difftray was inactive. Focus refresh is skipped while loading or
 while transient UI such as settings or the command palette is open.
+Cached tab-switch refresh uses that same silent reload path after the target tab
+is active.
 
 Persist review-workflow UI preferences. The initial ownership was
 `project_settings`, but Decision 0018 moves review and editor preferences to

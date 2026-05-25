@@ -48,10 +48,18 @@ try {
   await window
     .locator('[data-project-tab-name="visual-secondary-repo"][data-active="true"]')
     .waitFor({ timeout: 10_000 });
+  await expectProjectTabsEnabled(window);
+  await writeFile(
+    path.join(repoPath, "tracked.txt"),
+    "before\nbranch\nafter\ninactive tab update\n",
+    "utf8"
+  );
   await window.locator('[data-project-tab-name="visual-repo"] button').first().click();
   await window
     .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
     .waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await expectFileStats(window, "tracked.txt", "+2", "-0");
   await expectMissing(window, "button", "schema.generated.ts");
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
@@ -288,6 +296,14 @@ async function expectProjectTabOrder(window, projectNames) {
   );
 }
 
+async function expectProjectTabsEnabled(window) {
+  await window.waitForFunction(() => {
+    return [...document.querySelectorAll("[data-project-tab-name] button")].every(
+      (button) => !button.disabled
+    );
+  });
+}
+
 async function expectFileReviewState(window, filename, state) {
   await window.waitForFunction(
     ({ expectedState, targetFilename }) => {
@@ -298,6 +314,24 @@ async function expectFileReviewState(window, filename, state) {
       return Boolean(fileButton?.querySelector(`[data-state="${expectedState}"]`));
     },
     { expectedState: state, targetFilename: filename }
+  );
+}
+
+async function expectFileStats(window, filename, additions, deletions) {
+  await window.waitForFunction(
+    ({ expectedAdditions, expectedDeletions, targetFilename }) => {
+      const fileButton = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes(targetFilename)
+      );
+      const text = fileButton?.textContent ?? "";
+
+      return text.includes(expectedAdditions) && text.includes(expectedDeletions);
+    },
+    {
+      expectedAdditions: additions,
+      expectedDeletions: deletions,
+      targetFilename: filename
+    }
   );
 }
 

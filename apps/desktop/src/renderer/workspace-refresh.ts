@@ -10,12 +10,32 @@ export type SilentWorkspaceRefreshState = {
   readonly settingsOpen: boolean;
 };
 
+export type CachedWorkspaceTabSwitchRefreshState = {
+  readonly activeProjectId: string | undefined;
+  readonly loadState: WorkspaceLoadState;
+  readonly nextProjectId: string;
+  readonly paletteOpen: boolean;
+  readonly settingsOpen: boolean;
+};
+
 export function shouldApplySilentWorkspaceRefresh(
   state: SilentWorkspaceRefreshState
 ): boolean {
   return (
     state.activeProjectId === state.requestProjectId &&
     state.applyVersion === state.requestApplyVersion &&
+    state.loadState === "idle" &&
+    !state.paletteOpen &&
+    !state.settingsOpen
+  );
+}
+
+export function shouldRefreshCachedWorkspaceAfterTabSwitch(
+  state: CachedWorkspaceTabSwitchRefreshState
+): boolean {
+  return (
+    state.activeProjectId !== undefined &&
+    state.activeProjectId !== state.nextProjectId &&
     state.loadState === "idle" &&
     !state.paletteOpen &&
     !state.settingsOpen

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   carryLoadedDiffsForward,
+  shouldRefreshCachedWorkspaceAfterTabSwitch,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
 
@@ -69,6 +70,58 @@ describe("shouldApplySilentWorkspaceRefresh", () => {
     ).toBe(false);
     expect(
       shouldApplySilentWorkspaceRefresh({
+        ...input,
+        loadState: "idle",
+        settingsOpen: true
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldRefreshCachedWorkspaceAfterTabSwitch", () => {
+  it("refreshes silently after switching to a different cached project", () => {
+    expect(
+      shouldRefreshCachedWorkspaceAfterTabSwitch({
+        activeProjectId: "difftray",
+        loadState: "idle",
+        nextProjectId: "reader-flow",
+        paletteOpen: false,
+        settingsOpen: false
+      })
+    ).toBe(true);
+  });
+
+  it("does not refresh when reselecting the active project", () => {
+    expect(
+      shouldRefreshCachedWorkspaceAfterTabSwitch({
+        activeProjectId: "difftray",
+        loadState: "idle",
+        nextProjectId: "difftray",
+        paletteOpen: false,
+        settingsOpen: false
+      })
+    ).toBe(false);
+  });
+
+  it("does not refresh while a visible load or overlay is active", () => {
+    const input = {
+      activeProjectId: "difftray",
+      loadState: "loading" as const,
+      nextProjectId: "reader-flow",
+      paletteOpen: false,
+      settingsOpen: false
+    };
+
+    expect(shouldRefreshCachedWorkspaceAfterTabSwitch(input)).toBe(false);
+    expect(
+      shouldRefreshCachedWorkspaceAfterTabSwitch({
+        ...input,
+        loadState: "idle",
+        paletteOpen: true
+      })
+    ).toBe(false);
+    expect(
+      shouldRefreshCachedWorkspaceAfterTabSwitch({
         ...input,
         loadState: "idle",
         settingsOpen: true
