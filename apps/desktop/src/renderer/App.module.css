@@ -805,43 +805,16 @@
 
 .diffSurface {
   --diff-bottom-review-padding: 56px;
-  --diffs-addition-color: var(--add-mark);
-  --diffs-bg: var(--panel);
-  --diffs-bg-addition-override: var(--add-bg);
-  --diffs-bg-context-override: var(--panel);
-  --diffs-bg-context-gutter-override: color-mix(in srgb, var(--panel), var(--bg) 30%);
-  --diffs-bg-deletion-override: var(--del-bg);
-  --diffs-bg-separator-override: var(--panel-2);
-  --diffs-dark: var(--text-2);
-  --diffs-dark-bg: var(--panel);
-  --diffs-deletion-color: var(--del-mark);
-  --diffs-fg-number-override: var(--text-dim);
-  --diffs-font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --diffs-font-size: 12px;
-  --diffs-header-font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --diffs-light: var(--text-2);
-  --diffs-light-bg: var(--panel);
-  --diffs-line-height: 20px;
-  --diffs-min-number-column-width-default: 4ch;
-  --diffs-scrollbar-gutter-override: 8px;
 
   min-height: 0;
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
-  background: var(--panel);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 20px;
 }
 
 .diffsFileDiff {
   display: block;
   min-width: 100%;
-}
-
-.diffSurface[data-diff-layout="split"] .diffsFileDiff {
-  min-width: 900px;
 }
 
 .diffPreparingState {

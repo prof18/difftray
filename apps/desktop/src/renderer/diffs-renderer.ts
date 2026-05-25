@@ -4,7 +4,6 @@ import {
   type FileContents,
   type FileDiffMetadata,
   type FileDiffOptions,
-  type ThemesType,
   type VirtualFileMetrics
 } from "@pierre/diffs";
 import {
@@ -43,11 +42,6 @@ const maxTokenizedLineLength = 4_000;
 const maxLineDiffLength = 20_000;
 const workerPoolSize = 2;
 
-const diffsThemes: ThemesType = {
-  dark: "github-dark",
-  light: "github-light"
-};
-
 export const diffsVirtualFileMetrics = {
   diffHeaderHeight: 0,
   hunkLineCount: 50,
@@ -58,10 +52,9 @@ export const diffsVirtualFileMetrics = {
 } as const satisfies VirtualFileMetrics;
 
 export const diffsWorkerHighlighterOptions = {
-  lineDiffType: "word",
+  lineDiffType: "word-alt",
   maxLineDiffLength,
   preferredHighlighter: "shiki-js",
-  theme: diffsThemes,
   tokenizeMaxLineLength: maxTokenizedLineLength,
   useTokenTransformer: true
 } as const satisfies WorkerInitializationRenderOptions;
@@ -105,18 +98,17 @@ export function createDiffsFileDiffOptions({
 }: CreateDiffsFileDiffOptionsInput): FileDiffOptions<undefined> {
   return {
     collapsedContextThreshold: 1,
-    diffIndicators: "classic",
+    diffIndicators: "bars",
     diffStyle: diffMode,
     disableBackground: false,
     disableFileHeader: true,
     expansionLineCount: 40,
     expandUnchanged: false,
     hunkSeparators: "line-info-basic",
-    lineDiffType: "word",
+    lineDiffType: "word-alt",
     maxLineDiffLength,
-    overflow: "scroll",
+    overflow: "wrap",
     stickyHeader: false,
-    theme: diffsThemes,
     themeType: resolvedTheme,
     tokenizeMaxLineLength: maxTokenizedLineLength,
     useTokenTransformer: true

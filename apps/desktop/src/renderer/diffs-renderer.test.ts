@@ -1,6 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import { createDiffsRenderModel } from "./diffs-renderer.js";
+import {
+  createDiffsFileDiffOptions,
+  createDiffsRenderModel,
+  diffsWorkerHighlighterOptions
+} from "./diffs-renderer.js";
+
+describe("createDiffsFileDiffOptions", () => {
+  it("uses Difftray's preferred visual diff rendering style", () => {
+    expect(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark"
+      })
+    ).toMatchObject({
+      diffIndicators: "bars",
+      diffStyle: "split",
+      disableBackground: false,
+      lineDiffType: "word-alt",
+      overflow: "wrap",
+      themeType: "dark"
+    });
+    expect(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark"
+      })
+    ).not.toHaveProperty("theme");
+    expect(diffsWorkerHighlighterOptions).toMatchObject({
+      lineDiffType: "word-alt"
+    });
+    expect(diffsWorkerHighlighterOptions).not.toHaveProperty("theme");
+  });
+});
 
 describe("createDiffsRenderModel", () => {
   it("uses full file snapshots when both sides are available", () => {
