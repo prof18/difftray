@@ -190,16 +190,21 @@ explicit setting if native filesystem events prove unreliable for a user.
 
 ## Diff Rendering
 
-The current renderer uses a small React diff viewer backed by the core
-`parseDiffSegments` parser. Keep parsing and context-expansion behavior in
-`packages/core` so renderer components stay mostly presentational.
+The desktop renderer uses `@pierre/diffs` for text diff parsing, split/unified
+layout, syntax highlighting, expandable unchanged regions, and diff
+virtualization.
 
-Do not keep unused diff-rendering dependencies in the release build.
-`@pierre/diffs` was evaluated and rejected in
-[Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md) after the
-attempted migration created more tab-switching and large-diff performance risk
-than benefit. It should not be a runtime dependency unless a future measured ADR
-supersedes that decision.
+Difftray still owns the review model around the renderer. `packages/git`
+provides Git-derived patch text and bounded old/new text snapshots. Review
+hashes and invalidation are based on those Git-derived payloads, not on Diffs
+render output.
+
+Keep the existing performance boundary: summaries load without full patch text,
+selected file content loads lazily, parsing is deferred until after paint,
+highlighting uses a bounded worker pool, and inactive repository tabs must not
+mount hidden diff viewers.
+
+See [Decision 0024](decisions/0024-diffs-rendering-engine.md).
 
 ## Styling Architecture
 

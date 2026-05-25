@@ -2,21 +2,19 @@
 
 ## Status
 
-Archived. Do not implement this migration.
+Superseded and implemented.
 
-The Diffs / `@pierre/diffs` renderer migration was evaluated and rolled back on
-2026-05-25. Difftray keeps the current custom renderer backed by
-`parseDiffSegments` for now.
-
-See [Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md).
+The Diffs / `@pierre/diffs` renderer migration is now accepted by
+[Decision 0024](decisions/0024-diffs-rendering-engine.md), superseding the
+rollback described in [Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md).
 
 ## Outcome
 
-Do not replace the custom text diff renderer with `@pierre/diffs` in the current
-product.
+The custom text diff renderer has been replaced with `@pierre/diffs` in the
+desktop renderer.
 
-The attempted migration created more performance and reliability risk than it
-removed:
+The earlier rollback happened because the attempted migration created more
+performance and reliability risk than it removed:
 
 - opening and restoring repositories became easier to block on expensive diff
   work
@@ -28,28 +26,24 @@ removed:
 - the app needs multiple repositories open at once, but only the active review
   surface should be expensive
 
-The current custom renderer is not perfect, but it is known to work with the
-existing multi-repository model and keeps the performance behavior easier to
-reason about.
+The accepted implementation keeps the earlier performance safeguards instead of
+mounting rich diff viewers for inactive repositories.
 
 ## Current Direction
 
-Keep the local renderer:
+Use Diffs with Difftray's existing performance boundary:
 
-- `packages/core/src/diff-context.ts` owns patch parsing and collapsed context
-  segmentation.
-- `apps/desktop/src/renderer/App.tsx` owns the split/unified React renderer and
-  syntax highlighting setup.
+- `apps/desktop/src/renderer/diffs-renderer.ts` adapts Git-derived patches and
+  old/new snapshots into Diffs metadata.
 - `packages/git` continues to load canonical patch text plus bounded text
   snapshots where needed for context expansion.
 - Review hashes remain based on Git-derived payloads, not renderer output.
+- Selected file content still loads lazily.
+- Inactive tabs do not mount hidden diff viewers.
 
-Do not add `@pierre/diffs` as a runtime dependency, worker dependency, or hidden
-inactive-tab renderer.
+## Performance Criteria
 
-## Reconsideration Criteria
-
-Reopen this only with a new measured spike that proves all of the following:
+Keep the implementation accountable to the original migration criteria:
 
 - first repository open remains responsive
 - opening a second repository does not block or crash the existing workspace
@@ -59,8 +53,5 @@ Reopen this only with a new measured spike that proves all of the following:
 - memory stays bounded with several repositories open
 - inactive tabs do not mount hidden diff viewers or run background rich
   rendering
-- visual behavior matches the current split/unified renderer, including context
+- visual behavior matches the expected split/unified renderer, including context
   expansion, generated-file filtering, stale review state, and review actions
-
-Until then, performance work should optimize the existing custom renderer and
-Git loading path rather than replacing the renderer library.

@@ -1,18 +1,18 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  parseDiffSegments,
-  type CollapsedDiffContextSegment,
-  type ParsedDiffHunkSegment,
-  type ParsedDiffLine,
-  type ParsedDiffSegment
-} from "@difftray/core/diff-context";
-import { createHighlighterCore } from "shiki/core";
-import type { HighlighterCore, ThemedToken } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { bundledLanguages, bundledLanguagesInfo } from "shiki/langs";
-import type { BundledLanguage } from "shiki/langs";
-import githubDarkTheme from "shiki/themes/github-dark.mjs";
-import githubLightTheme from "shiki/themes/github-light.mjs";
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import {
+  FileDiff,
+  VirtualizerContext,
+  WorkerPoolContextProvider
+} from "@pierre/diffs/react";
+import { Virtualizer as DiffsVirtualizer } from "@pierre/diffs";
 import {
   AlertTriangle,
   Check,
@@ -25,7 +25,6 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -46,6 +45,14 @@ import {
   carryLoadedDiffsForward,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
+import {
+  createDiffsFileDiffOptions,
+  createDiffsRenderModel,
+  createDiffsWorkerPoolOptions,
+  diffsVirtualFileMetrics,
+  diffsWorkerHighlighterOptions,
+  type DiffsRenderModel
+} from "./diffs-renderer.js";
 
 type LoadState = "idle" | "loading";
 type DiffMode = "split" | "unified";
@@ -54,8 +61,6 @@ type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
 type PaletteMode = "all" | "files";
 type CommandKind = "action" | "file" | "project";
 type ResolvedTheme = "dark" | "light";
-type HighlightedLineMap = ReadonlyMap<string, readonly ThemedToken[]>;
-type SyntaxLanguage = BundledLanguage | "text";
 
 type WorkspaceLoadStatus = {
   readonly detail: string;
@@ -71,7 +76,7 @@ type DiffParseState =
     }
   | {
       readonly key: string;
-      readonly segments: readonly ParsedDiffSegment[];
+      readonly model: DiffsRenderModel;
       readonly status: "ready";
     };
 
@@ -128,16 +133,6 @@ const delayedTabSwitchLoaderMs = 500;
 const delayedFileDiffLoaderMs = 500;
 const fileListRowHeight = 54;
 const fileListOverscanRows = 8;
-const maxHighlightedDiffLines = 800;
-
-const syntaxThemes = {
-  dark: "github-dark",
-  light: "github-light"
-} as const satisfies Record<ResolvedTheme, string>;
-
-const syntaxLanguageAliases = buildSyntaxLanguageAliases();
-
-let highlighterPromise: Promise<HighlighterCore> | undefined;
 
 export function App(): React.JSX.Element {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(defaultAppSettings);
@@ -1612,6 +1607,7 @@ export function App(): React.JSX.Element {
                       newText={selectedFile.newText}
                       oldText={selectedFile.oldText}
                       patch={selectedFile.patch}
+                      previousPath={selectedFile.previousPath}
                       resolvedTheme={resolvedTheme}
                       status={selectedFile.status}
                       refObject={diffSurfaceRef}
@@ -2452,6 +2448,7 @@ function DiffSurface({
   newText,
   oldText,
   patch,
+  previousPath,
   resolvedTheme,
   status,
   refObject
@@ -2462,57 +2459,49 @@ function DiffSurface({
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
   readonly patch: string;
+  readonly previousPath: string | undefined;
   readonly resolvedTheme: ResolvedTheme;
   readonly status: ReviewFileView["status"];
   readonly refObject: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
   const parseKey = `${filePath}:${diffHash}`;
+  const effectiveDiffMode = status === "added" ? "unified" : diffMode;
+  const visualDiffLayout = status === "added" ? "single" : diffMode;
   const [parseState, setParseState] = useState<DiffParseState>(() => ({
     key: parseKey,
     status: "parsing"
   }));
-  const segments =
+  const model =
     parseState.key === parseKey && parseState.status === "ready"
-      ? parseState.segments
+      ? parseState.model
       : undefined;
-  const [expandedContextKeys, setExpandedContextKeys] = useState<ReadonlySet<string>>(
-    () => new Set()
-  );
-  const visibleSegments = useMemo<readonly ParsedDiffSegment[]>(
+  const fileDiffOptions = useMemo(
     () =>
-      segments
-        ? segments.map((segment) =>
-            segment.kind === "collapsed_context" && !expandedContextKeys.has(segment.key)
-              ? { ...segment, lines: [] }
-              : segment
-          )
-        : [],
-    [expandedContextKeys, segments]
+      createDiffsFileDiffOptions({
+        diffMode: effectiveDiffMode,
+        resolvedTheme
+      }),
+    [effectiveDiffMode, resolvedTheme]
   );
-  const highlightedLines = useHighlightedLines({
-    filePath,
-    segments: visibleSegments,
-    resolvedTheme
-  });
-  const forceSingleFile = status === "added";
-
-  useEffect(() => {
-    setExpandedContextKeys(new Set());
-  }, [filePath, newText, oldText, patch]);
+  const workerPoolOptions = useMemo(() => createDiffsWorkerPoolOptions(), []);
 
   useEffect(() => {
     let cancelled = false;
     const timeout = window.setTimeout(() => {
-      const nextSegments = parseDiffSegments({
+      const nextModel = createDiffsRenderModel({
+        diffHash,
+        filePath,
         ...(newText !== undefined ? { newText } : {}),
         ...(oldText !== undefined ? { oldText } : {}),
-        patch
+        patch,
+        ...(previousPath !== undefined ? { previousPath } : {}),
+        status
       });
 
       if (!cancelled) {
         setParseState({
           key: parseKey,
-          segments: nextSegments,
+          model: nextModel,
           status: "ready"
         });
       }
@@ -2527,451 +2516,93 @@ function DiffSurface({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [newText, oldText, parseKey, patch]);
-
-  function toggleContext(key: string): void {
-    setExpandedContextKeys((currentKeys) => {
-      const nextKeys = new Set(currentKeys);
-
-      if (nextKeys.has(key)) {
-        nextKeys.delete(key);
-      } else {
-        nextKeys.add(key);
-      }
-
-      return nextKeys;
-    });
-  }
+  }, [diffHash, filePath, newText, oldText, parseKey, patch, previousPath, status]);
 
   return (
-    <div
-      className={styles.diffSurface}
-      data-diff-layout={forceSingleFile ? "single" : diffMode}
-      ref={refObject}
-    >
-      {!segments ? (
+    <DiffsVirtualizedSurface diffLayout={visualDiffLayout} refObject={refObject}>
+      {!model ? (
         <div className={styles.diffPreparingState} role="status">
           <span className={styles.loadingMiniMark} aria-hidden />
           <span>Preparing diff</span>
         </div>
       ) : null}
-      {segments?.map((segment) =>
-        segment.kind === "collapsed_context" ? (
-          <CollapsedContextBlock
-            diffMode={diffMode}
-            forceSingleFile={forceSingleFile}
-            highlightedLines={highlightedLines}
-            isExpanded={expandedContextKeys.has(segment.key)}
-            key={segment.key}
-            onToggle={() => {
-              toggleContext(segment.key);
-            }}
-            segment={segment}
-          />
-        ) : (
-          <DiffHunk
-            diffMode={diffMode}
-            forceSingleFile={forceSingleFile}
-            highlightedLines={highlightedLines}
-            hunk={segment}
-            key={segment.key}
-          />
-        )
-      )}
-      <div className={styles.diffEndSpacer} aria-hidden />
-    </div>
-  );
-}
-
-function DiffHunk({
-  diffMode,
-  forceSingleFile,
-  highlightedLines,
-  hunk
-}: {
-  readonly diffMode: DiffMode;
-  readonly forceSingleFile: boolean;
-  readonly highlightedLines: HighlightedLineMap;
-  readonly hunk: ParsedDiffHunkSegment;
-}): React.JSX.Element {
-  return (
-    <section className={styles.hunk}>
-      <div className={styles.hunkHeader}>
-        <Diff size={13} strokeWidth={1.4} aria-hidden />
-        <span>{hunk.header}</span>
-      </div>
-      <DiffLineBlock
-        diffMode={diffMode}
-        forceSingleFile={forceSingleFile}
-        highlightedLines={highlightedLines}
-        lines={hunk.lines}
-      />
-    </section>
-  );
-}
-
-function CollapsedContextBlock({
-  diffMode,
-  forceSingleFile,
-  highlightedLines,
-  isExpanded,
-  onToggle,
-  segment
-}: {
-  readonly diffMode: DiffMode;
-  readonly forceSingleFile: boolean;
-  readonly highlightedLines: HighlightedLineMap;
-  readonly isExpanded: boolean;
-  readonly onToggle: () => void;
-  readonly segment: CollapsedDiffContextSegment;
-}): React.JSX.Element {
-  const lineLabel = segment.lineCount === 1 ? "line" : "lines";
-
-  return (
-    <section className={styles.contextBlock} data-expanded={isExpanded}>
-      <button
-        aria-expanded={isExpanded}
-        className={styles.contextExpander}
-        onClick={onToggle}
-        title={`${isExpanded ? "Hide" : "Show"} ${String(segment.lineCount)} unchanged ${lineLabel}`}
-        type="button"
-      >
-        <MoreHorizontal size={14} strokeWidth={1.5} aria-hidden />
-        <span>
-          {isExpanded ? "Hide" : "Show"} {segment.lineCount} unchanged {lineLabel}
-        </span>
-      </button>
-      {isExpanded ? (
-        <DiffLineBlock
-          diffMode={diffMode}
-          forceSingleFile={forceSingleFile}
-          highlightedLines={highlightedLines}
-          lines={segment.lines}
-        />
+      {model?.kind === "fallback" ? (
+        <DiffFallback title={model.title} detail={model.detail} />
       ) : null}
+      {model?.kind === "diff" ? (
+        <WorkerPoolContextProvider
+          highlighterOptions={diffsWorkerHighlighterOptions}
+          poolOptions={workerPoolOptions}
+        >
+          <FileDiff
+            className={styles.diffsFileDiff ?? ""}
+            fileDiff={model.fileDiff}
+            metrics={diffsVirtualFileMetrics}
+            options={fileDiffOptions}
+          />
+        </WorkerPoolContextProvider>
+      ) : null}
+    </DiffsVirtualizedSurface>
+  );
+}
+
+function DiffsVirtualizedSurface({
+  children,
+  diffLayout,
+  refObject
+}: {
+  readonly children: React.ReactNode;
+  readonly diffLayout: DiffMode | "single";
+  readonly refObject: React.RefObject<HTMLDivElement | null>;
+}): React.JSX.Element {
+  const [virtualizer] = useState(
+    () =>
+      new DiffsVirtualizer({
+        intersectionObserverMargin: 600,
+        overscrollSize: 1_200,
+        resizeDebugging: false
+      })
+  );
+  const setDiffSurfaceRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      refObject.current = node;
+
+      if (node) {
+        virtualizer.setup(node);
+      } else {
+        virtualizer.cleanUp();
+      }
+    },
+    [refObject, virtualizer]
+  );
+
+  return (
+    <VirtualizerContext.Provider value={virtualizer}>
+      <div
+        className={styles.diffSurface}
+        data-diff-layout={diffLayout}
+        ref={setDiffSurfaceRef}
+      >
+        {children}
+        <div className={styles.diffEndSpacer} aria-hidden />
+      </div>
+    </VirtualizerContext.Provider>
+  );
+}
+
+function DiffFallback({
+  detail,
+  title
+}: {
+  readonly detail: string;
+  readonly title: string;
+}): React.JSX.Element {
+  return (
+    <section className={styles.diffFallback}>
+      <div className={styles.diffFallbackTitle}>{title}</div>
+      {detail.length > 0 ? <pre>{detail}</pre> : null}
     </section>
   );
-}
-
-function DiffLineBlock({
-  diffMode,
-  forceSingleFile,
-  highlightedLines,
-  lines
-}: {
-  readonly diffMode: DiffMode;
-  readonly forceSingleFile: boolean;
-  readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedDiffLine[];
-}): React.JSX.Element {
-  if (forceSingleFile) {
-    return <AddedFileHunk highlightedLines={highlightedLines} lines={lines} />;
-  }
-
-  return diffMode === "split" ? (
-    <SplitHunk highlightedLines={highlightedLines} lines={lines} />
-  ) : (
-    <UnifiedHunk highlightedLines={highlightedLines} lines={lines} />
-  );
-}
-
-function AddedFileHunk({
-  highlightedLines,
-  lines
-}: {
-  readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedDiffLine[];
-}) {
-  return (
-    <div className={styles.singleFileDiff}>
-      {lines
-        .filter((line) => line.kind !== "deleted")
-        .map((line) => (
-          <div className={styles.singleFileRow} data-kind={line.kind} key={line.key}>
-            <span className={styles.lineNumber}>{line.newNumber ?? ""}</span>
-            <CodeText
-              highlightedTokens={highlightedLines.get(line.key)}
-              text={line.text}
-            />
-          </div>
-        ))}
-    </div>
-  );
-}
-
-function SplitHunk({
-  highlightedLines,
-  lines
-}: {
-  readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedDiffLine[];
-}) {
-  const rows = pairSplitLines(lines);
-  const oldContentColumns = maxLineColumns(rows.map((row) => row.oldLine));
-  const newContentColumns = maxLineColumns(rows.map((row) => row.newLine));
-
-  return (
-    <div className={styles.splitDiff}>
-      <div className={styles.splitPane} data-side="old">
-        {rows.map((row) => (
-          <SplitCell
-            contentColumns={oldContentColumns}
-            highlightedTokens={
-              row.oldLine ? highlightedLines.get(row.oldLine.key) : undefined
-            }
-            line={row.oldLine}
-            side="old"
-            key={`old-${row.key}`}
-          />
-        ))}
-      </div>
-      <div className={styles.splitPane} data-side="new">
-        {rows.map((row) => (
-          <SplitCell
-            contentColumns={newContentColumns}
-            highlightedTokens={
-              row.newLine ? highlightedLines.get(row.newLine.key) : undefined
-            }
-            line={row.newLine}
-            side="new"
-            key={`new-${row.key}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SplitCell({
-  contentColumns,
-  highlightedTokens,
-  line,
-  side
-}: {
-  readonly contentColumns: number;
-  readonly highlightedTokens: readonly ThemedToken[] | undefined;
-  readonly line: ParsedDiffLine | undefined;
-  readonly side: "new" | "old";
-}) {
-  return (
-    <div
-      className={styles.splitCell}
-      data-kind={line?.kind ?? "empty"}
-      data-side={side}
-      style={
-        {
-          "--diff-row-content-width": `${String(contentColumns)}ch`
-        } as React.CSSProperties
-      }
-    >
-      <span className={styles.lineNumber}>
-        {side === "old" ? line?.oldNumber : line?.newNumber}
-      </span>
-      <CodeText highlightedTokens={highlightedTokens} text={line ? line.text : ""} />
-    </div>
-  );
-}
-
-function UnifiedHunk({
-  highlightedLines,
-  lines
-}: {
-  readonly highlightedLines: HighlightedLineMap;
-  readonly lines: readonly ParsedDiffLine[];
-}) {
-  return (
-    <div className={styles.unifiedDiff}>
-      {lines.map((line) => (
-        <div className={styles.unifiedRow} data-kind={line.kind} key={line.key}>
-          <span className={styles.lineNumber}>{line.oldNumber ?? ""}</span>
-          <span className={styles.lineNumber}>{line.newNumber ?? ""}</span>
-          <span className={styles.diffGlyph}>{lineGlyph(line.kind)}</span>
-          <CodeText highlightedTokens={highlightedLines.get(line.key)} text={line.text} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CodeText({
-  highlightedTokens,
-  text
-}: {
-  readonly highlightedTokens: readonly ThemedToken[] | undefined;
-  readonly text: string;
-}) {
-  return (
-    <code className={styles.codeText}>
-      {highlightedTokens && highlightedTokens.length > 0
-        ? highlightedTokens.map((token, index) => (
-            <span
-              key={`${String(index)}-${String(token.offset)}`}
-              style={styleForToken(token)}
-            >
-              {token.content}
-            </span>
-          ))
-        : text}
-    </code>
-  );
-}
-
-function useHighlightedLines({
-  filePath,
-  segments,
-  resolvedTheme
-}: {
-  readonly filePath: string;
-  readonly segments: readonly ParsedDiffSegment[];
-  readonly resolvedTheme: ResolvedTheme;
-}): HighlightedLineMap {
-  const [highlightedLines, setHighlightedLines] = useState<HighlightedLineMap>(
-    () => new Map()
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    const language = syntaxLanguageForPath(filePath);
-    const theme = syntaxThemes[resolvedTheme];
-    const linesToHighlight = segments.flatMap((segment) => segment.lines);
-
-    setHighlightedLines(new Map());
-
-    async function highlight(): Promise<void> {
-      try {
-        if (linesToHighlight.length > maxHighlightedDiffLines) {
-          return;
-        }
-
-        const highlighter = await getSyntaxHighlighter();
-
-        if (language !== "text") {
-          await loadSyntaxLanguage(highlighter, language);
-        }
-
-        const nextLines = new Map<string, readonly ThemedToken[]>();
-
-        for (const segment of segments) {
-          if (segment.lines.length === 0) {
-            continue;
-          }
-
-          const tokenized = highlighter.codeToTokens(
-            segment.lines.map((line) => line.text).join("\n"),
-            {
-              lang: language,
-              theme
-            }
-          ).tokens;
-
-          for (const [index, line] of segment.lines.entries()) {
-            nextLines.set(line.key, tokenized[index] ?? []);
-          }
-        }
-
-        if (!cancelled) {
-          setHighlightedLines(nextLines);
-        }
-      } catch {
-        if (!cancelled) {
-          setHighlightedLines(new Map());
-        }
-      }
-    }
-
-    void highlight();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath, segments, resolvedTheme]);
-
-  return highlightedLines;
-}
-
-async function loadSyntaxLanguage(
-  highlighter: HighlighterCore,
-  language: Exclude<SyntaxLanguage, "text">
-): Promise<void> {
-  await highlighter.loadLanguage(bundledLanguages[language]);
-}
-
-function getSyntaxHighlighter(): Promise<HighlighterCore> {
-  highlighterPromise ??= createHighlighterCore({
-    engine: createJavaScriptRegexEngine(),
-    langs: [],
-    themes: [githubDarkTheme, githubLightTheme]
-  });
-
-  return highlighterPromise;
-}
-
-function syntaxLanguageForPath(filePath: string): SyntaxLanguage {
-  const normalizedPath = filePath.toLowerCase();
-  const filename = normalizedPath.split("/").at(-1) ?? normalizedPath;
-  const candidates = syntaxLanguageCandidates(filename);
-
-  for (const candidate of candidates) {
-    const language = syntaxLanguageAliases.get(candidate);
-
-    if (language) {
-      return language;
-    }
-  }
-
-  return "text";
-}
-
-function syntaxLanguageCandidates(filename: string): readonly string[] {
-  const candidates = new Set<string>();
-  const basename = filename.startsWith(".") ? filename.slice(1) : filename;
-
-  candidates.add(filename);
-  candidates.add(basename);
-
-  const parts = basename.split(".").filter(Boolean);
-
-  for (let index = 0; index < parts.length; index += 1) {
-    candidates.add(parts.slice(index).join("."));
-  }
-
-  for (const part of parts) {
-    candidates.add(part);
-  }
-
-  return [...candidates];
-}
-
-function buildSyntaxLanguageAliases(): ReadonlyMap<string, BundledLanguage> {
-  const aliases = new Map<string, BundledLanguage>();
-
-  for (const language of bundledLanguagesInfo) {
-    if (!isBundledLanguage(language.id)) {
-      continue;
-    }
-
-    aliases.set(language.id.toLowerCase(), language.id);
-
-    for (const alias of language.aliases ?? []) {
-      aliases.set(alias.toLowerCase(), language.id);
-    }
-  }
-
-  return aliases;
-}
-
-function isBundledLanguage(language: string): language is BundledLanguage {
-  return language in bundledLanguages;
-}
-
-function styleForToken(token: ThemedToken): React.CSSProperties {
-  return {
-    color: token.color,
-    fontStyle: token.fontStyle && (token.fontStyle & 1) !== 0 ? "italic" : undefined,
-    fontWeight: token.fontStyle && (token.fontStyle & 2) !== 0 ? 600 : undefined,
-    textDecoration:
-      token.fontStyle && (token.fontStyle & 4) !== 0 ? "underline" : undefined
-  };
 }
 
 function EmptyState({
@@ -3768,52 +3399,6 @@ function commandKindSearchWeight(kind: CommandKind): number {
   }
 }
 
-function pairSplitLines(lines: readonly ParsedDiffLine[]) {
-  const rows: {
-    key: string;
-    newLine: ParsedDiffLine | undefined;
-    oldLine: ParsedDiffLine | undefined;
-  }[] = [];
-  let pendingDeleted: ParsedDiffLine[] = [];
-
-  for (const line of lines) {
-    if (line.kind === "deleted") {
-      pendingDeleted.push(line);
-      continue;
-    }
-
-    if (line.kind === "added") {
-      const oldLine = pendingDeleted.shift();
-      rows.push({
-        key: `${oldLine?.key ?? "blank"}-${line.key}`,
-        newLine: line,
-        oldLine
-      });
-      continue;
-    }
-
-    for (const deletedLine of pendingDeleted) {
-      rows.push({
-        key: deletedLine.key,
-        newLine: undefined,
-        oldLine: deletedLine
-      });
-    }
-    pendingDeleted = [];
-    rows.push({ key: line.key, newLine: line, oldLine: line });
-  }
-
-  for (const deletedLine of pendingDeleted) {
-    rows.push({
-      key: deletedLine.key,
-      newLine: undefined,
-      oldLine: deletedLine
-    });
-  }
-
-  return rows;
-}
-
 function nextPendingPath(
   workspace: ReviewWorkspaceView,
   reviewedPath: string
@@ -4027,24 +3612,6 @@ function splitPath(path: string): {
     dirname: dirname.length > 0 ? dirname : ".",
     filename
   };
-}
-
-function lineGlyph(kind: ParsedDiffLine["kind"]): string {
-  switch (kind) {
-    case "added":
-      return "+";
-    case "deleted":
-      return "-";
-    case "context":
-      return " ";
-  }
-}
-
-function maxLineColumns(lines: readonly (ParsedDiffLine | undefined)[]): number {
-  return Math.max(
-    1,
-    ...lines.map((line) => (line ? line.text.replaceAll("\t", "    ").length : 0))
-  );
 }
 
 function clampIndex(index: number, length: number): number {

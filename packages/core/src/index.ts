@@ -1,14 +1,6 @@
 import { createHash } from "node:crypto";
 
 export {
-  parseDiffSegments,
-  type CollapsedDiffContextSegment,
-  type ParsedDiffHunkSegment,
-  type ParsedDiffLine,
-  type ParsedDiffSegment,
-  type ParseDiffSegmentsInput
-} from "./diff-context.js";
-export {
   commonEditorPresets,
   findEditorPresetByLaunchConfig,
   listInstalledEditorPresets,

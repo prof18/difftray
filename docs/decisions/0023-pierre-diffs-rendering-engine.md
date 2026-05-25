@@ -2,7 +2,7 @@
 
 ## Status
 
-Rejected
+Superseded by [Decision 0024](0024-diffs-rendering-engine.md)
 
 ## Decision
 

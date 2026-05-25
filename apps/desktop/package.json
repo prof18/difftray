@@ -17,12 +17,12 @@
     "@difftray/storage": "workspace:*",
     "@fontsource/ibm-plex-sans": "^5.2.6",
     "@fontsource/jetbrains-mono": "^5.2.6",
+    "@pierre/diffs": "1.2.3",
     "@radix-ui/react-tooltip": "^1.2.7",
     "chokidar": "^4.0.3",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "shiki": "^3.23.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.5",

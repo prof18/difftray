@@ -71,7 +71,7 @@
 
 ## V0 Release Prep
 
-- [x] Keep custom text diff rendering; `@pierre/diffs` migration rejected.
+- [x] Adopt `@pierre/diffs` while preserving lazy diff loading and review invalidation.
 - [x] Run full local gate.
 - [x] Add screenshots.
 - [x] Add install/run instructions.

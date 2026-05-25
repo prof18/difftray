@@ -12,7 +12,7 @@ Use:
 - React
 - TypeScript
 - Vite
-- custom React diff viewer backed by `@difftray/core` patch parsing
+- `@pierre/diffs` for text diff rendering
 - SQLite
 - Git CLI
 - Chokidar
@@ -45,6 +45,6 @@ Negative:
 Tauri can be reconsidered later if app size becomes a serious problem, but it
 adds Rust integration cost before the product is proven.
 
-`@pierre/diffs` was evaluated and rejected in
-[Decision 0023](0023-pierre-diffs-rendering-engine.md). Keep the current custom
-text diff renderer unless a future measured ADR supersedes that decision.
+`@pierre/diffs` was adopted in
+[Decision 0024](0024-diffs-rendering-engine.md), superseding the earlier
+rejection in [Decision 0023](0023-pierre-diffs-rendering-engine.md).

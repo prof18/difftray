@@ -94,9 +94,7 @@ Hidden generated files do not count. If generated files are shown, they count.
 
 ## Diff Viewer
 
-V0 uses side-by-side diffs by default.
-
-Unified diff view is out of scope for v0, but the architecture should not prevent it later.
+V0 uses side-by-side diffs by default and allows switching to unified diff mode.
 
 The viewer should support:
 

@@ -182,7 +182,7 @@ Deliverables:
 - project sidebar shell
 - file list
 - file selection
-- custom split/unified diff viewer adapter backed by `parseDiffSegments`
+- Diffs-backed split/unified diff viewer adapter
 - review checkbox
 - progress display
 

@@ -111,10 +111,7 @@ try {
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
   await window.getByRole("button", { name: /context\.txt modified/ }).click();
-  await window
-    .getByRole("button", { name: /Show \d+ unchanged lines/ })
-    .first()
-    .click();
+  await window.locator("[data-unmodified-lines]").first().click();
   await window.getByText("context line 1", { exact: true }).first().waitFor({
     timeout: 10_000
   });
