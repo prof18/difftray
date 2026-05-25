@@ -35,6 +35,7 @@ export type DiffsRenderModel =
 export type CreateDiffsFileDiffOptionsInput = {
   readonly diffMode: "split" | "unified";
   readonly resolvedTheme: "dark" | "light";
+  readonly wrapLines: boolean;
 };
 
 const fallbackTitle = "No textual diff";
@@ -94,7 +95,8 @@ export function createDiffsRenderModel(
 
 export function createDiffsFileDiffOptions({
   diffMode,
-  resolvedTheme
+  resolvedTheme,
+  wrapLines
 }: CreateDiffsFileDiffOptionsInput): FileDiffOptions<undefined> {
   return {
     collapsedContextThreshold: 1,
@@ -107,7 +109,7 @@ export function createDiffsFileDiffOptions({
     hunkSeparators: "line-info-basic",
     lineDiffType: "word-alt",
     maxLineDiffLength,
-    overflow: "wrap",
+    overflow: wrapLines ? "wrap" : "scroll",
     stickyHeader: false,
     themeType: resolvedTheme,
     tokenizeMaxLineLength: maxTokenizedLineLength,

@@ -51,6 +51,7 @@ export type AppSettingsView = {
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+  readonly wrapDiffLines: boolean;
 };
 
 export type EditorPresetView = {
@@ -244,6 +245,7 @@ export type UpdateAppSettingsInput = {
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+  readonly wrapDiffLines: boolean;
 };
 
 const api: DifftrayApi = {

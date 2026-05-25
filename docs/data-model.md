@@ -133,6 +133,7 @@ repositories:
 - `auto_collapse_hunks_over`
 - `notify_on_drift`
 - `review_reset_trigger`
+- `wrap_diff_lines`
 
 Installed editor presets are not stored as separate rows. Selecting a preset writes
 the existing `editor_launch_config_json` command/args shape. The Electron main

@@ -56,6 +56,7 @@ declare global {
     readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
     readonly showGeneratedFiles: boolean;
     readonly themeMode: ThemeMode;
+    readonly wrapDiffLines: boolean;
   };
 
   type EditorPresetView = {
@@ -245,6 +246,7 @@ declare global {
     readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
     readonly showGeneratedFiles: boolean;
     readonly themeMode: ThemeMode;
+    readonly wrapDiffLines: boolean;
   };
 
   interface Window {

@@ -11,7 +11,8 @@ describe("createDiffsFileDiffOptions", () => {
     expect(
       createDiffsFileDiffOptions({
         diffMode: "split",
-        resolvedTheme: "dark"
+        resolvedTheme: "dark",
+        wrapLines: true
       })
     ).toMatchObject({
       diffIndicators: "bars",
@@ -24,13 +25,26 @@ describe("createDiffsFileDiffOptions", () => {
     expect(
       createDiffsFileDiffOptions({
         diffMode: "split",
-        resolvedTheme: "dark"
+        resolvedTheme: "dark",
+        wrapLines: true
       })
     ).not.toHaveProperty("theme");
     expect(diffsWorkerHighlighterOptions).toMatchObject({
       lineDiffType: "word-alt"
     });
     expect(diffsWorkerHighlighterOptions).not.toHaveProperty("theme");
+  });
+
+  it("uses horizontal scrolling when line wrapping is disabled", () => {
+    expect(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark",
+        wrapLines: false
+      })
+    ).toMatchObject({
+      overflow: "scroll"
+    });
   });
 });
 

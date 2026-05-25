@@ -114,7 +114,8 @@ const defaultAppSettings: AppSettingsView = {
   notifyOnDrift: true,
   reviewResetTrigger: "diff_content",
   showGeneratedFiles: false,
-  themeMode: "system"
+  themeMode: "system",
+  wrapDiffLines: true
 };
 
 const defaultProjectSettings: ProjectSettingsView = {
@@ -1120,7 +1121,8 @@ export function App(): React.JSX.Element {
           notifyOnDrift: appSettingsDraft.notifyOnDrift,
           reviewResetTrigger: appSettingsDraft.reviewResetTrigger,
           showGeneratedFiles: appSettingsDraft.showGeneratedFiles,
-          themeMode: appSettingsDraft.themeMode
+          themeMode: appSettingsDraft.themeMode,
+          wrapDiffLines: appSettingsDraft.wrapDiffLines
         }),
         window.difftray.updateProjectSettings({
           fileListCollapsed: projectSettings.fileListCollapsed,
@@ -1212,7 +1214,8 @@ export function App(): React.JSX.Element {
         notifyOnDrift: nextSettings.notifyOnDrift,
         reviewResetTrigger: nextSettings.reviewResetTrigger,
         showGeneratedFiles: nextSettings.showGeneratedFiles,
-        themeMode: nextSettings.themeMode
+        themeMode: nextSettings.themeMode,
+        wrapDiffLines: nextSettings.wrapDiffLines
       });
 
       setAppSettings(savedSettings);
@@ -1611,6 +1614,7 @@ export function App(): React.JSX.Element {
                       resolvedTheme={resolvedTheme}
                       status={selectedFile.status}
                       refObject={diffSurfaceRef}
+                      wrapLines={appSettings.wrapDiffLines}
                     />
                   ) : (
                     <DiffLoadingState
@@ -2450,8 +2454,9 @@ function DiffSurface({
   patch,
   previousPath,
   resolvedTheme,
+  refObject,
   status,
-  refObject
+  wrapLines
 }: {
   readonly diffHash: string;
   readonly diffMode: DiffMode;
@@ -2461,8 +2466,9 @@ function DiffSurface({
   readonly patch: string;
   readonly previousPath: string | undefined;
   readonly resolvedTheme: ResolvedTheme;
-  readonly status: ReviewFileView["status"];
   readonly refObject: React.RefObject<HTMLDivElement | null>;
+  readonly status: ReviewFileView["status"];
+  readonly wrapLines: boolean;
 }): React.JSX.Element {
   const parseKey = `${filePath}:${diffHash}`;
   const effectiveDiffMode = status === "added" ? "unified" : diffMode;
@@ -2479,9 +2485,10 @@ function DiffSurface({
     () =>
       createDiffsFileDiffOptions({
         diffMode: effectiveDiffMode,
-        resolvedTheme
+        resolvedTheme,
+        wrapLines
       }),
-    [effectiveDiffMode, resolvedTheme]
+    [effectiveDiffMode, resolvedTheme, wrapLines]
   );
   const workerPoolOptions = useMemo(() => createDiffsWorkerPoolOptions(), []);
 
@@ -2845,6 +2852,13 @@ function SettingsPanel({
                 </button>
               </div>
             </div>
+            <ToggleRow
+              checked={appSettings.wrapDiffLines}
+              label="Wrap long lines"
+              onChange={(checked) => {
+                onChangeAppSettings({ wrapDiffLines: checked });
+              }}
+            />
             <ToggleRow
               checked={appSettings.showGeneratedFiles}
               label="Show generated files"

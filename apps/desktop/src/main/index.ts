@@ -178,6 +178,7 @@ type AppSettingsView = {
   readonly reviewResetTrigger: "commit_sha" | "diff_content" | "line_count";
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+  readonly wrapDiffLines: boolean;
 };
 
 type EditorPresetView = {
@@ -305,6 +306,7 @@ ipcMain.handle(
     const editorArgs = readOptionalStringProperty(input, "editorArgs");
     const editorArgList = readOptionalStringArrayProperty(input, "editorArgList");
     const themeMode = readEnumProperty(input, "themeMode", ["dark", "light", "system"]);
+    const wrapDiffLines = readBooleanProperty(input, "wrapDiffLines");
     const settings: AppSettingsRecord = {
       autoCollapseHunksOver,
       defaultDiffMode,
@@ -320,7 +322,8 @@ ipcMain.handle(
       notifyOnDrift,
       reviewResetTrigger,
       showGeneratedFiles,
-      themeMode
+      themeMode,
+      wrapDiffLines
     };
 
     getStorage().upsertAppSettings(settings);
@@ -1069,7 +1072,8 @@ function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
     notifyOnDrift: settings.notifyOnDrift,
     reviewResetTrigger: settings.reviewResetTrigger,
     showGeneratedFiles: settings.showGeneratedFiles,
-    themeMode: settings.themeMode
+    themeMode: settings.themeMode,
+    wrapDiffLines: settings.wrapDiffLines
   };
 }
 

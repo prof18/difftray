@@ -18,6 +18,7 @@ Store review and editor preferences at the app level in `app_settings`:
 - auto-collapse hunk threshold
 - drift notification preference
 - selected re-review trigger
+- diff line wrapping preference
 - editor launch configuration
 
 Keep only repository-local workspace layout in `project_settings`: file-list width
@@ -27,6 +28,7 @@ For the first visible settings surface, expose only the review options that are
 implemented end to end:
 
 - default diff mode
+- diff line wrapping preference
 - generated-file visibility
 - drift notification preference
 

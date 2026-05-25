@@ -367,7 +367,8 @@ describe("storage", () => {
       notifyOnDrift: true,
       reviewResetTrigger: "diff_content",
       showGeneratedFiles: false,
-      themeMode: "system"
+      themeMode: "system",
+      wrapDiffLines: true
     });
     storage.close();
   });
@@ -386,7 +387,8 @@ describe("storage", () => {
       notifyOnDrift: false,
       reviewResetTrigger: "line_count",
       showGeneratedFiles: true,
-      themeMode: "light"
+      themeMode: "light",
+      wrapDiffLines: false
     });
 
     expect(storage.getAppSettings()).toEqual({
@@ -400,7 +402,8 @@ describe("storage", () => {
       notifyOnDrift: false,
       reviewResetTrigger: "line_count",
       showGeneratedFiles: true,
-      themeMode: "light"
+      themeMode: "light",
+      wrapDiffLines: false
     });
     storage.close();
   });
@@ -422,7 +425,8 @@ describe("storage", () => {
         notifyOnDrift: true,
         reviewResetTrigger: "diff_content",
         showGeneratedFiles: false,
-        themeMode: "system"
+        themeMode: "system",
+        wrapDiffLines: true
       });
       storage.close();
 
@@ -442,7 +446,8 @@ describe("storage", () => {
         notifyOnDrift: true,
         reviewResetTrigger: "diff_content",
         showGeneratedFiles: false,
-        themeMode: "system"
+        themeMode: "system",
+        wrapDiffLines: true
       });
       reopenedStorage.close();
     } finally {
@@ -541,7 +546,8 @@ describe("storage", () => {
         notifyOnDrift: false,
         reviewResetTrigger: "commit_sha",
         showGeneratedFiles: true,
-        themeMode: "system"
+        themeMode: "system",
+        wrapDiffLines: true
       });
       reopenedStorage.close();
     } finally {

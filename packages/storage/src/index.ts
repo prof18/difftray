@@ -55,6 +55,7 @@ export type AppSettingsRecord = {
   readonly reviewResetTrigger: ReviewResetTrigger;
   readonly showGeneratedFiles: boolean;
   readonly themeMode: ThemeMode;
+  readonly wrapDiffLines: boolean;
 };
 
 export type ReviewMarkInput = {
@@ -521,6 +522,7 @@ function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord): void 
   upsertAppSetting(db, "review_reset_trigger", settings.reviewResetTrigger);
   upsertAppSetting(db, "show_generated_files", settings.showGeneratedFiles ? "1" : "0");
   upsertAppSetting(db, "theme_mode", settings.themeMode);
+  upsertAppSetting(db, "wrap_diff_lines", settings.wrapDiffLines ? "1" : "0");
 }
 
 function getAppSettings(db: DatabaseSync): AppSettingsRecord {
@@ -533,6 +535,7 @@ function getAppSettings(db: DatabaseSync): AppSettingsRecord {
   const reviewResetTrigger = getAppSetting(db, "review_reset_trigger");
   const showGeneratedFiles = getAppSetting(db, "show_generated_files");
   const themeMode = getAppSetting(db, "theme_mode");
+  const wrapDiffLines = getAppSetting(db, "wrap_diff_lines");
   const editorLaunchConfig =
     editorLaunchConfigJson === undefined
       ? legacySettings.editorLaunchConfig
@@ -560,7 +563,8 @@ function getAppSettings(db: DatabaseSync): AppSettingsRecord {
       showGeneratedFiles,
       legacySettings.showGeneratedFiles
     ),
-    themeMode: isThemeMode(themeMode) ? themeMode : "system"
+    themeMode: isThemeMode(themeMode) ? themeMode : "system",
+    wrapDiffLines: appBooleanSetting(wrapDiffLines, legacySettings.wrapDiffLines)
   };
 }
 
@@ -852,7 +856,8 @@ function latestLegacyProjectAppSettings(db: DatabaseSync): AppSettingsRecord {
     notifyOnDrift: row.notify_on_drift === 1,
     reviewResetTrigger: reviewResetTriggerFromValue(row.review_reset_trigger),
     showGeneratedFiles: row.show_generated_files === 1,
-    themeMode: "system"
+    themeMode: "system",
+    wrapDiffLines: true
   };
 }
 
@@ -864,7 +869,8 @@ function defaultAppSettings(): AppSettingsRecord {
     notifyOnDrift: true,
     reviewResetTrigger: "diff_content",
     showGeneratedFiles: false,
-    themeMode: "system"
+    themeMode: "system",
+    wrapDiffLines: true
   };
 }
 
