@@ -5,12 +5,15 @@ import { lstat, readFile, readlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { mapWithConcurrency } from "./concurrency.js";
+
 const execFileAsync = promisify(execFile);
 const maxGitOutputBuffer = 20 * 1024 * 1024;
 const maxTextSnapshotBytes = 2 * 1024 * 1024;
 const maxPatchBytesPerFile = 2 * 1024 * 1024;
 const patchReadBufferPadding = 256 * 1024;
 const oversizedPatchMarker = "__difftray_patch_too_large__";
+const maxConcurrentFileDiffLoads = 4;
 
 export type GitRepository = {
   readonly gitDir: string;
@@ -86,6 +89,12 @@ export type GitLoadedFileDiff = {
   readonly status: "added" | "deleted" | "mode_changed" | "modified" | "renamed";
 };
 
+export type GitFileDiffSummary = Omit<GitLoadedFileDiff, "content"> & {
+  readonly additions: number;
+  readonly content: GitLoadedFileDiff["content"];
+  readonly deletions: number;
+};
+
 export type WorkingTreeDiffResult = {
   readonly files: readonly GitLoadedFileDiff[];
   readonly reviewTarget: GitWorkingTreeReviewTarget;
@@ -94,6 +103,27 @@ export type WorkingTreeDiffResult = {
 export type BranchDiffResult = {
   readonly files: readonly GitLoadedFileDiff[];
   readonly reviewTarget: GitBranchReviewTarget;
+};
+
+export type WorkingTreeDiffSummaryResult = {
+  readonly files: readonly GitFileDiffSummary[];
+  readonly reviewTarget: GitWorkingTreeReviewTarget;
+};
+
+export type BranchDiffSummaryResult = {
+  readonly files: readonly GitFileDiffSummary[];
+  readonly reviewTarget: GitBranchReviewTarget;
+};
+
+export type DiffLoadProgress = {
+  readonly loadedFiles?: number;
+  readonly path?: string;
+  readonly phase: "loading_files" | "resolving_target" | "scanning_files";
+  readonly totalFiles?: number;
+};
+
+export type DiffLoadOptions = {
+  readonly onProgress?: (progress: DiffLoadProgress) => void;
 };
 
 export async function findGitRepository(
@@ -173,38 +203,23 @@ export async function listBranchRefs(repoPath: string): Promise<readonly string[
   );
 }
 
-export async function loadWorkingTreeDiffs(
+async function loadWorkingTreeReviewTarget(
   repoPath: string
-): Promise<WorkingTreeDiffResult> {
+): Promise<GitWorkingTreeReviewTarget> {
   const branchName = await currentBranchName(repoPath);
-  const reviewTarget: GitWorkingTreeReviewTarget = {
+
+  return {
     ...(branchName ? { headRefName: branchName } : {}),
     headSha: await requiredGitOutput(repoPath, ["rev-parse", "HEAD"]),
     kind: "working_tree",
     projectId: repoPath
   };
-
-  const status = await getGitStatus(repoPath);
-  const trackedDiffs = await loadTrackedDiffs(repoPath, ["HEAD"], {
-    oldRef: reviewTarget.headSha
-  });
-  const trackedPaths = new Set(trackedDiffs.map((diff) => diff.newPath));
-  const untrackedDiffs = await Promise.all(
-    status
-      .filter((entry) => entry.status === "untracked" && !trackedPaths.has(entry.path))
-      .map(async (entry) => synthesizeUntrackedDiff(repoPath, entry.path))
-  );
-
-  return {
-    files: [...trackedDiffs, ...untrackedDiffs.filter(isDefined)],
-    reviewTarget
-  };
 }
 
-export async function loadBranchDiffs(
+async function loadBranchReviewTarget(
   repoPath: string,
   baseRefName: string
-): Promise<BranchDiffResult> {
+): Promise<GitBranchReviewTarget> {
   const baseSha = await gitOutputOrNull(repoPath, [
     "rev-parse",
     "--verify",
@@ -222,7 +237,8 @@ export async function loadBranchDiffs(
     "HEAD"
   ]);
   const branchName = await currentBranchName(repoPath);
-  const reviewTarget: GitBranchReviewTarget = {
+
+  return {
     baseRefName,
     baseSha,
     ...(branchName ? { headRefName: branchName } : {}),
@@ -231,14 +247,206 @@ export async function loadBranchDiffs(
     mergeBaseSha,
     projectId: repoPath
   };
+}
+
+export async function loadWorkingTreeDiffs(
+  repoPath: string,
+  options: DiffLoadOptions = {}
+): Promise<WorkingTreeDiffResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  const status = await getGitStatus(repoPath);
+  const trackedDiffs = await loadTrackedDiffs(
+    repoPath,
+    ["HEAD"],
+    {
+      oldRef: reviewTarget.headSha
+    },
+    options
+  );
+  const trackedPaths = new Set(trackedDiffs.map((diff) => diff.newPath));
+  const untrackedEntries = status.filter(
+    (entry) => entry.status === "untracked" && !trackedPaths.has(entry.path)
+  );
+  let loadedUntrackedFiles = 0;
+
+  if (untrackedEntries.length > 0) {
+    reportDiffLoadProgress(options, {
+      loadedFiles: loadedUntrackedFiles,
+      phase: "loading_files",
+      totalFiles: untrackedEntries.length
+    });
+  }
+
+  const untrackedDiffs = await mapWithConcurrency(
+    untrackedEntries,
+    maxConcurrentFileDiffLoads,
+    async (entry) => {
+      const diff = await synthesizeUntrackedDiff(repoPath, entry.path);
+      loadedUntrackedFiles += 1;
+      reportDiffLoadProgress(options, {
+        loadedFiles: loadedUntrackedFiles,
+        path: entry.path,
+        phase: "loading_files",
+        totalFiles: untrackedEntries.length
+      });
+      return diff;
+    }
+  );
 
   return {
-    files: await loadTrackedDiffs(repoPath, [mergeBaseSha, "HEAD"], {
-      newRef: headSha,
-      oldRef: mergeBaseSha
-    }),
+    files: [...trackedDiffs, ...untrackedDiffs.filter(isDefined)],
     reviewTarget
   };
+}
+
+export async function loadWorkingTreeDiffSummaries(
+  repoPath: string,
+  options: DiffLoadOptions = {}
+): Promise<WorkingTreeDiffSummaryResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  const status = await getGitStatus(repoPath);
+  const trackedSummaries = await loadTrackedDiffSummaries(
+    repoPath,
+    ["HEAD"],
+    {
+      oldRef: reviewTarget.headSha
+    },
+    options
+  );
+  const trackedPaths = new Set(trackedSummaries.map((diff) => diff.newPath));
+  const untrackedEntries = status.filter(
+    (entry) => entry.status === "untracked" && !trackedPaths.has(entry.path)
+  );
+  let loadedUntrackedFiles = 0;
+
+  if (untrackedEntries.length > 0) {
+    reportDiffLoadProgress(options, {
+      loadedFiles: loadedUntrackedFiles,
+      phase: "loading_files",
+      totalFiles: untrackedEntries.length
+    });
+  }
+
+  const untrackedSummaries = await mapWithConcurrency(
+    untrackedEntries,
+    maxConcurrentFileDiffLoads,
+    async (entry) => {
+      const diff = await summarizeUntrackedDiff(repoPath, entry.path);
+      loadedUntrackedFiles += 1;
+      reportDiffLoadProgress(options, {
+        loadedFiles: loadedUntrackedFiles,
+        path: entry.path,
+        phase: "loading_files",
+        totalFiles: untrackedEntries.length
+      });
+      return diff;
+    }
+  );
+
+  return {
+    files: [...trackedSummaries, ...untrackedSummaries.filter(isDefined)],
+    reviewTarget
+  };
+}
+
+export async function loadWorkingTreeFileDiff(
+  repoPath: string,
+  filePath: string
+): Promise<GitLoadedFileDiff | null> {
+  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+  const trackedDiffs = await loadTrackedDiffs(
+    repoPath,
+    ["HEAD"],
+    {
+      oldRef: reviewTarget.headSha
+    },
+    {},
+    [filePath]
+  );
+  const trackedDiff = trackedDiffs.find((diff) => diff.newPath === filePath);
+
+  if (trackedDiff) {
+    return trackedDiff;
+  }
+
+  const status = await getGitStatus(repoPath);
+  const untracked = status.find(
+    (entry) => entry.status === "untracked" && entry.path === filePath
+  );
+
+  return untracked ? ((await synthesizeUntrackedDiff(repoPath, filePath)) ?? null) : null;
+}
+
+export async function loadBranchDiffs(
+  repoPath: string,
+  baseRefName: string,
+  options: DiffLoadOptions = {}
+): Promise<BranchDiffResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  return {
+    files: await loadTrackedDiffs(
+      repoPath,
+      [reviewTarget.mergeBaseSha, "HEAD"],
+      {
+        newRef: reviewTarget.headSha,
+        oldRef: reviewTarget.mergeBaseSha
+      },
+      options
+    ),
+    reviewTarget
+  };
+}
+
+export async function loadBranchDiffSummaries(
+  repoPath: string,
+  baseRefName: string,
+  options: DiffLoadOptions = {}
+): Promise<BranchDiffSummaryResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  return {
+    files: await loadTrackedDiffSummaries(
+      repoPath,
+      [reviewTarget.mergeBaseSha, "HEAD"],
+      {
+        newRef: reviewTarget.headSha,
+        oldRef: reviewTarget.mergeBaseSha
+      },
+      options
+    ),
+    reviewTarget
+  };
+}
+
+export async function loadBranchFileDiff(
+  repoPath: string,
+  baseRefName: string,
+  filePath: string
+): Promise<GitLoadedFileDiff | null> {
+  const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
+  const diffs = await loadTrackedDiffs(
+    repoPath,
+    [reviewTarget.mergeBaseSha, "HEAD"],
+    {
+      newRef: reviewTarget.headSha,
+      oldRef: reviewTarget.mergeBaseSha
+    },
+    {},
+    [filePath]
+  );
+
+  return diffs.find((diff) => diff.newPath === filePath) ?? null;
 }
 
 export function parseStatusPorcelainV2(output: string): readonly GitPorcelainStatus[] {
@@ -385,12 +593,23 @@ type NameStatusDiff = {
 async function loadTrackedDiffs(
   repoPath: string,
   diffArgs: readonly string[],
-  snapshotSource: TrackedDiffSnapshotSource
+  snapshotSource: TrackedDiffSnapshotSource,
+  options: DiffLoadOptions = {},
+  pathspecs: readonly string[] = []
 ): Promise<readonly GitLoadedFileDiff[]> {
-  const nameStatuses = await loadRawDiffs(repoPath, diffArgs);
+  const nameStatuses = await loadRawDiffs(repoPath, diffArgs, pathspecs);
+  let loadedFiles = 0;
 
-  return Promise.all(
-    nameStatuses.map(async (nameStatus) => {
+  reportDiffLoadProgress(options, {
+    loadedFiles,
+    phase: "loading_files",
+    totalFiles: nameStatuses.length
+  });
+
+  return mapWithConcurrency(
+    nameStatuses,
+    maxConcurrentFileDiffLoads,
+    async (nameStatus) => {
       const patch = await loadPatchForDiff(repoPath, diffArgs, nameStatus);
       const content = await loadTrackedDiffContent(
         repoPath,
@@ -399,7 +618,7 @@ async function loadTrackedDiffs(
         patch
       );
 
-      return {
+      const result: GitLoadedFileDiff = {
         content,
         ...(nameStatus.newMode ? { newMode: nameStatus.newMode } : {}),
         newPath: nameStatus.newPath,
@@ -407,13 +626,81 @@ async function loadTrackedDiffs(
         ...(nameStatus.oldPath ? { oldPath: nameStatus.oldPath } : {}),
         status: content.kind === "mode_only" ? "mode_changed" : nameStatus.status
       };
-    })
+
+      loadedFiles += 1;
+      reportDiffLoadProgress(options, {
+        loadedFiles,
+        path: nameStatus.newPath,
+        phase: "loading_files",
+        totalFiles: nameStatuses.length
+      });
+
+      return result;
+    }
   );
+}
+
+async function loadTrackedDiffSummaries(
+  repoPath: string,
+  diffArgs: readonly string[],
+  snapshotSource: TrackedDiffSnapshotSource,
+  options: DiffLoadOptions = {},
+  pathspecs: readonly string[] = []
+): Promise<readonly GitFileDiffSummary[]> {
+  const nameStatuses = await loadRawDiffs(repoPath, diffArgs, pathspecs);
+  const statsByPath = await loadDiffStats(repoPath, diffArgs, pathspecs);
+  let loadedFiles = 0;
+
+  reportDiffLoadProgress(options, {
+    loadedFiles,
+    phase: "loading_files",
+    totalFiles: nameStatuses.length
+  });
+
+  return mapWithConcurrency(
+    nameStatuses,
+    maxConcurrentFileDiffLoads,
+    async (nameStatus) => {
+      const content = await loadTrackedDiffSummaryContent(
+        repoPath,
+        nameStatus,
+        snapshotSource
+      );
+      const result: GitFileDiffSummary = {
+        additions: statsByPath.get(nameStatus.newPath)?.additions ?? 0,
+        content,
+        deletions: statsByPath.get(nameStatus.newPath)?.deletions ?? 0,
+        ...(nameStatus.newMode ? { newMode: nameStatus.newMode } : {}),
+        newPath: nameStatus.newPath,
+        ...(nameStatus.oldMode ? { oldMode: nameStatus.oldMode } : {}),
+        ...(nameStatus.oldPath ? { oldPath: nameStatus.oldPath } : {}),
+        status: content.kind === "mode_only" ? "mode_changed" : nameStatus.status
+      };
+
+      loadedFiles += 1;
+      reportDiffLoadProgress(options, {
+        loadedFiles,
+        path: nameStatus.newPath,
+        phase: "loading_files",
+        totalFiles: nameStatuses.length
+      });
+
+      return result;
+    }
+  );
+}
+
+function reportDiffLoadProgress(
+  options: DiffLoadOptions,
+  progress: DiffLoadProgress
+): void {
+  options.onProgress?.(progress);
 }
 
 async function loadRawDiffs(
   repoPath: string,
-  diffArgs: readonly string[]
+  diffArgs: readonly string[],
+  pathspecs: readonly string[] = []
 ): Promise<readonly NameStatusDiff[]> {
   const output = await gitOutput(repoPath, [
     "diff",
@@ -421,10 +708,69 @@ async function loadRawDiffs(
     "--full-index",
     "--find-renames",
     "-z",
-    ...diffArgs
+    ...diffArgs,
+    ...(pathspecs.length > 0 ? ["--", ...pathspecs] : [])
   ]);
 
   return parseRawDiffs(output);
+}
+
+async function loadDiffStats(
+  repoPath: string,
+  diffArgs: readonly string[],
+  pathspecs: readonly string[] = []
+): Promise<
+  ReadonlyMap<string, { readonly additions: number; readonly deletions: number }>
+> {
+  const output = await gitOutput(repoPath, [
+    "diff",
+    "--numstat",
+    "--find-renames",
+    ...diffArgs,
+    ...(pathspecs.length > 0 ? ["--", ...pathspecs] : [])
+  ]);
+  const stats = new Map<
+    string,
+    { readonly additions: number; readonly deletions: number }
+  >();
+
+  for (const line of output.split("\n")) {
+    if (line.length === 0) {
+      continue;
+    }
+
+    const [rawAdditions, rawDeletions, ...pathParts] = line.split("\t");
+    const filePath = normalizeNumstatPath(pathParts.join("\t"));
+
+    if (!rawAdditions || !rawDeletions || filePath.length === 0) {
+      continue;
+    }
+
+    stats.set(filePath, {
+      additions: numberStat(rawAdditions),
+      deletions: numberStat(rawDeletions)
+    });
+  }
+
+  return stats;
+}
+
+function normalizeNumstatPath(filePath: string): string {
+  const braceRename = /^(?<prefix>.*)\{.* => (?<next>.*)\}(?<suffix>.*)$/.exec(filePath);
+
+  if (braceRename?.groups?.next !== undefined) {
+    return `${braceRename.groups.prefix ?? ""}${braceRename.groups.next}${braceRename.groups.suffix ?? ""}`;
+  }
+
+  const plainRename = /^.* => (?<next>.*)$/.exec(filePath);
+
+  return plainRename?.groups?.next ?? filePath;
+}
+
+function numberStat(value: string): number {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function parseRawDiffs(output: string): readonly NameStatusDiff[] {
@@ -563,6 +909,131 @@ async function loadTrackedDiffContent(
     kind: "binary",
     ...(await loadBinaryFingerprint(repoPath, diff, source))
   };
+}
+
+async function loadTrackedDiffSummaryContent(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource
+): Promise<GitLoadedFileDiff["content"]> {
+  if (isSubmoduleDiff(diff)) {
+    return loadSubmoduleContent(repoPath, diff, source);
+  }
+
+  if (isModeOnlySummaryDiff(diff)) {
+    return { kind: "mode_only" };
+  }
+
+  if (isSymlinkDiff(diff)) {
+    const snapshots = await loadTextSnapshots(repoPath, diff, source);
+
+    return {
+      kind: "symlink",
+      ...(snapshots.newText !== undefined ? { newTarget: snapshots.newText } : {}),
+      ...(snapshots.oldText !== undefined ? { oldTarget: snapshots.oldText } : {})
+    };
+  }
+
+  return {
+    kind: "binary",
+    ...(await loadSummaryFingerprint(repoPath, diff, source))
+  };
+}
+
+function isModeOnlySummaryDiff(diff: NameStatusDiff): boolean {
+  return (
+    diff.status === "modified" &&
+    diff.oldMode !== undefined &&
+    diff.newMode !== undefined &&
+    diff.oldMode !== diff.newMode &&
+    diff.oldObjectId !== undefined &&
+    diff.newObjectId !== undefined &&
+    diff.oldObjectId === diff.newObjectId
+  );
+}
+
+async function loadSummaryFingerprint(
+  repoPath: string,
+  diff: NameStatusDiff,
+  source: TrackedDiffSnapshotSource
+): Promise<{ readonly byteSize: number; readonly digest: string }> {
+  const oldPath = diff.oldPath ?? diff.newPath;
+  const oldIdentity =
+    diff.status === "added"
+      ? undefined
+      : await committedSummaryIdentity(
+          repoPath,
+          source.oldRef,
+          oldPath,
+          diff.oldObjectId
+        );
+  const newIdentity =
+    diff.status === "deleted"
+      ? undefined
+      : source.newRef
+        ? await committedSummaryIdentity(
+            repoPath,
+            source.newRef,
+            diff.newPath,
+            diff.newObjectId
+          )
+        : await worktreeSummaryIdentity(repoPath, diff.newPath, diff.newObjectId);
+
+  return {
+    byteSize: newIdentity?.byteSize ?? oldIdentity?.byteSize ?? 0,
+    digest: sha256Json([
+      "diff-summary-v1",
+      diff.status,
+      diff.oldMode ?? null,
+      diff.newMode ?? null,
+      oldIdentity?.id ?? null,
+      newIdentity?.id ?? null
+    ])
+  };
+}
+
+async function committedSummaryIdentity(
+  repoPath: string,
+  ref: string,
+  relativePath: string,
+  objectId: string | undefined
+): Promise<{ readonly byteSize: number; readonly id: string } | undefined> {
+  const byteSize = await committedSnapshotByteSize(repoPath, ref, relativePath);
+
+  if (byteSize === undefined) {
+    return undefined;
+  }
+
+  return {
+    byteSize,
+    id: fullNonZeroObjectId(objectId)
+      ? `git-object:${objectId}`
+      : `git-sha256:${await sha256GitBlob(repoPath, ref, relativePath)}`
+  };
+}
+
+async function worktreeSummaryIdentity(
+  repoPath: string,
+  relativePath: string,
+  objectId: string | undefined
+): Promise<{ readonly byteSize: number; readonly id: string } | undefined> {
+  if (fullNonZeroObjectId(objectId)) {
+    return {
+      byteSize: 0,
+      id: `git-object:${objectId}`
+    };
+  }
+
+  try {
+    const fingerprint = await fingerprintFile(path.join(repoPath, relativePath));
+
+    return {
+      byteSize: fingerprint.byteSize,
+      id: `worktree-sha256:${fingerprint.digest}`
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function loadTextSnapshots(
@@ -854,6 +1325,43 @@ async function synthesizeUntrackedDiff(
   };
 }
 
+async function summarizeUntrackedDiff(
+  repoPath: string,
+  relativePath: string
+): Promise<GitFileDiffSummary | undefined> {
+  const filePath = path.join(repoPath, relativePath);
+  const fileStat = await lstat(filePath);
+
+  if (fileStat.isSymbolicLink()) {
+    return {
+      additions: 0,
+      content: {
+        kind: "symlink",
+        newTarget: await readlink(filePath)
+      },
+      deletions: 0,
+      newMode: "120000",
+      newPath: relativePath,
+      status: "added"
+    };
+  }
+
+  if (!fileStat.isFile()) {
+    return undefined;
+  }
+
+  return {
+    additions: 0,
+    content: {
+      kind: "binary",
+      ...(await fingerprintFile(filePath))
+    },
+    deletions: 0,
+    newPath: relativePath,
+    status: "added"
+  };
+}
+
 function synthesizeAddedPatch(relativePath: string, text: string): string {
   const lines = text.length === 0 ? [] : text.replaceAll("\r\n", "\n").split("\n");
   const normalizedLines = lines.at(-1) === "" ? lines.slice(0, -1) : lines;
@@ -934,6 +1442,14 @@ function patchTooLarge(patch: string): boolean {
 
 function fullObjectId(objectId: string | undefined): objectId is string {
   return objectId !== undefined && /^[0-9a-f]{40}$/i.test(objectId);
+}
+
+function fullNonZeroObjectId(objectId: string | undefined): objectId is string {
+  return fullObjectId(objectId) && !/^0{40}$/.test(objectId);
+}
+
+function sha256Json(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
 async function worktreeSubmoduleCommit(

@@ -5,6 +5,7 @@ import {
   ipcMain,
   nativeImage,
   shell,
+  type WebContents,
   type IpcMainInvokeEvent,
   type NativeImage,
   type OpenDialogOptions
@@ -27,9 +28,13 @@ import {
 } from "@difftray/core";
 import {
   findGitRepository,
+  loadBranchDiffSummaries,
+  loadBranchFileDiff,
   listBranchRefs,
-  loadBranchDiffs,
-  loadWorkingTreeDiffs,
+  loadWorkingTreeDiffSummaries,
+  loadWorkingTreeFileDiff,
+  type DiffLoadProgress,
+  type GitFileDiffSummary,
   type GitBranchReviewTarget,
   type GitLoadedFileDiff,
   type GitWorkingTreeReviewTarget
@@ -87,24 +92,17 @@ type ReviewProgressView = {
   readonly totalVisibleReviewableFiles: number;
 };
 
-const emptyProjectReviewSummary: ProjectReviewSummaryView = {
-  attentionCount: 0,
-  progress: {
-    reviewedVisibleFiles: 0,
-    totalVisibleReviewableFiles: 0
-  }
-};
-
 type ReviewFileView = {
   readonly additions: number;
   readonly deletions: number;
   readonly diffHash: string;
+  readonly diffLoaded: boolean;
   readonly generated: boolean;
   readonly invalidated: boolean;
   readonly newText?: string;
   readonly oldText?: string;
   readonly path: string;
-  readonly patch: string;
+  readonly patch?: string;
   readonly previousPath?: string;
   readonly reviewable: boolean;
   readonly reviewed: boolean;
@@ -123,6 +121,41 @@ type ReviewWorkspaceView = {
     readonly id: string;
     readonly kind: ReviewTarget["kind"];
   };
+};
+
+type FileReviewStateWithSummary = {
+  readonly state: FileReviewState;
+  readonly summary: GitFileDiffSummary;
+};
+
+type ProjectLoadProgressView = {
+  readonly loadedFiles?: number;
+  readonly message: string;
+  readonly path?: string;
+  readonly phase:
+    | "loading_files"
+    | "preparing_workspace"
+    | "resolving_review_state"
+    | "resolving_target"
+    | "scanning_files";
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectPath: string;
+  readonly totalFiles?: number;
+};
+
+type ProjectLoadProgressReporter = (
+  progress: Omit<ProjectLoadProgressView, "projectId" | "projectName" | "projectPath">
+) => void;
+
+type ReviewFileDiffContentView = {
+  readonly additions: number;
+  readonly deletions: number;
+  readonly newText?: string;
+  readonly oldText?: string;
+  readonly patch: string;
+  readonly path: string;
+  readonly status: FileDiff["status"];
 };
 
 type ProjectSettingsView = {
@@ -295,7 +328,18 @@ ipcMain.handle(
     return appSettingsView(getStorage().getAppSettings());
   }
 );
-ipcMain.handle("projects:listRecent", async () => listAvailableRecentProjectViews());
+ipcMain.handle("projects:listRecent", () => listAvailableRecentProjectViews());
+ipcMain.handle(
+  "projects:getReviewSummary",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ProjectReviewSummaryView | null> => {
+    const projectId = readStringProperty(input, "projectId");
+
+    return loadProjectReviewSummaryIfAvailable(projectId);
+  }
+);
 ipcMain.handle(
   "projects:listBranchRefs",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<readonly string[]> => {
@@ -319,24 +363,31 @@ ipcMain.handle(
     return listAvailableRecentProjectViews();
   }
 );
-ipcMain.handle("projects:open", async () => openProjectFromDialog());
+ipcMain.handle("projects:open", async (event: IpcMainInvokeEvent) =>
+  openProjectFromDialog(event.sender)
+);
 ipcMain.handle(
   "projects:load",
   async (
-    _event: IpcMainInvokeEvent,
+    event: IpcMainInvokeEvent,
     input: unknown
   ): Promise<ReviewWorkspaceView | null> => {
     const projectId = readStringProperty(input, "projectId");
 
-    return loadProjectWorkspaceIfAvailable(projectId);
+    return loadProjectWorkspaceIfAvailable(
+      projectId,
+      projectLoadProgressReporter(event.sender, projectId)
+    );
   }
 );
 ipcMain.handle(
   "projects:updateDiffTarget",
-  async (_event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
+  async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
     const projectId = readStringProperty(input, "projectId");
     const mode = readEnumProperty(input, "mode", ["branch", "working_tree"]);
     const project = assertStoredProject(projectId);
+    const reportProgress = projectLoadProgressReporter(event.sender, projectId);
+    const previousBaseRef = project.defaultBaseRef;
 
     if (mode === "branch") {
       const baseRefName = readStringProperty(input, "baseRefName").trim();
@@ -345,13 +396,17 @@ ipcMain.handle(
         throw new Error("Base branch is required.");
       }
 
-      await loadBranchDiffs(project.path, baseRefName);
       getStorage().updateProjectDefaultBaseRef(projectId, baseRefName);
     } else {
       getStorage().updateProjectDefaultBaseRef(projectId, undefined);
     }
 
-    return loadProjectWorkspace(projectId);
+    try {
+      return await loadProjectWorkspace(projectId, reportProgress);
+    } catch (caughtError) {
+      getStorage().updateProjectDefaultBaseRef(projectId, previousBaseRef);
+      throw caughtError;
+    }
   }
 );
 ipcMain.handle(
@@ -495,6 +550,18 @@ ipcMain.handle(
     return openFileInEditor(projectId, pathName);
   }
 );
+ipcMain.handle(
+  "files:loadDiff",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewFileDiffContentView | null> => {
+    const projectId = readStringProperty(input, "projectId");
+    const pathName = readStringProperty(input, "path");
+
+    return loadProjectFileDiff(projectId, pathName);
+  }
+);
 
 app.on("before-quit", () => {
   isQuitting = true;
@@ -627,17 +694,60 @@ function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
   return getStorage().listRecentProjects();
 }
 
-async function listAvailableRecentProjectViews(): Promise<readonly RecentProjectView[]> {
+function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   const projects = listAvailableRecentProjects();
 
-  return Promise.all(
-    projects.map(async (project) =>
-      projectView(project, await loadProjectReviewSummary(project))
-    )
-  );
+  return projects.map((project) => projectView(project));
 }
 
-async function openProjectFromDialog(): Promise<ReviewWorkspaceView | null> {
+function projectLoadProgressReporter(
+  sender: WebContents,
+  projectId: string
+): ProjectLoadProgressReporter {
+  return (progress) => {
+    const project = getStorage().getProject(projectId);
+
+    if (!project || sender.isDestroyed()) {
+      return;
+    }
+
+    const payload: ProjectLoadProgressView = {
+      ...progress,
+      projectId: project.id,
+      projectName: project.name,
+      projectPath: project.path
+    };
+
+    sender.send("projects:loadProgress", payload);
+  };
+}
+
+function projectProgressFromGit(
+  progress: DiffLoadProgress
+): Omit<ProjectLoadProgressView, "projectId" | "projectName" | "projectPath"> {
+  return {
+    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
+    message: gitProgressMessage(progress.phase),
+    ...(progress.path ? { path: progress.path } : {}),
+    phase: progress.phase,
+    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
+  };
+}
+
+function gitProgressMessage(progress: DiffLoadProgress["phase"]): string {
+  switch (progress) {
+    case "resolving_target":
+      return "Resolving review target";
+    case "scanning_files":
+      return "Scanning changed files";
+    case "loading_files":
+      return "Loading changed files";
+  }
+}
+
+async function openProjectFromDialog(
+  sender: WebContents
+): Promise<ReviewWorkspaceView | null> {
   const dialogOptions: OpenDialogOptions = {
     buttonLabel: "Open Repository",
     properties: ["openDirectory"]
@@ -658,7 +768,10 @@ async function openProjectFromDialog(): Promise<ReviewWorkspaceView | null> {
 
   const project = await storeRepositoryAtPath(selectedPath);
 
-  return loadProjectWorkspace(project.id);
+  return loadProjectWorkspace(
+    project.id,
+    projectLoadProgressReporter(sender, project.id)
+  );
 }
 
 async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecord> {
@@ -680,44 +793,32 @@ async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecor
   return project;
 }
 
-async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceView> {
+async function loadProjectWorkspace(
+  projectId: string,
+  reportProgress?: ProjectLoadProgressReporter
+): Promise<ReviewWorkspaceView> {
   const project = getStorage().getProject(projectId);
 
   if (!project) {
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
-  const { progress, reviewTarget, reviewTargetId, states } =
-    await loadProjectReviewState(project);
+  const { files, progress, reviewTarget, reviewTargetId } = await loadProjectReviewState(
+    project,
+    reportProgress
+  );
+  const reviewSummary = projectReviewSummaryView(files, progress);
 
   watchActiveProjectInBackground(project);
+  reportProgress?.({
+    message: "Preparing diff view",
+    phase: "preparing_workspace"
+  });
 
   return {
-    files: states.map((state) => {
-      const patch = patchForDiff(state.diff);
-      const summary = summarizePatch(patch);
-      const textContent =
-        state.diff.content.kind === "text" ? state.diff.content : undefined;
-
-      return {
-        additions: summary.additions,
-        deletions: summary.deletions,
-        diffHash: state.diffHash,
-        generated: state.generated,
-        invalidated: state.invalidated,
-        ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
-        ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
-        path: state.path,
-        patch,
-        ...(state.diff.oldPath ? { previousPath: state.diff.oldPath } : {}),
-        reviewable: state.reviewable,
-        reviewed: state.reviewed,
-        status: state.diff.status,
-        visible: state.visible
-      };
-    }),
+    files: files.map((file) => reviewFileView(file)),
     progress,
-    project: projectView(project),
+    project: projectView(project, reviewSummary),
     reviewTarget: {
       ...(reviewTarget.kind === "branch"
         ? { baseRefName: reviewTarget.baseRefName }
@@ -730,34 +831,51 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
   };
 }
 
-async function loadProjectReviewSummary(
-  project: StoredProjectRecord
-): Promise<ProjectReviewSummaryView> {
-  try {
-    const { progress, states } = await loadProjectReviewState(project);
+async function loadProjectReviewSummaryIfAvailable(
+  projectId: string
+): Promise<ProjectReviewSummaryView | null> {
+  const project = getStorage().getProject(projectId);
 
-    return {
-      attentionCount: states.filter((state) => state.visible && state.invalidated).length,
-      progress: progressView(progress)
-    };
-  } catch {
-    return emptyProjectReviewSummary;
+  if (!project) {
+    return null;
   }
+
+  if (!existsSync(project.path)) {
+    getStorage().deleteProject(project.id);
+    await projectWatchService?.stopProject(project.id);
+    return null;
+  }
+
+  const { files, progress } = await loadProjectReviewState(project);
+
+  return projectReviewSummaryView(files, progress);
 }
 
-async function loadProjectReviewState(project: StoredProjectRecord): Promise<{
+async function loadProjectReviewState(
+  project: StoredProjectRecord,
+  reportProgress?: ProjectLoadProgressReporter
+): Promise<{
+  readonly files: readonly FileReviewStateWithSummary[];
   readonly progress: ReviewProgress;
   readonly reviewTarget: ReviewTarget;
   readonly reviewTargetId: string;
-  readonly states: readonly FileReviewState[];
 }> {
+  const gitProgress = {
+    onProgress: (progress: DiffLoadProgress) => {
+      reportProgress?.(projectProgressFromGit(progress));
+    }
+  };
   const diffResult = project.defaultBaseRef
-    ? await loadBranchDiffs(project.path, project.defaultBaseRef)
-    : await loadWorkingTreeDiffs(project.path);
+    ? await loadBranchDiffSummaries(project.path, project.defaultBaseRef, gitProgress)
+    : await loadWorkingTreeDiffSummaries(project.path, gitProgress);
   const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
   const reviewTargetId = createReviewTargetId(reviewTarget);
   const settings = getStorage().getAppSettings();
 
+  reportProgress?.({
+    message: "Resolving review state",
+    phase: "resolving_review_state"
+  });
   getStorage().upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
 
   const diffs = diffResult.files.map((file) => fileDiffFromGit(file));
@@ -770,17 +888,27 @@ async function loadProjectReviewState(project: StoredProjectRecord): Promise<{
     reviewTarget,
     showGeneratedFiles: settings.showGeneratedFiles
   });
+  const files = states.map((state, index) => {
+    const summary = diffResult.files[index];
+
+    if (!summary) {
+      throw new Error(`Review summary missing for ${state.path}`);
+    }
+
+    return { state, summary };
+  });
 
   return {
+    files,
     progress: calculateProgress(states),
     reviewTarget,
-    reviewTargetId,
-    states
+    reviewTargetId
   };
 }
 
 async function loadProjectWorkspaceIfAvailable(
-  projectId: string
+  projectId: string,
+  reportProgress?: ProjectLoadProgressReporter
 ): Promise<ReviewWorkspaceView | null> {
   const project = getStorage().getProject(projectId);
 
@@ -794,7 +922,18 @@ async function loadProjectWorkspaceIfAvailable(
     return null;
   }
 
-  return loadProjectWorkspace(projectId);
+  return loadProjectWorkspace(projectId, reportProgress);
+}
+
+function projectReviewSummaryView(
+  files: readonly FileReviewStateWithSummary[],
+  progress: ReviewProgress
+): ProjectReviewSummaryView {
+  return {
+    attentionCount: files.filter((file) => file.state.visible && file.state.invalidated)
+      .length,
+    progress
+  };
 }
 
 async function openFileInEditor(
@@ -857,6 +996,40 @@ async function openFileInEditor(
   child.unref();
 
   return { status: "opened" };
+}
+
+async function loadProjectFileDiff(
+  projectId: string,
+  pathName: string
+): Promise<ReviewFileDiffContentView | null> {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    throw new Error(`Project is not stored: ${projectId}`);
+  }
+
+  const gitDiff = project.defaultBaseRef
+    ? await loadBranchFileDiff(project.path, project.defaultBaseRef, pathName)
+    : await loadWorkingTreeFileDiff(project.path, pathName);
+
+  if (!gitDiff) {
+    return null;
+  }
+
+  const diff = fileDiffFromGit(gitDiff);
+  const patch = patchForDiff(diff);
+  const summary = summarizePatch(patch);
+  const textContent = diff.content.kind === "text" ? diff.content : undefined;
+
+  return {
+    additions: summary.additions,
+    deletions: summary.deletions,
+    ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
+    ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
+    patch,
+    path: diff.newPath,
+    status: diff.status
+  };
 }
 
 function upsertOpenedProject(project: ProjectRecord): void {
@@ -1129,13 +1302,6 @@ function projectView(
   };
 }
 
-function progressView(progress: ReviewProgress): ReviewProgressView {
-  return {
-    reviewedVisibleFiles: progress.reviewedVisibleFiles,
-    totalVisibleReviewableFiles: progress.totalVisibleReviewableFiles
-  };
-}
-
 function reviewTargetFromGit(
   target: GitBranchReviewTarget | GitWorkingTreeReviewTarget
 ): ReviewTarget {
@@ -1186,7 +1352,35 @@ function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTargetRecor
   }
 }
 
-function fileDiffFromGit(file: GitLoadedFileDiff): FileDiff {
+function reviewFileView(
+  file: FileReviewStateWithSummary,
+  detailedDiff?: FileDiff
+): ReviewFileView {
+  const patch = detailedDiff ? patchForDiff(detailedDiff) : undefined;
+  const patchSummary = patch ? summarizePatch(patch) : undefined;
+  const textContent =
+    detailedDiff?.content.kind === "text" ? detailedDiff.content : undefined;
+
+  return {
+    additions: patchSummary?.additions ?? file.summary.additions,
+    deletions: patchSummary?.deletions ?? file.summary.deletions,
+    diffHash: file.state.diffHash,
+    diffLoaded: detailedDiff !== undefined,
+    generated: file.state.generated,
+    invalidated: file.state.invalidated,
+    ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
+    ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
+    path: file.state.path,
+    ...(patch !== undefined ? { patch } : {}),
+    ...(file.state.diff.oldPath ? { previousPath: file.state.diff.oldPath } : {}),
+    reviewable: file.state.reviewable,
+    reviewed: file.state.reviewed,
+    status: file.state.diff.status,
+    visible: file.state.visible
+  };
+}
+
+function fileDiffFromGit(file: GitLoadedFileDiff | GitFileDiffSummary): FileDiff {
   return {
     content: file.content,
     ...(file.newMode ? { newMode: file.newMode } : {}),

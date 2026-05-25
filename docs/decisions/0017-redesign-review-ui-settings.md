@@ -19,12 +19,26 @@ review settings window, command palette, empty state, and drift notification toa
 
 Project tabs show each listed repository's review progress and attention indicator,
 not only the active repository. The active tab uses the loaded workspace state; other
-tabs use recent-project review summaries computed in the main process. Every tab
-renders a status dot and review counter, falling back to an empty summary if the
-repository cannot be summarized. The renderer preserves the visible tab order across
-recent-project refreshes and appends newly opened repositories at the end of the tab
-strip, even though storage keeps recent projects ordered by last-opened time. Users
-can drag tabs to reorder the visible tab strip.
+tabs use lazily loaded review summaries computed in the main process. Every tab
+renders a status dot and review counter, falling back to an unknown summary while
+the background summary queue catches up. The renderer preserves the visible tab
+order and already-loaded summaries across recent-project refreshes and appends newly
+opened repositories at the end of the tab strip, even though storage keeps recent
+projects ordered by last-opened time. Users can drag tabs to reorder the visible tab
+strip.
+
+Selecting an uncached project tab makes that tab active immediately. During the
+load, the previous repository's review controls remain visible but blocked, with
+the selected tab's loading state shown in a compact banner above the workspace.
+
+For small known review sets, the selected-tab loading state is delayed briefly so
+quick switches can complete without a loader flash. Larger known review sets show
+the loading state immediately.
+
+Selected file diffs use the same delayed-loader behavior: quick on-demand patch
+loads render directly, while slower patch loads show a compact diff-pane loading
+state. The file list is virtualized instead of paginated so large reviews avoid
+mounting every row while preserving continuous navigation.
 
 The open-repository button follows the last tab when the tab strip has enough
 horizontal space. When the tab strip overflows, it stays fixed at the trailing edge

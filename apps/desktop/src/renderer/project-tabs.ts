@@ -21,7 +21,7 @@ export function mergeProjectTabs<TProject extends ProjectTabRecord>(
     const nextProject = nextProjectsById.get(project.id);
 
     if (nextProject) {
-      orderedProjects.push(nextProject);
+      orderedProjects.push({ ...project, ...nextProject });
     }
   }
 

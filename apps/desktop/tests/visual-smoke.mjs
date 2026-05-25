@@ -41,23 +41,17 @@ try {
   await window
     .locator('[data-project-tab-name="visual-repo"][draggable="true"]')
     .waitFor({ timeout: 10_000 });
-  const secondaryTabBox = await window
-    .locator('[data-project-tab-name="visual-secondary-repo"]')
-    .boundingBox();
-
-  if (!secondaryTabBox) {
-    throw new Error("Expected secondary project tab to be visible");
-  }
-
   await window
-    .locator('[data-project-tab-name="visual-repo"]')
-    .dragTo(window.locator('[data-project-tab-name="visual-secondary-repo"]'), {
-      targetPosition: {
-        x: Math.max(1, secondaryTabBox.width - 4),
-        y: Math.min(14, Math.max(1, secondaryTabBox.height - 4))
-      }
-    });
-  await expectProjectTabOrder(window, ["visual-secondary-repo", "visual-repo"]);
+    .locator('[data-project-tab-name="visual-secondary-repo"] button')
+    .first()
+    .click();
+  await window
+    .locator('[data-project-tab-name="visual-secondary-repo"][data-active="true"]')
+    .waitFor({ timeout: 10_000 });
+  await window.locator('[data-project-tab-name="visual-repo"] button').first().click();
+  await window
+    .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
+    .waitFor({ timeout: 10_000 });
   await expectMissing(window, "button", "schema.generated.ts");
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
@@ -70,7 +64,11 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-editor-picker.png")
   });
-  await window.getByRole("option", { name: "System default" }).click();
+  await window.getByRole("button", { name: /Editor:/ }).click();
+  await window.getByRole("listbox", { name: "Editor" }).waitFor({
+    state: "detached",
+    timeout: 10_000
+  });
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-settings.png")

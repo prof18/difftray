@@ -8,6 +8,49 @@ Accepted
 
 The v0 desktop app opens local repositories through the native directory picker, stores opened repositories as recent projects, and loads the selected repository diff target through the main process.
 
+Recent-project listing is metadata-only. It must not compute full review
+summaries for inactive repositories during app launch; only the active workspace
+owns expensive diff loading and authoritative progress. Inactive tabs may show an
+unknown progress count until a background tab-summary pass has loaded their
+lightweight review summaries.
+
+Inactive tab summaries are loaded lazily, one repository at a time, through the
+same summary-only Git path used by workspace loading. A stale or missing summary
+must not trigger full patch-body loading, hidden diff rendering, or tab switching.
+
+Once a repository has been loaded in the renderer, tab switches back to that
+repository reuse the in-memory workspace snapshot. Explicit refresh, project
+watch events, settings changes, diff-target changes, and review marking still
+reload through the main process when they need authoritative Git state.
+
+Long-running active workspace reloads publish progress through the preload API.
+When an existing tab is active, the renderer keeps the app chrome visible,
+blocks the active review controls, and shows a compact loading state in the tab
+and diff pane. Full-window loading is reserved for app startup or states where
+there is no active workspace to keep visible.
+
+When switching to a repository tab whose workspace is not already cached, the
+renderer selects the target tab immediately while keeping the existing review
+workspace visible underneath a compact loading banner. The previous workspace
+controls are blocked until the new workspace arrives, but the content is not
+replaced by a full loading surface.
+
+The uncached tab-switch loading state is delayed for tabs whose lightweight
+summary predicts a small review set. If the workspace arrives before the delay,
+the renderer switches directly to the loaded workspace without flashing a loader.
+Large or unexpectedly slow tab switches still show the selected-tab loading
+state.
+
+Workspace loads return file metadata, review state, and content fingerprints.
+Patch bodies are fetched separately for the selected file. This keeps large
+repositories responsive because opening a tab does not require serializing every
+patch through IPC before the renderer can show the file list.
+
+The selected-file patch loader is delayed briefly to avoid flicker when the
+patch returns quickly. The file list is virtualized rather than paginated, so
+large reviews mount only the visible rows while keyboard navigation, progress,
+and command-palette search still operate on the full file set.
+
 The renderer talks to a narrow preload API for project listing, project open/load, refresh, project settings, editor launch, and marking a displayed file reviewed. The renderer does not read Git, SQLite, or the filesystem directly.
 
 Review marking is verified in the main process by reloading the current repository diff target and comparing the displayed diff hash with the current diff hash before persisting the mark.
@@ -29,7 +72,20 @@ Positive:
 - Recent-project state and review marks share one storage boundary.
 - Settings changes use the same main-process storage boundary as review state.
 - The first UI can support real local review without adding network or PR concepts.
+- App launch is not blocked by full diff calculations for every stored recent repository.
+- Inactive tabs can show useful review counters and drift attention after their
+  lightweight summaries finish loading.
+- Switching back to an already-opened repository is immediate.
+- Large active-repository reloads have visible progress instead of looking hung.
+- Large file sets can be opened and navigated before every patch body is loaded.
+- Thousand-file reviews do not require rendering every file row at once.
 
 Negative:
 
 - Refresh is explicit for now; file watching remains a later main-process service.
+- Inactive repository tabs can briefly show unknown progress while their summary
+  queue catches up.
+- Cached tab content may be stale until refresh or a guarded review action
+  reloads current Git state.
+- Existing review marks created from older patch-body hashes may need to be
+  re-marked under the lightweight fingerprint model.

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   parseDiffSegments,
   type CollapsedDiffContextSegment,
@@ -46,12 +46,30 @@ import {
 type LoadState = "idle" | "loading";
 type DiffMode = "split" | "unified";
 type ReviewDiffTargetMode = "branch" | "working_tree";
-type ReviewState = "attention" | "pending" | "reviewed";
+type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
 type PaletteMode = "all" | "files";
 type CommandKind = "action" | "file" | "project";
 type ResolvedTheme = "dark" | "light";
 type HighlightedLineMap = ReadonlyMap<string, readonly ThemedToken[]>;
 type SyntaxLanguage = BundledLanguage | "text";
+
+type WorkspaceLoadStatus = {
+  readonly detail: string;
+  readonly loadedFiles?: number;
+  readonly title: string;
+  readonly totalFiles?: number;
+};
+
+type DiffParseState =
+  | {
+      readonly key: string;
+      readonly status: "parsing";
+    }
+  | {
+      readonly key: string;
+      readonly segments: readonly ParsedDiffSegment[];
+      readonly status: "ready";
+    };
 
 type CommandItem = {
   readonly id: string;
@@ -62,6 +80,18 @@ type CommandItem = {
   readonly run: () => void;
   readonly shortcut?: string;
   readonly sub: string;
+};
+
+type WorkspaceCacheEntry = {
+  readonly branchRefs: readonly string[];
+  readonly projectSettings: ProjectSettingsView;
+  readonly workspace: ReviewWorkspaceView;
+};
+
+type ApplyWorkspaceOptions = {
+  readonly appSettings?: AppSettingsView;
+  readonly branchRefs?: readonly string[];
+  readonly projectSettings?: ProjectSettingsView;
 };
 
 const defaultAppSettings: AppSettingsView = {
@@ -84,13 +114,17 @@ const defaultProjectSettings: ProjectSettingsView = {
   projectId: ""
 };
 
-const emptyProjectReviewSummary: ProjectReviewSummaryView = {
-  attentionCount: 0,
-  progress: {
-    reviewedVisibleFiles: 0,
-    totalVisibleReviewableFiles: 0
-  }
+const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {
+  detail: "Preparing local diffs",
+  title: "Loading repository"
 };
+
+const immediateTabSwitchLoaderFileThreshold = 75;
+const delayedTabSwitchLoaderMs = 500;
+const delayedFileDiffLoaderMs = 500;
+const fileListRowHeight = 54;
+const fileListOverscanRows = 8;
+const maxHighlightedDiffLines = 800;
 
 const syntaxThemes = {
   dark: "github-dark",
@@ -113,7 +147,14 @@ export function App(): React.JSX.Element {
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
   const [fileListWidth, setFileListWidth] = useState(340);
   const [hasBootstrapped, setHasBootstrapped] = useState(false);
+  const [loadingDiffPath, setLoadingDiffPath] = useState<string | undefined>();
+  const [visibleLoadingDiffPath, setVisibleLoadingDiffPath] = useState<
+    string | undefined
+  >();
   const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [loadStatus, setLoadStatus] = useState<WorkspaceLoadStatus>(
+    defaultWorkspaceLoadStatus
+  );
   const [paletteMode, setPaletteMode] = useState<PaletteMode>("all");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -124,12 +165,25 @@ export function App(): React.JSX.Element {
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tabSummaryLoadingProjectIds, setTabSummaryLoadingProjectIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [loadingProject, setLoadingProject] = useState<RecentProjectView | undefined>();
+  const [pendingLoadingProjectId, setPendingLoadingProjectId] = useState<
+    string | undefined
+  >();
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const focusRefreshRunningRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
+  const selectedPathByProjectRef = useRef<Map<string, string>>(new Map());
+  const tabSummaryInvalidationRef = useRef<Map<string, number>>(new Map());
+  const tabSummaryLoadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const tabSummaryLoadsInFlightRef = useRef<Set<string>>(new Set());
+  const tabSummaryLoadSkippedRef = useRef<Set<string>>(new Set());
+  const workspaceCacheRef = useRef<Map<string, WorkspaceCacheEntry>>(new Map());
   const resizeStartRef = useRef<{
     readonly startWidth: number;
     readonly x: number;
@@ -168,6 +222,31 @@ export function App(): React.JSX.Element {
       window.setTimeout(() => paletteInputRef.current?.focus(), 0);
     }
   }, [paletteOpen, paletteMode, paletteQuery]);
+
+  useEffect(() => {
+    if (workspace && selectedPath) {
+      selectedPathByProjectRef.current.set(workspace.project.id, selectedPath);
+    }
+  }, [selectedPath, workspace]);
+
+  useEffect(() => {
+    if (!hasBootstrapped || loadState === "loading") {
+      return;
+    }
+
+    for (const project of recentProjects) {
+      if (
+        project.id === workspace?.project.id ||
+        project.reviewSummary ||
+        tabSummaryLoadsInFlightRef.current.has(project.id) ||
+        tabSummaryLoadSkippedRef.current.has(project.id)
+      ) {
+        continue;
+      }
+
+      queueProjectReviewSummary(project.id);
+    }
+  }, [hasBootstrapped, loadState, recentProjects, workspace?.project.id]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -293,6 +372,115 @@ export function App(): React.JSX.Element {
       : undefined;
   const showDriftToast =
     appSettings.notifyOnDrift && Boolean(toastKey) && toastDismissedFor !== toastKey;
+  const activeProject = loadingProject ?? workspace?.project;
+  const activeReviewSummary = loadingProject
+    ? loadingProject.reviewSummary
+    : workspace
+      ? {
+          attentionCount: attentionFiles.length,
+          progress: workspace.progress
+        }
+      : undefined;
+  const isPendingProjectSwitch =
+    loadState === "loading" &&
+    pendingLoadingProjectId !== undefined &&
+    loadingProject === undefined;
+  const showActiveWorkspaceLoading = loadState === "loading" && !isPendingProjectSwitch;
+
+  useEffect(() => {
+    if (!workspace || !selectedFile || selectedFile.diffLoaded) {
+      return;
+    }
+
+    const projectId = workspace.project.id;
+    const reviewTargetId = workspace.reviewTarget.id;
+    const filePath = selectedFile.path;
+    let cancelled = false;
+    const loaderTimerId = window.setTimeout(() => {
+      if (!cancelled) {
+        setVisibleLoadingDiffPath(filePath);
+      }
+    }, delayedFileDiffLoaderMs);
+
+    setLoadingDiffPath(filePath);
+
+    void window.difftray
+      .loadFileDiff({
+        path: filePath,
+        projectId
+      })
+      .then((loadedDiff) => {
+        if (cancelled || !loadedDiff) {
+          return;
+        }
+
+        setWorkspace((currentWorkspace) => {
+          if (
+            currentWorkspace?.project.id !== projectId ||
+            currentWorkspace.reviewTarget.id !== reviewTargetId
+          ) {
+            return currentWorkspace;
+          }
+
+          const nextWorkspace = {
+            ...currentWorkspace,
+            files: currentWorkspace.files.map((file) =>
+              file.path === loadedDiff.path
+                ? {
+                    ...file,
+                    additions: loadedDiff.additions,
+                    deletions: loadedDiff.deletions,
+                    diffLoaded: true,
+                    patch: loadedDiff.patch,
+                    status: loadedDiff.status,
+                    ...(loadedDiff.newText !== undefined
+                      ? { newText: loadedDiff.newText }
+                      : {}),
+                    ...(loadedDiff.oldText !== undefined
+                      ? { oldText: loadedDiff.oldText }
+                      : {})
+                  }
+                : file
+            )
+          };
+
+          workspaceCacheRef.current.set(projectId, {
+            branchRefs,
+            projectSettings,
+            workspace: nextWorkspace
+          });
+
+          return nextWorkspace;
+        });
+      })
+      .catch((caughtError: unknown) => {
+        if (!cancelled) {
+          setError(errorMessage(caughtError));
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(loaderTimerId);
+        if (!cancelled) {
+          setLoadingDiffPath((currentPath) =>
+            currentPath === filePath ? undefined : currentPath
+          );
+          setVisibleLoadingDiffPath((currentPath) =>
+            currentPath === filePath ? undefined : currentPath
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(loaderTimerId);
+      setLoadingDiffPath((currentPath) =>
+        currentPath === filePath ? undefined : currentPath
+      );
+      setVisibleLoadingDiffPath((currentPath) =>
+        currentPath === filePath ? undefined : currentPath
+      );
+    };
+  }, [branchRefs, projectSettings, selectedFile, workspace]);
 
   useEffect(() => {
     function handleWindowFocus(): void {
@@ -335,6 +523,12 @@ export function App(): React.JSX.Element {
       void handleProjectChanged(event);
     });
   }, [loadState, paletteOpen, selectedFile, settingsOpen, workspace]);
+
+  useEffect(() => {
+    return window.difftray.onProjectLoadProgress((progress) => {
+      setLoadStatus(loadStatusFromProgress(progress));
+    });
+  }, []);
 
   const commands = useMemo(
     () =>
@@ -395,6 +589,8 @@ export function App(): React.JSX.Element {
   async function bootstrapApp(): Promise<void> {
     setError(undefined);
     setLoadState("loading");
+    setLoadStatus(defaultWorkspaceLoadStatus);
+    await nextPaint();
 
     try {
       const [projects, settings, installedEditors] = await Promise.all([
@@ -416,7 +612,7 @@ export function App(): React.JSX.Element {
           continue;
         }
 
-        await applyWorkspace(nextWorkspace, undefined, settings);
+        await applyWorkspace(nextWorkspace, undefined, { appSettings: settings });
         break;
       }
 
@@ -426,6 +622,7 @@ export function App(): React.JSX.Element {
     } finally {
       setHasBootstrapped(true);
       setLoadState("idle");
+      setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
 
@@ -437,16 +634,118 @@ export function App(): React.JSX.Element {
     );
   }
 
+  function queueProjectReviewSummary(projectId: string): void {
+    if (
+      tabSummaryLoadsInFlightRef.current.has(projectId) ||
+      tabSummaryLoadSkippedRef.current.has(projectId)
+    ) {
+      return;
+    }
+
+    const requestVersion = tabSummaryInvalidationRef.current.get(projectId) ?? 0;
+
+    tabSummaryLoadsInFlightRef.current.add(projectId);
+    setTabSummaryLoadingProjectIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      nextIds.add(projectId);
+
+      return nextIds;
+    });
+
+    tabSummaryLoadQueueRef.current = tabSummaryLoadQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const summary = await window.difftray.getProjectReviewSummary(projectId);
+
+        if ((tabSummaryInvalidationRef.current.get(projectId) ?? 0) !== requestVersion) {
+          return;
+        }
+
+        if (!summary) {
+          tabSummaryLoadSkippedRef.current.add(projectId);
+          return;
+        }
+
+        setRecentProjects((currentProjects) =>
+          currentProjects.map((project) =>
+            project.id === projectId ? { ...project, reviewSummary: summary } : project
+          )
+        );
+      })
+      .catch(() => {
+        if ((tabSummaryInvalidationRef.current.get(projectId) ?? 0) === requestVersion) {
+          tabSummaryLoadSkippedRef.current.add(projectId);
+        }
+      })
+      .finally(() => {
+        tabSummaryLoadsInFlightRef.current.delete(projectId);
+        setTabSummaryLoadingProjectIds((currentIds) => {
+          const nextIds = new Set(currentIds);
+
+          nextIds.delete(projectId);
+
+          return nextIds;
+        });
+      });
+  }
+
+  function invalidateProjectReviewSummary(projectId: string): void {
+    tabSummaryInvalidationRef.current.set(
+      projectId,
+      (tabSummaryInvalidationRef.current.get(projectId) ?? 0) + 1
+    );
+    tabSummaryLoadSkippedRef.current.delete(projectId);
+    setRecentProjects((currentProjects) =>
+      currentProjects.map((project) =>
+        project.id === projectId ? omitProjectReviewSummary(project) : project
+      )
+    );
+  }
+
+  function updateRecentProjectReviewSummary(
+    projectId: string,
+    summary: ProjectReviewSummaryView
+  ): void {
+    tabSummaryLoadSkippedRef.current.delete(projectId);
+    setRecentProjects((currentProjects) =>
+      currentProjects.map((project) => {
+        if (
+          project.id !== projectId ||
+          reviewSummariesEqual(project.reviewSummary, summary)
+        ) {
+          return project;
+        }
+
+        return { ...project, reviewSummary: summary };
+      })
+    );
+  }
+
   async function applyWorkspace(
     nextWorkspace: ReviewWorkspaceView,
     nextPath?: string,
-    nextAppSettings = appSettings
+    options: ApplyWorkspaceOptions = {}
   ): Promise<void> {
+    setLoadStatus({
+      detail: nextWorkspace.project.name,
+      title: "Preparing workspace"
+    });
     const [nextSettings, nextBranchRefs] = await Promise.all([
-      window.difftray.getProjectSettings(nextWorkspace.project.id),
-      window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
+      options.projectSettings
+        ? Promise.resolve(options.projectSettings)
+        : window.difftray.getProjectSettings(nextWorkspace.project.id),
+      options.branchRefs
+        ? Promise.resolve(options.branchRefs)
+        : window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
     ]);
+    const nextAppSettings = options.appSettings ?? appSettings;
 
+    workspaceCacheRef.current.set(nextWorkspace.project.id, {
+      branchRefs: nextBranchRefs,
+      projectSettings: nextSettings,
+      workspace: nextWorkspace
+    });
     setWorkspace(nextWorkspace);
     setProjectSettings(nextSettings);
     setBranchRefs(nextBranchRefs);
@@ -459,15 +758,39 @@ export function App(): React.JSX.Element {
     setFileListWidth(nextSettings.fileListWidth);
     setFileListCollapsed(nextSettings.fileListCollapsed);
     setSelectedPath(visiblePathOrFirst(nextWorkspace, nextPath));
+    updateRecentProjectReviewSummary(
+      nextWorkspace.project.id,
+      projectReviewSummary(nextWorkspace)
+    );
     setSettingsOpen(false);
   }
 
   async function runWorkspaceLoad(
     loadWorkspace: () => Promise<ReviewWorkspaceView | null>,
-    nextPath?: string
+    nextPath?: string,
+    initialStatus: WorkspaceLoadStatus = defaultWorkspaceLoadStatus,
+    projectToShowWhileLoading?: RecentProjectView,
+    projectLoadingDelayMs = 0
   ): Promise<void> {
+    let loadingProjectTimeout: number | undefined;
+
     setError(undefined);
+    if (projectToShowWhileLoading && projectLoadingDelayMs <= 0) {
+      setPendingLoadingProjectId(undefined);
+      setLoadingProject(projectToShowWhileLoading);
+    } else if (projectToShowWhileLoading) {
+      setPendingLoadingProjectId(projectToShowWhileLoading.id);
+      loadingProjectTimeout = window.setTimeout(() => {
+        setPendingLoadingProjectId(undefined);
+        setLoadingProject(projectToShowWhileLoading);
+      }, projectLoadingDelayMs);
+    } else {
+      setPendingLoadingProjectId(undefined);
+      setLoadingProject(undefined);
+    }
     setLoadState("loading");
+    setLoadStatus(initialStatus);
+    await nextPaint();
 
     try {
       const nextWorkspace = await loadWorkspace();
@@ -481,16 +804,56 @@ export function App(): React.JSX.Element {
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     } finally {
+      if (loadingProjectTimeout !== undefined) {
+        window.clearTimeout(loadingProjectTimeout);
+      }
+
       setLoadState("idle");
+      setLoadStatus(defaultWorkspaceLoadStatus);
+      setPendingLoadingProjectId((currentProjectId) =>
+        currentProjectId === projectToShowWhileLoading?.id ? undefined : currentProjectId
+      );
+      setLoadingProject((currentProject) =>
+        currentProject?.id === projectToShowWhileLoading?.id ? undefined : currentProject
+      );
     }
   }
 
   async function openProject(): Promise<void> {
-    await runWorkspaceLoad(() => window.difftray.openProject());
+    await runWorkspaceLoad(() => window.difftray.openProject(), undefined, {
+      detail: "Waiting for repository selection",
+      title: "Opening repository"
+    });
   }
 
   async function loadProject(projectId: string): Promise<void> {
-    await runWorkspaceLoad(() => window.difftray.loadProject(projectId));
+    const cachedWorkspace = workspaceCacheRef.current.get(projectId);
+
+    if (cachedWorkspace) {
+      setError(undefined);
+      await applyWorkspace(
+        cachedWorkspace.workspace,
+        selectedPathByProjectRef.current.get(projectId),
+        {
+          branchRefs: cachedWorkspace.branchRefs,
+          projectSettings: cachedWorkspace.projectSettings
+        }
+      );
+      return;
+    }
+
+    const projectToLoad = recentProjects.find((project) => project.id === projectId);
+
+    await runWorkspaceLoad(
+      () => window.difftray.loadProject(projectId),
+      undefined,
+      {
+        detail: projectToLoad?.name ?? "Repository",
+        title: "Loading repository"
+      },
+      projectToLoad,
+      tabSwitchLoaderDelayMs(projectToLoad)
+    );
   }
 
   async function closeProject(projectId: string): Promise<void> {
@@ -501,8 +864,15 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     setLoadState("loading");
+    setLoadStatus({
+      detail: "Updating open repositories",
+      title: "Closing repository"
+    });
+    await nextPaint();
 
     try {
+      workspaceCacheRef.current.delete(projectId);
+      selectedPathByProjectRef.current.delete(projectId);
       const nextProjects = await window.difftray.closeProject(projectId);
       const orderedNextProjects = mergeProjectTabs(recentProjects, nextProjects);
 
@@ -550,6 +920,7 @@ export function App(): React.JSX.Element {
       setError(errorMessage(caughtError));
     } finally {
       setLoadState("idle");
+      setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
 
@@ -560,11 +931,18 @@ export function App(): React.JSX.Element {
 
     await runWorkspaceLoad(
       () => window.difftray.loadProject(workspace.project.id),
-      selectedFile?.path
+      selectedFile?.path,
+      {
+        detail: workspace.project.name,
+        title: "Refreshing repository"
+      }
     );
   }
 
   async function handleProjectChanged(event: ProjectChangedEvent): Promise<void> {
+    workspaceCacheRef.current.delete(event.projectId);
+    invalidateProjectReviewSummary(event.projectId);
+
     if (loadState === "loading") {
       return;
     }
@@ -572,7 +950,11 @@ export function App(): React.JSX.Element {
     if (workspace?.project.id === event.projectId && !settingsOpen && !paletteOpen) {
       await runWorkspaceLoad(
         () => window.difftray.loadProject(event.projectId),
-        selectedFile?.path
+        selectedFile?.path,
+        {
+          detail: "Local changes changed",
+          title: "Refreshing repository"
+        }
       );
       return;
     }
@@ -587,6 +969,11 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     setLoadState("loading");
+    setLoadStatus({
+      detail: "Reading current preferences",
+      title: "Opening settings"
+    });
+    await nextPaint();
 
     try {
       const [nextAppSettings, nextProjectSettings] = await Promise.all([
@@ -602,6 +989,7 @@ export function App(): React.JSX.Element {
       setError(errorMessage(caughtError));
     } finally {
       setLoadState("idle");
+      setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
 
@@ -640,6 +1028,11 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     setLoadState("loading");
+    setLoadStatus({
+      detail: "Refreshing review after preferences change",
+      title: "Saving settings"
+    });
+    await nextPaint();
 
     try {
       const [savedAppSettings, savedSettings] = await Promise.all([
@@ -675,7 +1068,9 @@ export function App(): React.JSX.Element {
         await applyWorkspace(
           nextWorkspace,
           visiblePathOrFirst(nextWorkspace, selectedPath),
-          savedAppSettings
+          {
+            appSettings: savedAppSettings
+          }
         );
       } else {
         setWorkspace(undefined);
@@ -688,6 +1083,7 @@ export function App(): React.JSX.Element {
       setError(errorMessage(caughtError));
     } finally {
       setLoadState("idle");
+      setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
 
@@ -713,6 +1109,11 @@ export function App(): React.JSX.Element {
       });
 
       setProjectSettings(savedSettings);
+      workspaceCacheRef.current.set(workspace.project.id, {
+        branchRefs,
+        projectSettings: savedSettings,
+        workspace
+      });
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     }
@@ -783,7 +1184,11 @@ export function App(): React.JSX.Element {
             mode: "branch",
             projectId: workspace.project.id
           }),
-        selectedFile?.path
+        selectedFile?.path,
+        {
+          detail: nextBaseRef,
+          title: "Switching diff target"
+        }
       );
       return;
     }
@@ -794,7 +1199,11 @@ export function App(): React.JSX.Element {
           mode: "working_tree",
           projectId: workspace.project.id
         }),
-      selectedFile?.path
+      selectedFile?.path,
+      {
+        detail: workspace.project.name,
+        title: "Switching diff target"
+      }
     );
   }
 
@@ -826,7 +1235,12 @@ export function App(): React.JSX.Element {
   }
 
   async function markSelectedReviewed(): Promise<void> {
-    if (!workspace || !selectedFile || selectedFile.reviewed) {
+    if (
+      !workspace ||
+      !selectedFile ||
+      selectedFile.reviewed ||
+      !selectedFile.diffLoaded
+    ) {
       return;
     }
 
@@ -856,6 +1270,15 @@ export function App(): React.JSX.Element {
 
       setWorkspace(nextWorkspace);
       setSelectedPath(nextPath);
+      updateRecentProjectReviewSummary(
+        nextWorkspace.project.id,
+        projectReviewSummary(nextWorkspace)
+      );
+      workspaceCacheRef.current.set(nextWorkspace.project.id, {
+        branchRefs,
+        projectSettings,
+        workspace: nextWorkspace
+      });
 
       if (result.status === "rejected") {
         setError(
@@ -871,7 +1294,7 @@ export function App(): React.JSX.Element {
   }
 
   async function unmarkSelectedReviewed(): Promise<void> {
-    if (!workspace || selectedFile?.reviewed !== true) {
+    if (!workspace || selectedFile?.reviewed !== true || !selectedFile.diffLoaded) {
       return;
     }
 
@@ -897,6 +1320,15 @@ export function App(): React.JSX.Element {
 
       setWorkspace(result.workspace);
       setSelectedPath(visiblePathOrFirst(result.workspace, optimisticFile.path));
+      updateRecentProjectReviewSummary(
+        result.workspace.project.id,
+        projectReviewSummary(result.workspace)
+      );
+      workspaceCacheRef.current.set(result.workspace.project.id, {
+        branchRefs,
+        projectSettings,
+        workspace: result.workspace
+      });
 
       if (result.status === "rejected") {
         setError(
@@ -975,19 +1407,17 @@ export function App(): React.JSX.Element {
   return (
     <main className={styles.windowShell}>
       <div className={styles.titlebarDragArea}>
-        {workspace ? (
-          <div className={styles.titlebarProjectName}>{workspace.project.name}</div>
+        {activeProject ? (
+          <div className={styles.titlebarProjectName}>{activeProject.name}</div>
         ) : null}
       </div>
 
-      {workspace ? (
+      {workspace && activeProject ? (
         <ProjectTabBar
-          activeProjectId={workspace.project.id}
-          activeReviewSummary={{
-            attentionCount: attentionFiles.length,
-            progress: workspace.progress
-          }}
+          activeProjectId={activeProject.id}
+          {...(activeReviewSummary ? { activeReviewSummary } : {})}
           disabled={loadState === "loading"}
+          {...(loadState === "loading" ? { loadingStatus: loadStatus } : {})}
           onOpenProject={() => {
             void openProject();
           }}
@@ -1006,6 +1436,7 @@ export function App(): React.JSX.Element {
             void loadProject(projectId);
           }}
           projects={recentProjects}
+          summaryLoadingProjectIds={tabSummaryLoadingProjectIds}
         />
       ) : null}
 
@@ -1016,116 +1447,137 @@ export function App(): React.JSX.Element {
       ) : null}
 
       {workspace ? (
-        <section className={styles.mainLayout}>
-          {fileListCollapsed ? (
-            <CollapsedRail
-              files={visibleFiles}
-              onExpand={toggleFileListCollapsed}
-              progress={workspace.progress}
-            />
-          ) : (
-            <nav
-              className={styles.filePane}
-              style={{ width: `${String(fileListWidth)}px` }}
-              aria-label="Changed files"
-            >
-              <FileListHeader
-                attentionCount={attentionFiles.length}
-                baseRefDraft={baseRefDraft}
-                branchRefs={branchRefs}
-                disabled={loadState === "loading"}
+        <section className={styles.workspaceBody} aria-label="Review workspace">
+          {showActiveWorkspaceLoading ? <TabLoadBanner status={loadStatus} /> : null}
+          <section className={styles.mainLayout} aria-busy={showActiveWorkspaceLoading}>
+            {fileListCollapsed ? (
+              <CollapsedRail
                 files={visibleFiles}
-                onBaseRefDraftChange={setBaseRefDraft}
-                onCollapse={toggleFileListCollapsed}
-                onUseBranchDiff={(baseRefName) => {
-                  void setProjectDiffTarget("branch", baseRefName);
-                }}
-                onUseWorkingTreeDiff={() => {
-                  void setProjectDiffTarget("working_tree");
-                }}
-                onRefresh={() => {
-                  void refreshWorkspace();
-                }}
+                onExpand={toggleFileListCollapsed}
                 progress={workspace.progress}
-                reviewTarget={workspace.reviewTarget}
               />
-              <div className={styles.fileList}>
-                {visibleFiles.map((file) => (
-                  <FileButton
-                    file={file}
-                    isSelected={selectedFile?.path === file.path}
-                    key={file.path}
-                    onSelect={setSelectedPath}
-                  />
-                ))}
-              </div>
-              <div className={styles.fileFooter}>
-                <span>
-                  <kbd>↑</kbd> <kbd>↓</kbd> navigate
-                </span>
-                <span>
-                  <kbd>R</kbd> review
-                </span>
-              </div>
-              <div
-                aria-label="Resize file list"
-                className={styles.resizeHandle}
-                onPointerDown={startResize}
-                onPointerMove={updateResize}
-                onPointerUp={endResize}
-                role="separator"
-              />
-            </nav>
-          )}
-
-          <article className={styles.diffPane} aria-label="Diff preview">
-            {selectedFile ? (
-              <>
-                <DiffToolbar
-                  disabled={loadState === "loading"}
-                  file={selectedFile}
-                  onToggleReviewed={() => {
-                    void toggleSelectedReviewed();
-                  }}
-                  onOpenEditor={() => {
-                    void openSelectedInEditor();
-                  }}
-                  refName={diffTargetLabel(workspace.reviewTarget)}
-                />
-                <DiffSurface
-                  diffMode={diffMode}
-                  filePath={selectedFile.path}
-                  newText={selectedFile.newText}
-                  oldText={selectedFile.oldText}
-                  patch={selectedFile.patch}
-                  resolvedTheme={resolvedTheme}
-                  status={selectedFile.status}
-                  refObject={diffSurfaceRef}
-                />
-              </>
             ) : (
-              <div className={styles.noFileState}>No changed files</div>
+              <nav
+                className={styles.filePane}
+                style={{ width: `${String(fileListWidth)}px` }}
+                aria-label="Changed files"
+              >
+                <FileListHeader
+                  attentionCount={attentionFiles.length}
+                  baseRefDraft={baseRefDraft}
+                  branchRefs={branchRefs}
+                  disabled={loadState === "loading"}
+                  files={visibleFiles}
+                  onBaseRefDraftChange={setBaseRefDraft}
+                  onCollapse={toggleFileListCollapsed}
+                  onUseBranchDiff={(baseRefName) => {
+                    void setProjectDiffTarget("branch", baseRefName);
+                  }}
+                  onUseWorkingTreeDiff={() => {
+                    void setProjectDiffTarget("working_tree");
+                  }}
+                  onRefresh={() => {
+                    void refreshWorkspace();
+                  }}
+                  progress={workspace.progress}
+                  reviewTarget={workspace.reviewTarget}
+                />
+                <FileList
+                  files={visibleFiles}
+                  onSelect={setSelectedPath}
+                  selectedPath={selectedFile?.path}
+                />
+                <div className={styles.fileFooter}>
+                  <span>
+                    <kbd>↑</kbd> <kbd>↓</kbd> navigate
+                  </span>
+                  <span>
+                    <kbd>R</kbd> review
+                  </span>
+                </div>
+                <div
+                  aria-label="Resize file list"
+                  className={styles.resizeHandle}
+                  onPointerDown={startResize}
+                  onPointerMove={updateResize}
+                  onPointerUp={endResize}
+                  role="separator"
+                />
+              </nav>
             )}
-          </article>
 
-          {showDriftToast ? (
-            <DriftToast
-              files={attentionFiles}
-              onClose={() => {
-                setToastDismissedFor(toastKey);
-              }}
-              onReviewNow={() => {
-                setSelectedPath(attentionFiles[0]?.path);
-                setToastDismissedFor(toastKey);
-              }}
-            />
-          ) : null}
+            <article
+              className={styles.diffPane}
+              aria-label="Diff preview"
+              data-loading={showActiveWorkspaceLoading ? true : undefined}
+            >
+              {selectedFile ? (
+                <>
+                  <DiffToolbar
+                    disabled={loadState === "loading" || !selectedFile.diffLoaded}
+                    file={selectedFile}
+                    onToggleReviewed={() => {
+                      void toggleSelectedReviewed();
+                    }}
+                    onOpenEditor={() => {
+                      void openSelectedInEditor();
+                    }}
+                    refName={diffTargetLabel(workspace.reviewTarget)}
+                  />
+                  {selectedFile.patch ? (
+                    <DiffSurface
+                      diffHash={selectedFile.diffHash}
+                      diffMode={diffMode}
+                      filePath={selectedFile.path}
+                      newText={selectedFile.newText}
+                      oldText={selectedFile.oldText}
+                      patch={selectedFile.patch}
+                      resolvedTheme={resolvedTheme}
+                      status={selectedFile.status}
+                      refObject={diffSurfaceRef}
+                    />
+                  ) : (
+                    <DiffLoadingState
+                      filePath={selectedFile.path}
+                      status={
+                        visibleLoadingDiffPath === selectedFile.path
+                          ? "loading"
+                          : loadingDiffPath === selectedFile.path
+                            ? "deferred"
+                            : "idle"
+                      }
+                    />
+                  )}
+                </>
+              ) : (
+                <div className={styles.noFileState}>No changed files</div>
+              )}
+            </article>
+
+            {showDriftToast ? (
+              <DriftToast
+                files={attentionFiles}
+                onClose={() => {
+                  setToastDismissedFor(toastKey);
+                }}
+                onReviewNow={() => {
+                  setSelectedPath(attentionFiles[0]?.path);
+                  setToastDismissedFor(toastKey);
+                }}
+              />
+            ) : null}
+          </section>
         </section>
-      ) : !hasBootstrapped || recentProjects.length > 0 ? (
-        <section className={styles.launchState} aria-label="Loading repository" />
+      ) : loadState === "loading" || !hasBootstrapped || recentProjects.length > 0 ? (
+        <section className={styles.launchState} aria-label={loadStatus.title}>
+          <div className={styles.loadingMark} aria-hidden />
+          <div className={styles.loadingTitle}>{loadStatus.title}</div>
+          <div className={styles.loadingMeta}>{loadStatus.detail}</div>
+          <LoadingProgress status={loadStatus} />
+        </section>
       ) : (
         <EmptyState
-          disabled={loadState === "loading"}
+          disabled={false}
           onOpenProject={() => {
             void openProject();
           }}
@@ -1169,16 +1621,19 @@ function ProjectTabBar({
   activeProjectId,
   activeReviewSummary,
   disabled,
+  loadingStatus,
   onCloseActiveProject,
   onOpenProject,
   onOpenSettings,
   onReorderProjects,
   onSelectProject,
-  projects
+  projects,
+  summaryLoadingProjectIds
 }: {
   readonly activeProjectId: string;
-  readonly activeReviewSummary: ProjectReviewSummaryView;
+  readonly activeReviewSummary?: ProjectReviewSummaryView;
   readonly disabled: boolean;
+  readonly loadingStatus?: WorkspaceLoadStatus;
   readonly onCloseActiveProject: () => void;
   readonly onOpenProject: () => void;
   readonly onOpenSettings: () => void;
@@ -1189,6 +1644,7 @@ function ProjectTabBar({
   ) => void;
   readonly onSelectProject: (projectId: string) => void;
   readonly projects: readonly RecentProjectView[];
+  readonly summaryLoadingProjectIds: ReadonlySet<string>;
 }): React.JSX.Element {
   const tabScrollerRef = useRef<HTMLDivElement>(null);
   const inlineOpenButtonRef = useRef<HTMLButtonElement>(null);
@@ -1232,7 +1688,7 @@ function ProjectTabBar({
       resizeObserver.disconnect();
       window.removeEventListener("resize", updateOpenButtonPlacement);
     };
-  }, [activeProjectId, activeReviewSummary, projects]);
+  }, [activeProjectId, activeReviewSummary, projects, summaryLoadingProjectIds]);
 
   function clearDragState(): void {
     setDraggedProjectId(undefined);
@@ -1270,10 +1726,12 @@ function ProjectTabBar({
       <div className={styles.tabScroller} ref={tabScrollerRef}>
         {projects.map((project) => {
           const isActive = project.id === activeProjectId;
-          const reviewSummary =
-            (isActive ? activeReviewSummary : project.reviewSummary) ??
-            emptyProjectReviewSummary;
-          const tabState = reviewSummaryState(reviewSummary);
+          const isLoading = isActive && loadingStatus !== undefined;
+          const isSummaryLoading = !isActive && summaryLoadingProjectIds.has(project.id);
+          const reviewSummary = isActive
+            ? (activeReviewSummary ?? project.reviewSummary)
+            : project.reviewSummary;
+          const tabState = reviewSummary ? reviewSummaryState(reviewSummary) : "unknown";
 
           return (
             <div
@@ -1335,15 +1793,28 @@ function ProjectTabBar({
                 onClick={() => {
                   onSelectProject(project.id);
                 }}
+                title={
+                  isLoading
+                    ? loadingStatus.detail
+                    : projectTabTitle(project, reviewSummary, isSummaryLoading)
+                }
                 type="button"
               >
-                <Folder size={14} strokeWidth={1.4} aria-hidden />
+                {isLoading ? (
+                  <span className={styles.tabLoadingMark} aria-hidden />
+                ) : (
+                  <Folder size={14} strokeWidth={1.4} aria-hidden />
+                )}
                 <span>{project.name}</span>
-                <span className={styles.statusDot} data-state={tabState} aria-hidden />
+                {isLoading ? null : isSummaryLoading ? (
+                  <span className={styles.tabSummaryLoadingMark} aria-hidden />
+                ) : (
+                  <span className={styles.statusDot} data-state={tabState} aria-hidden />
+                )}
                 <span className={styles.tabCount}>
-                  {`${String(reviewSummary.progress.reviewedVisibleFiles)}/${String(
-                    reviewSummary.progress.totalVisibleReviewableFiles
-                  )}`}
+                  {isLoading
+                    ? tabLoadingText(loadingStatus)
+                    : tabReviewCountText(reviewSummary)}
                 </span>
               </button>
               {isActive ? (
@@ -1397,6 +1868,51 @@ function ProjectTabBar({
       >
         <Settings size={15} strokeWidth={1.4} aria-hidden />
       </button>
+    </div>
+  );
+}
+
+function TabLoadBanner({
+  status
+}: {
+  readonly status: WorkspaceLoadStatus;
+}): React.JSX.Element {
+  return (
+    <div className={styles.tabLoadBanner} role="status" aria-live="polite">
+      <div className={styles.tabLoadCopy}>
+        <span className={styles.loadingMiniMark} aria-hidden />
+        <span className={styles.tabLoadTitle}>{status.title}</span>
+        <span className={styles.tabLoadDetail}>{status.detail}</span>
+      </div>
+      <LoadingProgress status={status} />
+    </div>
+  );
+}
+
+function LoadingProgress({
+  status
+}: {
+  readonly status: WorkspaceLoadStatus;
+}): React.JSX.Element | null {
+  if (
+    status.loadedFiles === undefined ||
+    status.totalFiles === undefined ||
+    status.totalFiles <= 0
+  ) {
+    return null;
+  }
+
+  const progress = Math.min(1, Math.max(0, status.loadedFiles / status.totalFiles));
+
+  return (
+    <div
+      className={styles.loadingProgress}
+      aria-label={`${String(status.loadedFiles)} of ${String(status.totalFiles)} files loaded`}
+    >
+      <div
+        className={styles.loadingProgressBar}
+        style={{ width: `${String(progress * 100)}%` }}
+      />
     </div>
   );
 }
@@ -1616,20 +2132,130 @@ function CollapsedRail({
   );
 }
 
-function FileButton({
+function FileList({
+  files,
+  onSelect,
+  selectedPath
+}: {
+  readonly files: readonly ReviewFileView[];
+  readonly onSelect: (path: string) => void;
+  readonly selectedPath: string | undefined;
+}): React.JSX.Element {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const selectedIndex = selectedPath
+    ? files.findIndex((file) => file.path === selectedPath)
+    : -1;
+  const startIndex = Math.max(
+    0,
+    Math.floor(scrollTop / fileListRowHeight) - fileListOverscanRows
+  );
+  const visibleRowCount = Math.ceil(viewportHeight / fileListRowHeight);
+  const endIndex = Math.min(
+    files.length,
+    startIndex + visibleRowCount + fileListOverscanRows * 2
+  );
+  const renderedFiles = files.slice(startIndex, endIndex);
+
+  useLayoutEffect(() => {
+    const listElement = listRef.current;
+
+    if (!listElement) {
+      return;
+    }
+
+    const updateViewport = (): void => {
+      setViewportHeight(listElement.clientHeight);
+      setScrollTop(listElement.scrollTop);
+    };
+
+    updateViewport();
+
+    const resizeObserver = new ResizeObserver(updateViewport);
+    resizeObserver.observe(listElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const listElement = listRef.current;
+
+    if (!listElement || selectedIndex < 0) {
+      return;
+    }
+
+    const rowTop = selectedIndex * fileListRowHeight;
+    const rowBottom = rowTop + fileListRowHeight;
+    const viewportTop = listElement.scrollTop;
+    const viewportBottom = viewportTop + listElement.clientHeight;
+
+    if (rowTop < viewportTop) {
+      listElement.scrollTop = rowTop;
+      setScrollTop(rowTop);
+    } else if (rowBottom > viewportBottom) {
+      const nextScrollTop = Math.max(0, rowBottom - listElement.clientHeight);
+      listElement.scrollTop = nextScrollTop;
+      setScrollTop(nextScrollTop);
+    }
+  }, [selectedIndex]);
+
+  return (
+    <div
+      className={styles.fileList}
+      onScroll={(event) => {
+        setScrollTop(event.currentTarget.scrollTop);
+      }}
+      ref={listRef}
+    >
+      <div
+        className={styles.fileListVirtualSpacer}
+        style={{ height: `${String(files.length * fileListRowHeight)}px` }}
+      >
+        <div
+          className={styles.fileListVirtualItems}
+          style={{
+            transform: `translateY(${String(startIndex * fileListRowHeight)}px)`
+          }}
+        >
+          {renderedFiles.map((file, index) => (
+            <FileButton
+              file={file}
+              isSelected={selectedPath === file.path}
+              key={file.path}
+              onSelect={onSelect}
+              position={startIndex + index + 1}
+              total={files.length}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FileButton = memo(function FileButton({
   file,
   isSelected,
-  onSelect
+  onSelect,
+  position,
+  total
 }: {
   readonly file: ReviewFileView;
   readonly isSelected: boolean;
   readonly onSelect: (path: string) => void;
+  readonly position: number;
+  readonly total: number;
 }): React.JSX.Element {
   const parts = splitPath(file.path);
 
   return (
     <button
       aria-label={`${parts.filename} ${file.status}${file.invalidated ? " changed after review" : ""}`}
+      aria-posinset={position}
+      aria-setsize={total}
       className={styles.fileItem}
       data-selected={isSelected}
       onClick={() => {
@@ -1650,7 +2276,7 @@ function FileButton({
       <DiffStats additions={file.additions} deletions={file.deletions} />
     </button>
   );
-}
+});
 
 function DiffToolbar({
   disabled,
@@ -1717,7 +2343,30 @@ function DiffToolbar({
   );
 }
 
+function DiffLoadingState({
+  filePath,
+  status
+}: {
+  readonly filePath: string;
+  readonly status: "deferred" | "idle" | "loading";
+}): React.JSX.Element {
+  if (status === "deferred") {
+    return <div className={styles.diffPreparingState} aria-hidden="true" />;
+  }
+
+  return (
+    <div className={styles.diffPreparingState} role="status" aria-live="polite">
+      {status === "loading" ? (
+        <span className={styles.loadingMiniMark} aria-hidden />
+      ) : null}
+      <span>{status === "loading" ? "Loading diff" : "Diff not loaded"}</span>
+      <span className={styles.diffPreparingPath}>{filePath}</span>
+    </div>
+  );
+}
+
 function DiffSurface({
+  diffHash,
   diffMode,
   filePath,
   newText,
@@ -1727,6 +2376,7 @@ function DiffSurface({
   status,
   refObject
 }: {
+  readonly diffHash: string;
   readonly diffMode: DiffMode;
   readonly filePath: string;
   readonly newText: string | undefined;
@@ -1736,25 +2386,27 @@ function DiffSurface({
   readonly status: ReviewFileView["status"];
   readonly refObject: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
-  const segments = useMemo(
-    () =>
-      parseDiffSegments({
-        ...(newText !== undefined ? { newText } : {}),
-        ...(oldText !== undefined ? { oldText } : {}),
-        patch
-      }),
-    [newText, oldText, patch]
-  );
+  const parseKey = `${filePath}:${diffHash}`;
+  const [parseState, setParseState] = useState<DiffParseState>(() => ({
+    key: parseKey,
+    status: "parsing"
+  }));
+  const segments =
+    parseState.key === parseKey && parseState.status === "ready"
+      ? parseState.segments
+      : undefined;
   const [expandedContextKeys, setExpandedContextKeys] = useState<ReadonlySet<string>>(
     () => new Set()
   );
   const visibleSegments = useMemo<readonly ParsedDiffSegment[]>(
     () =>
-      segments.map((segment) =>
-        segment.kind === "collapsed_context" && !expandedContextKeys.has(segment.key)
-          ? { ...segment, lines: [] }
-          : segment
-      ),
+      segments
+        ? segments.map((segment) =>
+            segment.kind === "collapsed_context" && !expandedContextKeys.has(segment.key)
+              ? { ...segment, lines: [] }
+              : segment
+          )
+        : [],
     [expandedContextKeys, segments]
   );
   const highlightedLines = useHighlightedLines({
@@ -1767,6 +2419,35 @@ function DiffSurface({
   useEffect(() => {
     setExpandedContextKeys(new Set());
   }, [filePath, newText, oldText, patch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      const nextSegments = parseDiffSegments({
+        ...(newText !== undefined ? { newText } : {}),
+        ...(oldText !== undefined ? { oldText } : {}),
+        patch
+      });
+
+      if (!cancelled) {
+        setParseState({
+          key: parseKey,
+          segments: nextSegments,
+          status: "ready"
+        });
+      }
+    }, 0);
+
+    setParseState({
+      key: parseKey,
+      status: "parsing"
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [newText, oldText, parseKey, patch]);
 
   function toggleContext(key: string): void {
     setExpandedContextKeys((currentKeys) => {
@@ -1788,7 +2469,13 @@ function DiffSurface({
       data-diff-layout={forceSingleFile ? "single" : diffMode}
       ref={refObject}
     >
-      {segments.map((segment) =>
+      {!segments ? (
+        <div className={styles.diffPreparingState} role="status">
+          <span className={styles.loadingMiniMark} aria-hidden />
+          <span>Preparing diff</span>
+        </div>
+      ) : null}
+      {segments?.map((segment) =>
         segment.kind === "collapsed_context" ? (
           <CollapsedContextBlock
             diffMode={diffMode}
@@ -2066,11 +2753,16 @@ function useHighlightedLines({
     let cancelled = false;
     const language = syntaxLanguageForPath(filePath);
     const theme = syntaxThemes[resolvedTheme];
+    const linesToHighlight = segments.flatMap((segment) => segment.lines);
 
     setHighlightedLines(new Map());
 
     async function highlight(): Promise<void> {
       try {
+        if (linesToHighlight.length > maxHighlightedDiffLines) {
+          return;
+        }
+
         const highlighter = await getSyntaxHighlighter();
 
         if (language !== "text") {
@@ -3069,6 +3761,134 @@ function visiblePathOrFirst(
   return workspace.files.some((file) => file.path === preferredPath && file.visible)
     ? preferredPath
     : firstVisiblePath(workspace);
+}
+
+function loadStatusFromProgress(progress: ProjectLoadProgressView): WorkspaceLoadStatus {
+  return {
+    detail: loadProgressDetail(progress),
+    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
+    title: progress.message,
+    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
+  };
+}
+
+function loadProgressDetail(progress: ProjectLoadProgressView): string {
+  if (progress.phase === "loading_files" && progress.totalFiles !== undefined) {
+    const loadedFiles = progress.loadedFiles ?? 0;
+    const pathSuffix = progress.path ? ` · ${progress.path}` : "";
+
+    return `${String(loadedFiles)} / ${String(progress.totalFiles)} files${pathSuffix}`;
+  }
+
+  return progress.projectName;
+}
+
+function tabLoadingText(status: WorkspaceLoadStatus): string {
+  if (
+    status.loadedFiles !== undefined &&
+    status.totalFiles !== undefined &&
+    status.totalFiles > 0
+  ) {
+    return `${String(status.loadedFiles)}/${String(status.totalFiles)}`;
+  }
+
+  return "Loading";
+}
+
+function tabSwitchLoaderDelayMs(project: RecentProjectView | undefined): number {
+  const changedFileCount = project?.reviewSummary?.progress.totalVisibleReviewableFiles;
+
+  if (
+    changedFileCount !== undefined &&
+    changedFileCount > immediateTabSwitchLoaderFileThreshold
+  ) {
+    return 0;
+  }
+
+  return delayedTabSwitchLoaderMs;
+}
+
+function tabReviewCountText(summary: ProjectReviewSummaryView | undefined): string {
+  if (!summary) {
+    return "-/-";
+  }
+
+  return `${String(summary.progress.reviewedVisibleFiles)}/${String(
+    summary.progress.totalVisibleReviewableFiles
+  )}`;
+}
+
+function projectTabTitle(
+  project: RecentProjectView,
+  summary: ProjectReviewSummaryView | undefined,
+  isSummaryLoading: boolean
+): string {
+  if (isSummaryLoading) {
+    return `${project.path} · Updating review status`;
+  }
+
+  if (!summary) {
+    return `${project.path} · Review status not loaded`;
+  }
+
+  if (summary.attentionCount > 0) {
+    return `${project.path} · ${String(summary.attentionCount)} reviewed files changed`;
+  }
+
+  const total = summary.progress.totalVisibleReviewableFiles;
+  const reviewed = summary.progress.reviewedVisibleFiles;
+
+  if (total === 0) {
+    return `${project.path} · No changed files`;
+  }
+
+  if (reviewed >= total) {
+    return `${project.path} · All files reviewed`;
+  }
+
+  return `${project.path} · ${String(reviewed)} of ${String(total)} files reviewed`;
+}
+
+function projectReviewSummary(workspace: ReviewWorkspaceView): ProjectReviewSummaryView {
+  return {
+    attentionCount: workspace.files.filter((file) => file.visible && file.invalidated)
+      .length,
+    progress: workspace.progress
+  };
+}
+
+function reviewSummariesEqual(
+  left: ProjectReviewSummaryView | undefined,
+  right: ProjectReviewSummaryView
+): boolean {
+  if (!left) {
+    return false;
+  }
+
+  return (
+    left.attentionCount === right.attentionCount &&
+    left.progress.reviewedVisibleFiles === right.progress.reviewedVisibleFiles &&
+    left.progress.totalVisibleReviewableFiles ===
+      right.progress.totalVisibleReviewableFiles
+  );
+}
+
+function omitProjectReviewSummary(project: RecentProjectView): RecentProjectView {
+  const { reviewSummary, ...projectWithoutSummary } = project;
+
+  void reviewSummary;
+
+  return projectWithoutSummary;
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
 }
 
 function diffTargetLabel(target: ReviewWorkspaceView["reviewTarget"]): string {

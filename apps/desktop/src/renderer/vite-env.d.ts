@@ -7,11 +7,18 @@ declare global {
     readonly appVersion: () => Promise<string>;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
+    readonly getProjectReviewSummary: (
+      projectId: string
+    ) => Promise<ProjectReviewSummaryView | null>;
     readonly listInstalledEditors: () => Promise<readonly EditorPresetView[]>;
     readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+    readonly loadFileDiff: (
+      input: LoadFileDiffInput
+    ) => Promise<ReviewFileDiffContentView | null>;
     readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
     readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
+    readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
     readonly markFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<MarkReviewedResult>;
@@ -82,6 +89,26 @@ declare global {
 
   type ProjectChangedListener = (event: ProjectChangedEvent) => void;
 
+  type ProjectLoadProgressPhase =
+    | "loading_files"
+    | "preparing_workspace"
+    | "resolving_review_state"
+    | "resolving_target"
+    | "scanning_files";
+
+  type ProjectLoadProgressView = {
+    readonly loadedFiles?: number;
+    readonly message: string;
+    readonly path?: string;
+    readonly phase: ProjectLoadProgressPhase;
+    readonly projectId: string;
+    readonly projectName: string;
+    readonly projectPath: string;
+    readonly totalFiles?: number;
+  };
+
+  type ProjectLoadProgressListener = (progress: ProjectLoadProgressView) => void;
+
   type ReviewProgressView = {
     readonly reviewedVisibleFiles: number;
     readonly totalVisibleReviewableFiles: number;
@@ -91,17 +118,33 @@ declare global {
     readonly additions: number;
     readonly deletions: number;
     readonly diffHash: string;
+    readonly diffLoaded: boolean;
     readonly generated: boolean;
     readonly invalidated: boolean;
     readonly newText?: string;
     readonly oldText?: string;
     readonly path: string;
-    readonly patch: string;
+    readonly patch?: string;
     readonly previousPath?: string;
     readonly reviewable: boolean;
     readonly reviewed: boolean;
     readonly status: "added" | "deleted" | "mode_changed" | "modified" | "renamed";
     readonly visible: boolean;
+  };
+
+  type LoadFileDiffInput = {
+    readonly path: string;
+    readonly projectId: string;
+  };
+
+  type ReviewFileDiffContentView = {
+    readonly additions: number;
+    readonly deletions: number;
+    readonly newText?: string;
+    readonly oldText?: string;
+    readonly patch: string;
+    readonly path: string;
+    readonly status: ReviewFileView["status"];
   };
 
   type ReviewWorkspaceView = {

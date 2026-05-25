@@ -21,7 +21,11 @@ import {
   getWorktreeInfo,
   listBranchRefs,
   loadBranchDiffs,
+  loadBranchDiffSummaries,
+  loadBranchFileDiff,
   loadWorkingTreeDiffs,
+  loadWorkingTreeDiffSummaries,
+  loadWorkingTreeFileDiff,
   parseStatusPorcelainV2
 } from "../src/index.js";
 
@@ -135,6 +139,77 @@ describe("working tree diff loading", () => {
     await expect(loadWorkingTreeDiffs(repo)).resolves.toEqual(
       expect.objectContaining({
         files: []
+      })
+    );
+  });
+
+  it("reports progress while loading changed files", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "changed\n");
+    const progressEvents: {
+      readonly loadedFiles?: number;
+      readonly path?: string;
+      readonly phase: string;
+      readonly totalFiles?: number;
+    }[] = [];
+
+    const result = await loadWorkingTreeDiffs(repo, {
+      onProgress: (progress) => {
+        progressEvents.push(progress);
+      }
+    });
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+    expect(progressEvents.map((event) => event.phase)).toEqual(
+      expect.arrayContaining(["resolving_target", "scanning_files", "loading_files"])
+    );
+    expect(progressEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          loadedFiles: 0,
+          phase: "loading_files",
+          totalFiles: 1
+        }),
+        expect.objectContaining({
+          loadedFiles: 1,
+          path: "tracked.txt",
+          phase: "loading_files",
+          totalFiles: 1
+        })
+      ])
+    );
+  });
+
+  it("loads lightweight summaries before selected working tree file details", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "changed\n");
+
+    const summary = await loadWorkingTreeDiffSummaries(repo);
+    const detail = await loadWorkingTreeFileDiff(repo, "tracked.txt");
+
+    expect(summary.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({ kind: "binary" }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+    expect(summary.files[0]?.content).not.toEqual(
+      expect.objectContaining({ patch: expect.any(String) })
+    );
+    expect(detail).toEqual(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          patch: expect.stringContaining("+changed")
+        }),
+        newPath: "tracked.txt",
+        status: "modified"
       })
     );
   });
@@ -630,6 +705,34 @@ describe("branch diff loading", () => {
         status: "modified"
       })
     ]);
+  });
+
+  it("loads branch summaries separately from selected file details", async () => {
+    const repo = await createRepo();
+    await git(repo, "checkout", "-b", "feature/change");
+    await writeFile(path.join(repo, "tracked.txt"), "branch\n");
+    await git(repo, "commit", "-am", "change tracked");
+
+    const summary = await loadBranchDiffSummaries(repo, "main");
+    const detail = await loadBranchFileDiff(repo, "main", "tracked.txt");
+
+    expect(summary.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({ kind: "binary" }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+    expect(detail).toEqual(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          patch: expect.stringContaining("+branch")
+        }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    );
   });
 
   it("loads committed binary content identity in branch diffs", async () => {

@@ -27,6 +27,27 @@ describe("mergeProjectTabs", () => {
       )
     ).toEqual([project("reader-flow"), project("new-repo")]);
   });
+
+  it("preserves locally loaded tab review summaries when storage returns metadata only", () => {
+    type TestProject = {
+      readonly id: string;
+      readonly name?: string;
+      readonly reviewSummary?: {
+        readonly count: number;
+      };
+    };
+    const summary = { count: 3 };
+    const currentProjects: readonly TestProject[] = [
+      { id: "reader-flow", name: "Reader Flow", reviewSummary: summary }
+    ];
+    const nextProjects: readonly TestProject[] = [
+      { id: "reader-flow", name: "reader-flow" }
+    ];
+
+    expect(mergeProjectTabs(currentProjects, nextProjects)).toEqual([
+      { id: "reader-flow", name: "reader-flow", reviewSummary: summary }
+    ]);
+  });
 });
 
 describe("reorderProjectTabs", () => {
