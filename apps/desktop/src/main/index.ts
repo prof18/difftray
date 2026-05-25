@@ -60,11 +60,13 @@ import {
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
+const projectWatchersEnabled = process.env.DIFFTRAY_ENABLE_PROJECT_WATCHERS === "1";
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
 
 let mainWindow: BrowserWindow | undefined;
 let projectWatchService: ProjectWatchService | undefined;
 let storage: DifftrayStorage | undefined;
+let isQuitting = false;
 
 type RecentProjectView = {
   readonly defaultBaseRef?: string;
@@ -207,15 +209,23 @@ const createMainWindow = async (): Promise<void> => {
     }
   });
 
-  window.once("ready-to-show", () => {
+  let didShowWindow = false;
+  const showWindow = (): void => {
+    if (didShowWindow || window.isDestroyed()) {
+      return;
+    }
+
+    didShowWindow = true;
     window.show();
-  });
+  };
+
+  window.once("ready-to-show", showWindow);
+  window.webContents.once("did-finish-load", showWindow);
+  setTimeout(showWindow, 1_500);
 
   if (bootProjectPath) {
     await storeRepositoryAtPath(bootProjectPath);
   }
-
-  await syncProjectWatchers(listAvailableRecentProjects());
 
   const rendererDevUrl = resolveRendererDevUrl(rendererDevUrlFromEnv, app.isPackaged);
 
@@ -225,6 +235,7 @@ const createMainWindow = async (): Promise<void> => {
     await window.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
 
+  showWindow();
   mainWindow = window;
 };
 
@@ -486,6 +497,8 @@ ipcMain.handle(
 );
 
 app.on("before-quit", () => {
+  isQuitting = true;
+  pendingProjectWatcherSync = undefined;
   void projectWatchService?.close();
   projectWatchService = undefined;
   storage?.close();
@@ -542,10 +555,55 @@ function emitProjectChange(change: ProjectWatchChangeEvent): void {
   }
 }
 
-async function syncProjectWatchers(
-  projects: readonly StoredProjectRecord[]
-): Promise<void> {
-  await getProjectWatchService().syncProjects(projects.map(projectWatchTarget));
+let pendingProjectWatcherSync: readonly WatchedProject[] | undefined;
+let isProjectWatcherSyncRunning = false;
+
+function syncProjectWatchersInBackground(
+  projects: readonly Pick<StoredProjectRecord, "id" | "path">[]
+): void {
+  if (!projectWatchersEnabled || isQuitting) {
+    return;
+  }
+
+  pendingProjectWatcherSync = projects.map(projectWatchTarget);
+
+  if (isProjectWatcherSyncRunning) {
+    return;
+  }
+
+  isProjectWatcherSyncRunning = true;
+
+  void (async () => {
+    try {
+      for (;;) {
+        const projectsToSync = pendingProjectWatcherSync;
+
+        if (!projectsToSync) {
+          break;
+        }
+
+        pendingProjectWatcherSync = undefined;
+
+        try {
+          await getProjectWatchService().syncProjects(projectsToSync);
+        } catch (caughtError) {
+          console.error("Project watcher sync failed", caughtError);
+        }
+      }
+    } finally {
+      isProjectWatcherSyncRunning = false;
+
+      if (pendingProjectWatcherSync) {
+        syncProjectWatchersInBackground(pendingProjectWatcherSync);
+      }
+    }
+  })();
+}
+
+function watchActiveProjectInBackground(
+  project: Pick<StoredProjectRecord, "id" | "path">
+): void {
+  syncProjectWatchersInBackground([project]);
 }
 
 function projectWatchTarget(
@@ -571,8 +629,6 @@ function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
 
 async function listAvailableRecentProjectViews(): Promise<readonly RecentProjectView[]> {
   const projects = listAvailableRecentProjects();
-
-  await syncProjectWatchers(projects);
 
   return Promise.all(
     projects.map(async (project) =>
@@ -620,7 +676,6 @@ async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecor
   };
 
   upsertOpenedProject(project);
-  await getProjectWatchService().watchProject(projectWatchTarget(project));
 
   return project;
 }
@@ -634,6 +689,8 @@ async function loadProjectWorkspace(projectId: string): Promise<ReviewWorkspaceV
 
   const { progress, reviewTarget, reviewTargetId, states } =
     await loadProjectReviewState(project);
+
+  watchActiveProjectInBackground(project);
 
   return {
     files: states.map((state) => {
@@ -733,7 +790,7 @@ async function loadProjectWorkspaceIfAvailable(
 
   if (!existsSync(project.path)) {
     getStorage().deleteProject(project.id);
-    await getProjectWatchService().stopProject(project.id);
+    await projectWatchService?.stopProject(project.id);
     return null;
   }
 

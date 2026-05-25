@@ -195,10 +195,11 @@ The current renderer uses a small React diff viewer backed by the core
 `packages/core` so renderer components stay mostly presentational.
 
 Do not keep unused diff-rendering dependencies in the release build.
-`@pierre/diffs` is tracked as a proposed migration in
-[Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md) and
-[the migration plan](pierre-diffs-migration-plan.md), but it should not be a
-runtime dependency until a real adapter replaces the local renderer.
+`@pierre/diffs` was evaluated and rejected in
+[Decision 0023](decisions/0023-pierre-diffs-rendering-engine.md) after the
+attempted migration created more tab-switching and large-diff performance risk
+than benefit. It should not be a runtime dependency unless a future measured ADR
+supersedes that decision.
 
 ## Styling Architecture
 

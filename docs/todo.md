@@ -71,7 +71,7 @@
 
 ## V0 Release Prep
 
-- [ ] Replace manual text diff rendering with `@pierre/diffs`.
+- [x] Keep custom text diff rendering; `@pierre/diffs` migration rejected.
 - [x] Run full local gate.
 - [x] Add screenshots.
 - [x] Add install/run instructions.

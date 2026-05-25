@@ -45,6 +45,6 @@ Negative:
 Tauri can be reconsidered later if app size becomes a serious problem, but it
 adds Rust integration cost before the product is proven.
 
-`@pierre/diffs` remains a proposed renderer migration in
-[Decision 0023](0023-pierre-diffs-rendering-engine.md). It should be added back
-only when a real adapter replaces the current local text diff renderer.
+`@pierre/diffs` was evaluated and rejected in
+[Decision 0023](0023-pierre-diffs-rendering-engine.md). Keep the current custom
+text diff renderer unless a future measured ADR supersedes that decision.

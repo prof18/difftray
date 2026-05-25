@@ -1,83 +1,82 @@
-# Decision 0023: Pierre Diffs Rendering Engine
+# Decision 0023: Do Not Adopt Pierre Diffs Rendering Engine
 
 ## Status
 
-Proposed
+Rejected
 
 ## Decision
 
-Adopt `@pierre/diffs` as Difftray's primary text diff engine in the desktop
-renderer.
+Do not adopt `@pierre/diffs` as Difftray's primary text diff renderer for the
+current product.
 
-Pierre owns renderer-side text diff parsing, hunk layout, split/unified
-rendering, syntax highlighting, line annotations, selection, context expansion
-where supported, and virtualization.
+Difftray will keep the bespoke text diff renderer:
 
-Difftray should not keep a bespoke patch parser or bespoke React hunk renderer
-in the release build after the migration. Any remaining Difftray renderer code
-around Pierre should be a thin adapter for product state, styling, commands, and
-non-text placeholders.
+- `packages/core` owns patch parsing and collapsed context segmentation through
+  `parseDiffSegments`.
+- `apps/desktop` owns the current split/unified React rendering and syntax
+  highlighting.
+- `packages/git` continues to provide canonical patch text and bounded old/new
+  text snapshots where the renderer needs them.
 
-Git collection and review correctness stay owned by Difftray:
-
-- `packages/git` remains responsible for invoking Git, loading canonical patch
-  text, loading optional old/new text snapshots, and classifying binary,
-  symlink, submodule, mode-only, generated, and oversized changes.
-- `packages/core` remains responsible for review targets, diff hashes, progress,
-  generated-file detection, and review invalidation.
-- Review hashes continue to use Difftray's canonical Git-derived payloads. They
-  must not depend on Pierre render output, DOM shape, tokenization, or
-  renderer-side parse success.
-
-For text diffs, the renderer should feed Pierre either Git patch text or
-Pierre's `FileDiffMetadata` built from the loaded patch and snapshots. Prefer
-the representation that supports full-context expansion and virtualization
-without changing review identity.
-
-Non-text changes are still reviewable, but they render through explicit
-Difftray-owned placeholder panels until Pierre has a useful representation for
-them.
+`@pierre/diffs` must not be added as a production dependency, worker dependency,
+or hidden inactive-tab renderer unless a new ADR supersedes this decision with
+measured evidence.
 
 ## Context
 
-The initial implementation used a local `parseDiffSegments` parser and custom
-React components for split/unified diff rendering. That made early progress
-possible, but it also made Difftray responsible for a difficult viewer surface:
-patch parsing, hunk alignment, syntax highlighting, context expansion,
-virtualization, selection, annotations, and large-file behavior.
+The migration was originally proposed to reduce custom diff parsing, layout,
+highlighting, and virtualization code. A branch attempt showed that the library
+integration did not improve the product enough to justify the added runtime
+cost and complexity.
 
-`@pierre/diffs` was requested as the intended diff rendering dependency and is a
-candidate fit for this responsibility. It provides React
-components, Shiki-backed highlighting, split and stacked layouts, annotation
-hooks, line selection/highlighting, hunk expansion behavior, and virtualization
-APIs.
+The app's core workflow depends on keeping multiple repositories open and moving
+between repository tabs quickly. The attempted migration made that path harder
+to keep responsive:
 
-Difftray's product moat is trustworthy local review state, not ownership of a
-homegrown diff renderer.
+- repository tab switches could still block on expensive diff loading or rich
+  rendering work
+- large selected diffs still had synchronous parser/render cost before workers
+  could help
+- making tab switches feel acceptable required extra caches, background refresh
+  behavior, and stale inactive summaries
+- the app became harder to reason about when only one active repository should
+  own expensive review state
+
+The current custom renderer has known maintenance cost, but it matches the
+existing multi-repository model and has already been verified with the app's
+review workflow.
 
 ## Consequences
 
 Positive:
 
-- Reduces custom diff parsing and rendering code before publication.
-- Moves correctness risk for common text diff rendering to a dedicated library.
-- Gives Difftray a clearer path for large diffs, annotations, selection, and
-  future review affordances.
-- Lets core tests focus on review invariants instead of UI hunk formatting.
+- Avoids introducing a third-party renderer dependency that currently regresses
+  the most important interaction path.
+- Keeps repository switching and review state behavior simpler.
+- Preserves existing expandable context behavior and old/new snapshot handling.
+- Keeps Electron worker and content-security-policy complexity out of the
+  renderer for now.
 
 Negative:
 
-- Adds a real third-party runtime dependency to the desktop renderer.
-- Requires an adapter and visual verification to preserve Difftray's current
-  workflow, styling, keyboard behavior, and Electron security posture.
-- Requires explicit handling for worker bundling and content security policy.
-- Some non-text review surfaces remain Difftray-owned.
+- Difftray still owns custom patch parsing, hunk layout, split/unified rendering,
+  and syntax highlighting glue.
+- Future annotation, selection, and virtualization improvements must be built or
+  separately evaluated.
+- The custom renderer needs continued performance discipline for large diffs.
 
-## Amends
+## Reconsideration
 
-This decision amends [Decision 0001](0001-stack.md) and replaces the previous
-architecture guidance to use the local `parseDiffSegments` renderer.
+This decision can be superseded only after a new spike proves, with realistic
+repositories, that a replacement renderer:
 
-This amendment should become accepted only after the adapter lands and
-`@pierre/diffs` is an actual production dependency. Until then, the release build
-uses the local renderer and should not carry an unused Pierre dependency.
+- keeps first open, second open, tab switching, and large diff selection
+  responsive
+- does not require hidden viewers for inactive repositories
+- keeps memory bounded with several repositories open
+- preserves review identity, invalidation, generated-file filtering, context
+  expansion, and visual parity
+- passes the full local gate and visual smoke tests
+
+Until then, optimize the current renderer and Git loading path instead of
+planning another `@pierre/diffs` migration.
