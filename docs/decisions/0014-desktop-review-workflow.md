@@ -29,6 +29,13 @@ blocks the active review controls, and shows a compact loading state in the tab
 and diff pane. Full-window loading is reserved for app startup or states where
 there is no active workspace to keep visible.
 
+Focus-triggered active workspace refreshes are silent. The renderer asks the
+main process to reload Git state without progress events, keeps the current UI
+interactive, and applies the refreshed workspace only if the same project is
+still active and no newer workspace update has started. Loaded patch bodies are
+carried forward when their diff hash still matches, so a no-op focus refresh
+does not replace the diff pane with a loader.
+
 When switching to a repository tab whose workspace is not already cached, the
 renderer selects the target tab immediately while keeping the existing review
 workspace visible underneath a compact loading banner. The previous workspace
@@ -77,6 +84,7 @@ Positive:
   lightweight summaries finish loading.
 - Switching back to an already-opened repository is immediate.
 - Large active-repository reloads have visible progress instead of looking hung.
+- Refocusing the app can validate drift without flashing a loading state.
 - Large file sets can be opened and navigated before every patch body is loaded.
 - Thousand-file reviews do not require rendering every file row at once.
 
@@ -87,5 +95,7 @@ Negative:
   queue catches up.
 - Cached tab content may be stale until refresh or a guarded review action
   reloads current Git state.
+- Focus-triggered refresh failures are reported only if the original project is
+  still active when the background refresh completes.
 - Existing review marks created from older patch-body hashes may need to be
   re-marked under the lightweight fingerprint model.

@@ -16,7 +16,10 @@ declare global {
     readonly loadFileDiff: (
       input: LoadFileDiffInput
     ) => Promise<ReviewFileDiffContentView | null>;
-    readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+    readonly loadProject: (
+      projectId: string,
+      options?: LoadProjectOptions
+    ) => Promise<ReviewWorkspaceView | null>;
     readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
     readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
     readonly markFileReviewed: (
@@ -70,6 +73,10 @@ declare global {
     readonly name: string;
     readonly path: string;
     readonly reviewSummary?: ProjectReviewSummaryView;
+  };
+
+  type LoadProjectOptions = {
+    readonly reportProgress?: boolean;
   };
 
   type ProjectReviewSummaryView = {

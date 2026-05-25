@@ -373,10 +373,11 @@ ipcMain.handle(
     input: unknown
   ): Promise<ReviewWorkspaceView | null> => {
     const projectId = readStringProperty(input, "projectId");
+    const reportProgress = readOptionalBooleanProperty(input, "reportProgress") ?? true;
 
     return loadProjectWorkspaceIfAvailable(
       projectId,
-      projectLoadProgressReporter(event.sender, projectId)
+      reportProgress ? projectLoadProgressReporter(event.sender, projectId) : undefined
     );
   }
 );
@@ -1502,6 +1503,23 @@ function readBooleanProperty(input: unknown, property: string): boolean {
 
   if (typeof value !== "boolean") {
     throw new Error(`Invalid IPC payload: missing ${property}`);
+  }
+
+  return value;
+}
+
+function readOptionalBooleanProperty(
+  input: unknown,
+  property: string
+): boolean | undefined {
+  const value = readUnknownProperty(input, property);
+
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid IPC payload: ${property} must be a boolean`);
   }
 
   return value;

@@ -13,7 +13,10 @@ export type DifftrayApi = {
   readonly loadFileDiff: (
     input: LoadFileDiffInput
   ) => Promise<ReviewFileDiffContentView | null>;
-  readonly loadProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+  readonly loadProject: (
+    projectId: string,
+    options?: LoadProjectOptions
+  ) => Promise<ReviewWorkspaceView | null>;
   readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
   readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
   readonly markFileReviewed: (
@@ -65,6 +68,10 @@ export type RecentProjectView = {
   readonly name: string;
   readonly path: string;
   readonly reviewSummary?: ProjectReviewSummaryView;
+};
+
+export type LoadProjectOptions = {
+  readonly reportProgress?: boolean;
 };
 
 export type ProjectReviewSummaryView = {
@@ -264,9 +271,10 @@ const api: DifftrayApi = {
       "files:loadDiff",
       input
     ) as Promise<ReviewFileDiffContentView | null>,
-  loadProject: async (projectId) =>
+  loadProject: async (projectId, options = {}) =>
     ipcRenderer.invoke("projects:load", {
-      projectId
+      projectId,
+      reportProgress: options.reportProgress ?? true
     }) as Promise<ReviewWorkspaceView | null>,
   markFileReviewed: async (input) =>
     ipcRenderer.invoke("reviews:markFileReviewed", input) as Promise<MarkReviewedResult>,

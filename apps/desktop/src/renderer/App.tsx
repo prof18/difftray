@@ -42,6 +42,10 @@ import {
   reorderProjectTabs,
   type ProjectTabDropPosition
 } from "./project-tabs.js";
+import {
+  carryLoadedDiffsForward,
+  shouldApplySilentWorkspaceRefresh
+} from "./workspace-refresh.js";
 
 type LoadState = "idle" | "loading";
 type DiffMode = "split" | "unified";
@@ -178,12 +182,18 @@ export function App(): React.JSX.Element {
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const focusRefreshRunningRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
+  const loadStateRef = useRef<LoadState>("idle");
+  const paletteOpenRef = useRef(false);
+  const selectedPathRef = useRef<string | undefined>(undefined);
+  const settingsOpenRef = useRef(false);
   const selectedPathByProjectRef = useRef<Map<string, string>>(new Map());
   const tabSummaryInvalidationRef = useRef<Map<string, number>>(new Map());
   const tabSummaryLoadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const tabSummaryLoadsInFlightRef = useRef<Set<string>>(new Set());
   const tabSummaryLoadSkippedRef = useRef<Set<string>>(new Set());
+  const workspaceApplyVersionRef = useRef(0);
   const workspaceCacheRef = useRef<Map<string, WorkspaceCacheEntry>>(new Map());
+  const workspaceRef = useRef<ReviewWorkspaceView | undefined>(undefined);
   const resizeStartRef = useRef<{
     readonly startWidth: number;
     readonly x: number;
@@ -192,6 +202,14 @@ export function App(): React.JSX.Element {
   useLayoutEffect(() => {
     void bootstrapApp();
   }, []);
+
+  useEffect(() => {
+    loadStateRef.current = loadState;
+    paletteOpenRef.current = paletteOpen;
+    selectedPathRef.current = selectedPath;
+    settingsOpenRef.current = settingsOpen;
+    workspaceRef.current = workspace;
+  }, [loadState, paletteOpen, selectedPath, settingsOpen, workspace]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -503,10 +521,7 @@ export function App(): React.JSX.Element {
       lastFocusRefreshAtRef.current = now;
       focusRefreshRunningRef.current = true;
 
-      void runWorkspaceLoad(
-        () => window.difftray.loadProject(workspace.project.id),
-        selectedFile?.path
-      ).finally(() => {
+      void refreshWorkspaceSilently(workspace.project.id).finally(() => {
         focusRefreshRunningRef.current = false;
       });
     }
@@ -727,42 +742,101 @@ export function App(): React.JSX.Element {
     nextPath?: string,
     options: ApplyWorkspaceOptions = {}
   ): Promise<void> {
+    const workspaceToApply = carryLoadedDiffsForward(workspaceRef.current, nextWorkspace);
+
     setLoadStatus({
-      detail: nextWorkspace.project.name,
+      detail: workspaceToApply.project.name,
       title: "Preparing workspace"
     });
     const [nextSettings, nextBranchRefs] = await Promise.all([
       options.projectSettings
         ? Promise.resolve(options.projectSettings)
-        : window.difftray.getProjectSettings(nextWorkspace.project.id),
+        : window.difftray.getProjectSettings(workspaceToApply.project.id),
       options.branchRefs
         ? Promise.resolve(options.branchRefs)
-        : window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
+        : window.difftray.listProjectBranchRefs(workspaceToApply.project.id)
     ]);
     const nextAppSettings = options.appSettings ?? appSettings;
 
-    workspaceCacheRef.current.set(nextWorkspace.project.id, {
+    workspaceCacheRef.current.set(workspaceToApply.project.id, {
       branchRefs: nextBranchRefs,
       projectSettings: nextSettings,
-      workspace: nextWorkspace
+      workspace: workspaceToApply
     });
-    setWorkspace(nextWorkspace);
+    setWorkspace(workspaceToApply);
     setProjectSettings(nextSettings);
     setBranchRefs(nextBranchRefs);
     setBaseRefDraft(
-      nextWorkspace.reviewTarget.baseRefName ??
-        suggestedBaseRef(nextBranchRefs, nextWorkspace.reviewTarget.headRefName) ??
+      workspaceToApply.reviewTarget.baseRefName ??
+        suggestedBaseRef(nextBranchRefs, workspaceToApply.reviewTarget.headRefName) ??
         ""
     );
     setDiffMode(nextAppSettings.defaultDiffMode);
     setFileListWidth(nextSettings.fileListWidth);
     setFileListCollapsed(nextSettings.fileListCollapsed);
-    setSelectedPath(visiblePathOrFirst(nextWorkspace, nextPath));
+    setSelectedPath(visiblePathOrFirst(workspaceToApply, nextPath));
     updateRecentProjectReviewSummary(
-      nextWorkspace.project.id,
-      projectReviewSummary(nextWorkspace)
+      workspaceToApply.project.id,
+      projectReviewSummary(workspaceToApply)
     );
     setSettingsOpen(false);
+  }
+
+  function invalidatePendingSilentWorkspaceRefreshes(): void {
+    workspaceApplyVersionRef.current += 1;
+  }
+
+  function canApplySilentWorkspaceRefresh(
+    projectId: string,
+    requestApplyVersion: number
+  ): boolean {
+    return shouldApplySilentWorkspaceRefresh({
+      activeProjectId: workspaceRef.current?.project.id,
+      applyVersion: workspaceApplyVersionRef.current,
+      loadState: loadStateRef.current,
+      paletteOpen: paletteOpenRef.current,
+      requestApplyVersion,
+      requestProjectId: projectId,
+      settingsOpen: settingsOpenRef.current
+    });
+  }
+
+  async function refreshWorkspaceSilently(projectId: string): Promise<void> {
+    const requestApplyVersion = workspaceApplyVersionRef.current;
+
+    try {
+      const nextWorkspace = await window.difftray.loadProject(projectId, {
+        reportProgress: false
+      });
+
+      if (!canApplySilentWorkspaceRefresh(projectId, requestApplyVersion)) {
+        return;
+      }
+
+      if (!nextWorkspace) {
+        await refreshRecentProjects();
+        return;
+      }
+
+      const [nextSettings, nextBranchRefs] = await Promise.all([
+        window.difftray.getProjectSettings(nextWorkspace.project.id),
+        window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
+      ]);
+
+      if (!canApplySilentWorkspaceRefresh(projectId, requestApplyVersion)) {
+        return;
+      }
+
+      await applyWorkspace(nextWorkspace, selectedPathRef.current, {
+        branchRefs: nextBranchRefs,
+        projectSettings: nextSettings
+      });
+      await refreshRecentProjects();
+    } catch (caughtError) {
+      if (canApplySilentWorkspaceRefresh(projectId, requestApplyVersion)) {
+        setError(errorMessage(caughtError));
+      }
+    }
   }
 
   async function runWorkspaceLoad(
@@ -774,6 +848,7 @@ export function App(): React.JSX.Element {
   ): Promise<void> {
     let loadingProjectTimeout: number | undefined;
 
+    invalidatePendingSilentWorkspaceRefreshes();
     setError(undefined);
     if (projectToShowWhileLoading && projectLoadingDelayMs <= 0) {
       setPendingLoadingProjectId(undefined);
@@ -830,6 +905,7 @@ export function App(): React.JSX.Element {
     const cachedWorkspace = workspaceCacheRef.current.get(projectId);
 
     if (cachedWorkspace) {
+      invalidatePendingSilentWorkspaceRefreshes();
       setError(undefined);
       await applyWorkspace(
         cachedWorkspace.workspace,
@@ -863,6 +939,7 @@ export function App(): React.JSX.Element {
     );
 
     setError(undefined);
+    invalidatePendingSilentWorkspaceRefreshes();
     setLoadState("loading");
     setLoadStatus({
       detail: "Updating open repositories",
@@ -1027,6 +1104,7 @@ export function App(): React.JSX.Element {
     }
 
     setError(undefined);
+    invalidatePendingSilentWorkspaceRefreshes();
     setLoadState("loading");
     setLoadStatus({
       detail: "Refreshing review after preferences change",
@@ -1247,6 +1325,7 @@ export function App(): React.JSX.Element {
     const optimisticFile = selectedFile;
 
     setError(undefined);
+    invalidatePendingSilentWorkspaceRefreshes();
     setWorkspace({
       ...workspace,
       files: workspace.files.map((file) =>
@@ -1301,6 +1380,7 @@ export function App(): React.JSX.Element {
     const optimisticFile = selectedFile;
 
     setError(undefined);
+    invalidatePendingSilentWorkspaceRefreshes();
     setWorkspace({
       ...workspace,
       files: workspace.files.map((file) =>

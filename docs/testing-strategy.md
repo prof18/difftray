@@ -138,6 +138,8 @@ Renderer tests should cover:
 - inactive-project watcher events refresh summaries without switching projects
 - watcher events received while settings or the command palette are open are queued
   or applied without interrupting the overlay
+- focus-triggered refresh runs silently, ignores stale completions, and preserves
+  loaded patch content when the refreshed diff hash is unchanged
 - subscription cleanup prevents duplicate refreshes after remount
 
 ### App Workflow Tests
