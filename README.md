@@ -1,37 +1,42 @@
 # Difftray
 
-Difftray is a local-first macOS desktop app for reviewing Git changes across multiple projects. It tracks which files have been reviewed and automatically invalidates that review state when the relevant diff changes.
-
-This repository is private while the product shape is being defined. The intended long-term direction is an open-source macOS app.
-
-## Product Promise
+Difftray is a local-first macOS desktop app for reviewing Git changes across multiple projects. It tracks which files have been reviewed, automatically invalidates that review state when the relevant diff changes, and turns review comments into a ready-made prompt for your favorite agent or AI tool.
 
 Keep track of what changed, what you already reviewed, and what needs another look.
 
 Difftray is not an IDE, not an AI agent host, and not a pull request platform. It is a focused review desk for local Git changes.
 
-## Initial Stack
+## Current Features
 
-- Electron
-- React
-- TypeScript
-- Vite
-- pnpm workspaces
-- custom React diff viewer backed by `@difftray/core` patch parsing
-- SQLite for local app state
-- Git CLI integration
-- Chokidar for file watching
-- CSS Modules with CSS custom properties
-- Radix UI primitives where accessible behavior is useful
-- lucide-react for icons
-- Vitest for unit/integration tests
-- Playwright for renderer and app workflow tests
+- Keep several local repositories open in one review desk.
+- See which projects still need attention without switching context.
+- Review uncommitted work or branch changes with the same focused workflow.
+- Move through changed files quickly, with noisy generated files out of the way by default.
+- Read diffs in the shape that fits the moment: side-by-side, unified, expanded context, or focused on one side.
+- Mark files reviewed and Difftray will flag them if they change later.
+- Leave line-level review notes and copy a ready-made prompt to paste back into your favorite agent or AI tool.
+- Drive review from the keyboard, command palette, or dense file list controls.
+- Stay local by design: no fetching, pushing, staging, editing, or repository metadata writes.
+
 
 ## Screenshots
 
+Review workflow with inline comments and a ready-made agent handoff prompt:
+
 ![Review workflow](docs/screenshots/review-workflow.png)
 
-![Project settings](docs/screenshots/settings.png)
+Reviewed-file drift notification after a diff changes:
+
+![Reviewed-file drift notification](docs/screenshots/review-invalidated.png)
+
+Expandable unchanged context in split diff mode:
+
+![Expandable diff context](docs/screenshots/expanded-context.png)
+
+Focused new-side diff view:
+
+![Focused new-side diff](docs/screenshots/diff-focused-new.png)
+
 
 ## Install And Run
 
@@ -78,35 +83,6 @@ pnpm test
 pnpm test:visual
 ```
 
-## Documentation
-
-- [Product Brief](docs/product-brief.md)
-- [V0 Specification](docs/spec-v0.md)
-- [Architecture](docs/architecture.md)
-- [Data Model](docs/data-model.md)
-- [Testing Strategy](docs/testing-strategy.md)
-- [Implementation Plan](docs/implementation-plan.md)
-- [Roadmap](docs/roadmap.md)
-- [Todo](docs/todo.md)
-- [Naming Notes](docs/naming.md)
-- [Contributing](CONTRIBUTING.md)
-- [Decisions](docs/decisions)
-
-## Core Principles
-
-- Local-first by default.
-- Review state is local only.
-- Git repos and worktrees are first-class.
-- File-level review is the v0 unit of completion.
-- Exact diff changes invalidate reviewed state.
-- The app should be keyboard-friendly from the beginning.
-- Development should follow hard TDD for core behavior.
-- Keep the app private until the project is ready for an intentional open-source launch.
-
 ## License
 
 Apache-2.0.
-
-## Current Status
-
-Implementation has started. Difftray can open local repositories, list changed files, preview diffs, mark files reviewed, persist review state, configure project settings, and run the local quality gate.

@@ -274,10 +274,10 @@ export function App(): React.JSX.Element {
     };
   }, [appSettings.themeMode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (paletteOpen) {
       setPaletteSelected(0);
-      window.setTimeout(() => paletteInputRef.current?.focus(), 0);
+      paletteInputRef.current?.focus();
     }
   }, [paletteOpen, paletteMode, paletteQuery]);
 
@@ -378,7 +378,12 @@ export function App(): React.JSX.Element {
 
         if (event.key === "Enter") {
           event.preventDefault();
-          filteredCommands[paletteSelected]?.run();
+          const activeCommands = filterCommands(
+            commands,
+            paletteMode,
+            paletteInputRef.current?.value ?? paletteQuery
+          );
+          activeCommands[clampIndex(paletteSelected, activeCommands.length)]?.run();
           closePalette();
           return;
         }
@@ -701,30 +706,7 @@ export function App(): React.JSX.Element {
   );
 
   const filteredCommands = useMemo(() => {
-    const normalizedQuery = paletteQuery.trim().toLowerCase();
-    const modeCommands =
-      paletteMode === "files"
-        ? commands.filter((command) => command.kind === "file")
-        : commands;
-
-    if (normalizedQuery.length === 0) {
-      return modeCommands;
-    }
-
-    return modeCommands
-      .map((command) => ({
-        command,
-        rank: commandSearchRank(command, normalizedQuery)
-      }))
-      .filter((result) => Number.isFinite(result.rank))
-      .sort(
-        (left, right) =>
-          left.rank - right.rank ||
-          commandKindSearchWeight(left.command.kind) -
-            commandKindSearchWeight(right.command.kind) ||
-          left.command.label.localeCompare(right.command.label)
-      )
-      .map((result) => result.command);
+    return filterCommands(commands, paletteMode, paletteQuery);
   }, [commands, paletteMode, paletteQuery]);
 
   async function bootstrapApp(): Promise<void> {
@@ -4285,6 +4267,35 @@ function commandSearchRank(command: CommandItem, query: string): number {
   }
 
   return Number.POSITIVE_INFINITY;
+}
+
+function filterCommands(
+  commands: readonly CommandItem[],
+  mode: PaletteMode,
+  query: string
+): readonly CommandItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  const modeCommands =
+    mode === "files" ? commands.filter((command) => command.kind === "file") : commands;
+
+  if (normalizedQuery.length === 0) {
+    return modeCommands;
+  }
+
+  return modeCommands
+    .map((command) => ({
+      command,
+      rank: commandSearchRank(command, normalizedQuery)
+    }))
+    .filter((result) => Number.isFinite(result.rank))
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        commandKindSearchWeight(left.command.kind) -
+          commandKindSearchWeight(right.command.kind) ||
+        left.command.label.localeCompare(right.command.label)
+    )
+    .map((result) => result.command);
 }
 
 function commandKindSearchWeight(kind: CommandKind): number {

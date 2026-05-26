@@ -17,13 +17,13 @@ The renderer uses `@pierre/diffs` line annotations and line-number interaction
 hooks. Difftray owns the comment records, invalidation policy, report text, and
 clipboard handoff.
 
-The report export copies a single text report to the system clipboard. It
+The report export copies a ready-made prompt to the system clipboard. It
 contains a short header with project and target context, then groups comments by
 file with side-aware line numbers, reviewer text, and a small fenced diff
-excerpt around each commented line when textual content is available. The report
-is intended to be pasted into an agent or LLM so the local changes can be fixed
-from the review notes without requiring the recipient to infer the target line
-from the path alone.
+excerpt around each commented line when textual content is available. The prompt
+is intended to be pasted back into the reviewer's preferred agent or AI tool so
+the local changes can be fixed from the review notes without requiring the
+recipient to infer the target line from the path alone.
 The export action is shown as a text button with a comment count, and is hidden
 until the active review has at least one comment.
 Before copying, the main process reloads the active review and verifies that the

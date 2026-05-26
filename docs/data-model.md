@@ -117,7 +117,8 @@ with comments still present, and comment export does not change reviewed state.
 
 Comments are active only while `review_target_id`, `path`, and `diff_hash` match
 the current file diff. When a diff changes, old comments are kept for auditability
-but are hidden from the active review UI and omitted from the agent-ready report.
+but are hidden from the active review UI and omitted from the ready-made agent
+prompt.
 
 ### project_settings
 

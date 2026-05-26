@@ -10,12 +10,12 @@ Difftray must support:
 
 - opening multiple local Git repos
 - opening multiple Git worktrees
-- keeping all opened projects in one window
+- keeping all opened projects in one window with project tabs
 - remembering recent projects
 - project-specific base branch setting
 - live monitoring of all opened projects
 
-The preferred layout is a single-window project sidebar, not separate windows or project tabs.
+The preferred layout is a single-window review surface with project tabs, a changed-file list, and a diff workspace.
 
 ## Diff Modes
 
@@ -81,6 +81,14 @@ Changing the base branch creates or selects a different review target. Review st
 When marking a file reviewed, the main process must recompute or verify the current diff hash before storing the review mark. If the displayed hash is stale, the mark is rejected and the file refreshes.
 
 Paths are part of the diff hash. A rename is reviewable behavior and does not automatically inherit reviewed state from the old path. Once a specific rename diff is marked reviewed, it remains reviewed while that exact rename diff remains current.
+
+## Inline Review Comments
+
+Difftray supports local inline comments on rendered text diff lines.
+
+Comments are scoped to the project, review target, path, diff hash, side, and line range. Only comments whose stored diff hash still matches the active file diff are shown in the review UI and included in exported reports.
+
+The export action copies a ready-made prompt to the clipboard, grouped by file with side-aware line references and small diff excerpts where textual context is available. The prompt is intended for explicit local handoff back to the user's preferred agent or AI tool.
 
 ## Progress
 
@@ -179,7 +187,7 @@ When a file is marked reviewed:
 - collapse it
 - advance to the next unreviewed file when available
 
-Project sidebar shows:
+Project tabs show:
 
 - project name
 - path tooltip
@@ -228,8 +236,6 @@ Font customization is out of scope for v0, but the styling architecture should a
 
 ## Out of Scope for V0
 
-- line comments
-- exporting review comments
 - GitHub/GitLab integration
 - pull request review
 - non-Git folder snapshots
