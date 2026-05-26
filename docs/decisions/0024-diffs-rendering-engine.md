@@ -19,9 +19,10 @@ The app keeps its existing performance boundaries around the renderer:
 - Syntax highlighting runs through a bounded Diffs worker pool.
 - The selected diff surface uses Diffs virtualization and a stable `diffHash`
   cache key.
-- Diffs owns the Pierre theme defaults and line background styling; Difftray only
-  passes rendering preferences such as split/unified mode, bars, word-level
-  highlighting, and the user's line wrapping preference.
+- Diffs owns parsing, syntax rendering, and virtualization. Difftray passes
+  rendering preferences such as split/unified mode, bars, word-level
+  highlighting, the user's line wrapping preference, and the app's registered
+  IntelliJ Islands themes plus line/background CSS variables.
 - Inactive repository tabs do not mount hidden diff viewers.
 
 `packages/core` no longer owns a custom patch-to-render-segment parser.

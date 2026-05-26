@@ -18,6 +18,10 @@ Difftray will support an app-level appearance preference with three modes:
 
 The preference is stored in the local `app_settings` table rather than project settings because appearance is a user-level app choice. The renderer resolves `system` through `prefers-color-scheme` and applies theme-specific CSS custom properties with `data-theme`.
 
+As of [Decision 0025](0025-intellij-islands-visual-theme.md), those dark and light
+token values follow the IntelliJ IDEA Islands visual palette and are also passed
+through to the diff renderer.
+
 ## Context
 
 The professional redesign established a restrained dark review console. Users may still expect a macOS-style app to follow system appearance and offer explicit light or dark overrides.

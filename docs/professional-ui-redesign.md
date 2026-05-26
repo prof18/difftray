@@ -148,24 +148,26 @@ It should be collapsible or contextual so it does not steal room from the diff.
 
 ### Color
 
-Use a restrained neutral base with one low-saturation operational accent.
+Use a restrained editor-like base with one operational accent. Current
+implementation follows the IntelliJ IDEA Islands palette described in
+[Decision 0025](decisions/0025-intellij-islands-visual-theme.md).
 
-Recommended token direction:
+Token direction:
 
 ```text
---color-bg: #101112
---color-panel: #161719
---color-panel-raised: #1d1f22
---color-border: #2a2d31
---color-border-strong: #3a3e44
---color-text: #f1f0ec
---color-text-muted: #9c9a94
---color-text-subtle: #6f736f
---color-accent: #8aa0b5
---color-accent-strong: #a9bac9
---color-reviewed: #7aa877
---color-invalidated: #d0a45f
---color-danger: #d66f61
+--color-bg: #191a1c
+--color-panel: #191a1c
+--color-panel-raised: #2b2d30
+--color-border: #26282b
+--color-border-strong: #3a3d42
+--color-text: #d1d3da
+--color-text-muted: #aaacb2
+--color-text-subtle: #6f737a
+--color-accent: #3474f0
+--color-accent-strong: #5da9ff
+--color-reviewed: #73bd79
+--color-invalidated: #d9b64e
+--color-danger: #cd3131
 ```
 
 Rules:

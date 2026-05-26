@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   createDiffsFileDiffOptions,
   createDiffsRenderModel,
-  diffsWorkerHighlighterOptions
+  diffsVirtualFileMetrics,
+  diffsWorkerHighlighterOptions,
+  intellijIslandsDiffTheme
 } from "./diffs-renderer.js";
 
 describe("createDiffsFileDiffOptions", () => {
@@ -20,6 +22,7 @@ describe("createDiffsFileDiffOptions", () => {
       disableBackground: false,
       lineDiffType: "word-alt",
       overflow: "wrap",
+      theme: intellijIslandsDiffTheme,
       themeType: "dark"
     });
     expect(
@@ -28,11 +31,19 @@ describe("createDiffsFileDiffOptions", () => {
         resolvedTheme: "dark",
         wrapLines: true
       })
-    ).not.toHaveProperty("theme");
+    ).toHaveProperty("unsafeCSS");
+    expect(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark",
+        wrapLines: true
+      }).unsafeCSS
+    ).toContain("--diffs-font-size: 13px");
+    expect(diffsVirtualFileMetrics.lineHeight).toBe(22);
     expect(diffsWorkerHighlighterOptions).toMatchObject({
-      lineDiffType: "word-alt"
+      lineDiffType: "word-alt",
+      theme: intellijIslandsDiffTheme
     });
-    expect(diffsWorkerHighlighterOptions).not.toHaveProperty("theme");
   });
 
   it("uses horizontal scrolling when line wrapping is disabled", () => {
