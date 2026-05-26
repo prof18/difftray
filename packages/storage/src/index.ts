@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 export type ProjectRecord = {
@@ -73,6 +73,26 @@ export type ReviewMarkRecord = {
   readonly reviewTargetId: string;
 };
 
+export type ReviewCommentSide = "additions" | "deletions";
+
+export type CreateReviewCommentInput = {
+  readonly body: string;
+  readonly diffHash: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+  readonly side: ReviewCommentSide;
+};
+
+export type ReviewCommentRecord = CreateReviewCommentInput & {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly updatedAt: string;
+};
+
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
   readonly displayedDiffHash: string;
@@ -109,7 +129,9 @@ export type VerifyAndUnmarkReviewedResult =
 
 export type DifftrayStorage = {
   readonly close: () => void;
+  readonly createReviewComment: (input: CreateReviewCommentInput) => ReviewCommentRecord;
   readonly deleteProject: (id: string) => void;
+  readonly deleteReviewComment: (id: string) => boolean;
   readonly getAppSettings: () => AppSettingsRecord;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
@@ -120,6 +142,7 @@ export type DifftrayStorage = {
     path: string,
     currentDiffHash: string
   ) => boolean;
+  readonly listReviewComments: (reviewTargetId: string) => readonly ReviewCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
   readonly markReviewed: (input: ReviewMarkInput) => void;
@@ -132,6 +155,7 @@ export type DifftrayStorage = {
     projectId: string,
     defaultBaseRef: string | undefined
   ) => void;
+  readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
@@ -153,9 +177,11 @@ export function openStorage(filename: string): DifftrayStorage {
     close: () => {
       db.close();
     },
+    createReviewComment: (input) => createReviewComment(db, input),
     deleteProject: (id) => {
       deleteProject(db, id);
     },
+    deleteReviewComment: (id) => deleteReviewComment(db, id),
     getAppSettings: () => getAppSettings(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
@@ -163,6 +189,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
+    listReviewComments: (reviewTargetId) => listReviewComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
     markReviewed: (input) => {
@@ -174,6 +201,7 @@ export function openStorage(filename: string): DifftrayStorage {
     updateProjectDefaultBaseRef: (projectId, defaultBaseRef) => {
       updateProjectDefaultBaseRef(db, projectId, defaultBaseRef);
     },
+    updateReviewComment: (id, body) => updateReviewComment(db, id, body),
     upsertProject: (project) => {
       upsertProject(db, project);
     },
@@ -266,6 +294,24 @@ function runMigrations(db: DatabaseSync): void {
       updated_at text not null,
       unique(review_target_id, path, reviewed_diff_hash)
     );
+
+    create table if not exists review_comments (
+      id text primary key,
+      project_id text not null references projects(id) on delete cascade,
+      review_target_id text not null references review_targets(id) on delete cascade,
+      path text not null,
+      previous_path text,
+      diff_hash text not null,
+      side text not null check(side in ('additions', 'deletions')),
+      line_start integer not null,
+      line_end integer not null,
+      body text not null,
+      created_at text not null,
+      updated_at text not null
+    );
+
+    create index if not exists review_comments_target_path_idx
+      on review_comments(review_target_id, path, diff_hash, line_start);
 
     create table if not exists project_settings (
       project_id text primary key references projects(id) on delete cascade,
@@ -676,6 +722,105 @@ function listReviewMarks(
   return rows.map((row) => reviewMarkFromRow(row as ReviewMarkRow));
 }
 
+function createReviewComment(
+  db: DatabaseSync,
+  input: CreateReviewCommentInput
+): ReviewCommentRecord {
+  const now = currentTimestamp();
+  const id = randomUUID();
+  const lineStart = normalizeLineNumber(input.lineStart);
+  const lineEnd = Math.max(lineStart, normalizeLineNumber(input.lineEnd));
+
+  db.prepare(
+    `
+    insert into review_comments (
+      id,
+      project_id,
+      review_target_id,
+      path,
+      previous_path,
+      diff_hash,
+      side,
+      line_start,
+      line_end,
+      body,
+      created_at,
+      updated_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `
+  ).run(
+    id,
+    input.projectId,
+    input.reviewTargetId,
+    input.path,
+    input.previousPath ?? null,
+    input.diffHash,
+    input.side,
+    lineStart,
+    lineEnd,
+    input.body,
+    now,
+    now
+  );
+
+  const comment = getReviewComment(db, id);
+
+  if (!comment) {
+    throw new Error("Review comment was not stored.");
+  }
+
+  return comment;
+}
+
+function updateReviewComment(
+  db: DatabaseSync,
+  id: string,
+  body: string
+): ReviewCommentRecord | null {
+  const result = db
+    .prepare(
+      `
+      update review_comments
+      set body = ?,
+          updated_at = ?
+      where id = ?
+    `
+    )
+    .run(body, currentTimestamp(), id);
+
+  return result.changes > 0 ? getReviewComment(db, id) : null;
+}
+
+function deleteReviewComment(db: DatabaseSync, id: string): boolean {
+  const result = db.prepare("delete from review_comments where id = ?").run(id);
+
+  return result.changes > 0;
+}
+
+function listReviewComments(
+  db: DatabaseSync,
+  reviewTargetId: string
+): readonly ReviewCommentRecord[] {
+  const rows = db
+    .prepare(
+      `
+        select *
+        from review_comments
+        where review_target_id = ?
+        order by path asc, line_start asc, line_end asc, created_at asc
+      `
+    )
+    .all(reviewTargetId);
+
+  return rows.map((row) => reviewCommentFromRow(row as ReviewCommentRow));
+}
+
+function getReviewComment(db: DatabaseSync, id: string): ReviewCommentRecord | null {
+  const row = db.prepare("select * from review_comments where id = ?").get(id);
+
+  return row ? reviewCommentFromRow(row as ReviewCommentRow) : null;
+}
+
 function reviewMarkId(input: ReviewMarkInput): string {
   return createHash("sha256")
     .update(
@@ -688,6 +833,10 @@ function reviewMarkId(input: ReviewMarkInput): string {
       "utf8"
     )
     .digest("hex");
+}
+
+function normalizeLineNumber(value: number): number {
+  return Math.max(1, Math.round(value));
 }
 
 function currentTimestamp(): string {
@@ -740,6 +889,21 @@ type ReviewMarkRow = {
   readonly previous_path: null | string;
   readonly reviewed_diff_hash: string;
   readonly review_target_id: string;
+};
+
+type ReviewCommentRow = {
+  readonly body: string;
+  readonly created_at: string;
+  readonly diff_hash: string;
+  readonly id: string;
+  readonly line_end: number;
+  readonly line_start: number;
+  readonly path: string;
+  readonly previous_path: null | string;
+  readonly project_id: string;
+  readonly review_target_id: string;
+  readonly side: ReviewCommentSide;
+  readonly updated_at: string;
 };
 
 function projectFromRow(row: ProjectRow): StoredProjectRecord {
@@ -880,6 +1044,23 @@ function reviewMarkFromRow(row: ReviewMarkRow): ReviewMarkRecord {
     ...(row.previous_path ? { previousPath: row.previous_path } : {}),
     reviewedDiffHash: row.reviewed_diff_hash,
     reviewTargetId: row.review_target_id
+  };
+}
+
+function reviewCommentFromRow(row: ReviewCommentRow): ReviewCommentRecord {
+  return {
+    body: row.body,
+    createdAt: row.created_at,
+    diffHash: row.diff_hash,
+    id: row.id,
+    lineEnd: row.line_end,
+    lineStart: row.line_start,
+    path: row.path,
+    ...(row.previous_path ? { previousPath: row.previous_path } : {}),
+    projectId: row.project_id,
+    reviewTargetId: row.review_target_id,
+    side: row.side,
+    updatedAt: row.updated_at
   };
 }
 

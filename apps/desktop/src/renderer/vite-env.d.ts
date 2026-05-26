@@ -6,6 +6,15 @@ declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
+    readonly copyReviewCommentsReport: (
+      input: CopyReviewCommentsReportInput
+    ) => Promise<CopyReviewCommentsReportResult>;
+    readonly createReviewComment: (
+      input: CreateReviewCommentInput
+    ) => Promise<CreateReviewCommentResult>;
+    readonly deleteReviewComment: (
+      input: DeleteReviewCommentInput
+    ) => Promise<DeleteReviewCommentResult>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
     readonly getProjectReviewSummary: (
       projectId: string
@@ -37,6 +46,9 @@ declare global {
     readonly updateAppSettings: (
       input: UpdateAppSettingsInput
     ) => Promise<AppSettingsView>;
+    readonly updateReviewComment: (
+      input: UpdateReviewCommentInput
+    ) => Promise<UpdateReviewCommentResult>;
     readonly unmarkFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<UnmarkReviewedResult>;
@@ -140,6 +152,21 @@ declare global {
     readonly visible: boolean;
   };
 
+  type ReviewCommentSide = "additions" | "deletions";
+
+  type ReviewCommentView = {
+    readonly body: string;
+    readonly createdAt: string;
+    readonly diffHash: string;
+    readonly id: string;
+    readonly lineEnd: number;
+    readonly lineStart: number;
+    readonly path: string;
+    readonly previousPath?: string;
+    readonly side: ReviewCommentSide;
+    readonly updatedAt: string;
+  };
+
   type LoadFileDiffInput = {
     readonly path: string;
     readonly projectId: string;
@@ -156,6 +183,7 @@ declare global {
   };
 
   type ReviewWorkspaceView = {
+    readonly comments: readonly ReviewCommentView[];
     readonly files: readonly ReviewFileView[];
     readonly project: RecentProjectView;
     readonly progress: ReviewProgressView;
@@ -167,6 +195,71 @@ declare global {
       readonly kind: "branch" | "working_tree";
     };
   };
+
+  type CreateReviewCommentInput = {
+    readonly body: string;
+    readonly displayedDiffHash: string;
+    readonly lineEnd: number;
+    readonly lineStart: number;
+    readonly path: string;
+    readonly projectId: string;
+    readonly reviewTargetId: string;
+    readonly side: ReviewCommentSide;
+  };
+
+  type CreateReviewCommentResult =
+    | {
+        readonly comment: ReviewCommentView;
+        readonly status: "created";
+      }
+    | {
+        readonly reason: "file_missing" | "stale_diff";
+        readonly status: "rejected";
+      };
+
+  type UpdateReviewCommentInput = {
+    readonly body: string;
+    readonly id: string;
+  };
+
+  type UpdateReviewCommentResult =
+    | {
+        readonly comment: ReviewCommentView;
+        readonly status: "updated";
+      }
+    | {
+        readonly reason: "comment_missing";
+        readonly status: "rejected";
+      };
+
+  type DeleteReviewCommentInput = {
+    readonly id: string;
+  };
+
+  type DeleteReviewCommentResult =
+    | {
+        readonly status: "deleted";
+      }
+    | {
+        readonly reason: "comment_missing";
+        readonly status: "rejected";
+      };
+
+  type CopyReviewCommentsReportInput = {
+    readonly expectedCommentIds: readonly string[];
+    readonly projectId: string;
+    readonly reviewTargetId: string;
+  };
+
+  type CopyReviewCommentsReportResult =
+    | {
+        readonly commentCount: number;
+        readonly status: "copied";
+      }
+    | {
+        readonly reason: "stale_diff";
+        readonly status: "rejected";
+      };
 
   type MarkFileReviewedInput = {
     readonly displayedDiffHash: string;

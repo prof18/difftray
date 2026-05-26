@@ -62,8 +62,6 @@
 
 - Commit range review.
 - Unified diff mode.
-- Line comments.
-- Export review comments as agent-ready text.
 - Custom generated-file rules.
 - GitHub/GitLab integrations.
 - Snapshot mode for non-Git folders.

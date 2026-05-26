@@ -64,6 +64,9 @@ try {
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
   });
+  await window
+    .getByRole("button", { name: "Copy comments report" })
+    .waitFor({ state: "detached", timeout: 10_000 });
   await window.getByRole("button", { name: "Show new version" }).click();
   await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
   await expectRenderedFocusedSide(window, "additions");
@@ -140,6 +143,7 @@ try {
   });
   await window.keyboard.type("tracked");
   await window.keyboard.press("Enter");
+  await expectWorkspaceIdle(window);
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
   await window.getByRole("button", { name: /long-context\.txt modified/ }).click();
@@ -191,6 +195,27 @@ try {
   });
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
+  await clickDiffLineNumber(window, "additions", 3);
+  await window
+    .locator('textarea[aria-label="Review comment"]')
+    .fill("Please tighten the added line.");
+  await window.getByRole("button", { name: "Save" }).click();
+  await window
+    .getByText("Please tighten the added line.", { exact: true })
+    .waitFor({ timeout: 10_000 });
+  await expectFileCommentCount(window, "tracked.txt", "1");
+  await window.getByRole("button", { name: "Copy comments report" }).click();
+  await window
+    .getByText("Copied 1 review comment", { exact: true })
+    .waitFor({ timeout: 10_000 });
+  await expectClipboardReport(app, [
+    "# Difftray Review Comments",
+    "tracked.txt",
+    "New line 3",
+    "Diff context:",
+    "+ 3 after",
+    "Please tighten the added line."
+  ]);
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-workflow.png")
@@ -418,12 +443,45 @@ async function expectFileStats(window, filename, additions, deletions) {
   );
 }
 
+async function expectFileCommentCount(window, filename, count) {
+  await window.waitForFunction(
+    ({ expectedCount, targetFilename }) => {
+      const fileButton = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes(targetFilename)
+      );
+      const badge = fileButton?.querySelector('[title="Review comments"]');
+
+      return badge?.textContent?.trim() === expectedCount;
+    },
+    { expectedCount: count, targetFilename: filename }
+  );
+}
+
 async function expectSelectedFile(window, filename) {
   await window.waitForFunction((targetFilename) => {
     const selectedButton = document.querySelector('button[data-selected="true"]');
 
     return selectedButton?.textContent?.includes(targetFilename);
   }, filename);
+}
+
+async function expectWorkspaceIdle(window) {
+  await window.locator('section[aria-busy="false"]').waitFor({ timeout: 10_000 });
+}
+
+async function clickDiffLineNumber(window, side, lineNumber) {
+  const selector = `[data-${side}] [data-column-number="${String(lineNumber)}"]`;
+
+  await window.locator(selector).first().click({ timeout: 10_000 });
+}
+
+async function expectClipboardReport(app, snippets) {
+  const text = await app.evaluate(({ clipboard }) => clipboard.readText());
+  const missing = snippets.filter((snippet) => !text.includes(snippet));
+
+  if (missing.length > 0) {
+    throw new Error(`Clipboard report is missing: ${missing.join(", ")}`);
+  }
 }
 
 async function expectFocusedFile(window, filename) {

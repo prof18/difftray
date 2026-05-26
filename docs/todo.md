@@ -68,6 +68,8 @@
 - [x] Implement keyboard shortcuts.
 - [x] Implement external editor preset launch.
 - [x] Implement settings screen.
+- [x] Implement inline review comments.
+- [x] Export review comments as agent-ready clipboard text.
 
 ## V0 Release Prep
 

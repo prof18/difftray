@@ -12,12 +12,17 @@ import {
   VirtualizerContext,
   WorkerPoolContextProvider
 } from "@pierre/diffs/react";
-import { Virtualizer as DiffsVirtualizer } from "@pierre/diffs";
+import {
+  Virtualizer as DiffsVirtualizer,
+  type DiffLineAnnotation,
+  type OnDiffLineClickProps
+} from "@pierre/diffs";
 import {
   AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
   Code2,
   Columns2,
   Diff,
@@ -26,15 +31,18 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
+  MessageSquare,
+  PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
-  PanelLeft,
   PanelRight,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
   Search,
   Settings,
+  Trash2,
   X
 } from "lucide-react";
 
@@ -74,6 +82,25 @@ type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
 type PaletteMode = "all" | "files";
 type CommandKind = "action" | "file" | "project";
 type ResolvedTheme = "dark" | "light";
+
+type ReviewCommentDraft = {
+  readonly body: string;
+  readonly diffHash: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly side: ReviewCommentSide;
+};
+
+type ReviewCommentAnnotationMetadata =
+  | {
+      readonly comment: ReviewCommentView;
+      readonly kind: "comment";
+    }
+  | {
+      readonly draft: ReviewCommentDraft;
+      readonly kind: "draft";
+    };
 
 type WorkspaceLoadStatus = {
   readonly detail: string;
@@ -154,6 +181,8 @@ export function App(): React.JSX.Element {
     useState<AppSettingsView>(defaultAppSettings);
   const [baseRefDraft, setBaseRefDraft] = useState("");
   const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
+  const [commentDraft, setCommentDraft] = useState<ReviewCommentDraft | undefined>();
+  const [commentToast, setCommentToast] = useState<string | undefined>();
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
   const [diffSideFocus, setDiffSideFocus] = useState<DiffSideFocus>("both");
   const [error, setError] = useState<string | undefined>();
@@ -257,6 +286,20 @@ export function App(): React.JSX.Element {
       selectedPathByProjectRef.current.set(workspace.project.id, selectedPath);
     }
   }, [selectedPath, workspace]);
+
+  useEffect(() => {
+    if (!commentToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCommentToast(undefined);
+    }, 2_400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [commentToast]);
 
   useEffect(() => {
     if (!hasBootstrapped || loadState === "loading") {
@@ -397,6 +440,15 @@ export function App(): React.JSX.Element {
   const selectedDiffSideFocus = selectedFile
     ? diffSideFocusForFile(selectedFile, diffMode, diffSideFocus)
     : diffSideFocus;
+
+  useEffect(() => {
+    setCommentDraft((draft) =>
+      draft?.path === selectedFile?.path && draft?.diffHash === selectedFile?.diffHash
+        ? draft
+        : undefined
+    );
+  }, [selectedFile]);
+
   const selectedDiffScrollKey =
     workspace && selectedFile
       ? createDiffScrollKey({
@@ -406,6 +458,21 @@ export function App(): React.JSX.Element {
           reviewTargetId: workspace.reviewTarget.id
         })
       : undefined;
+  const selectedComments = useMemo(
+    () =>
+      workspace && selectedFile
+        ? workspace.comments.filter(
+            (comment) =>
+              comment.path === selectedFile.path &&
+              comment.diffHash === selectedFile.diffHash
+          )
+        : [],
+    [selectedFile, workspace]
+  );
+  const commentCountByPath = useMemo(
+    () => commentCountsByPath(workspace?.comments ?? []),
+    [workspace?.comments]
+  );
   const attentionFiles = visibleFiles.filter((file) => file.invalidated);
   const toastKey =
     workspace && attentionFiles.length > 0
@@ -1547,6 +1614,169 @@ export function App(): React.JSX.Element {
     }
   }
 
+  function applyWorkspaceComments(
+    updateComments: (
+      comments: readonly ReviewCommentView[]
+    ) => readonly ReviewCommentView[]
+  ): void {
+    setWorkspace((currentWorkspace) => {
+      if (!currentWorkspace) {
+        return currentWorkspace;
+      }
+
+      const nextWorkspace = {
+        ...currentWorkspace,
+        comments: sortReviewComments(updateComments(currentWorkspace.comments))
+      };
+
+      workspaceCacheRef.current.set(nextWorkspace.project.id, {
+        branchRefs,
+        projectSettings,
+        workspace: nextWorkspace
+      });
+
+      return nextWorkspace;
+    });
+  }
+
+  function startComment(side: ReviewCommentSide, lineNumber: number): void {
+    if (!selectedFile?.diffLoaded) {
+      return;
+    }
+
+    setCommentDraft({
+      body: "",
+      diffHash: selectedFile.diffHash,
+      lineEnd: lineNumber,
+      lineStart: lineNumber,
+      path: selectedFile.path,
+      side
+    });
+  }
+
+  async function saveCommentDraft(): Promise<void> {
+    if (!workspace || !selectedFile || !commentDraft) {
+      return;
+    }
+
+    const body = commentDraft.body.trim();
+
+    if (body.length === 0) {
+      return;
+    }
+
+    setError(undefined);
+
+    try {
+      const result = await window.difftray.createReviewComment({
+        body,
+        displayedDiffHash: selectedFile.diffHash,
+        lineEnd: commentDraft.lineEnd,
+        lineStart: commentDraft.lineStart,
+        path: selectedFile.path,
+        projectId: workspace.project.id,
+        reviewTargetId: workspace.reviewTarget.id,
+        side: commentDraft.side
+      });
+
+      if (result.status === "rejected") {
+        setError(
+          result.reason === "stale_diff"
+            ? "The diff changed before the comment could be saved."
+            : "The selected file is no longer present in this review."
+        );
+        await refreshWorkspace();
+        return;
+      }
+
+      applyWorkspaceComments((comments) => [...comments, result.comment]);
+      setCommentDraft(undefined);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function updateComment(commentId: string, body: string): Promise<void> {
+    const trimmedBody = body.trim();
+
+    if (trimmedBody.length === 0) {
+      return;
+    }
+
+    setError(undefined);
+
+    try {
+      const result = await window.difftray.updateReviewComment({
+        body: trimmedBody,
+        id: commentId
+      });
+
+      if (result.status === "rejected") {
+        applyWorkspaceComments((comments) =>
+          comments.filter((comment) => comment.id !== commentId)
+        );
+        setError("That review comment is no longer present.");
+        return;
+      }
+
+      applyWorkspaceComments((comments) =>
+        comments.map((comment) =>
+          comment.id === result.comment.id ? result.comment : comment
+        )
+      );
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function deleteComment(commentId: string): Promise<void> {
+    setError(undefined);
+
+    try {
+      const result = await window.difftray.deleteReviewComment({ id: commentId });
+
+      if (result.status === "rejected") {
+        setError("That review comment is no longer present.");
+      }
+
+      applyWorkspaceComments((comments) =>
+        comments.filter((comment) => comment.id !== commentId)
+      );
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function copyReviewCommentsReport(): Promise<void> {
+    if (!workspace || workspace.comments.length === 0) {
+      return;
+    }
+
+    setError(undefined);
+
+    try {
+      const result = await window.difftray.copyReviewCommentsReport({
+        expectedCommentIds: workspace.comments.map((comment) => comment.id),
+        projectId: workspace.project.id,
+        reviewTargetId: workspace.reviewTarget.id
+      });
+
+      if (result.status === "rejected") {
+        setError("The diff changed before the comment report could be copied.");
+        await refreshWorkspace();
+        return;
+      }
+
+      setCommentToast(
+        result.commentCount === 1
+          ? "Copied 1 review comment"
+          : `Copied ${String(result.commentCount)} review comments`
+      );
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.currentTarget.setPointerCapture(event.pointerId);
     resizeStartRef.current = { startWidth: fileListWidth, x: event.clientX };
@@ -1654,6 +1884,7 @@ export function App(): React.JSX.Element {
                   reviewTarget={workspace.reviewTarget}
                 />
                 <FileList
+                  commentCountByPath={commentCountByPath}
                   files={visibleFiles}
                   onSelect={selectPath}
                   selectedPath={selectedFile?.path}
@@ -1685,10 +1916,15 @@ export function App(): React.JSX.Element {
               {selectedFile ? (
                 <>
                   <DiffToolbar
+                    commentCount={selectedComments.length}
+                    copyDisabled={loadState === "loading"}
                     diffMode={diffMode}
                     diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
                     file={selectedFile}
+                    onCopyCommentsReport={() => {
+                      void copyReviewCommentsReport();
+                    }}
                     onDiffSideFocusChange={setDiffSideFocus}
                     onToggleReviewed={() => {
                       void toggleSelectedReviewed();
@@ -1697,9 +1933,17 @@ export function App(): React.JSX.Element {
                       void openSelectedInEditor();
                     }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
+                    reportCommentCount={workspace.comments.length}
                   />
                   {selectedFile.patch ? (
                     <DiffSurface
+                      commentDraft={
+                        commentDraft?.path === selectedFile.path &&
+                        commentDraft.diffHash === selectedFile.diffHash
+                          ? commentDraft
+                          : undefined
+                      }
+                      comments={selectedComments}
                       diffHash={selectedFile.diffHash}
                       diffMode={diffMode}
                       diffSideFocus={selectedDiffSideFocus}
@@ -1711,8 +1955,24 @@ export function App(): React.JSX.Element {
                       previousPath={selectedFile.previousPath}
                       resolvedTheme={resolvedTheme}
                       status={selectedFile.status}
+                      onCancelComment={() => {
+                        setCommentDraft(undefined);
+                      }}
+                      onCommentDraftBodyChange={(body) => {
+                        setCommentDraft((draft) => (draft ? { ...draft, body } : draft));
+                      }}
+                      onDeleteComment={(commentId) => {
+                        void deleteComment(commentId);
+                      }}
+                      onSaveComment={() => {
+                        void saveCommentDraft();
+                      }}
                       refObject={diffSurfaceRef}
                       onScrollPositionChange={rememberDiffScrollPosition}
+                      onStartComment={startComment}
+                      onUpdateComment={(commentId, body) => {
+                        void updateComment(commentId, body);
+                      }}
                       scrollKey={selectedDiffScrollKey ?? ""}
                       scrollPosition={
                         selectedDiffScrollKey
@@ -1751,6 +2011,7 @@ export function App(): React.JSX.Element {
                 }}
               />
             ) : null}
+            {commentToast ? <SimpleToast message={commentToast} /> : null}
           </section>
         </section>
       ) : loadState === "loading" || !hasBootstrapped || recentProjects.length > 0 ? (
@@ -2318,10 +2579,12 @@ function CollapsedRail({
 }
 
 function FileList({
+  commentCountByPath,
   files,
   onSelect,
   selectedPath
 }: {
+  readonly commentCountByPath: ReadonlyMap<string, number>;
   readonly files: readonly ReviewFileView[];
   readonly onSelect: (path: string) => void;
   readonly selectedPath: string | undefined;
@@ -2432,6 +2695,7 @@ function FileList({
         >
           {renderedFiles.map((file, index) => (
             <FileButton
+              commentCount={commentCountByPath.get(file.path) ?? 0}
               file={file}
               isSelected={selectedPath === file.path}
               key={file.path}
@@ -2447,12 +2711,14 @@ function FileList({
 }
 
 const FileButton = memo(function FileButton({
+  commentCount,
   file,
   isSelected,
   onSelect,
   position,
   total
 }: {
+  readonly commentCount: number;
   readonly file: ReviewFileView;
   readonly isSelected: boolean;
   readonly onSelect: (path: string) => void;
@@ -2481,6 +2747,12 @@ const FileButton = memo(function FileButton({
           {file.invalidated ? (
             <span className={styles.attentionPulse} aria-hidden />
           ) : null}
+          {commentCount > 0 ? (
+            <span className={styles.commentBadge} title="Review comments">
+              <MessageSquare size={11} strokeWidth={1.5} aria-hidden />
+              {commentCount}
+            </span>
+          ) : null}
         </span>
         <span className={styles.fileDir}>{parts.dirname}</span>
       </span>
@@ -2490,23 +2762,31 @@ const FileButton = memo(function FileButton({
 });
 
 function DiffToolbar({
+  commentCount,
+  copyDisabled,
   diffMode,
   diffSideFocus,
   disabled,
   file,
+  onCopyCommentsReport,
   onDiffSideFocusChange,
   onOpenEditor,
   onToggleReviewed,
-  refName
+  refName,
+  reportCommentCount
 }: {
+  readonly commentCount: number;
+  readonly copyDisabled: boolean;
   readonly diffMode: DiffMode;
   readonly diffSideFocus: DiffSideFocus;
   readonly disabled: boolean;
   readonly file: ReviewFileView;
+  readonly onCopyCommentsReport: () => void;
   readonly onDiffSideFocusChange: (sideFocus: DiffSideFocus) => void;
   readonly onOpenEditor: () => void;
   readonly onToggleReviewed: () => void;
   readonly refName: string;
+  readonly reportCommentCount: number;
 }): React.JSX.Element {
   const parts = splitPath(file.path);
   const canFocusSides = file.status !== "added" && file.status !== "deleted";
@@ -2532,6 +2812,15 @@ function DiffToolbar({
           <span>·</span>
           <span className={styles.addText}>+{file.additions}</span>
           <span className={styles.delText}>-{file.deletions}</span>
+          {commentCount > 0 ? (
+            <>
+              <span>·</span>
+              <span className={styles.commentMeta}>
+                <MessageSquare size={12} strokeWidth={1.4} aria-hidden />
+                {commentCount}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
       <div className={styles.diffActions}>
@@ -2581,6 +2870,22 @@ function DiffToolbar({
             </div>
             <span className={styles.verticalDivider} />
           </>
+        ) : null}
+        {reportCommentCount > 0 ? (
+          <button
+            aria-label="Copy comments report"
+            className={classList(styles.secondaryButton, styles.reportButton)}
+            disabled={copyDisabled}
+            onClick={onCopyCommentsReport}
+            title="Copy all comments as an agent-ready report"
+            type="button"
+          >
+            <ClipboardList size={14} strokeWidth={1.4} aria-hidden />
+            <span className={styles.reportButtonLabel}>Copy comments report</span>
+            <span className={styles.reportButtonCount} aria-hidden>
+              {reportCommentCount}
+            </span>
+          </button>
         ) : null}
         <button
           aria-label="Open selected file in editor"
@@ -2632,13 +2937,21 @@ function DiffLoadingState({
 }
 
 function DiffSurface({
+  commentDraft,
+  comments,
   diffHash,
   diffMode,
   diffSideFocus,
   filePath,
   newText,
   oldText,
+  onCancelComment,
+  onCommentDraftBodyChange,
+  onDeleteComment,
+  onSaveComment,
   onScrollPositionChange,
+  onStartComment,
+  onUpdateComment,
   patch,
   previousPath,
   resolvedTheme,
@@ -2648,16 +2961,24 @@ function DiffSurface({
   status,
   wrapLines
 }: {
+  readonly commentDraft: ReviewCommentDraft | undefined;
+  readonly comments: readonly ReviewCommentView[];
   readonly diffHash: string;
   readonly diffMode: DiffMode;
   readonly diffSideFocus: DiffSideFocus;
   readonly filePath: string;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
+  readonly onCancelComment: () => void;
+  readonly onCommentDraftBodyChange: (body: string) => void;
+  readonly onDeleteComment: (commentId: string) => void;
+  readonly onSaveComment: () => void;
   readonly onScrollPositionChange: (
     scrollKey: string,
     position: DiffScrollPosition
   ) => void;
+  readonly onStartComment: (side: ReviewCommentSide, lineNumber: number) => void;
+  readonly onUpdateComment: (commentId: string, body: string) => void;
   readonly patch: string;
   readonly previousPath: string | undefined;
   readonly resolvedTheme: ResolvedTheme;
@@ -2689,13 +3010,27 @@ function DiffSurface({
     [diffSideFocus, model]
   );
   const fileDiffOptions = useMemo(
-    () =>
-      createDiffsFileDiffOptions({
+    () => ({
+      ...createDiffsFileDiffOptions<ReviewCommentAnnotationMetadata>({
         diffMode: effectiveDiffMode,
         resolvedTheme,
         wrapLines
       }),
-    [effectiveDiffMode, resolvedTheme, wrapLines]
+      enableLineSelection: true,
+      lineHoverHighlight: "both" as const,
+      onLineNumberClick: (line: OnDiffLineClickProps) => {
+        onStartComment(line.annotationSide, line.lineNumber);
+      }
+    }),
+    [effectiveDiffMode, onStartComment, resolvedTheme, wrapLines]
+  );
+  const lineAnnotations = useMemo(
+    () =>
+      reviewCommentAnnotations({
+        comments,
+        draft: commentDraft
+      }),
+    [commentDraft, comments]
   );
   const workerPoolOptions = useMemo(() => createDiffsWorkerPoolOptions(), []);
 
@@ -2759,12 +3094,148 @@ function DiffSurface({
             className={classList(styles.diffsFileDiff, diffFocusClassName(diffSideFocus))}
             fileDiff={focusedFileDiff}
             key={focusedFileDiff.cacheKey ?? `${focusedFileDiff.name}:${diffSideFocus}`}
+            lineAnnotations={lineAnnotations}
             metrics={diffsVirtualFileMetrics}
             options={fileDiffOptions}
+            renderAnnotation={(annotation) => (
+              <ReviewCommentAnnotation
+                annotation={annotation}
+                onCancelDraft={onCancelComment}
+                onDeleteComment={onDeleteComment}
+                onDraftBodyChange={onCommentDraftBodyChange}
+                onSaveDraft={onSaveComment}
+                onUpdateComment={onUpdateComment}
+              />
+            )}
           />
         </WorkerPoolContextProvider>
       ) : null}
     </DiffsVirtualizedSurface>
+  );
+}
+
+function ReviewCommentAnnotation({
+  annotation,
+  onCancelDraft,
+  onDeleteComment,
+  onDraftBodyChange,
+  onSaveDraft,
+  onUpdateComment
+}: {
+  readonly annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>;
+  readonly onCancelDraft: () => void;
+  readonly onDeleteComment: (commentId: string) => void;
+  readonly onDraftBodyChange: (body: string) => void;
+  readonly onSaveDraft: () => void;
+  readonly onUpdateComment: (commentId: string, body: string) => void;
+}): React.JSX.Element {
+  const { metadata } = annotation;
+  const [editingBody, setEditingBody] = useState<string | undefined>();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isDraft = metadata.kind === "draft";
+  const body =
+    metadata.kind === "draft"
+      ? metadata.draft.body
+      : (editingBody ?? metadata.comment.body);
+
+  useEffect(() => {
+    if (isDraft || editingBody !== undefined) {
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+  }, [editingBody, isDraft]);
+
+  if (metadata.kind === "draft" || editingBody !== undefined) {
+    return (
+      <div className={styles.reviewCommentCard} data-draft={isDraft}>
+        <div className={styles.reviewCommentHeader}>
+          <span>
+            <MessageSquare size={13} strokeWidth={1.4} aria-hidden />
+            {formatReviewCommentLocation(annotation)}
+          </span>
+        </div>
+        <textarea
+          aria-label="Review comment"
+          className={styles.reviewCommentTextarea}
+          onChange={(event) => {
+            if (metadata.kind === "draft") {
+              onDraftBodyChange(event.target.value);
+            } else {
+              setEditingBody(event.target.value);
+            }
+          }}
+          ref={textareaRef}
+          rows={3}
+          value={body}
+        />
+        <div className={styles.reviewCommentActions}>
+          <button
+            className={styles.secondaryButton}
+            onClick={() => {
+              if (metadata.kind === "draft") {
+                onCancelDraft();
+              } else {
+                setEditingBody(undefined);
+              }
+            }}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className={styles.primaryButton}
+            disabled={body.trim().length === 0}
+            onClick={() => {
+              if (metadata.kind === "draft") {
+                onSaveDraft();
+              } else {
+                onUpdateComment(metadata.comment.id, body);
+                setEditingBody(undefined);
+              }
+            }}
+            type="button"
+          >
+            <Save size={13} strokeWidth={1.4} aria-hidden />
+            Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.reviewCommentCard}>
+      <div className={styles.reviewCommentHeader}>
+        <span>
+          <MessageSquare size={13} strokeWidth={1.4} aria-hidden />
+          {formatReviewCommentLocation(annotation)}
+        </span>
+        <div className={styles.reviewCommentIconActions}>
+          <button
+            aria-label="Edit review comment"
+            className={styles.iconButton}
+            onClick={() => {
+              setEditingBody(metadata.comment.body);
+            }}
+            title="Edit comment"
+            type="button"
+          >
+            <Pencil size={13} strokeWidth={1.4} aria-hidden />
+          </button>
+          <button
+            aria-label="Delete review comment"
+            className={styles.iconButton}
+            onClick={() => {
+              onDeleteComment(metadata.comment.id);
+            }}
+            title="Delete comment"
+            type="button"
+          >
+            <Trash2 size={13} strokeWidth={1.4} aria-hidden />
+          </button>
+        </div>
+      </div>
+      <p className={styles.reviewCommentBody}>{metadata.comment.body}</p>
+    </div>
   );
 }
 
@@ -3619,6 +4090,15 @@ function DriftToast({
   );
 }
 
+function SimpleToast({ message }: { readonly message: string }): React.JSX.Element {
+  return (
+    <aside className={styles.simpleToast} role="status">
+      <Check size={15} strokeWidth={1.5} aria-hidden />
+      <span>{message}</span>
+    </aside>
+  );
+}
+
 function DiffStats({
   additions,
   deletions
@@ -3981,6 +4461,90 @@ function diffTargetLabel(target: ReviewWorkspaceView["reviewTarget"]): string {
   }
 
   return target.headRefName ?? "worktree";
+}
+
+function reviewCommentAnnotations({
+  comments,
+  draft
+}: {
+  readonly comments: readonly ReviewCommentView[];
+  readonly draft: ReviewCommentDraft | undefined;
+}): DiffLineAnnotation<ReviewCommentAnnotationMetadata>[] {
+  return [
+    ...comments.map((comment) => ({
+      lineNumber: comment.lineEnd,
+      metadata: {
+        comment,
+        kind: "comment" as const
+      },
+      side: comment.side
+    })),
+    ...(draft
+      ? [
+          {
+            lineNumber: draft.lineEnd,
+            metadata: {
+              draft,
+              kind: "draft" as const
+            },
+            side: draft.side
+          }
+        ]
+      : [])
+  ];
+}
+
+function formatReviewCommentLocation(
+  annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>
+): string {
+  const lineStart =
+    annotation.metadata.kind === "draft"
+      ? annotation.metadata.draft.lineStart
+      : annotation.metadata.comment.lineStart;
+  const lineEnd =
+    annotation.metadata.kind === "draft"
+      ? annotation.metadata.draft.lineEnd
+      : annotation.metadata.comment.lineEnd;
+  const side = annotation.side === "additions" ? "New" : "Old";
+  const lineLabel = lineStart === lineEnd ? "line" : "lines";
+  const lineRange =
+    lineStart === lineEnd ? String(lineStart) : `${String(lineStart)}-${String(lineEnd)}`;
+
+  return `${side} ${lineLabel} ${lineRange}`;
+}
+
+function commentCountsByPath(
+  comments: readonly ReviewCommentView[]
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const comment of comments) {
+    counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function sortReviewComments(
+  comments: readonly ReviewCommentView[]
+): readonly ReviewCommentView[] {
+  return [...comments].sort((left, right) => {
+    const pathCompare = left.path.localeCompare(right.path);
+
+    if (pathCompare !== 0) {
+      return pathCompare;
+    }
+
+    if (left.lineStart !== right.lineStart) {
+      return left.lineStart - right.lineStart;
+    }
+
+    if (left.lineEnd !== right.lineEnd) {
+      return left.lineEnd - right.lineEnd;
+    }
+
+    return left.createdAt.localeCompare(right.createdAt);
+  });
 }
 
 function suggestedBaseRef(

@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+import {
+  reviewCommentReportItemTemplate,
+  reviewCommentsEmptyReportTemplate,
+  reviewCommentsReportTemplate
+} from "./review-comments-report-templates.js";
+
 export {
   commonEditorPresets,
   findEditorPresetByLaunchConfig,
@@ -107,6 +113,34 @@ export type ReviewProgress = {
   readonly totalVisibleReviewableFiles: number;
 };
 
+export type ReviewCommentSide = "additions" | "deletions";
+
+export type ReviewCommentReportContextLine = {
+  readonly kind: "commented" | "context";
+  readonly lineNumber: number;
+  readonly text: string;
+};
+
+export type ReviewCommentReportContext = {
+  readonly lines: readonly ReviewCommentReportContextLine[];
+  readonly side: ReviewCommentSide;
+};
+
+export type ReviewCommentReportItem = {
+  readonly body: string;
+  readonly context?: ReviewCommentReportContext;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly side: ReviewCommentSide;
+};
+
+export type FormatReviewCommentsReportInput = {
+  readonly comments: readonly ReviewCommentReportItem[];
+  readonly projectName: string;
+  readonly targetLabel?: string;
+};
+
 export type GeneratedFileInput = {
   readonly path: string;
   readonly sample?: string;
@@ -206,6 +240,125 @@ export function calculateProgress(states: readonly FileReviewState[]): ReviewPro
     totalVisibleReviewableFiles: visibleReviewableStates.length
   };
 }
+
+export function formatReviewCommentsReport(
+  input: FormatReviewCommentsReportInput
+): string {
+  const values = {
+    commentCount: String(input.comments.length),
+    comments: input.comments
+      .map((comment, index) => formatReviewCommentReportItem(comment, index + 1))
+      .join("\n"),
+    projectName: input.projectName,
+    targetLabel: input.targetLabel ?? "current local git diff"
+  };
+
+  return renderTemplate(
+    input.comments.length === 0
+      ? reviewCommentsEmptyReportTemplate
+      : reviewCommentsReportTemplate,
+    values
+  );
+}
+
+function formatReviewCommentReportItem(
+  comment: ReviewCommentReportItem,
+  index: number
+): string {
+  return renderTemplate(reviewCommentReportItemTemplate, {
+    commentBody: formatCommentBody(comment.body),
+    diffContext: formatCommentContext(comment),
+    index: String(index),
+    path: comment.path,
+    referencedLines: formatReferencedLines(comment),
+    referencedSide: formatReferencedSide(comment.side)
+  });
+}
+
+function formatCommentLocation(comment: ReviewCommentReportItem): string {
+  const sideLabel = comment.side === "additions" ? "New" : "Old";
+  const lineLabel = comment.lineStart === comment.lineEnd ? "line" : "lines";
+  const range =
+    comment.lineStart === comment.lineEnd
+      ? String(comment.lineStart)
+      : `${String(comment.lineStart)}-${String(comment.lineEnd)}`;
+
+  return `${sideLabel} ${lineLabel} ${range}`;
+}
+
+function formatReferencedLines(comment: ReviewCommentReportItem): string {
+  const lineLabel =
+    comment.lineStart === comment.lineEnd ? "Referenced line" : "Referenced lines";
+  const range =
+    comment.lineStart === comment.lineEnd
+      ? String(comment.lineStart)
+      : `${String(comment.lineStart)}-${String(comment.lineEnd)}`;
+
+  return `${lineLabel}: ${range}`;
+}
+
+function formatReferencedSide(side: ReviewCommentSide): string {
+  return side === "additions" ? "new" : "old";
+}
+
+function formatCommentBody(body: string): string {
+  const normalizedBody = body.trim();
+
+  if (normalizedBody.length === 0) {
+    return "> (No comment body)";
+  }
+
+  return normalizedBody
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+}
+
+function formatCommentContext(comment: ReviewCommentReportItem): string {
+  const context = comment.context;
+
+  if (!context || context.lines.length === 0) {
+    return "";
+  }
+
+  const lineNumberWidth = Math.max(
+    ...context.lines.map((line) => String(line.lineNumber).length)
+  );
+
+  return [
+    "",
+    "",
+    "Diff context:",
+    "",
+    "```diff",
+    `@@ ${formatCommentLocation({ ...comment, side: context.side })} @@`,
+    ...context.lines.map((line) => {
+      const marker =
+        line.kind === "commented" ? (context.side === "additions" ? "+" : "-") : " ";
+      const lineNumber = String(line.lineNumber).padStart(lineNumberWidth, " ");
+
+      return `${marker} ${lineNumber} ${line.text}`;
+    }),
+    "```"
+  ].join("\n");
+}
+
+function renderTemplate(
+  template: string,
+  values: Readonly<Record<string, string | undefined>>
+): string {
+  return template.replace(templatePlaceholderPattern, (placeholder, key: string) => {
+    const value = values[key];
+
+    if (value === undefined) {
+      throw new Error(`Missing value for template placeholder ${placeholder}`);
+    }
+
+    return value;
+  });
+}
+
+const templatePlaceholderPattern = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/gu;
 
 function canonicalReviewTarget(target: ReviewTarget): readonly unknown[] {
   switch (target.kind) {

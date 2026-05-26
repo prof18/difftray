@@ -194,11 +194,11 @@ export function createDiffsRenderModel(
   return fallbackModel(input.patch);
 }
 
-export function createDiffsFileDiffOptions({
+export function createDiffsFileDiffOptions<LAnnotation = undefined>({
   diffMode,
   resolvedTheme,
   wrapLines
-}: CreateDiffsFileDiffOptionsInput): FileDiffOptions<undefined> {
+}: CreateDiffsFileDiffOptionsInput): FileDiffOptions<LAnnotation> {
   return {
     collapsedContextThreshold: 1,
     diffIndicators: "bars",

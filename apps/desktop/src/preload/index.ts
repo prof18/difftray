@@ -3,6 +3,15 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
+  readonly copyReviewCommentsReport: (
+    input: CopyReviewCommentsReportInput
+  ) => Promise<CopyReviewCommentsReportResult>;
+  readonly createReviewComment: (
+    input: CreateReviewCommentInput
+  ) => Promise<CreateReviewCommentResult>;
+  readonly deleteReviewComment: (
+    input: DeleteReviewCommentInput
+  ) => Promise<DeleteReviewCommentResult>;
   readonly getAppSettings: () => Promise<AppSettingsView>;
   readonly getProjectReviewSummary: (
     projectId: string
@@ -32,6 +41,9 @@ export type DifftrayApi = {
     input: UpdateProjectDiffTargetInput
   ) => Promise<ReviewWorkspaceView>;
   readonly updateAppSettings: (input: UpdateAppSettingsInput) => Promise<AppSettingsView>;
+  readonly updateReviewComment: (
+    input: UpdateReviewCommentInput
+  ) => Promise<UpdateReviewCommentResult>;
   readonly unmarkFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<UnmarkReviewedResult>;
@@ -139,6 +151,21 @@ export type ReviewFileView = {
   readonly visible: boolean;
 };
 
+export type ReviewCommentSide = "additions" | "deletions";
+
+export type ReviewCommentView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly diffHash: string;
+  readonly id: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly side: ReviewCommentSide;
+  readonly updatedAt: string;
+};
+
 export type LoadFileDiffInput = {
   readonly path: string;
   readonly projectId: string;
@@ -155,6 +182,7 @@ export type ReviewFileDiffContentView = {
 };
 
 export type ReviewWorkspaceView = {
+  readonly comments: readonly ReviewCommentView[];
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
@@ -166,6 +194,71 @@ export type ReviewWorkspaceView = {
     readonly kind: "branch" | "working_tree";
   };
 };
+
+export type CreateReviewCommentInput = {
+  readonly body: string;
+  readonly displayedDiffHash: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+  readonly side: ReviewCommentSide;
+};
+
+export type CreateReviewCommentResult =
+  | {
+      readonly comment: ReviewCommentView;
+      readonly status: "created";
+    }
+  | {
+      readonly reason: "file_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+export type UpdateReviewCommentInput = {
+  readonly body: string;
+  readonly id: string;
+};
+
+export type UpdateReviewCommentResult =
+  | {
+      readonly comment: ReviewCommentView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+export type DeleteReviewCommentInput = {
+  readonly id: string;
+};
+
+export type DeleteReviewCommentResult =
+  | {
+      readonly status: "deleted";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+export type CopyReviewCommentsReportInput = {
+  readonly expectedCommentIds: readonly string[];
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+};
+
+export type CopyReviewCommentsReportResult =
+  | {
+      readonly commentCount: number;
+      readonly status: "copied";
+    }
+  | {
+      readonly reason: "stale_diff";
+      readonly status: "rejected";
+    };
 
 export type MarkFileReviewedInput = {
   readonly displayedDiffHash: string;
@@ -254,6 +347,15 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("projects:close", {
       projectId
     }) as Promise<readonly RecentProjectView[]>,
+  copyReviewCommentsReport: async (input) =>
+    ipcRenderer.invoke(
+      "comments:copyReport",
+      input
+    ) as Promise<CopyReviewCommentsReportResult>,
+  createReviewComment: async (input) =>
+    ipcRenderer.invoke("comments:create", input) as Promise<CreateReviewCommentResult>,
+  deleteReviewComment: async (input) =>
+    ipcRenderer.invoke("comments:delete", input) as Promise<DeleteReviewCommentResult>,
   getAppSettings: async () =>
     ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
   getProjectReviewSummary: async (projectId) =>
@@ -327,6 +429,8 @@ const api: DifftrayApi = {
     ) as Promise<ReviewWorkspaceView>,
   updateAppSettings: async (input) =>
     ipcRenderer.invoke("settings:updateApp", input) as Promise<AppSettingsView>,
+  updateReviewComment: async (input) =>
+    ipcRenderer.invoke("comments:update", input) as Promise<UpdateReviewCommentResult>,
   unmarkFileReviewed: async (input) =>
     ipcRenderer.invoke(
       "reviews:unmarkFileReviewed",
