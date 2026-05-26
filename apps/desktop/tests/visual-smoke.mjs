@@ -64,7 +64,31 @@ try {
   await window.getByRole("button", { name: "Mark reviewed" }).waitFor({
     timeout: 10_000
   });
+  await window.getByRole("button", { name: "Show new version" }).click();
+  await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
+  await expectRenderedFocusedSide(window, "additions");
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-diff-focused-new.png")
+  });
+  await runCommand(window, "unified", /Switch to unified diff/);
+  await window.locator('[data-diff-layout="unified"]').waitFor({ timeout: 10_000 });
+  await expectRenderedUnifiedDiff(window);
+  await window
+    .getByRole("button", { name: "Show new version" })
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await window
+    .getByRole("button", { name: "Show old version" })
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await window
+    .getByRole("button", { name: "Show both diff sides" })
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await runCommand(window, "split", /Switch to split diff/);
+  await window.getByRole("button", { name: "Show both diff sides" }).click();
+  await window.locator('[data-diff-layout="split"]').waitFor({ timeout: 10_000 });
+  await expectRenderedSplitDiff(window);
   await window.getByRole("button", { name: "Project settings" }).click();
+  await expectSettingsDiffModeSelector(window, "split");
   await window.getByLabel("Show generated files", { exact: true }).check();
   await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
   await window.getByRole("button", { name: /Editor:/ }).click();
@@ -119,9 +143,9 @@ try {
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
   await window.getByRole("button", { name: /long-context\.txt modified/ }).click();
-  await window.getByText("changed long context line 1", { exact: true }).first().waitFor({
-    timeout: 10_000
-  });
+  await expectSelectedFile(window, "long-context.txt");
+  await window.locator('[data-diff-layout="split"]').waitFor({ timeout: 10_000 });
+  await expectRenderedDiffText(window, "changed long context line 1");
   await window.waitForTimeout(750);
   await expectDiffScrollTopAtMost(window, 1);
   const restoredContextScrollTop = await setDiffScrollTopFromBottom(window, 900);
@@ -471,6 +495,106 @@ async function diffScrollState(window) {
   });
 }
 
+async function runCommand(window, query, commandName) {
+  await window.keyboard.press("Meta+KeyK");
+  await window.getByRole("dialog", { name: "Command palette" }).waitFor({
+    timeout: 10_000
+  });
+  await window.keyboard.type(query);
+  await window.getByRole("button", { name: commandName }).click();
+  await window.getByRole("dialog", { name: "Command palette" }).waitFor({
+    state: "detached",
+    timeout: 10_000
+  });
+}
+
+async function expectRenderedFocusedSide(window, side) {
+  try {
+    await window.waitForFunction((expectedSide) => {
+      const diffElement = document.querySelector("[data-diff-layout] diffs-container");
+      const pre = diffElement?.shadowRoot?.querySelector("pre[data-diff-type='single']");
+
+      return (
+        pre instanceof HTMLElement &&
+        Boolean(pre.querySelector(`[data-${expectedSide}]`)) &&
+        !pre.querySelector("[data-deletions]")
+      );
+    }, side);
+  } catch (error) {
+    const debugState = await window.evaluate(() => {
+      const diffElement = document.querySelector("[data-diff-layout] diffs-container");
+      const pre = diffElement?.shadowRoot?.querySelector("pre");
+
+      return {
+        diffElementClassName:
+          diffElement instanceof HTMLElement ? diffElement.className : undefined,
+        layout: document
+          .querySelector("[data-diff-layout]")
+          ?.getAttribute("data-diff-layout"),
+        preDiffType: pre?.getAttribute("data-diff-type"),
+        hasAdditions: Boolean(pre?.querySelector("[data-additions]")),
+        hasDeletions: Boolean(pre?.querySelector("[data-deletions]")),
+        hostCount: document.querySelectorAll("diffs-container").length
+      };
+    });
+
+    throw new Error(`Expected focused ${side} diff, got ${JSON.stringify(debugState)}`, {
+      cause: error
+    });
+  }
+}
+
+async function expectRenderedUnifiedDiff(window) {
+  await window.waitForFunction(() => {
+    const diffElement = document.querySelector("[data-diff-layout] diffs-container");
+    const pre = diffElement?.shadowRoot?.querySelector("pre[data-diff-type='single']");
+
+    return pre instanceof HTMLElement && Boolean(pre.querySelector("[data-unified]"));
+  });
+}
+
+async function expectRenderedSplitDiff(window) {
+  await window.waitForFunction(() => {
+    const diffElement = document.querySelector("diffs-container");
+    const pre = diffElement?.shadowRoot?.querySelector("pre[data-diff-type='split']");
+
+    return (
+      pre instanceof HTMLElement &&
+      Boolean(pre.querySelector("[data-deletions]")) &&
+      Boolean(pre.querySelector("[data-additions]"))
+    );
+  });
+}
+
+async function expectRenderedDiffText(window, expectedText) {
+  try {
+    await window.waitForFunction((text) => {
+      const diffElement = document.querySelector("[data-diff-layout] diffs-container");
+
+      return Boolean(diffElement?.shadowRoot?.textContent?.includes(text));
+    }, expectedText);
+  } catch (error) {
+    const debugState = await window.evaluate(() => {
+      const surface = document.querySelector("[data-diff-layout]");
+      const diffElement = surface?.querySelector("diffs-container");
+
+      return {
+        layout:
+          surface instanceof HTMLElement
+            ? surface.getAttribute("data-diff-layout")
+            : undefined,
+        scrollTop: surface instanceof HTMLElement ? surface.scrollTop : undefined,
+        shadowTextSample: diffElement?.shadowRoot?.textContent?.slice(0, 500)
+      };
+    });
+
+    throw new Error(
+      `Expected rendered diff text ${expectedText}, got ${JSON.stringify(debugState)}`,
+      { cause: error }
+    );
+  }
+}
+
 async function expectChecked(window, label) {
   const checked = await window.getByLabel(label, { exact: true }).isChecked();
 
@@ -493,6 +617,33 @@ async function expectComboboxValue(window, name, expectedValue) {
   if (actualValue !== expectedValue) {
     throw new Error(`Expected combobox to be ${expectedValue}, got ${actualValue}`);
   }
+}
+
+async function expectSettingsDiffModeSelector(window, expectedMode) {
+  await window.waitForFunction((mode) => {
+    const group = document.querySelector(
+      '[role="group"][aria-label="Default diff view"]'
+    );
+
+    if (!(group instanceof HTMLElement)) {
+      return false;
+    }
+
+    const buttons = [...group.querySelectorAll("button")];
+    const activeButton = buttons.find((button) => button.dataset.active === "true");
+
+    return (
+      buttons.length === 2 &&
+      buttons.some((button) => button.textContent?.trim() === "Split") &&
+      buttons.some((button) => button.textContent?.trim() === "Unified") &&
+      activeButton?.textContent?.trim().toLowerCase() === mode &&
+      buttons.every((button) => {
+        const rect = button.getBoundingClientRect();
+
+        return rect.width >= 54 && rect.height >= 28;
+      })
+    );
+  }, expectedMode);
 }
 
 async function expectEditorChoice(window, expectedValue) {

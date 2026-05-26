@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   Code2,
+  Columns2,
   Diff,
   ExternalLink,
   FileCode2,
@@ -27,6 +28,8 @@ import {
   GitBranch,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelLeft,
+  PanelRight,
   Plus,
   RefreshCw,
   Save,
@@ -54,11 +57,14 @@ import {
 } from "./workspace-refresh.js";
 import {
   createDiffsFileDiffOptions,
+  createDiffsFocusedFileDiff,
   createDiffsRenderModel,
   createDiffsWorkerPoolOptions,
+  diffFocusClassName,
   diffsVirtualFileMetrics,
   diffsWorkerHighlighterOptions,
-  type DiffsRenderModel
+  type DiffsRenderModel,
+  type DiffSideFocus
 } from "./diffs-renderer.js";
 
 type LoadState = "idle" | "loading";
@@ -149,6 +155,7 @@ export function App(): React.JSX.Element {
   const [baseRefDraft, setBaseRefDraft] = useState("");
   const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
+  const [diffSideFocus, setDiffSideFocus] = useState<DiffSideFocus>("both");
   const [error, setError] = useState<string | undefined>();
   const [editorOptions, setEditorOptions] = useState<readonly EditorPresetView[]>([]);
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
@@ -387,6 +394,9 @@ export function App(): React.JSX.Element {
 
   const selectedFile =
     visibleFiles.find((file) => file.path === selectedPath) ?? visibleFiles[0];
+  const selectedDiffSideFocus = selectedFile
+    ? diffSideFocusForFile(selectedFile, diffMode, diffSideFocus)
+    : diffSideFocus;
   const selectedDiffScrollKey =
     workspace && selectedFile
       ? createDiffScrollKey({
@@ -1675,8 +1685,11 @@ export function App(): React.JSX.Element {
               {selectedFile ? (
                 <>
                   <DiffToolbar
+                    diffMode={diffMode}
+                    diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
                     file={selectedFile}
+                    onDiffSideFocusChange={setDiffSideFocus}
                     onToggleReviewed={() => {
                       void toggleSelectedReviewed();
                     }}
@@ -1689,6 +1702,7 @@ export function App(): React.JSX.Element {
                     <DiffSurface
                       diffHash={selectedFile.diffHash}
                       diffMode={diffMode}
+                      diffSideFocus={selectedDiffSideFocus}
                       filePath={selectedFile.path}
                       key={selectedDiffScrollKey ?? selectedFile.diffHash}
                       newText={selectedFile.newText}
@@ -2476,19 +2490,27 @@ const FileButton = memo(function FileButton({
 });
 
 function DiffToolbar({
+  diffMode,
+  diffSideFocus,
   disabled,
   file,
+  onDiffSideFocusChange,
   onOpenEditor,
   onToggleReviewed,
   refName
 }: {
+  readonly diffMode: DiffMode;
+  readonly diffSideFocus: DiffSideFocus;
   readonly disabled: boolean;
   readonly file: ReviewFileView;
+  readonly onDiffSideFocusChange: (sideFocus: DiffSideFocus) => void;
   readonly onOpenEditor: () => void;
   readonly onToggleReviewed: () => void;
   readonly refName: string;
 }): React.JSX.Element {
   const parts = splitPath(file.path);
+  const canFocusSides = file.status !== "added" && file.status !== "deleted";
+  const showSideFocusControls = diffMode === "split";
 
   return (
     <div className={styles.diffToolbar}>
@@ -2513,6 +2535,53 @@ function DiffToolbar({
         </div>
       </div>
       <div className={styles.diffActions}>
+        {showSideFocusControls ? (
+          <>
+            <div
+              className={styles.diffSideSegmented}
+              role="group"
+              aria-label="Diff side focus"
+            >
+              <button
+                aria-label="Show old version"
+                data-active={diffSideFocus === "old"}
+                disabled={disabled || !canFocusSides}
+                onClick={() => {
+                  onDiffSideFocusChange("old");
+                }}
+                title="Show old version"
+                type="button"
+              >
+                <PanelLeft size={14} strokeWidth={1.4} aria-hidden />
+              </button>
+              <button
+                aria-label="Show both diff sides"
+                data-active={diffSideFocus === "both"}
+                disabled={disabled}
+                onClick={() => {
+                  onDiffSideFocusChange("both");
+                }}
+                title="Show both sides"
+                type="button"
+              >
+                <Columns2 size={14} strokeWidth={1.4} aria-hidden />
+              </button>
+              <button
+                aria-label="Show new version"
+                data-active={diffSideFocus === "new"}
+                disabled={disabled || !canFocusSides}
+                onClick={() => {
+                  onDiffSideFocusChange("new");
+                }}
+                title="Show new version"
+                type="button"
+              >
+                <PanelRight size={14} strokeWidth={1.4} aria-hidden />
+              </button>
+            </div>
+            <span className={styles.verticalDivider} />
+          </>
+        ) : null}
         <button
           aria-label="Open selected file in editor"
           className={styles.iconButton}
@@ -2565,6 +2634,7 @@ function DiffLoadingState({
 function DiffSurface({
   diffHash,
   diffMode,
+  diffSideFocus,
   filePath,
   newText,
   oldText,
@@ -2580,6 +2650,7 @@ function DiffSurface({
 }: {
   readonly diffHash: string;
   readonly diffMode: DiffMode;
+  readonly diffSideFocus: DiffSideFocus;
   readonly filePath: string;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
@@ -2598,7 +2669,10 @@ function DiffSurface({
 }): React.JSX.Element {
   const parseKey = `${filePath}:${diffHash}`;
   const effectiveDiffMode = status === "added" ? "unified" : diffMode;
-  const visualDiffLayout = status === "added" ? "single" : diffMode;
+  const visualDiffLayout =
+    status === "added" || status === "deleted" || diffSideFocus !== "both"
+      ? "single"
+      : diffMode;
   const [parseState, setParseState] = useState<DiffParseState>(() => ({
     key: parseKey,
     status: "parsing"
@@ -2607,6 +2681,13 @@ function DiffSurface({
     parseState.key === parseKey && parseState.status === "ready"
       ? parseState.model
       : undefined;
+  const focusedFileDiff = useMemo(
+    () =>
+      model?.kind === "diff"
+        ? createDiffsFocusedFileDiff(model.fileDiff, diffSideFocus)
+        : undefined,
+    [diffSideFocus, model]
+  );
   const fileDiffOptions = useMemo(
     () =>
       createDiffsFileDiffOptions({
@@ -2669,14 +2750,15 @@ function DiffSurface({
       {model?.kind === "fallback" ? (
         <DiffFallback title={model.title} detail={model.detail} />
       ) : null}
-      {model?.kind === "diff" ? (
+      {focusedFileDiff ? (
         <WorkerPoolContextProvider
           highlighterOptions={diffsWorkerHighlighterOptions}
           poolOptions={workerPoolOptions}
         >
           <FileDiff
-            className={styles.diffsFileDiff ?? ""}
-            fileDiff={model.fileDiff}
+            className={classList(styles.diffsFileDiff, diffFocusClassName(diffSideFocus))}
+            fileDiff={focusedFileDiff}
+            key={focusedFileDiff.cacheKey ?? `${focusedFileDiff.name}:${diffSideFocus}`}
             metrics={diffsVirtualFileMetrics}
             options={fileDiffOptions}
           />
@@ -3150,7 +3232,11 @@ function SettingsPanel({
           <SettingsSection title="Review">
             <div className={styles.settingRow}>
               <span>Default diff view</span>
-              <div className={styles.segmented}>
+              <div
+                className={styles.settingsSegmented}
+                role="group"
+                aria-label="Default diff view"
+              >
                 <button
                   data-active={appSettings.defaultDiffMode === "split"}
                   onClick={() => {
@@ -3916,6 +4002,22 @@ function reviewState(file: ReviewFileView): ReviewState {
   }
 
   return file.reviewed ? "reviewed" : "pending";
+}
+
+function diffSideFocusForFile(
+  file: ReviewFileView,
+  diffMode: DiffMode,
+  requestedFocus: DiffSideFocus
+): DiffSideFocus {
+  if (diffMode === "unified") {
+    return "both";
+  }
+
+  if (file.status === "added" || file.status === "deleted") {
+    return "both";
+  }
+
+  return requestedFocus;
 }
 
 function reviewSummaryState(summary: ProjectReviewSummaryView): ReviewState {

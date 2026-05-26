@@ -114,6 +114,7 @@ The diff canvas is the visual center of the app. It should have the calmest back
 Required qualities:
 
 - readable side-by-side diff columns
+- temporary old-side and new-side focus for reading one side of split diffs at full width
 - strong line-number and gutter alignment
 - clear added, removed, and changed-line states
 - enough contrast for long sessions

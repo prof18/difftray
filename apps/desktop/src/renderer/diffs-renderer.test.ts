@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createDiffsFocusedFileDiff,
   createDiffsFileDiffOptions,
   createDiffsRenderModel,
+  diffFocusClassName,
   diffsVirtualFileMetrics,
   diffsWorkerHighlighterOptions,
   intellijIslandsDiffTheme
@@ -39,6 +41,13 @@ describe("createDiffsFileDiffOptions", () => {
         wrapLines: true
       }).unsafeCSS
     ).toContain("--diffs-font-size: 13px");
+    expect(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark",
+        wrapLines: true
+      }).unsafeCSS
+    ).toContain(":host(.difftrayDiffFocusNew)");
     expect(diffsVirtualFileMetrics.lineHeight).toBe(22);
     expect(diffsWorkerHighlighterOptions).toMatchObject({
       lineDiffType: "word-alt",
@@ -150,5 +159,74 @@ describe("createDiffsRenderModel", () => {
       kind: "fallback",
       title: "No textual diff"
     });
+  });
+});
+
+describe("createDiffsFocusedFileDiff", () => {
+  it("keeps the original split diff model when both sides are visible", () => {
+    const model = createDiffsRenderModel({
+      diffHash: "hash-focus-both",
+      filePath: "src/example.ts",
+      newText: "new\n",
+      oldText: "old\n",
+      patch: [
+        "diff --git a/src/example.ts b/src/example.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/example.ts",
+        "+++ b/src/example.ts",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new"
+      ].join("\n"),
+      status: "modified"
+    });
+
+    expect(model.kind).toBe("diff");
+    if (model.kind !== "diff") {
+      return;
+    }
+
+    expect(createDiffsFocusedFileDiff(model.fileDiff, "both")).toBe(model.fileDiff);
+  });
+
+  it("maps focused old and new sides to single-column diff metadata", () => {
+    const model = createDiffsRenderModel({
+      diffHash: "hash-focus-side",
+      filePath: "src/example.ts",
+      newText: "new\n",
+      oldText: "old\n",
+      patch: [
+        "diff --git a/src/example.ts b/src/example.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/example.ts",
+        "+++ b/src/example.ts",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new"
+      ].join("\n"),
+      status: "modified"
+    });
+
+    expect(model.kind).toBe("diff");
+    if (model.kind !== "diff") {
+      return;
+    }
+
+    expect(createDiffsFocusedFileDiff(model.fileDiff, "old")).toMatchObject({
+      cacheKey: "hash-focus-side:focus-old",
+      type: "deleted"
+    });
+    expect(createDiffsFocusedFileDiff(model.fileDiff, "new")).toMatchObject({
+      cacheKey: "hash-focus-side:focus-new",
+      type: "new"
+    });
+  });
+});
+
+describe("diffFocusClassName", () => {
+  it("maps side focus values to renderer host classes", () => {
+    expect(diffFocusClassName("both")).toBeUndefined();
+    expect(diffFocusClassName("old")).toBe("difftrayDiffFocusOld");
+    expect(diffFocusClassName("new")).toBe("difftrayDiffFocusNew");
   });
 });

@@ -45,6 +45,11 @@ export type CreateDiffsFileDiffOptionsInput = {
   readonly wrapLines: boolean;
 };
 
+export type DiffSideFocus = "both" | "new" | "old";
+
+export const diffFocusNewClassName = "difftrayDiffFocusNew";
+export const diffFocusOldClassName = "difftrayDiffFocusOld";
+
 const fallbackTitle = "No textual diff";
 const maxTokenizedLineLength = 4_000;
 const maxLineDiffLength = 20_000;
@@ -115,6 +120,45 @@ const difftrayDiffUnsafeCSS = `
 [data-diff-type="split"][data-overflow="wrap"] [data-deletions] [data-content] {
   border-color: var(--diff-bg-separator, #24262a);
 }
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="scroll"],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="scroll"] {
+  grid-template-columns: 1fr;
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"] [data-additions],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"] [data-deletions] {
+  display: none !important;
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="scroll"] [data-deletions],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="scroll"] [data-additions] {
+  grid-column: 1;
+  border-right: 0;
+  border-left: 0;
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="wrap"],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="wrap"] {
+  grid-template-columns: var(--diffs-code-grid);
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="wrap"] [data-deletions],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="wrap"] [data-additions] {
+  display: contents;
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="wrap"] [data-deletions] [data-content],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="wrap"] [data-additions] [data-content] {
+  grid-column: 2;
+  border-right: 0;
+}
+
+:host(.difftrayDiffFocusOld) [data-diff-type="split"][data-overflow="wrap"] [data-deletions] [data-gutter],
+:host(.difftrayDiffFocusNew) [data-diff-type="split"][data-overflow="wrap"] [data-additions] [data-gutter] {
+  grid-column: 1;
+  border-left: 0;
+}
 `;
 
 export function createDiffsRenderModel(
@@ -174,6 +218,32 @@ export function createDiffsFileDiffOptions({
     unsafeCSS: difftrayDiffUnsafeCSS,
     useTokenTransformer: true
   };
+}
+
+export function createDiffsFocusedFileDiff(
+  fileDiff: FileDiffMetadata,
+  sideFocus: DiffSideFocus
+): FileDiffMetadata {
+  if (sideFocus === "both") {
+    return fileDiff;
+  }
+
+  return {
+    ...fileDiff,
+    cacheKey: `${fileDiff.cacheKey ?? fileDiff.name}:focus-${sideFocus}`,
+    type: sideFocus === "new" ? "new" : "deleted"
+  };
+}
+
+export function diffFocusClassName(sideFocus: DiffSideFocus): string | undefined {
+  switch (sideFocus) {
+    case "both":
+      return undefined;
+    case "new":
+      return diffFocusNewClassName;
+    case "old":
+      return diffFocusOldClassName;
+  }
 }
 
 export function createDiffsWorkerPoolOptions(): WorkerPoolOptions {

@@ -701,31 +701,69 @@
   gap: 8px;
 }
 
-.segmented {
+.diffSideSegmented {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  border-radius: 6px;
-  background: var(--selected);
-  padding: 3px;
+  gap: 4px;
 }
 
-.segmented button {
+.diffSideSegmented button {
   display: inline-grid;
-  min-width: 28px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   place-items: center;
-  border: 0;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   font-size: 11.5px;
-  padding: 0 8px;
+  padding: 0;
 }
 
-.segmented button[data-active="true"] {
+.diffSideSegmented button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.diffSideSegmented button[data-active="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.settingsSegmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--elev);
-  box-shadow: var(--shadow-sm);
+  padding: 2px;
+}
+
+.settingsSegmented button {
+  display: inline-flex;
+  min-width: 68px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 10px;
+}
+
+.settingsSegmented button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.settingsSegmented button[data-active="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
