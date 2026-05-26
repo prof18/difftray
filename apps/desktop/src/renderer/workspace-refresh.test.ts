@@ -203,6 +203,7 @@ describe("carryLoadedDiffsForward", () => {
 
 function workspace(patch: Partial<ReviewWorkspaceView> = {}): ReviewWorkspaceView {
   return {
+    comments: [],
     files: [],
     progress: {
       reviewedVisibleFiles: 0,

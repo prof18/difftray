@@ -90,6 +90,35 @@ review_marks (
 
 This allows a file to become reviewed again if its diff returns to a previously reviewed hash.
 
+### review_comments
+
+```sql
+review_comments (
+  id text primary key,
+  project_id text not null,
+  review_target_id text not null,
+  path text not null,
+  previous_path text,
+  diff_hash text not null,
+  side text not null,
+  line_start integer not null,
+  line_end integer not null,
+  body text not null,
+  created_at text not null,
+  updated_at text not null
+)
+```
+
+`side` is either `additions` for the new/right side or `deletions` for the
+old/left side.
+
+Inline review comments are separate from `review_marks`. A file can be reviewed
+with comments still present, and comment export does not change reviewed state.
+
+Comments are active only while `review_target_id`, `path`, and `diff_hash` match
+the current file diff. When a diff changes, old comments are kept for auditability
+but are hidden from the active review UI and omitted from the agent-ready report.
+
 ### project_settings
 
 ```sql

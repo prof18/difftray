@@ -143,6 +143,16 @@ describe("storage", () => {
       reviewedDiffHash: "hash-a",
       reviewTargetId: reviewTarget.id
     });
+    storage.createReviewComment({
+      body: "Needs a regression test.",
+      diffHash: "hash-a",
+      lineEnd: 12,
+      lineStart: 12,
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id,
+      side: "additions"
+    });
 
     storage.deleteProject(project.id);
 
@@ -150,6 +160,7 @@ describe("storage", () => {
     expect(storage.listRecentProjects()).toEqual([]);
     expect(storage.getReviewTarget(reviewTarget.id)).toBeNull();
     expect(storage.listReviewMarks(reviewTarget.id)).toEqual([]);
+    expect(storage.listReviewComments(reviewTarget.id)).toEqual([]);
     expect(storage.getProjectSettings(project.id)).toEqual(
       expect.objectContaining({
         fileListCollapsed: false,
@@ -157,6 +168,74 @@ describe("storage", () => {
         projectId: project.id
       })
     );
+    storage.close();
+  });
+
+  it("creates and lists review comments for a review target", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+
+    const comment = storage.createReviewComment({
+      body: "Validate this before saving.",
+      diffHash: "hash-a",
+      lineEnd: 18,
+      lineStart: 18,
+      path: "src/app.ts",
+      previousPath: "src/old-app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id,
+      side: "additions"
+    });
+
+    expect(comment).toEqual(
+      expect.objectContaining({
+        body: "Validate this before saving.",
+        diffHash: "hash-a",
+        lineEnd: 18,
+        lineStart: 18,
+        path: "src/app.ts",
+        previousPath: "src/old-app.ts",
+        projectId: project.id,
+        reviewTargetId: reviewTarget.id,
+        side: "additions"
+      })
+    );
+    expect(comment.id).toEqual(expect.any(String));
+    expect(comment.createdAt).toEqual(expect.any(String));
+    expect(comment.updatedAt).toEqual(expect.any(String));
+    expect(storage.listReviewComments(reviewTarget.id)).toEqual([comment]);
+    storage.close();
+  });
+
+  it("updates and deletes review comments", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+    const comment = storage.createReviewComment({
+      body: "Original comment.",
+      diffHash: "hash-a",
+      lineEnd: 7,
+      lineStart: 7,
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id,
+      side: "deletions"
+    });
+
+    const updatedComment = storage.updateReviewComment(comment.id, "Updated comment.");
+
+    expect(updatedComment).toEqual({
+      ...comment,
+      body: "Updated comment.",
+      updatedAt: expect.any(String)
+    });
+    expect(storage.updateReviewComment("missing-comment", "No-op")).toBeNull();
+
+    storage.deleteReviewComment(comment.id);
+
+    expect(storage.listReviewComments(reviewTarget.id)).toEqual([]);
+    expect(storage.deleteReviewComment("missing-comment")).toBe(false);
     storage.close();
   });
 

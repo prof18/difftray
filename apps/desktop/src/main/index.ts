@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   nativeImage,
@@ -17,11 +18,15 @@ import path from "node:path";
 import {
   calculateProgress,
   createReviewTargetId,
+  formatReviewCommentsReport,
   listInstalledEditorPresets,
   resolveReviewStates,
   type EditorPreset,
   type FileDiff,
   type FileReviewState,
+  type ReviewCommentReportContext,
+  type ReviewCommentReportItem,
+  type ReviewCommentSide,
   type ReviewMark,
   type ReviewProgress,
   type ReviewTarget
@@ -46,6 +51,7 @@ import {
   type DifftrayStorage,
   type ProjectSettingsRecord,
   type ProjectRecord,
+  type ReviewCommentRecord,
   type ReviewTargetRecord,
   type StoredProjectRecord
 } from "@difftray/storage";
@@ -111,6 +117,7 @@ type ReviewFileView = {
 };
 
 type ReviewWorkspaceView = {
+  readonly comments: readonly ReviewCommentView[];
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
@@ -121,6 +128,19 @@ type ReviewWorkspaceView = {
     readonly id: string;
     readonly kind: ReviewTarget["kind"];
   };
+};
+
+type ReviewCommentView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly diffHash: string;
+  readonly id: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly side: ReviewCommentSide;
+  readonly updatedAt: string;
 };
 
 type FileReviewStateWithSummary = {
@@ -218,6 +238,45 @@ type OpenFileInEditorResult =
     }
   | {
       readonly status: "opened";
+    };
+
+type CreateReviewCommentResult =
+  | {
+      readonly comment: ReviewCommentView;
+      readonly status: "created";
+    }
+  | {
+      readonly reason: "file_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+type UpdateReviewCommentResult =
+  | {
+      readonly comment: ReviewCommentView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+type DeleteReviewCommentResult =
+  | {
+      readonly status: "deleted";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+type CopyReviewCommentsReportResult =
+  | {
+      readonly commentCount: number;
+      readonly status: "copied";
+    }
+  | {
+      readonly reason: "stale_diff";
+      readonly status: "rejected";
     };
 
 const createMainWindow = async (): Promise<void> => {
@@ -546,6 +605,140 @@ ipcMain.handle(
   }
 );
 ipcMain.handle(
+  "comments:create",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<CreateReviewCommentResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const reviewTargetId = readStringProperty(input, "reviewTargetId");
+    const pathName = readStringProperty(input, "path");
+    const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
+    const side = readEnumProperty(input, "side", ["additions", "deletions"]);
+    const lineStart = readNumberProperty(input, "lineStart");
+    const lineEnd = readNumberProperty(input, "lineEnd");
+    const body = readStringProperty(input, "body").trim();
+    const workspace = await loadProjectWorkspace(projectId);
+    const file = workspace.files.find((candidate) => candidate.path === pathName);
+
+    if (!file) {
+      return {
+        reason: "file_missing",
+        status: "rejected"
+      };
+    }
+
+    if (
+      workspace.reviewTarget.id !== reviewTargetId ||
+      file.diffHash !== displayedDiffHash
+    ) {
+      return {
+        reason: "stale_diff",
+        status: "rejected"
+      };
+    }
+
+    if (body.length === 0) {
+      throw new Error("Review comment body is required.");
+    }
+
+    const comment = getStorage().createReviewComment({
+      body,
+      diffHash: file.diffHash,
+      lineEnd,
+      lineStart,
+      path: file.path,
+      ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      projectId,
+      reviewTargetId,
+      side
+    });
+
+    return {
+      comment: reviewCommentView(comment),
+      status: "created"
+    };
+  }
+);
+ipcMain.handle(
+  "comments:update",
+  (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewCommentResult => {
+    const commentId = readStringProperty(input, "id");
+    const body = readStringProperty(input, "body").trim();
+
+    if (body.length === 0) {
+      throw new Error("Review comment body is required.");
+    }
+
+    const comment = getStorage().updateReviewComment(commentId, body);
+
+    if (!comment) {
+      return {
+        reason: "comment_missing",
+        status: "rejected"
+      };
+    }
+
+    return {
+      comment: reviewCommentView(comment),
+      status: "updated"
+    };
+  }
+);
+ipcMain.handle(
+  "comments:delete",
+  (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewCommentResult => {
+    const commentId = readStringProperty(input, "id");
+
+    if (!getStorage().deleteReviewComment(commentId)) {
+      return {
+        reason: "comment_missing",
+        status: "rejected"
+      };
+    }
+
+    return { status: "deleted" };
+  }
+);
+ipcMain.handle(
+  "comments:copyReport",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<CopyReviewCommentsReportResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const reviewTargetId = readStringProperty(input, "reviewTargetId");
+    const expectedCommentIds =
+      readOptionalStringArrayProperty(input, "expectedCommentIds") ?? [];
+    const workspace = await loadProjectWorkspace(projectId);
+
+    if (
+      workspace.reviewTarget.id !== reviewTargetId ||
+      !sameCommentIds(workspace.comments, expectedCommentIds)
+    ) {
+      return {
+        reason: "stale_diff",
+        status: "rejected"
+      };
+    }
+
+    const comments = await reviewCommentReportItems(projectId, workspace.comments);
+
+    clipboard.writeText(
+      formatReviewCommentsReport({
+        comments,
+        projectName: workspace.project.name,
+        targetLabel: reviewTargetLabel(workspace.reviewTarget)
+      })
+    );
+
+    return {
+      commentCount: workspace.comments.length,
+      status: "copied"
+    };
+  }
+);
+ipcMain.handle(
   "files:openInEditor",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<OpenFileInEditorResult> => {
     const projectId = readStringProperty(input, "projectId");
@@ -820,6 +1013,7 @@ async function loadProjectWorkspace(
   });
 
   return {
+    comments: activeReviewCommentViews(reviewTargetId, files),
     files: files.map((file) => reviewFileView(file)),
     progress,
     project: projectView(project, reviewSummary),
@@ -1034,6 +1228,72 @@ async function loadProjectFileDiff(
     path: diff.newPath,
     status: diff.status
   };
+}
+
+async function reviewCommentReportItems(
+  projectId: string,
+  comments: readonly ReviewCommentView[]
+): Promise<readonly ReviewCommentReportItem[]> {
+  const uniquePaths = [...new Set(comments.map((comment) => comment.path))];
+  const diffEntries = await Promise.all(
+    uniquePaths.map(
+      async (pathName) =>
+        [pathName, await loadProjectFileDiff(projectId, pathName)] as const
+    )
+  );
+  const diffByPath = new Map(diffEntries);
+
+  return comments.map((comment) => {
+    const context = commentReportContext(comment, diffByPath.get(comment.path) ?? null);
+
+    return {
+      ...comment,
+      ...(context ? { context } : {})
+    };
+  });
+}
+
+function commentReportContext(
+  comment: ReviewCommentView,
+  diff: ReviewFileDiffContentView | null
+): ReviewCommentReportContext | undefined {
+  const text = comment.side === "additions" ? diff?.newText : diff?.oldText;
+
+  if (text === undefined) {
+    return undefined;
+  }
+
+  const lines = textLines(text);
+
+  if (comment.lineStart > lines.length) {
+    return undefined;
+  }
+
+  const contextRadius = 3;
+  const lineStart = Math.max(1, comment.lineStart - contextRadius);
+  const lineEnd = Math.min(lines.length, comment.lineEnd + contextRadius);
+
+  return {
+    lines: Array.from({ length: lineEnd - lineStart + 1 }, (_, index) => {
+      const lineNumber = lineStart + index;
+
+      return {
+        kind:
+          lineNumber >= comment.lineStart && lineNumber <= comment.lineEnd
+            ? "commented"
+            : "context",
+        lineNumber,
+        text: lines[lineNumber - 1] ?? ""
+      };
+    }),
+    side: comment.side
+  };
+}
+
+function textLines(text: string): readonly string[] {
+  const lines = text.split("\n");
+
+  return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
 }
 
 function upsertOpenedProject(project: ProjectRecord): void {
@@ -1383,6 +1643,59 @@ function reviewFileView(
     status: file.state.diff.status,
     visible: file.state.visible
   };
+}
+
+function activeReviewCommentViews(
+  reviewTargetId: string,
+  files: readonly FileReviewStateWithSummary[]
+): readonly ReviewCommentView[] {
+  const activeDiffHashByPath = new Map(
+    files.map((file) => [file.state.path, file.state.diffHash])
+  );
+
+  return getStorage()
+    .listReviewComments(reviewTargetId)
+    .filter((comment) => activeDiffHashByPath.get(comment.path) === comment.diffHash)
+    .map(reviewCommentView);
+}
+
+function reviewCommentView(comment: ReviewCommentRecord): ReviewCommentView {
+  return {
+    body: comment.body,
+    createdAt: comment.createdAt,
+    diffHash: comment.diffHash,
+    id: comment.id,
+    lineEnd: comment.lineEnd,
+    lineStart: comment.lineStart,
+    path: comment.path,
+    ...(comment.previousPath ? { previousPath: comment.previousPath } : {}),
+    side: comment.side,
+    updatedAt: comment.updatedAt
+  };
+}
+
+function sameCommentIds(
+  comments: readonly Pick<ReviewCommentView, "id">[],
+  expectedIds: readonly string[]
+): boolean {
+  if (comments.length !== expectedIds.length) {
+    return false;
+  }
+
+  const expectedIdSet = new Set(expectedIds);
+
+  return (
+    expectedIdSet.size === expectedIds.length &&
+    comments.every((comment) => expectedIdSet.has(comment.id))
+  );
+}
+
+function reviewTargetLabel(
+  reviewTarget: Pick<ReviewWorkspaceView["reviewTarget"], "baseRefName" | "kind">
+): string {
+  return reviewTarget.kind === "branch" && reviewTarget.baseRefName
+    ? `Against ${reviewTarget.baseRefName}`
+    : "Git changes";
 }
 
 function fileDiffFromGit(file: GitLoadedFileDiff | GitFileDiffSummary): FileDiff {

@@ -5,6 +5,7 @@ import {
   createDiffHash,
   createReviewTargetId,
   detectGeneratedFile,
+  formatReviewCommentsReport,
   resolveReviewStates,
   type FileDiff,
   type ReviewMark,
@@ -287,5 +288,187 @@ describe("review state and progress", () => {
       reviewedVisibleFiles: 0,
       totalVisibleReviewableFiles: 2
     });
+  });
+});
+
+describe("review comment reports", () => {
+  it("formats review comments as an agent-ready report", () => {
+    expect(
+      formatReviewCommentsReport({
+        comments: [
+          {
+            body: "Validate role before putting it in the token.",
+            context: {
+              lines: [
+                {
+                  kind: "context",
+                  lineNumber: 10,
+                  text: "const input = readAuthInput(request);"
+                },
+                {
+                  kind: "context",
+                  lineNumber: 11,
+                  text: "const token = createToken({"
+                },
+                {
+                  kind: "commented",
+                  lineNumber: 12,
+                  text: "  role: input.role"
+                },
+                {
+                  kind: "context",
+                  lineNumber: 13,
+                  text: "});"
+                }
+              ],
+              side: "additions"
+            },
+            lineEnd: 12,
+            lineStart: 12,
+            path: "src/auth.ts",
+            side: "additions"
+          },
+          {
+            body: "This branch is no longer used; remove the fallback too.",
+            context: {
+              lines: [
+                {
+                  kind: "context",
+                  lineNumber: 29,
+                  text: "if (cachedUser) {"
+                },
+                {
+                  kind: "commented",
+                  lineNumber: 30,
+                  text: "  return cachedUser;"
+                },
+                {
+                  kind: "commented",
+                  lineNumber: 31,
+                  text: "}"
+                },
+                {
+                  kind: "commented",
+                  lineNumber: 32,
+                  text: "return anonymousUser;"
+                }
+              ],
+              side: "deletions"
+            },
+            lineEnd: 32,
+            lineStart: 30,
+            path: "src/auth.ts",
+            side: "deletions"
+          },
+          {
+            body: "Please add a regression test for the empty state.",
+            lineEnd: 8,
+            lineStart: 8,
+            path: "src/ui.tsx",
+            side: "additions"
+          }
+        ],
+        projectName: "Difftray",
+        targetLabel: "Git changes"
+      })
+    ).toBe(
+      [
+        "# Difftray Review Comments",
+        "",
+        "Project: Difftray",
+        "Target: Git changes",
+        "Comment count: 3",
+        "",
+        "## Task",
+        "",
+        "Apply the following review comments to the current project.",
+        "",
+        "For each comment:",
+        "- Treat file paths and diff context as hints; line numbers may be stale.",
+        "- Inspect the surrounding code before editing.",
+        "- Apply the reviewer's intent when it is reasonably clear.",
+        "- If a comment is too vague to act on safely, leave it unchanged and report it as unresolved.",
+        "- Do not modify unrelated code.",
+        "- Preserve existing user/local changes.",
+        "- Run the relevant checks/tests after editing when possible.",
+        "",
+        "## Output Expected",
+        "",
+        "After applying the comments, report:",
+        "- Which comments were addressed.",
+        "- Which comments could not be resolved and why.",
+        "- What checks/tests were run.",
+        "",
+        "## Comments",
+        "",
+        "### 1. `src/auth.ts`",
+        "",
+        "Referenced side: new",
+        "Referenced line: 12",
+        "",
+        "Reviewer comment:",
+        "",
+        "> Validate role before putting it in the token.",
+        "",
+        "Diff context:",
+        "",
+        "```diff",
+        "@@ New line 12 @@",
+        "  10 const input = readAuthInput(request);",
+        "  11 const token = createToken({",
+        "+ 12   role: input.role",
+        "  13 });",
+        "```",
+        "",
+        "### 2. `src/auth.ts`",
+        "",
+        "Referenced side: old",
+        "Referenced lines: 30-32",
+        "",
+        "Reviewer comment:",
+        "",
+        "> This branch is no longer used; remove the fallback too.",
+        "",
+        "Diff context:",
+        "",
+        "```diff",
+        "@@ Old lines 30-32 @@",
+        "  29 if (cachedUser) {",
+        "- 30   return cachedUser;",
+        "- 31 }",
+        "- 32 return anonymousUser;",
+        "```",
+        "",
+        "### 3. `src/ui.tsx`",
+        "",
+        "Referenced side: new",
+        "Referenced line: 8",
+        "",
+        "Reviewer comment:",
+        "",
+        "> Please add a regression test for the empty state.",
+        ""
+      ].join("\n")
+    );
+  });
+
+  it("returns a useful empty report when no comments exist", () => {
+    expect(
+      formatReviewCommentsReport({
+        comments: [],
+        projectName: "Difftray"
+      })
+    ).toBe(
+      [
+        "# Difftray Review Comments",
+        "",
+        "Project: Difftray",
+        "Target: current local git diff",
+        "Comment count: 0",
+        "",
+        "No review comments are currently attached to this diff.",
+        ""
+      ].join("\n")
+    );
   });
 });
