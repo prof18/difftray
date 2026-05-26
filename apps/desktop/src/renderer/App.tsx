@@ -2240,6 +2240,7 @@ function FileList({
   readonly selectedPath: string | undefined;
 }): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldMoveFileListFocusRef = useRef(false);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const selectedIndex = selectedPath
@@ -2285,6 +2286,11 @@ function FileList({
       return;
     }
 
+    shouldMoveFileListFocusRef.current =
+      document.activeElement instanceof HTMLElement &&
+      listElement.contains(document.activeElement) &&
+      document.activeElement.matches("button");
+
     const rowTop = selectedIndex * fileListRowHeight;
     const rowBottom = rowTop + fileListRowHeight;
     const viewportTop = listElement.scrollTop;
@@ -2299,6 +2305,25 @@ function FileList({
       setScrollTop(nextScrollTop);
     }
   }, [selectedIndex]);
+
+  useLayoutEffect(() => {
+    const listElement = listRef.current;
+
+    if (!listElement || !selectedPath || !shouldMoveFileListFocusRef.current) {
+      return;
+    }
+
+    const selectedButton = [
+      ...listElement.querySelectorAll<HTMLButtonElement>("button[data-file-path]")
+    ].find((button) => button.dataset.filePath === selectedPath);
+
+    if (!selectedButton) {
+      return;
+    }
+
+    selectedButton.focus({ preventScroll: true });
+    shouldMoveFileListFocusRef.current = false;
+  }, [endIndex, selectedPath, startIndex]);
 
   return (
     <div
@@ -2355,6 +2380,7 @@ const FileButton = memo(function FileButton({
       aria-posinset={position}
       aria-setsize={total}
       className={styles.fileItem}
+      data-file-path={file.path}
       data-selected={isSelected}
       onClick={() => {
         onSelect(file.path);

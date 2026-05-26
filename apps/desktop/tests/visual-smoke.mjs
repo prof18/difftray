@@ -133,8 +133,10 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-workflow.png")
   });
-  await window.getByRole("button", { name: "Mark reviewed" }).click();
+  await window.keyboard.press("KeyR");
   await expectFileReviewState(window, "tracked.txt", "reviewed");
+  await expectSelectedFile(window, "schema.generated.ts");
+  await expectFocusedFile(window, "schema.generated.ts");
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await window.getByRole("button", { name: "Unmark reviewed" }).waitFor({
     timeout: 10_000
@@ -340,6 +342,12 @@ async function expectSelectedFile(window, filename) {
     const selectedButton = document.querySelector('button[data-selected="true"]');
 
     return selectedButton?.textContent?.includes(targetFilename);
+  }, filename);
+}
+
+async function expectFocusedFile(window, filename) {
+  await window.waitForFunction((targetFilename) => {
+    return document.activeElement?.textContent?.includes(targetFilename);
   }, filename);
 }
 
