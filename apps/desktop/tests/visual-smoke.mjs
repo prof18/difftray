@@ -118,9 +118,47 @@ try {
   await window.keyboard.press("Enter");
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
-  await window.getByRole("button", { name: /context\.txt modified/ }).click();
+  await window.getByRole("button", { name: /long-context\.txt modified/ }).click();
+  await window.getByText("changed long context line 1", { exact: true }).first().waitFor({
+    timeout: 10_000
+  });
+  await window.waitForTimeout(750);
+  await expectDiffScrollTopAtMost(window, 1);
+  const restoredContextScrollTop = await setDiffScrollTopFromBottom(window, 900);
+  await expectDiffScrollTopBetween(
+    window,
+    restoredContextScrollTop - 20,
+    restoredContextScrollTop + 20
+  );
+  await window.waitForTimeout(1_250);
+  await expectDiffScrollTopBetween(
+    window,
+    restoredContextScrollTop - 20,
+    restoredContextScrollTop + 20
+  );
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await expectSelectedFile(window, "tracked.txt");
+  await window.waitForTimeout(750);
+  await expectDiffScrollTopAtMost(window, 1);
+  await window.getByRole("button", { name: /long-context\.txt modified/ }).click();
+  await expectSelectedFile(window, "long-context.txt");
+  await expectDiffScrollTopBetween(
+    window,
+    restoredContextScrollTop - 20,
+    restoredContextScrollTop + 20
+  );
+  await window.waitForTimeout(1_250);
+  await expectDiffScrollTopBetween(
+    window,
+    restoredContextScrollTop - 20,
+    restoredContextScrollTop + 20
+  );
+  await window.getByRole("button", { exact: true, name: "context.txt modified" }).click();
+  await window.getByText("changed context line 1", { exact: true }).first().waitFor({
+    timeout: 10_000
+  });
   await window.locator("[data-unmodified-lines]").first().click();
-  await window.getByText("context line 1", { exact: true }).first().waitFor({
+  await window.getByText("context line 100", { exact: true }).first().waitFor({
     timeout: 10_000
   });
   await window.screenshot({
@@ -185,8 +223,12 @@ async function createChangedRepository(name = "visual-repo") {
   const repo = path.join(parent, name);
   const includeContextFile = name === "visual-repo";
   const contextLines = Array.from(
-    { length: 20 },
+    { length: 140 },
     (_, index) => `context line ${index + 1}`
+  );
+  const longContextLines = Array.from(
+    { length: 1_000 },
+    (_, index) => `long context line ${index + 1}`
   );
 
   await mkdir(repo);
@@ -196,6 +238,10 @@ async function createChangedRepository(name = "visual-repo") {
   await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf8");
   if (includeContextFile) {
     await writeFile(path.join(repo, "context.txt"), `${contextLines.join("\n")}\n`);
+    await writeFile(
+      path.join(repo, "long-context.txt"),
+      `${longContextLines.join("\n")}\n`
+    );
   }
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "Initial"]);
@@ -205,10 +251,21 @@ async function createChangedRepository(name = "visual-repo") {
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\nafter\n", "utf8");
   if (includeContextFile) {
     const changedContextLines = [...contextLines];
-    changedContextLines[11] = "changed context line 12";
+    for (let index = 0; index < 90; index += 1) {
+      changedContextLines[index] = `changed context line ${index + 1}`;
+    }
     await writeFile(
       path.join(repo, "context.txt"),
       `${changedContextLines.join("\n")}\n`,
+      "utf8"
+    );
+    const changedLongContextLines = [...longContextLines];
+    for (let index = 0; index < 600; index += 1) {
+      changedLongContextLines[index] = `changed long context line ${index + 1}`;
+    }
+    await writeFile(
+      path.join(repo, "long-context.txt"),
+      `${changedLongContextLines.join("\n")}\n`,
       "utf8"
     );
   }
@@ -349,6 +406,69 @@ async function expectFocusedFile(window, filename) {
   await window.waitForFunction((targetFilename) => {
     return document.activeElement?.textContent?.includes(targetFilename);
   }, filename);
+}
+
+async function setDiffScrollTopFromBottom(window, offsetFromBottom) {
+  await window.locator("[data-diff-layout]").evaluate((surface) => {
+    surface.scrollTop = surface.scrollHeight - surface.clientHeight;
+    surface.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await window.waitForTimeout(250);
+
+  return window
+    .locator("[data-diff-layout]")
+    .evaluate((surface, nextOffsetFromBottom) => {
+      const maxScrollTop = surface.scrollHeight - surface.clientHeight;
+      const nextScrollTop = Math.max(0, maxScrollTop - nextOffsetFromBottom);
+
+      surface.scrollTop = nextScrollTop;
+      surface.dispatchEvent(new Event("scroll", { bubbles: true }));
+
+      return nextScrollTop;
+    }, offsetFromBottom);
+}
+
+async function expectDiffScrollTopBetween(window, minimumScrollTop, maximumScrollTop) {
+  try {
+    await window.waitForFunction(
+      ({ maximum, minimum }) => {
+        const surface = document.querySelector("[data-diff-layout]");
+
+        return (
+          surface instanceof HTMLElement &&
+          surface.scrollTop >= minimum &&
+          surface.scrollTop <= maximum
+        );
+      },
+      { maximum: maximumScrollTop, minimum: minimumScrollTop }
+    );
+  } catch (error) {
+    const actual = await diffScrollState(window);
+
+    throw new Error(
+      `Expected diff scrollTop between ${minimumScrollTop} and ${maximumScrollTop}, got ${actual.scrollTop} of max ${actual.maxScrollTop}`,
+      { cause: error }
+    );
+  }
+}
+
+async function expectDiffScrollTopAtMost(window, scrollTop) {
+  await window.waitForFunction((maximumScrollTop) => {
+    const surface = document.querySelector("[data-diff-layout]");
+
+    return surface instanceof HTMLElement && surface.scrollTop <= maximumScrollTop;
+  }, scrollTop);
+}
+
+async function diffScrollState(window) {
+  return window.locator("[data-diff-layout]").evaluate((surface) => {
+    return {
+      clientHeight: surface.clientHeight,
+      maxScrollTop: surface.scrollHeight - surface.clientHeight,
+      scrollHeight: surface.scrollHeight,
+      scrollTop: surface.scrollTop
+    };
+  });
 }
 
 async function expectChecked(window, label) {

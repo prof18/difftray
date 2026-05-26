@@ -37,6 +37,12 @@ import {
 
 import styles from "./App.module.css";
 import {
+  createDiffScrollKey,
+  normalizeDiffScrollPosition,
+  topDiffScrollPosition,
+  type DiffScrollPosition
+} from "./diff-scroll-state.js";
+import {
   mergeProjectTabs,
   reorderProjectTabs,
   type ProjectTabDropPosition
@@ -176,6 +182,7 @@ export function App(): React.JSX.Element {
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
+  const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const focusRefreshRunningRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
@@ -380,6 +387,15 @@ export function App(): React.JSX.Element {
 
   const selectedFile =
     visibleFiles.find((file) => file.path === selectedPath) ?? visibleFiles[0];
+  const selectedDiffScrollKey =
+    workspace && selectedFile
+      ? createDiffScrollKey({
+          diffHash: selectedFile.diffHash,
+          filePath: selectedFile.path,
+          projectId: workspace.project.id,
+          reviewTargetId: workspace.reviewTarget.id
+        })
+      : undefined;
   const attentionFiles = visibleFiles.filter((file) => file.invalidated);
   const toastKey =
     workspace && attentionFiles.length > 0
@@ -401,6 +417,34 @@ export function App(): React.JSX.Element {
     pendingLoadingProjectId !== undefined &&
     loadingProject === undefined;
   const showActiveWorkspaceLoading = loadState === "loading" && !isPendingProjectSwitch;
+
+  const rememberDiffScrollPosition = useCallback(
+    (scrollKey: string, position: DiffScrollPosition) => {
+      diffScrollPositionsRef.current.set(
+        scrollKey,
+        normalizeDiffScrollPosition(position)
+      );
+    },
+    []
+  );
+  const rememberCurrentDiffScrollPosition = useCallback(() => {
+    if (!selectedDiffScrollKey || !diffSurfaceRef.current) {
+      return;
+    }
+
+    rememberDiffScrollPosition(selectedDiffScrollKey, {
+      left: diffSurfaceRef.current.scrollLeft,
+      top: diffSurfaceRef.current.scrollTop
+    });
+  }, [rememberDiffScrollPosition, selectedDiffScrollKey]);
+  const selectPath = useCallback(
+    (path: string | undefined) => {
+      rememberCurrentDiffScrollPosition();
+      selectedPathRef.current = path;
+      setSelectedPath(path);
+    },
+    [rememberCurrentDiffScrollPosition]
+  );
 
   useEffect(() => {
     if (!workspace || !selectedFile || selectedFile.diffLoaded) {
@@ -563,12 +607,20 @@ export function App(): React.JSX.Element {
         refresh: () => {
           void refreshWorkspace();
         },
-        selectFile: setSelectedPath,
+        selectFile: selectPath,
         setDiffMode: setAndPersistDiffMode,
         toggleFileList: toggleFileListCollapsed,
         workspace
       }),
-    [appSettings, diffMode, recentProjects, selectedFile, visibleFiles, workspace]
+    [
+      appSettings,
+      diffMode,
+      recentProjects,
+      selectPath,
+      selectedFile,
+      visibleFiles,
+      workspace
+    ]
   );
 
   const filteredCommands = useMemo(() => {
@@ -739,6 +791,8 @@ export function App(): React.JSX.Element {
     nextPath?: string,
     options: ApplyWorkspaceOptions = {}
   ): Promise<void> {
+    rememberCurrentDiffScrollPosition();
+
     const workspaceToApply = carryLoadedDiffsForward(workspaceRef.current, nextWorkspace);
 
     setLoadStatus({
@@ -1244,11 +1298,22 @@ export function App(): React.JSX.Element {
   }
 
   function setAndPersistDiffMode(mode: DiffMode): void {
-    const scrollTop = diffSurfaceRef.current?.scrollTop ?? 0;
+    const scrollPosition = diffSurfaceRef.current
+      ? normalizeDiffScrollPosition({
+          left: diffSurfaceRef.current.scrollLeft,
+          top: diffSurfaceRef.current.scrollTop
+        })
+      : topDiffScrollPosition;
+
+    if (selectedDiffScrollKey) {
+      rememberDiffScrollPosition(selectedDiffScrollKey, scrollPosition);
+    }
+
     setDiffMode(mode);
     window.setTimeout(() => {
       if (diffSurfaceRef.current) {
-        diffSurfaceRef.current.scrollTop = scrollTop;
+        diffSurfaceRef.current.scrollLeft = scrollPosition.left;
+        diffSurfaceRef.current.scrollTop = scrollPosition.top;
       }
     }, 0);
     void persistAppSettings({ defaultDiffMode: mode });
@@ -1324,7 +1389,7 @@ export function App(): React.JSX.Element {
     const nextFile = visibleFiles[nextIndex];
 
     if (nextFile) {
-      setSelectedPath(nextFile.path);
+      selectPath(nextFile.path);
     }
   }
 
@@ -1364,7 +1429,7 @@ export function App(): React.JSX.Element {
         visiblePathOrFirst(nextWorkspace, optimisticFile.path);
 
       setWorkspace(nextWorkspace);
-      setSelectedPath(nextPath);
+      selectPath(nextPath);
       updateRecentProjectReviewSummary(
         nextWorkspace.project.id,
         projectReviewSummary(nextWorkspace)
@@ -1415,7 +1480,7 @@ export function App(): React.JSX.Element {
       });
 
       setWorkspace(result.workspace);
-      setSelectedPath(visiblePathOrFirst(result.workspace, optimisticFile.path));
+      selectPath(visiblePathOrFirst(result.workspace, optimisticFile.path));
       updateRecentProjectReviewSummary(
         result.workspace.project.id,
         projectReviewSummary(result.workspace)
@@ -1580,7 +1645,7 @@ export function App(): React.JSX.Element {
                 />
                 <FileList
                   files={visibleFiles}
-                  onSelect={setSelectedPath}
+                  onSelect={selectPath}
                   selectedPath={selectedFile?.path}
                 />
                 <div className={styles.fileFooter}>
@@ -1625,6 +1690,7 @@ export function App(): React.JSX.Element {
                       diffHash={selectedFile.diffHash}
                       diffMode={diffMode}
                       filePath={selectedFile.path}
+                      key={selectedDiffScrollKey ?? selectedFile.diffHash}
                       newText={selectedFile.newText}
                       oldText={selectedFile.oldText}
                       patch={selectedFile.patch}
@@ -1632,6 +1698,13 @@ export function App(): React.JSX.Element {
                       resolvedTheme={resolvedTheme}
                       status={selectedFile.status}
                       refObject={diffSurfaceRef}
+                      onScrollPositionChange={rememberDiffScrollPosition}
+                      scrollKey={selectedDiffScrollKey ?? ""}
+                      scrollPosition={
+                        selectedDiffScrollKey
+                          ? diffScrollPositionsRef.current.get(selectedDiffScrollKey)
+                          : undefined
+                      }
                       wrapLines={appSettings.wrapDiffLines}
                     />
                   ) : (
@@ -1659,7 +1732,7 @@ export function App(): React.JSX.Element {
                   setToastDismissedFor(toastKey);
                 }}
                 onReviewNow={() => {
-                  setSelectedPath(attentionFiles[0]?.path);
+                  selectPath(attentionFiles[0]?.path);
                   setToastDismissedFor(toastKey);
                 }}
               />
@@ -2495,10 +2568,13 @@ function DiffSurface({
   filePath,
   newText,
   oldText,
+  onScrollPositionChange,
   patch,
   previousPath,
   resolvedTheme,
   refObject,
+  scrollKey,
+  scrollPosition,
   status,
   wrapLines
 }: {
@@ -2507,10 +2583,16 @@ function DiffSurface({
   readonly filePath: string;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
+  readonly onScrollPositionChange: (
+    scrollKey: string,
+    position: DiffScrollPosition
+  ) => void;
   readonly patch: string;
   readonly previousPath: string | undefined;
   readonly resolvedTheme: ResolvedTheme;
   readonly refObject: React.RefObject<HTMLDivElement | null>;
+  readonly scrollKey: string;
+  readonly scrollPosition: DiffScrollPosition | undefined;
   readonly status: ReviewFileView["status"];
   readonly wrapLines: boolean;
 }): React.JSX.Element {
@@ -2570,7 +2652,14 @@ function DiffSurface({
   }, [diffHash, filePath, newText, oldText, parseKey, patch, previousPath, status]);
 
   return (
-    <DiffsVirtualizedSurface diffLayout={visualDiffLayout} refObject={refObject}>
+    <DiffsVirtualizedSurface
+      contentReady={Boolean(model)}
+      diffLayout={visualDiffLayout}
+      refObject={refObject}
+      onScrollPositionChange={onScrollPositionChange}
+      scrollKey={scrollKey}
+      scrollPosition={scrollPosition}
+    >
       {!model ? (
         <div className={styles.diffPreparingState} role="status">
           <span className={styles.loadingMiniMark} aria-hidden />
@@ -2599,12 +2688,23 @@ function DiffSurface({
 
 function DiffsVirtualizedSurface({
   children,
+  contentReady,
   diffLayout,
+  onScrollPositionChange,
+  scrollKey,
+  scrollPosition,
   refObject
 }: {
   readonly children: React.ReactNode;
+  readonly contentReady: boolean;
   readonly diffLayout: DiffMode | "single";
+  readonly onScrollPositionChange: (
+    scrollKey: string,
+    position: DiffScrollPosition
+  ) => void;
   readonly refObject: React.RefObject<HTMLDivElement | null>;
+  readonly scrollKey: string;
+  readonly scrollPosition: DiffScrollPosition | undefined;
 }): React.JSX.Element {
   const [virtualizer] = useState(
     () =>
@@ -2614,9 +2714,14 @@ function DiffsVirtualizedSurface({
         resizeDebugging: false
       })
   );
+  const lastRestoreTokenRef = useRef<string | undefined>(undefined);
+  const restoreRunIdRef = useRef(0);
+  const scrollPersistenceEnabledRef = useRef(false);
+  const surfaceNodeRef = useRef<HTMLDivElement | null>(null);
   const setDiffSurfaceRef = useCallback(
     (node: HTMLDivElement | null) => {
       refObject.current = node;
+      surfaceNodeRef.current = node;
 
       if (node) {
         virtualizer.setup(node);
@@ -2626,12 +2731,182 @@ function DiffsVirtualizedSurface({
     },
     [refObject, virtualizer]
   );
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (!scrollPersistenceEnabledRef.current) {
+        return;
+      }
+
+      onScrollPositionChange(
+        scrollKey,
+        normalizeDiffScrollPosition({
+          left: event.currentTarget.scrollLeft,
+          top: event.currentTarget.scrollTop
+        })
+      );
+    },
+    [onScrollPositionChange, scrollKey]
+  );
+
+  useLayoutEffect(() => {
+    const surfaceNode = surfaceNodeRef.current;
+
+    if (!surfaceNode) {
+      return undefined;
+    }
+
+    const restoreToken = `${scrollKey}:${contentReady ? "ready" : "pending"}`;
+
+    if (lastRestoreTokenRef.current === restoreToken) {
+      return undefined;
+    }
+
+    lastRestoreTokenRef.current = restoreToken;
+    const restoreRunId = restoreRunIdRef.current + 1;
+    restoreRunIdRef.current = restoreRunId;
+    scrollPersistenceEnabledRef.current = false;
+
+    const restoreSurfaceNode = surfaceNode;
+    const nextScrollPosition = scrollPosition ?? topDiffScrollPosition;
+    let animationFrameId: number | undefined;
+    let frameCount = 0;
+    let lastClientHeight = -1;
+    let lastScrollHeight = -1;
+    let lastScrollWidth = -1;
+    const resizeObservedElements = new Set<Element>();
+    let restoreActive = true;
+    let stableFrameCount = 0;
+    const requiredStableFrames = contentReady ? 120 : 12;
+    const maximumRestoreFrames = contentReady ? 900 : 120;
+
+    function stopRestoreWatchers(): void {
+      restoreActive = false;
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+        animationFrameId = undefined;
+      }
+    }
+
+    function cancelRestore(): void {
+      if (restoreRunIdRef.current !== restoreRunId) {
+        return;
+      }
+
+      restoreRunIdRef.current += 1;
+      stopRestoreWatchers();
+      scrollPersistenceEnabledRef.current = true;
+    }
+
+    function restoreScrollPosition(node: HTMLDivElement): void {
+      node.scrollLeft = nextScrollPosition.left;
+      node.scrollTop = nextScrollPosition.top;
+    }
+
+    function scheduleRestore(): void {
+      if (!restoreActive || animationFrameId !== undefined) {
+        return;
+      }
+
+      animationFrameId = window.requestAnimationFrame(restoreUntilStable);
+    }
+
+    function resetStability(): void {
+      if (!restoreActive || restoreRunIdRef.current !== restoreRunId) {
+        return;
+      }
+
+      stableFrameCount = 0;
+      observeResizeTargets();
+      scheduleRestore();
+    }
+
+    function observeResizeTarget(element: Element): void {
+      if (resizeObservedElements.has(element)) {
+        return;
+      }
+
+      resizeObservedElements.add(element);
+      resizeObserver.observe(element);
+    }
+
+    function observeResizeTargets(): void {
+      observeResizeTarget(restoreSurfaceNode);
+      for (const child of restoreSurfaceNode.children) {
+        observeResizeTarget(child);
+      }
+    }
+
+    function restoreUntilStable(): void {
+      animationFrameId = undefined;
+
+      if (!restoreActive || restoreRunIdRef.current !== restoreRunId) {
+        return;
+      }
+
+      frameCount += 1;
+      restoreScrollPosition(restoreSurfaceNode);
+      const restored =
+        Math.abs(restoreSurfaceNode.scrollLeft - nextScrollPosition.left) <= 1 &&
+        Math.abs(restoreSurfaceNode.scrollTop - nextScrollPosition.top) <= 1;
+      const clientHeightStable = restoreSurfaceNode.clientHeight === lastClientHeight;
+      const scrollHeightStable = restoreSurfaceNode.scrollHeight === lastScrollHeight;
+      const scrollWidthStable = restoreSurfaceNode.scrollWidth === lastScrollWidth;
+
+      stableFrameCount =
+        restored && clientHeightStable && scrollHeightStable && scrollWidthStable
+          ? stableFrameCount + 1
+          : 0;
+      lastClientHeight = restoreSurfaceNode.clientHeight;
+      lastScrollHeight = restoreSurfaceNode.scrollHeight;
+      lastScrollWidth = restoreSurfaceNode.scrollWidth;
+
+      if (frameCount < maximumRestoreFrames && stableFrameCount < requiredStableFrames) {
+        scheduleRestore();
+        return;
+      }
+
+      stopRestoreWatchers();
+      scrollPersistenceEnabledRef.current = true;
+      onScrollPositionChange(
+        scrollKey,
+        normalizeDiffScrollPosition({
+          left: restoreSurfaceNode.scrollLeft,
+          top: restoreSurfaceNode.scrollTop
+        })
+      );
+    }
+
+    const resizeObserver = new ResizeObserver(resetStability);
+    const mutationObserver = new MutationObserver(resetStability);
+    observeResizeTargets();
+    mutationObserver.observe(restoreSurfaceNode, {
+      childList: true,
+      subtree: true
+    });
+    restoreSurfaceNode.addEventListener("pointerdown", cancelRestore);
+    restoreSurfaceNode.addEventListener("touchstart", cancelRestore, {
+      passive: true
+    });
+    restoreSurfaceNode.addEventListener("wheel", cancelRestore, { passive: true });
+    scheduleRestore();
+
+    return () => {
+      restoreRunIdRef.current += 1;
+      stopRestoreWatchers();
+      restoreSurfaceNode.removeEventListener("pointerdown", cancelRestore);
+      restoreSurfaceNode.removeEventListener("touchstart", cancelRestore);
+      restoreSurfaceNode.removeEventListener("wheel", cancelRestore);
+    };
+  }, [contentReady, onScrollPositionChange, scrollKey, scrollPosition]);
 
   return (
     <VirtualizerContext.Provider value={virtualizer}>
       <div
         className={styles.diffSurface}
         data-diff-layout={diffLayout}
+        onScroll={handleScroll}
         ref={setDiffSurfaceRef}
       >
         {children}

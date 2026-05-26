@@ -809,6 +809,7 @@
   min-height: 0;
   flex: 1;
   background: var(--diff-bg);
+  overflow-anchor: none;
   overflow-x: hidden;
   overflow-y: auto;
 }
