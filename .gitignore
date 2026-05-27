@@ -4,6 +4,7 @@ node_modules/
 dist/
 out/
 coverage/
+release/
 .vite/
 .turbo/
 .env

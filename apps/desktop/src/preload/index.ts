@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly getUpdatePhase: () => Promise<UpdatePhase>;
+  readonly installAndRelaunch: () => Promise<void>;
+  readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly copyReviewCommentsReport: (
     input: CopyReviewCommentsReportInput
@@ -50,6 +53,16 @@ export type DifftrayApi = {
 };
 
 export type ThemeMode = "dark" | "light" | "system";
+
+export type UpdatePhase =
+  | { readonly kind: "idle" }
+  | { readonly kind: "checking" }
+  | { readonly kind: "available"; readonly version: string }
+  | { readonly kind: "downloading"; readonly percent: number; readonly version: string }
+  | { readonly kind: "downloaded"; readonly version: string }
+  | { readonly kind: "error"; readonly message: string };
+
+export type UpdatePhaseListener = (phase: UpdatePhase) => void;
 
 export type AppSettingsView = {
   readonly autoCollapseHunksOver: number;
@@ -343,6 +356,25 @@ export type UpdateAppSettingsInput = {
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  getUpdatePhase: async () =>
+    ipcRenderer.invoke("updates:getPhase") as Promise<UpdatePhase>,
+  installAndRelaunch: async () =>
+    ipcRenderer.invoke("updates:installAndRelaunch") as Promise<void>,
+  onUpdatePhase: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      const phase = parseUpdatePhase(payload);
+
+      if (phase) {
+        listener(phase);
+      }
+    };
+
+    ipcRenderer.on("updates:phase", handler);
+
+    return () => {
+      ipcRenderer.removeListener("updates:phase", handler);
+    };
+  },
   closeProject: async (projectId) =>
     ipcRenderer.invoke("projects:close", {
       projectId
@@ -521,6 +553,35 @@ function isProjectLoadProgressPhase(value: unknown): value is ProjectLoadProgres
     value === "resolving_target" ||
     value === "scanning_files"
   );
+}
+
+function parseUpdatePhase(payload: unknown): UpdatePhase | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const { kind } = payload;
+
+  switch (kind) {
+    case "idle":
+    case "checking":
+      return { kind };
+    case "available":
+    case "downloaded":
+      return typeof payload.version === "string"
+        ? { kind, version: payload.version }
+        : undefined;
+    case "downloading":
+      return typeof payload.version === "string" && typeof payload.percent === "number"
+        ? { kind, percent: payload.percent, version: payload.version }
+        : undefined;
+    case "error":
+      return typeof payload.message === "string"
+        ? { kind, message: payload.message }
+        : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

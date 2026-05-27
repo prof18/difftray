@@ -18,7 +18,6 @@ Difftray is not an IDE, not an AI agent host, and not a pull request platform. I
 - Drive review from the keyboard, command palette, or dense file list controls.
 - Stay local by design: no fetching, pushing, staging, editing, or repository metadata writes.
 
-
 ## Screenshots
 
 Review workflow with inline comments and a ready-made agent handoff prompt:
@@ -36,7 +35,6 @@ Expandable unchanged context in split diff mode:
 Focused new-side diff view:
 
 ![Focused new-side diff](docs/screenshots/diff-focused-new.png)
-
 
 ## Install And Run
 

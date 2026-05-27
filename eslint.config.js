@@ -4,7 +4,13 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "pnpm-lock.yaml"]
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "pnpm-lock.yaml",
+      "release/**"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -26,8 +32,14 @@ export default tseslint.config(
     }
   },
   {
-    files: ["**/*.config.js", "**/*.config.ts", "**/*.mjs"],
+    files: ["**/*.config.cjs", "**/*.config.js", "**/*.config.ts", "**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked]
+  },
+  {
+    files: ["**/*.config.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off"
+    }
   },
   {
     files: ["**/*.test.ts"],

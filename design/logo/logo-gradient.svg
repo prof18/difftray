@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  
+  <defs>
+    <linearGradient id="dt-tile" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0%" stop-color="#3e4a92"></stop>
+      <stop offset="100%" stop-color="#2c3672"></stop>
+    </linearGradient>
+    <linearGradient id="dt-add" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3ad373"></stop>
+      <stop offset="100%" stop-color="#28a456"></stop>
+    </linearGradient>
+    <linearGradient id="dt-del" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6f73"></stop>
+      <stop offset="100%" stop-color="#e34a4f"></stop>
+    </linearGradient>
+    <linearGradient id="dt-neu" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8e6dc"></stop>
+      <stop offset="100%" stop-color="#cfccbe"></stop>
+    </linearGradient>
+    <clipPath id="dt-squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229"></rect>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#dt-squircle)">
+    <rect width="1024" height="1024" fill="url(#dt-tile)"></rect>
+    <rect width="1024" height="2" fill="rgba(255,255,255,0.10)"></rect>
+
+    <rect x="190" y="612" width="560" height="130" rx="40" fill="url(#dt-neu)"></rect>
+    <rect x="260" y="447" width="640" height="130" rx="40" fill="url(#dt-del)"></rect>
+    <rect x="170" y="282" width="700" height="130" rx="40" fill="url(#dt-add)"></rect>
+
+    <circle cx="240" cy="347" r="22" fill="rgba(255,255,255,0.95)"></circle>
+  </g>
+</svg>

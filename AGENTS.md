@@ -24,6 +24,15 @@ Project commands:
 - `pnpm dev`
 - `pnpm format`
 - `pnpm format:write`
+- `pnpm package`
+- `pnpm package:dev`
+- `pnpm package:mac`
+- `pnpm package:mac:dev`
+- `pnpm release:mac`
+- `pnpm release:dev:mac`
+- `pnpm release:setup-app-ids`
+- `pnpm release:setup-signing`
+- `pnpm release:upload`
 - `pnpm test`
 - `pnpm lint`
 - `pnpm typecheck`

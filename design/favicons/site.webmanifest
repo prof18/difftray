@@ -1,0 +1,29 @@
+{
+  "name": "Difftray",
+  "short_name": "Difftray",
+  "description": "Local-first Git diff review desk.",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#353f82",
+  "background_color": "#353f82",
+  "display": "standalone",
+  "start_url": "/"
+}

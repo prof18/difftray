@@ -55,7 +55,8 @@
 - Add security policy.
 - Add issue templates.
 - Add screenshots.
-- Add release workflow.
+- Add release workflow. Done locally with electron-builder and documented in
+  `docs/release.md`.
 - Create public GitHub repository.
 
 ## Later

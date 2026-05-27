@@ -68,6 +68,9 @@ import {
   resolveSafeProjectFilePath,
   trustedEditorLaunchConfig
 } from "./security.js";
+import { resolveAppRuntimeConfig, type AppRuntimeConfig } from "./app-runtime.js";
+import { loadAutoUpdater } from "./electron-updater.js";
+import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -77,7 +80,11 @@ const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
 let mainWindow: BrowserWindow | undefined;
 let projectWatchService: ProjectWatchService | undefined;
 let storage: DifftrayStorage | undefined;
+let didConfigureAppRuntime = false;
 let isQuitting = false;
+let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
+let didWireAutoUpdater = false;
+const updateState = new UpdateState();
 
 type RecentProjectView = {
   readonly defaultBaseRef?: string;
@@ -280,9 +287,11 @@ type CopyReviewCommentsReportResult =
     };
 
 const createMainWindow = async (): Promise<void> => {
+  const icon = appIconImage();
   const window = new BrowserWindow({
     backgroundColor: "#ffffff",
     height: 820,
+    ...(icon ? { icon } : {}),
     minHeight: 600,
     minWidth: 900,
     show: false,
@@ -333,6 +342,20 @@ const createMainWindow = async (): Promise<void> => {
 };
 
 ipcMain.handle("app:version", () => app.getVersion());
+ipcMain.handle("updates:getPhase", (): UpdatePhase => updateState.phase);
+ipcMain.handle("updates:installAndRelaunch", async (): Promise<void> => {
+  if (resolvedAppRuntimeConfig?.variant !== "production") {
+    return;
+  }
+
+  try {
+    const autoUpdater = await loadAutoUpdater();
+
+    autoUpdater.quitAndInstall();
+  } catch (caughtError) {
+    console.error("autoUpdater quitAndInstall failed", caughtError);
+  }
+});
 ipcMain.handle(
   "editors:listInstalled",
   async (): Promise<readonly EditorPresetView[]> => listInstalledEditorPresetViews()
@@ -777,13 +800,138 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
+    configureAppRuntime();
     void createMainWindow();
   }
 });
 
-void app.whenReady().then(createMainWindow);
+void app.whenReady().then(async () => {
+  configureAppRuntime();
+  await createMainWindow();
+  scheduleAutoUpdaterWiring();
+});
 
 export { mainWindow };
+
+function configureAppRuntime(): void {
+  if (didConfigureAppRuntime) {
+    return;
+  }
+
+  didConfigureAppRuntime = true;
+
+  const appRuntimeConfig = resolveAppRuntimeConfig({
+    envVariant: process.env.DIFFTRAY_APP_VARIANT,
+    executablePath: process.execPath,
+    isPackaged: app.isPackaged,
+    productName: app.getName()
+  });
+
+  resolvedAppRuntimeConfig = appRuntimeConfig;
+
+  if (process.platform === "win32") {
+    app.setAppUserModelId(appRuntimeConfig.appId);
+  }
+
+  if (!userDataPath) {
+    app.setPath(
+      "userData",
+      path.join(app.getPath("appData"), appRuntimeConfig.userDataDirectoryName)
+    );
+  }
+
+  if (process.platform === "darwin" && !app.isPackaged) {
+    const dockIcon = appIconImage();
+
+    if (dockIcon) {
+      app.dock?.setIcon(dockIcon);
+    }
+  }
+
+  updateState.subscribe(emitUpdatePhase);
+}
+
+function appIconImage(): NativeImage | undefined {
+  const iconPath = path.join(__dirname, "../../../resources/icon.png");
+  const image = nativeImage.createFromPath(iconPath);
+
+  return image.isEmpty() ? undefined : image;
+}
+
+function emitUpdatePhase(phase: UpdatePhase): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("updates:phase", phase);
+    }
+  }
+}
+
+function scheduleAutoUpdaterWiring(): void {
+  if (didWireAutoUpdater) {
+    return;
+  }
+
+  if (resolvedAppRuntimeConfig?.variant !== "production") {
+    return;
+  }
+
+  didWireAutoUpdater = true;
+
+  setTimeout(() => {
+    void wireAutoUpdater();
+  }, 3_000);
+}
+
+async function wireAutoUpdater(): Promise<void> {
+  const log = (await import("electron-log/main.js")).default;
+
+  log.transports.file.level = "info";
+  log.initialize();
+
+  let autoUpdater;
+
+  try {
+    autoUpdater = await loadAutoUpdater();
+  } catch (caughtError) {
+    log.error("autoUpdater failed to load:", caughtError);
+    console.error("autoUpdater failed to load:", caughtError);
+    return;
+  }
+
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  const handleUpdateEvent = (event: UpdateEvent): void => {
+    updateState.handleEvent(event);
+    log.info("autoUpdater event", event, "phase", updateState.phase);
+  };
+
+  autoUpdater.on("checking-for-update", () => handleUpdateEvent({ kind: "checking" }));
+  autoUpdater.on("update-available", (info) =>
+    handleUpdateEvent({ kind: "available", version: info.version })
+  );
+  autoUpdater.on("update-not-available", () =>
+    handleUpdateEvent({ kind: "not-available" })
+  );
+  autoUpdater.on("download-progress", (progress) =>
+    handleUpdateEvent({ kind: "progress", percent: progress.percent })
+  );
+  autoUpdater.on("update-downloaded", (info) =>
+    handleUpdateEvent({ kind: "downloaded", version: info.version })
+  );
+  autoUpdater.on("error", (error: Error) =>
+    handleUpdateEvent({ kind: "error", message: error.message })
+  );
+
+  try {
+    log.info("autoUpdater checking for updates");
+    await autoUpdater.checkForUpdates();
+  } catch (caughtError) {
+    log.error("autoUpdater.checkForUpdates failed:", caughtError);
+    console.error("autoUpdater.checkForUpdates failed:", caughtError);
+  }
+}
 
 function getStorage(): DifftrayStorage {
   if (storage) {

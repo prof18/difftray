@@ -7,7 +7,7 @@ export default defineConfig({
     emptyOutDir: false,
     outDir: "dist/main",
     rollupOptions: {
-      external: ["electron", "node:path"],
+      external: ["electron", "electron-log/main.js", "electron-updater", "node:path"],
       output: {
         entryFileNames: "index.cjs",
         format: "cjs"

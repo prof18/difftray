@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Difftray mark</title>
+  <desc>Mark-only logo (no tile). Drop on any background. Colors live in CSS custom properties on .difftray-mark (add, del, neutral, dot).</desc>
+  
+
+  <g class="difftray-mark">
+    <rect class="neutral" x="190" y="612" width="560" height="130" rx="40"></rect>
+    <rect class="del" x="260" y="447" width="640" height="130" rx="40"></rect>
+    <rect class="add" x="170" y="282" width="700" height="130" rx="40"></rect>
+    <circle class="dot" cx="240" cy="347" r="22"></circle>
+  </g>
+</svg>

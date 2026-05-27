@@ -1,0 +1,71 @@
+# Release
+
+Difftray uses `electron-builder` for local release builds. Production builds use
+`com.prof18.difftray`; dev/debug builds use `com.prof18.difftray.dev` and the
+`Difftray Dev` product name so a debug app installs side by side instead of
+replacing the production build. Both variants intentionally use the same
+`Difftray` user-data directory.
+
+The App Store Connect bundle IDs have been created under team `Q7CUB3RNAK`:
+
+- `com.prof18.difftray`: `64V6W55ZG6`
+- `com.prof18.difftray.dev`: `2DL3Z5R624`
+
+Run `pnpm release:setup-app-ids` to verify or recreate the bundle IDs on a new
+account. It uses `asc bundle-ids`.
+
+## Local Build
+
+```sh
+pnpm package:mac
+pnpm package:mac:dev
+```
+
+Release scripts run the full gate first:
+
+```sh
+pnpm release:mac
+pnpm release:dev:mac
+```
+
+macOS release builds require:
+
+```sh
+export APPLE_ID="<apple-id@example>"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="Q7CUB3RNAK"
+export CSC_NAME="Marco Gomiero (Q7CUB3RNAK)"
+```
+
+`CSC_NAME` is the common-name portion only. Do not include the
+`Developer ID Application:` prefix.
+
+## Signing
+
+Use `pnpm release:setup-signing -- prepare` to generate a Developer ID CSR. After
+creating the certificate in the Apple Developer portal, import it with:
+
+```sh
+pnpm release:setup-signing -- install ~/Downloads/developerID_application.cer
+```
+
+Artifacts are written to `release/<version>/` for production and
+`release/<version>-dev/` for dev/debug builds.
+
+macOS produces both `arm64` and `x64` `.dmg` + `.zip` files; the dmg name
+encodes the architecture (`Difftray-arm64.dmg`, `Difftray-x64.dmg`). Linux and
+Windows are not supported targets.
+
+## Upload
+
+Uploads target the source repo `prof18/difftray` — the same repo hosts both
+the open-source code and the GitHub Releases that `electron-updater` reads
+from. The repo must be public for `electron-updater` to fetch
+`latest-mac.yml` and the `.zip` artifacts (the in-app updater authenticates
+anonymously).
+
+```sh
+pnpm release:upload -- v0.1.0
+pnpm release:upload -- v0.1.0 --draft
+pnpm release:upload -- v0.1.0 dev --draft
+```

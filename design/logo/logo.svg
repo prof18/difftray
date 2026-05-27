@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Difftray logo</title>
+  <desc>Customizable source. Colors live in CSS custom properties on .difftray-logo (tile, add, del, neutral, dot). Override them in your stylesheet to retheme.</desc>
+  
+
+  <g class="difftray-logo">
+    <rect class="tile" x="0" y="0" width="1024" height="1024" rx="229" ry="229"></rect>
+    <rect class="neutral" x="190" y="612" width="560" height="130" rx="40"></rect>
+    <rect class="del" x="260" y="447" width="640" height="130" rx="40"></rect>
+    <rect class="add" x="170" y="282" width="700" height="130" rx="40"></rect>
+    <circle class="dot" cx="240" cy="347" r="22"></circle>
+  </g>
+</svg>

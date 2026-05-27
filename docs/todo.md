@@ -78,5 +78,6 @@
 - [x] Add screenshots.
 - [x] Add install/run instructions.
 - [x] Add contribution docs.
+- [x] Add local release packaging scripts.
 - [x] Add license.
 - [ ] Create public repository when ready.
