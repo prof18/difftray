@@ -1,10 +1,21 @@
 import { realpath } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { findEditorPresetByLaunchConfig } from "@difftray/core";
 import type { EditorLaunchConfig } from "@difftray/storage";
 
 const loopbackHostnames = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
+
+export type TrustedRendererLocation =
+  | {
+      readonly kind: "dev";
+      readonly origin: string;
+    }
+  | {
+      readonly kind: "file";
+      readonly path: string;
+    };
 
 export function resolveRendererDevUrl(
   rawUrl: string | undefined,
@@ -57,6 +68,27 @@ export async function resolveSafeProjectFilePath(
     return absoluteFilePath;
   } catch {
     return undefined;
+  }
+}
+
+export function isTrustedRendererUrl(
+  rawUrl: string,
+  location: TrustedRendererLocation
+): boolean {
+  try {
+    const url = new URL(rawUrl);
+
+    if (location.kind === "dev") {
+      return url.origin === location.origin;
+    }
+
+    if (url.protocol !== "file:") {
+      return false;
+    }
+
+    return path.resolve(fileURLToPath(url)) === path.resolve(location.path);
+  } catch {
+    return false;
   }
 }
 

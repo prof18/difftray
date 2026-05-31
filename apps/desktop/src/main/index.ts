@@ -64,8 +64,10 @@ import {
   type WatchedProject
 } from "./project-watch-service.js";
 import {
+  isTrustedRendererUrl,
   resolveRendererDevUrl,
   resolveSafeProjectFilePath,
+  type TrustedRendererLocation,
   trustedEditorLaunchConfig
 } from "./security.js";
 import { resolveAppRuntimeConfig, type AppRuntimeConfig } from "./app-runtime.js";
@@ -84,6 +86,7 @@ let didConfigureAppRuntime = false;
 let isQuitting = false;
 let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
+let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
 
 type RecentProjectView = {
@@ -332,18 +335,40 @@ const createMainWindow = async (): Promise<void> => {
   const rendererDevUrl = resolveRendererDevUrl(rendererDevUrlFromEnv, app.isPackaged);
 
   if (rendererDevUrl) {
+    trustedRendererLocation = {
+      kind: "dev",
+      origin: new URL(rendererDevUrl).origin
+    };
     await window.loadURL(rendererDevUrl);
   } else {
-    await window.loadFile(path.join(__dirname, "../renderer/index.html"));
+    const rendererFilePath = path.join(__dirname, "../renderer/index.html");
+
+    trustedRendererLocation = {
+      kind: "file",
+      path: rendererFilePath
+    };
+    await window.loadFile(rendererFilePath);
   }
 
   showWindow();
   mainWindow = window;
 };
 
-ipcMain.handle("app:version", () => app.getVersion());
-ipcMain.handle("updates:getPhase", (): UpdatePhase => updateState.phase);
-ipcMain.handle("updates:installAndRelaunch", async (): Promise<void> => {
+app.on("web-contents-created", (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+  contents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+  contents.on("will-navigate", (event, navigationUrl) => {
+    if (!isTrustedNavigationTarget(navigationUrl)) {
+      event.preventDefault();
+    }
+  });
+});
+
+handleTrusted("app:version", () => app.getVersion());
+handleTrusted("updates:getPhase", (): UpdatePhase => updateState.phase);
+handleTrusted("updates:installAndRelaunch", async (): Promise<void> => {
   if (resolvedAppRuntimeConfig?.variant !== "production") {
     return;
   }
@@ -356,15 +381,15 @@ ipcMain.handle("updates:installAndRelaunch", async (): Promise<void> => {
     console.error("autoUpdater quitAndInstall failed", caughtError);
   }
 });
-ipcMain.handle(
+handleTrusted(
   "editors:listInstalled",
   async (): Promise<readonly EditorPresetView[]> => listInstalledEditorPresetViews()
 );
-ipcMain.handle(
+handleTrusted(
   "settings:getApp",
   (): AppSettingsView => appSettingsView(getStorage().getAppSettings())
 );
-ipcMain.handle(
+handleTrusted(
   "settings:updateApp",
   (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
     const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
@@ -413,8 +438,8 @@ ipcMain.handle(
     return appSettingsView(getStorage().getAppSettings());
   }
 );
-ipcMain.handle("projects:listRecent", () => listAvailableRecentProjectViews());
-ipcMain.handle(
+handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
+handleTrusted(
   "projects:getReviewSummary",
   async (
     _event: IpcMainInvokeEvent,
@@ -425,7 +450,7 @@ ipcMain.handle(
     return loadProjectReviewSummaryIfAvailable(projectId);
   }
 );
-ipcMain.handle(
+handleTrusted(
   "projects:listBranchRefs",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<readonly string[]> => {
     const projectId = readStringProperty(input, "projectId");
@@ -434,7 +459,7 @@ ipcMain.handle(
     return listBranchRefs(project.path);
   }
 );
-ipcMain.handle(
+handleTrusted(
   "projects:close",
   async (
     _event: IpcMainInvokeEvent,
@@ -448,10 +473,10 @@ ipcMain.handle(
     return listAvailableRecentProjectViews();
   }
 );
-ipcMain.handle("projects:open", async (event: IpcMainInvokeEvent) =>
+handleTrusted("projects:open", async (event: IpcMainInvokeEvent) =>
   openProjectFromDialog(event.sender)
 );
-ipcMain.handle(
+handleTrusted(
   "projects:load",
   async (
     event: IpcMainInvokeEvent,
@@ -466,7 +491,7 @@ ipcMain.handle(
     );
   }
 );
-ipcMain.handle(
+handleTrusted(
   "projects:updateDiffTarget",
   async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
     const projectId = readStringProperty(input, "projectId");
@@ -495,7 +520,7 @@ ipcMain.handle(
     }
   }
 );
-ipcMain.handle(
+handleTrusted(
   "settings:getProject",
   (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
     const projectId = readStringProperty(input, "projectId");
@@ -505,7 +530,7 @@ ipcMain.handle(
     return settingsView(getStorage().getProjectSettings(projectId));
   }
 );
-ipcMain.handle(
+handleTrusted(
   "settings:updateProject",
   (_event: IpcMainInvokeEvent, input: unknown): ProjectSettingsView => {
     const projectId = readStringProperty(input, "projectId");
@@ -525,7 +550,7 @@ ipcMain.handle(
     return settingsView(getStorage().getProjectSettings(projectId));
   }
 );
-ipcMain.handle(
+handleTrusted(
   "reviews:markFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<MarkReviewedResult> => {
     const projectId = readStringProperty(input, "projectId");
@@ -577,7 +602,7 @@ ipcMain.handle(
     };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "reviews:unmarkFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<UnmarkReviewedResult> => {
     const projectId = readStringProperty(input, "projectId");
@@ -627,7 +652,7 @@ ipcMain.handle(
     };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "comments:create",
   async (
     _event: IpcMainInvokeEvent,
@@ -683,7 +708,7 @@ ipcMain.handle(
     };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "comments:update",
   (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewCommentResult => {
     const commentId = readStringProperty(input, "id");
@@ -708,7 +733,7 @@ ipcMain.handle(
     };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "comments:delete",
   (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewCommentResult => {
     const commentId = readStringProperty(input, "id");
@@ -723,7 +748,7 @@ ipcMain.handle(
     return { status: "deleted" };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "comments:copyReport",
   async (
     _event: IpcMainInvokeEvent,
@@ -761,7 +786,7 @@ ipcMain.handle(
     };
   }
 );
-ipcMain.handle(
+handleTrusted(
   "files:openInEditor",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<OpenFileInEditorResult> => {
     const projectId = readStringProperty(input, "projectId");
@@ -770,7 +795,7 @@ ipcMain.handle(
     return openFileInEditor(projectId, pathName);
   }
 );
-ipcMain.handle(
+handleTrusted(
   "files:loadDiff",
   async (
     _event: IpcMainInvokeEvent,
@@ -849,6 +874,32 @@ function configureAppRuntime(): void {
   }
 
   updateState.subscribe(emitUpdatePhase);
+}
+
+function handleTrusted(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
+): void {
+  ipcMain.handle(channel, (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+    assertTrustedIpcSender(event);
+
+    return listener(event, ...args);
+  });
+}
+
+function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
+  const senderUrl = event.senderFrame?.url;
+
+  if (!senderUrl || !isTrustedNavigationTarget(senderUrl)) {
+    throw new Error("Rejected IPC message from untrusted renderer.");
+  }
+}
+
+function isTrustedNavigationTarget(rawUrl: string): boolean {
+  return (
+    trustedRendererLocation !== undefined &&
+    isTrustedRendererUrl(rawUrl, trustedRendererLocation)
+  );
 }
 
 function appIconImage(): NativeImage | undefined {

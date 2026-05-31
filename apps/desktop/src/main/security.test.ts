@@ -5,8 +5,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  isTrustedRendererUrl,
   resolveRendererDevUrl,
   resolveSafeProjectFilePath,
+  type TrustedRendererLocation,
   trustedEditorLaunchConfig
 } from "./security.js";
 
@@ -38,6 +40,33 @@ describe("renderer dev URL resolution", () => {
 
   it("rejects non-loopback renderer URLs", () => {
     expect(() => resolveRendererDevUrl("http://example.com", false)).toThrow(/loopback/);
+  });
+});
+
+describe("trusted renderer URL validation", () => {
+  it("allows only the configured dev renderer origin", () => {
+    const location: TrustedRendererLocation = {
+      kind: "dev",
+      origin: "http://127.0.0.1:5173"
+    };
+
+    expect(isTrustedRendererUrl("http://127.0.0.1:5173/settings", location)).toBe(true);
+    expect(isTrustedRendererUrl("http://127.0.0.1.attacker.test:5173", location)).toBe(
+      false
+    );
+    expect(isTrustedRendererUrl("https://127.0.0.1:5173", location)).toBe(false);
+  });
+
+  it("allows only the packaged renderer file", () => {
+    const rendererFilePath = path.resolve("/Applications/Difftray.app/index.html");
+    const location: TrustedRendererLocation = {
+      kind: "file",
+      path: rendererFilePath
+    };
+
+    expect(isTrustedRendererUrl(`file://${rendererFilePath}`, location)).toBe(true);
+    expect(isTrustedRendererUrl("file:///tmp/index.html", location)).toBe(false);
+    expect(isTrustedRendererUrl("https://example.com", location)).toBe(false);
   });
 });
 

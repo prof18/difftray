@@ -29,6 +29,14 @@ Renderer windows must use:
 
 The preload layer exposes only typed Difftray APIs required by the renderer.
 
+Every IPC handler must validate that the sender frame belongs to the trusted
+renderer location before performing privileged work. Packaged builds trust only
+the bundled renderer file. Development builds trust only the configured
+loopback renderer origin.
+
+All Electron web contents deny webviews, deny new window creation, and prevent
+navigation outside the trusted renderer location.
+
 The main process owns:
 
 - Git execution
