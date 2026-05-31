@@ -14,6 +14,7 @@ const maxPatchBytesPerFile = 2 * 1024 * 1024;
 const patchReadBufferPadding = 256 * 1024;
 const oversizedPatchMarker = "__difftray_patch_too_large__";
 const maxConcurrentFileDiffLoads = 4;
+const emptyTreeObjectId = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 export type GitRepository = {
   readonly gitDir: string;
@@ -203,16 +204,23 @@ export async function listBranchRefs(repoPath: string): Promise<readonly string[
   );
 }
 
-async function loadWorkingTreeReviewTarget(
-  repoPath: string
-): Promise<GitWorkingTreeReviewTarget> {
+async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
+  readonly diffBaseRef: string;
+  readonly reviewTarget: GitWorkingTreeReviewTarget;
+}> {
   const branchName = await currentBranchName(repoPath);
+  const headSha =
+    (await gitOutputOrNull(repoPath, ["rev-parse", "--verify", "HEAD^{commit}"])) ??
+    emptyTreeObjectId;
 
   return {
-    ...(branchName ? { headRefName: branchName } : {}),
-    headSha: await requiredGitOutput(repoPath, ["rev-parse", "HEAD"]),
-    kind: "working_tree",
-    projectId: repoPath
+    diffBaseRef: headSha,
+    reviewTarget: {
+      ...(branchName ? { headRefName: branchName } : {}),
+      headSha,
+      kind: "working_tree",
+      projectId: repoPath
+    }
   };
 }
 
@@ -254,15 +262,15 @@ export async function loadWorkingTreeDiffs(
   options: DiffLoadOptions = {}
 ): Promise<WorkingTreeDiffResult> {
   reportDiffLoadProgress(options, { phase: "resolving_target" });
-  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+  const { diffBaseRef, reviewTarget } = await loadWorkingTreeReviewTarget(repoPath);
 
   reportDiffLoadProgress(options, { phase: "scanning_files" });
   const status = await getGitStatus(repoPath);
   const trackedDiffs = await loadTrackedDiffs(
     repoPath,
-    ["HEAD"],
+    [diffBaseRef],
     {
-      oldRef: reviewTarget.headSha
+      oldRef: diffBaseRef
     },
     options
   );
@@ -307,15 +315,15 @@ export async function loadWorkingTreeDiffSummaries(
   options: DiffLoadOptions = {}
 ): Promise<WorkingTreeDiffSummaryResult> {
   reportDiffLoadProgress(options, { phase: "resolving_target" });
-  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+  const { diffBaseRef, reviewTarget } = await loadWorkingTreeReviewTarget(repoPath);
 
   reportDiffLoadProgress(options, { phase: "scanning_files" });
   const status = await getGitStatus(repoPath);
   const trackedSummaries = await loadTrackedDiffSummaries(
     repoPath,
-    ["HEAD"],
+    [diffBaseRef],
     {
-      oldRef: reviewTarget.headSha
+      oldRef: diffBaseRef
     },
     options
   );
@@ -359,12 +367,12 @@ export async function loadWorkingTreeFileDiff(
   repoPath: string,
   filePath: string
 ): Promise<GitLoadedFileDiff | null> {
-  const reviewTarget = await loadWorkingTreeReviewTarget(repoPath);
+  const { diffBaseRef } = await loadWorkingTreeReviewTarget(repoPath);
   const trackedDiffs = await loadTrackedDiffs(
     repoPath,
-    ["HEAD"],
+    [diffBaseRef],
     {
-      oldRef: reviewTarget.headSha
+      oldRef: diffBaseRef
     },
     {},
     [filePath]
@@ -1464,12 +1472,13 @@ async function worktreeSubmoduleCommit(
 
 async function currentBranchName(repoPath: string): Promise<string | undefined> {
   const branchName = await gitOutputOrNull(repoPath, [
-    "rev-parse",
-    "--abbrev-ref",
+    "symbolic-ref",
+    "--quiet",
+    "--short",
     "HEAD"
   ]);
 
-  if (!branchName || branchName === "HEAD") {
+  if (!branchName) {
     return undefined;
   }
 

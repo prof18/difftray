@@ -60,7 +60,8 @@ For working tree review:
 - `mode` is `working_tree`
 - `head_kind` is `working_tree`
 - `head_ref_name` should be the current branch name when available
-- `head_ref_sha` should be `HEAD`
+- `head_ref_sha` should be `HEAD`, or Git's empty tree object
+  `4b825dc642cb6eb9a060e54bf8d69288fbee4904` when the repository has no commits
 - `base_ref_name`, `base_ref_sha`, and `merge_base_sha` are null
 
 For branch review:

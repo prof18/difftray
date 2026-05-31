@@ -33,6 +33,9 @@ If the base ref moves, the resolved SHA changes and the review target identity c
 ## Working Tree Review
 
 Working tree review compares the effective current working tree to `HEAD`.
+If the repository has no commits yet, Difftray compares the effective current
+working tree to Git's empty tree object
+`4b825dc642cb6eb9a060e54bf8d69288fbee4904`.
 
 It includes:
 
@@ -54,6 +57,9 @@ git ls-files --others --exclude-standard -z
 ```
 
 Untracked files are synthesized into added-file diffs or file snapshots because normal `git diff HEAD` does not include them.
+For an unborn repository, `HEAD`-based diff commands are replaced with the empty
+tree object so staged additions and unstaged edits to staged additions are
+loadable before the first commit.
 
 ## Diff Fingerprint
 

@@ -133,6 +133,48 @@ describe("Git status parsing", () => {
 });
 
 describe("working tree diff loading", () => {
+  it("loads added files from a repository before the first commit", async () => {
+    const repo = await createUnbornRepo();
+    await writeFile(path.join(repo, "staged.txt"), "staged\n");
+    await git(repo, "add", "staged.txt");
+    await writeFile(path.join(repo, "untracked.txt"), "untracked\n");
+
+    const result = await loadWorkingTreeDiffs(repo);
+    const summary = await loadWorkingTreeDiffSummaries(repo);
+
+    expect(result.reviewTarget).toEqual({
+      headRefName: "main",
+      headSha: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      kind: "working_tree",
+      projectId: repo
+    });
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          newText: "staged\n",
+          patch: expect.stringContaining("+staged")
+        }),
+        newPath: "staged.txt",
+        status: "added"
+      }),
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          newText: "untracked\n",
+          patch: expect.stringContaining("+untracked")
+        }),
+        newPath: "untracked.txt",
+        status: "added"
+      })
+    ]);
+    expect(summary.reviewTarget).toEqual(result.reviewTarget);
+    expect(summary.files.map((file) => file.newPath)).toEqual([
+      "staged.txt",
+      "untracked.txt"
+    ]);
+  });
+
   it("returns no files for a clean working tree", async () => {
     const repo = await createRepo();
 
@@ -802,6 +844,14 @@ async function createRepo(): Promise<string> {
   await writeFile(path.join(repo, "tracked.txt"), "initial\n");
   await git(repo, "add", "tracked.txt");
   await git(repo, "commit", "-m", "initial");
+  return repo;
+}
+
+async function createUnbornRepo(): Promise<string> {
+  const repo = await createTempRoot();
+  await git(repo, "init", "--initial-branch=main");
+  await git(repo, "config", "user.email", "difftray@example.test");
+  await git(repo, "config", "user.name", "Difftray Test");
   return repo;
 }
 

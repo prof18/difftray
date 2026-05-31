@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="design/logo/logo-256.png" alt="Difftray" width="160" />
+</p>
+
 # Difftray
 
 Difftray is a local-first macOS desktop app for reviewing Git changes across multiple projects. It tracks which files have been reviewed, automatically invalidates that review state when the relevant diff changes, and turns review comments into a ready-made prompt for your favorite agent or AI tool.
@@ -5,6 +9,18 @@ Difftray is a local-first macOS desktop app for reviewing Git changes across mul
 Keep track of what changed, what you already reviewed, and what needs another look.
 
 Difftray is not an IDE, not an AI agent host, and not a pull request platform. It is a focused review desk for local Git changes.
+
+## Why Difftray?
+
+Why not just use a regular Git diff client?
+
+I built this because I kept losing track of my own reviews. I'd skim a diff, an agent would iterate, I'd come back, and I had no idea which files were still the ones I'd looked at and which had moved underneath me.
+
+A few things came out of that:
+
+- **Reviewed files don't stay reviewed if they change.** Mark a file as reviewed; if the diff for that file changes later, Difftray drops it back to unreviewed so you know to look again. It doesn't tell you *what* changed, just that something did, and your previous pass is no longer trustworthy.
+- **It's built around the iteration loop.** Uncommitted work or branch changes, same flow. You're not preparing a PR, you're checking what the agent (or you) just did.
+- **Comments are meant to go back to the agent.** Leave line-level notes while reviewing, then copy them out as a prompt.
 
 ## Current Features
 
@@ -36,7 +52,16 @@ Focused new-side diff view:
 
 ![Focused new-side diff](docs/screenshots/diff-focused-new.png)
 
-## Install And Run
+## Install
+
+Download the latest macOS build from the [Releases page](https://github.com/prof18/difftray/releases/latest):
+
+- **Apple Silicon (M-series):** `Difftray-arm64.dmg`
+- **Intel:** `Difftray-x64.dmg`
+
+Open the `.dmg` and drag Difftray into your Applications folder.
+
+## Development
 
 Prerequisites:
 
