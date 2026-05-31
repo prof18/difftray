@@ -1647,6 +1647,10 @@
   z-index: 20;
   top: 10px;
   left: 50%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
   max-width: min(680px, calc(100vw - 48px));
   transform: translateX(-50%);
   border: 1px solid var(--del-mark);
@@ -1655,7 +1659,32 @@
   box-shadow: var(--shadow-pop);
   color: var(--text);
   font-size: 13px;
-  padding: 9px 12px;
+  padding: 7px 8px 7px 12px;
+}
+
+.errorBannerMessage {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errorBannerClose {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.errorBannerClose:hover {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text);
 }
 
 .srOnly {

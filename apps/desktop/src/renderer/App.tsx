@@ -1825,7 +1825,17 @@ export function App(): React.JSX.Element {
 
       {error ? (
         <div className={styles.errorBanner} role="status">
-          {error}
+          <span className={styles.errorBannerMessage}>{error}</span>
+          <button
+            type="button"
+            className={styles.errorBannerClose}
+            aria-label="Dismiss error"
+            onClick={() => {
+              setError(undefined);
+            }}
+          >
+            <X size={14} aria-hidden />
+          </button>
         </div>
       ) : null}
 
