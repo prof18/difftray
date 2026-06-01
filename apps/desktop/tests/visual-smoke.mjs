@@ -24,7 +24,8 @@ const app = await electron.launch({
   env: {
     ...process.env,
     DIFFTRAY_BOOT_PROJECT: repoPath,
-    DIFFTRAY_USER_DATA_DIR: userDataPath
+    DIFFTRAY_USER_DATA_DIR: userDataPath,
+    DIFFTRAY_WINDOW_PRESENTATION: process.env.DIFFTRAY_WINDOW_PRESENTATION ?? "inactive"
   },
   executablePath
 });

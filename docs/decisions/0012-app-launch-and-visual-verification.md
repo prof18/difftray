@@ -41,6 +41,12 @@ The scaffold should provide:
 - `pnpm e2e` for app workflow tests
 - `pnpm test:visual` for visual or screenshot-based checks once available
 
+Automated app workflow and visual tests may launch the Electron window with
+`DIFFTRAY_WINDOW_PRESENTATION=inactive` to avoid stealing focus from the user's
+current workspace. This still shows the window and preserves screenshot-based
+verification. Use `DIFFTRAY_WINDOW_PRESENTATION=active` for focused manual
+debugging.
+
 ## Handoff Policy
 
 If visual verification was required and completed, mention it in the handoff.

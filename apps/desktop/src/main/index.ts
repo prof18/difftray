@@ -70,7 +70,11 @@ import {
   type TrustedRendererLocation,
   trustedEditorLaunchConfig
 } from "./security.js";
-import { resolveAppRuntimeConfig, type AppRuntimeConfig } from "./app-runtime.js";
+import {
+  resolveAppRuntimeConfig,
+  resolveWindowPresentationMode,
+  type AppRuntimeConfig
+} from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 
@@ -78,6 +82,9 @@ const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
 const projectWatchersEnabled = process.env.DIFFTRAY_ENABLE_PROJECT_WATCHERS === "1";
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
+const windowPresentationMode = resolveWindowPresentationMode(
+  process.env.DIFFTRAY_WINDOW_PRESENTATION
+);
 
 let mainWindow: BrowserWindow | undefined;
 let projectWatchService: ProjectWatchService | undefined;
@@ -321,7 +328,11 @@ const createMainWindow = async (): Promise<void> => {
     }
 
     didShowWindow = true;
-    window.show();
+    if (windowPresentationMode === "inactive") {
+      window.showInactive();
+    } else {
+      window.show();
+    }
   };
 
   window.once("ready-to-show", showWindow);

@@ -1,4 +1,5 @@
 export type AppVariant = "dev" | "production";
+export type WindowPresentationMode = "active" | "inactive";
 
 export type ResolveAppRuntimeConfigInput = {
   readonly envVariant?: string | undefined;
@@ -53,4 +54,10 @@ export function resolveAppRuntimeConfig(
   }
 
   return productionConfig;
+}
+
+export function resolveWindowPresentationMode(
+  value: string | undefined
+): WindowPresentationMode {
+  return value === "inactive" ? "inactive" : "active";
 }

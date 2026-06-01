@@ -11,6 +11,7 @@ const executableName = isDevChannel ? "Difftray Dev" : "Difftray";
 const artifactPrefix = isDevChannel ? "Difftray-Dev" : "Difftray";
 const appId = isDevChannel ? "com.prof18.difftray.dev" : "com.prof18.difftray";
 const releaseDirectory = `release/${packageJson.version}${isDevChannel ? "-dev" : ""}`;
+const macArchitectures = isDevChannel ? ["arm64"] : ["arm64", "x64"];
 
 module.exports = {
   appId,
@@ -38,11 +39,11 @@ module.exports = {
     target: [
       {
         target: "dmg",
-        arch: ["arm64", "x64"]
+        arch: macArchitectures
       },
       {
         target: "zip",
-        arch: ["arm64", "x64"]
+        arch: macArchitectures
       }
     ],
     hardenedRuntime: true,

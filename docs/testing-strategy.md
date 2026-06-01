@@ -230,4 +230,10 @@ The root `./ci.sh` script is the full local CI gate. It runs:
 
 `pnpm check` delegates to `./ci.sh`.
 
+`pnpm test:visual` launches the Electron window with
+`DIFFTRAY_WINDOW_PRESENTATION=inactive` by default, so the smoke test can render
+and capture screenshots without activating the app or stealing focus from the
+current workspace. Set `DIFFTRAY_WINDOW_PRESENTATION=active` when debugging a
+visual test and intentionally interacting with the app window.
+
 No commit or handoff should happen without running `./ci.sh`.

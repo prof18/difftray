@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveAppRuntimeConfig } from "./app-runtime.js";
+import { resolveAppRuntimeConfig, resolveWindowPresentationMode } from "./app-runtime.js";
 
 describe("resolveAppRuntimeConfig", () => {
   it("uses the production app id for packaged production builds", () => {
@@ -58,5 +58,19 @@ describe("resolveAppRuntimeConfig", () => {
       appId: "com.prof18.difftray",
       variant: "production"
     });
+  });
+});
+
+describe("resolveWindowPresentationMode", () => {
+  it("shows windows actively by default", () => {
+    expect(resolveWindowPresentationMode(undefined)).toBe("active");
+  });
+
+  it("lets automated app tests show without taking focus", () => {
+    expect(resolveWindowPresentationMode("inactive")).toBe("inactive");
+  });
+
+  it("falls back to active presentation for unknown values", () => {
+    expect(resolveWindowPresentationMode("background")).toBe("active");
   });
 });
