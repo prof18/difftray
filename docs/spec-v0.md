@@ -90,6 +90,8 @@ Comments are scoped to the project, review target, path, diff hash, side, and li
 
 The export action copies a ready-made prompt to the clipboard, grouped by file with side-aware line references and small diff excerpts where textual context is available. The prompt is intended for explicit local handoff back to the user's preferred agent or AI tool.
 
+While the export is being generated and copied, the export control shows a generating state and prevents duplicate copy requests.
+
 ## Progress
 
 Progress is calculated from visible reviewable files:

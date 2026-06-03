@@ -241,6 +241,7 @@ export function App(): React.JSX.Element {
   const [commentSavePending, setCommentSavePending] = useState<
     CommentSavePending | undefined
   >();
+  const [commentReportCopyPending, setCommentReportCopyPending] = useState(false);
   const [commentToast, setCommentToast] = useState<string | undefined>();
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
   const [diffSideFocus, setDiffSideFocus] = useState<DiffSideFocus>("both");
@@ -279,6 +280,7 @@ export function App(): React.JSX.Element {
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
   const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
   const paletteInputRef = useRef<HTMLInputElement>(null);
+  const commentReportCopyPendingRef = useRef(false);
   const commentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
   const focusRefreshRunningRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
@@ -2000,11 +2002,17 @@ export function App(): React.JSX.Element {
   }
 
   async function copyReviewCommentsReport(): Promise<void> {
-    if (!workspace || workspace.comments.length === 0) {
+    if (
+      !workspace ||
+      workspace.comments.length === 0 ||
+      commentReportCopyPendingRef.current
+    ) {
       return;
     }
 
     setError(undefined);
+    commentReportCopyPendingRef.current = true;
+    setCommentReportCopyPending(true);
 
     try {
       const result = await window.difftray.copyReviewCommentsReport({
@@ -2026,6 +2034,9 @@ export function App(): React.JSX.Element {
       );
     } catch (caughtError) {
       setError(errorMessage(caughtError));
+    } finally {
+      commentReportCopyPendingRef.current = false;
+      setCommentReportCopyPending(false);
     }
   }
 
@@ -2179,7 +2190,8 @@ export function App(): React.JSX.Element {
                 <>
                   <DiffToolbar
                     commentCount={selectedComments.length}
-                    copyDisabled={loadState === "loading"}
+                    copyDisabled={loadState === "loading" || commentReportCopyPending}
+                    copyPending={commentReportCopyPending}
                     diffMode={diffMode}
                     diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
@@ -3029,6 +3041,7 @@ const FileButton = memo(function FileButton({
 function DiffToolbar({
   commentCount,
   copyDisabled,
+  copyPending,
   diffMode,
   diffSideFocus,
   disabled,
@@ -3042,6 +3055,7 @@ function DiffToolbar({
 }: {
   readonly commentCount: number;
   readonly copyDisabled: boolean;
+  readonly copyPending: boolean;
   readonly diffMode: DiffMode;
   readonly diffSideFocus: DiffSideFocus;
   readonly disabled: boolean;
@@ -3138,18 +3152,33 @@ function DiffToolbar({
         ) : null}
         {reportCommentCount > 0 ? (
           <button
-            aria-label="Copy comments report"
+            aria-busy={copyPending}
+            aria-label={
+              copyPending ? "Generating comments message" : "Copy comments report"
+            }
             className={classList(styles.secondaryButton, styles.reportButton)}
             disabled={copyDisabled}
             onClick={onCopyCommentsReport}
-            title="Copy all comments as an agent-ready report"
+            title={
+              copyPending
+                ? "Generating comments message"
+                : "Copy all comments as an agent-ready report"
+            }
             type="button"
           >
-            <ClipboardList size={14} strokeWidth={1.4} aria-hidden />
-            <span className={styles.reportButtonLabel}>Copy comments report</span>
-            <span className={styles.reportButtonCount} aria-hidden>
-              {reportCommentCount}
+            {copyPending ? (
+              <span className={styles.reportButtonSpinner} aria-hidden />
+            ) : (
+              <ClipboardList size={14} strokeWidth={1.4} aria-hidden />
+            )}
+            <span className={styles.reportButtonLabel}>
+              {copyPending ? "Generating message" : "Copy comments report"}
             </span>
+            {copyPending ? null : (
+              <span className={styles.reportButtonCount} aria-hidden>
+                {reportCommentCount}
+              </span>
+            )}
           </button>
         ) : null}
         <button

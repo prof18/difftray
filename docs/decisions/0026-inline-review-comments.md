@@ -25,7 +25,9 @@ is intended to be pasted back into the reviewer's preferred agent or AI tool so
 the local changes can be fixed from the review notes without requiring the
 recipient to infer the target line from the path alone.
 The export action is shown as a text button with a comment count, and is hidden
-until the active review has at least one comment.
+until the active review has at least one comment. While the renderer is waiting
+for report generation and clipboard writeback, the button shows a generating
+state and blocks duplicate export requests.
 Before copying, the main process reloads the active review and verifies that the
 active comment set still matches what the renderer requested, so stale diff
 changes do not silently produce an incomplete report.
