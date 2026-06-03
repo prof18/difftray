@@ -35,10 +35,12 @@ import {
 } from "@difftray/core";
 import {
   findGitRepository,
+  loadBranchReviewTarget,
   loadBranchDiffSummaries,
   loadBranchFileDiffSummary,
   loadBranchFileDiff,
   listBranchRefs,
+  loadWorkingTreeReviewTarget,
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiffSummary,
   loadWorkingTreeFileDiff,
@@ -756,8 +758,18 @@ handleTrusted(
     const lineStart = readNumberProperty(input, "lineStart");
     const lineEnd = readNumberProperty(input, "lineEnd");
     const body = readStringProperty(input, "body").trim();
-    const workspace = await loadProjectWorkspace(projectId);
-    const file = workspace.files.find((candidate) => candidate.path === pathName);
+    const project = assertStoredProject(projectId);
+    const reviewTarget = await loadCurrentProjectReviewTarget(project);
+    const currentReviewTargetId = createReviewTargetId(reviewTarget);
+
+    if (currentReviewTargetId !== reviewTargetId) {
+      return {
+        reason: "stale_diff",
+        status: "rejected"
+      };
+    }
+
+    const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
 
     if (!file) {
       return {
@@ -766,10 +778,7 @@ handleTrusted(
       };
     }
 
-    if (
-      workspace.reviewTarget.id !== reviewTargetId ||
-      file.diffHash !== displayedDiffHash
-    ) {
+    if (file.diffHash !== displayedDiffHash) {
       return {
         reason: "stale_diff",
         status: "rejected"
@@ -785,7 +794,7 @@ handleTrusted(
       diffHash: file.diffHash,
       lineEnd,
       lineStart,
-      path: file.path,
+      path: pathName,
       ...(file.previousPath ? { previousPath: file.previousPath } : {}),
       projectId,
       reviewTargetId,
@@ -1963,6 +1972,16 @@ async function loadCurrentReviewFile(
     diffHash: createDiffHash(reviewTarget, diff),
     ...(diff.oldPath ? { previousPath: diff.oldPath } : {})
   };
+}
+
+async function loadCurrentProjectReviewTarget(
+  project: StoredProjectRecord
+): Promise<ReviewTarget> {
+  const target = project.defaultBaseRef
+    ? await loadBranchReviewTarget(project.path, project.defaultBaseRef)
+    : (await loadWorkingTreeReviewTarget(project.path)).reviewTarget;
+
+  return reviewTargetFromGit(target);
 }
 
 function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTargetRecord {

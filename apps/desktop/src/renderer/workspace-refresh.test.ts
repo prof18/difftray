@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyLoadedFileDiffToWorkspace,
   carryLoadedDiffsForward,
+  isFileDiffLoaded,
   shouldRefreshCachedWorkspaceAfterTabSwitch,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
@@ -198,6 +200,75 @@ describe("carryLoadedDiffsForward", () => {
     });
 
     expect(carryLoadedDiffsForward(current, next).files[0]).toEqual(next.files[0]);
+  });
+});
+
+describe("applyLoadedFileDiffToWorkspace", () => {
+  it("marks the matching file as loaded without changing unrelated files", () => {
+    const current = workspace({
+      files: [
+        file({
+          path: "src/app.ts"
+        }),
+        file({
+          diffHash: "hash-b",
+          path: "src/other.ts"
+        })
+      ]
+    });
+
+    const next = applyLoadedFileDiffToWorkspace(current, {
+      additions: 8,
+      deletions: 3,
+      newText: "next",
+      oldText: "previous",
+      patch: "diff --git a/src/app.ts b/src/app.ts",
+      path: "src/app.ts",
+      status: "modified"
+    });
+
+    expect(next.files[0]).toEqual(
+      expect.objectContaining({
+        additions: 8,
+        deletions: 3,
+        diffLoaded: true,
+        newText: "next",
+        oldText: "previous",
+        patch: "diff --git a/src/app.ts b/src/app.ts"
+      })
+    );
+    expect(next.files[1]).toBe(current.files[1]);
+  });
+});
+
+describe("isFileDiffLoaded", () => {
+  it("requires both the loaded flag and patch content", () => {
+    expect(
+      isFileDiffLoaded(
+        workspace({
+          files: [
+            file({
+              diffLoaded: true,
+              patch: "diff --git a/src/app.ts b/src/app.ts"
+            })
+          ]
+        }),
+        "src/app.ts"
+      )
+    ).toBe(true);
+
+    expect(
+      isFileDiffLoaded(
+        workspace({
+          files: [
+            file({
+              diffLoaded: true
+            })
+          ]
+        }),
+        "src/app.ts"
+      )
+    ).toBe(false);
   });
 });
 

@@ -18,6 +18,14 @@ export type CachedWorkspaceTabSwitchRefreshState = {
   readonly settingsOpen: boolean;
 };
 
+export type LoadedFileDiffView = Pick<
+  ReviewFileView,
+  "additions" | "deletions" | "path" | "status"
+> &
+  Partial<Pick<ReviewFileView, "newText" | "oldText">> & {
+    readonly patch: string;
+  };
+
 export function shouldApplySilentWorkspaceRefresh(
   state: SilentWorkspaceRefreshState
 ): boolean {
@@ -77,6 +85,42 @@ export function carryLoadedDiffsForward(
       };
     })
   };
+}
+
+export function applyLoadedFileDiffToWorkspace(
+  workspace: ReviewWorkspaceView,
+  loadedDiff: LoadedFileDiffView
+): ReviewWorkspaceView {
+  return {
+    ...workspace,
+    files: workspace.files.map((file) =>
+      file.path === loadedDiff.path
+        ? {
+            ...file,
+            additions: loadedDiff.additions,
+            deletions: loadedDiff.deletions,
+            diffLoaded: true,
+            patch: loadedDiff.patch,
+            status: loadedDiff.status,
+            ...(loadedDiff.newText !== undefined ? { newText: loadedDiff.newText } : {}),
+            ...(loadedDiff.oldText !== undefined ? { oldText: loadedDiff.oldText } : {})
+          }
+        : file
+    )
+  };
+}
+
+export function isFileDiffLoaded(
+  workspace: ReviewWorkspaceView | undefined,
+  filePath: string | undefined
+): boolean {
+  if (!workspace || !filePath) {
+    return false;
+  }
+
+  const file = workspace.files.find((candidate) => candidate.path === filePath);
+
+  return Boolean(file?.diffLoaded && file.patch !== undefined);
 }
 
 type LoadedPatchFileView = ReviewFileView & {

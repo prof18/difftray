@@ -204,7 +204,7 @@ export async function listBranchRefs(repoPath: string): Promise<readonly string[
   );
 }
 
-async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
+export async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
   readonly diffBaseRef: string;
   readonly reviewTarget: GitWorkingTreeReviewTarget;
 }> {
@@ -224,7 +224,7 @@ async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
   };
 }
 
-async function loadBranchReviewTarget(
+export async function loadBranchReviewTarget(
   repoPath: string,
   baseRefName: string
 ): Promise<GitBranchReviewTarget> {
