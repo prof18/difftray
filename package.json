@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --stream build",
+    "bench:performance": "pnpm --filter @difftray/desktop bench:performance",
     "check": "./ci.sh",
     "dev": "pnpm --filter @difftray/desktop dev",
     "format": "prettier --check .",

@@ -83,6 +83,15 @@ type PaletteMode = "all" | "files";
 type CommandKind = "action" | "file" | "project";
 type ResolvedTheme = "dark" | "light";
 
+type ReviewNavigationPerformance = {
+  readonly diffLoadedLogged: boolean;
+  readonly fromPath: string;
+  readonly id: number;
+  readonly renderReadyLogged: boolean;
+  readonly startedAt: number;
+  readonly toPath: string | undefined;
+};
+
 type ReviewCommentDraft = {
   readonly body: string;
   readonly diffHash: string;
@@ -175,6 +184,35 @@ const delayedFileDiffLoaderMs = 500;
 const fileListRowHeight = 54;
 const fileListOverscanRows = 8;
 
+function rendererPerformanceLoggingEnabled(): boolean {
+  try {
+    return window.localStorage.getItem("difftray:perf") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function logRendererPerformance(
+  event: string,
+  payload: Readonly<Record<string, unknown>>
+): void {
+  if (!rendererPerformanceLoggingEnabled()) {
+    return;
+  }
+
+  console.info(
+    "[difftray:perf]",
+    JSON.stringify({
+      event,
+      ...payload
+    })
+  );
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.round(performance.now() - startedAt);
+}
+
 export function App(): React.JSX.Element {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(defaultAppSettings);
   const [appSettingsDraft, setAppSettingsDraft] =
@@ -225,6 +263,10 @@ export function App(): React.JSX.Element {
   const loadStateRef = useRef<LoadState>("idle");
   const paletteOpenRef = useRef(false);
   const selectedPathRef = useRef<string | undefined>(undefined);
+  const nextReviewNavigationPerformanceIdRef = useRef(0);
+  const reviewNavigationPerformanceRef = useRef<ReviewNavigationPerformance | undefined>(
+    undefined
+  );
   const settingsOpenRef = useRef(false);
   const selectedPathByProjectRef = useRef<Map<string, string>>(new Map());
   const tabSummaryInvalidationRef = useRef<Map<string, number>>(new Map());
@@ -454,6 +496,30 @@ export function App(): React.JSX.Element {
     );
   }, [selectedFile]);
 
+  useEffect(() => {
+    const action = reviewNavigationPerformanceRef.current;
+
+    if (
+      !action ||
+      action.diffLoadedLogged ||
+      !selectedFile?.diffLoaded ||
+      selectedFile.path !== action.toPath
+    ) {
+      return;
+    }
+
+    logRendererPerformance("review.mark.next_diff_loaded", {
+      actionId: action.id,
+      elapsedMs: elapsedSince(action.startedAt),
+      fromPath: action.fromPath,
+      toPath: action.toPath
+    });
+    reviewNavigationPerformanceRef.current = {
+      ...action,
+      diffLoadedLogged: true
+    };
+  }, [selectedFile]);
+
   const selectedDiffScrollKey =
     workspace && selectedFile
       ? createDiffScrollKey({
@@ -527,6 +593,26 @@ export function App(): React.JSX.Element {
     },
     [rememberCurrentDiffScrollPosition]
   );
+
+  const handleDiffRenderModelReady = useCallback((filePath: string, parseMs: number) => {
+    const action = reviewNavigationPerformanceRef.current;
+
+    if (!action || action.renderReadyLogged || filePath !== action.toPath) {
+      return;
+    }
+
+    logRendererPerformance("review.mark.next_diff_render_ready", {
+      actionId: action.id,
+      elapsedMs: elapsedSince(action.startedAt),
+      fromPath: action.fromPath,
+      parseMs,
+      toPath: action.toPath
+    });
+    reviewNavigationPerformanceRef.current = {
+      ...action,
+      renderReadyLogged: true
+    };
+  }, []);
 
   useEffect(() => {
     if (!workspace || !selectedFile || selectedFile.diffLoaded) {
@@ -1463,16 +1549,50 @@ export function App(): React.JSX.Element {
     }
 
     const optimisticFile = selectedFile;
-
-    setError(undefined);
-    invalidatePendingSilentWorkspaceRefreshes();
-    setWorkspace({
+    const actionId = nextReviewNavigationPerformanceIdRef.current + 1;
+    const startedAt = performance.now();
+    const optimisticWorkspace = {
       ...workspace,
       files: workspace.files.map((file) =>
         file.path === optimisticFile.path
           ? { ...file, invalidated: false, reviewed: true }
           : file
       )
+    };
+    const optimisticNextPath =
+      nextPendingPath(optimisticWorkspace, optimisticFile.path) ??
+      visiblePathOrFirst(optimisticWorkspace, optimisticFile.path);
+
+    nextReviewNavigationPerformanceIdRef.current = actionId;
+    reviewNavigationPerformanceRef.current = {
+      diffLoadedLogged: false,
+      fromPath: optimisticFile.path,
+      id: actionId,
+      renderReadyLogged: false,
+      startedAt,
+      toPath: optimisticNextPath
+    };
+    setError(undefined);
+    invalidatePendingSilentWorkspaceRefreshes();
+    const markApplyVersion = workspaceApplyVersionRef.current;
+    setWorkspace(optimisticWorkspace);
+    selectPath(optimisticNextPath);
+    workspaceCacheRef.current.set(optimisticWorkspace.project.id, {
+      branchRefs,
+      projectSettings,
+      workspace: optimisticWorkspace
+    });
+    logRendererPerformance("review.mark.optimistic_advance", {
+      actionId,
+      elapsedMs: elapsedSince(startedAt),
+      fromPath: optimisticFile.path,
+      toPath: optimisticNextPath
+    });
+
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
     });
 
     try {
@@ -1483,9 +1603,23 @@ export function App(): React.JSX.Element {
         reviewTargetId: workspace.reviewTarget.id
       });
       const nextWorkspace = result.workspace;
+      const userSelectedPath = selectedPathRef.current;
       const nextPath =
-        nextPendingPath(nextWorkspace, optimisticFile.path) ??
-        visiblePathOrFirst(nextWorkspace, optimisticFile.path);
+        userSelectedPath === optimisticFile.path
+          ? (nextPendingPath(nextWorkspace, optimisticFile.path) ??
+            visiblePathOrFirst(nextWorkspace, optimisticFile.path))
+          : visiblePathOrFirst(nextWorkspace, userSelectedPath);
+
+      logRendererPerformance("review.mark.ipc_result", {
+        actionId,
+        elapsedMs: elapsedSince(startedAt),
+        fromPath: optimisticFile.path,
+        status: result.status,
+        toPath: nextPath
+      });
+      if (workspaceApplyVersionRef.current !== markApplyVersion) {
+        return;
+      }
 
       setWorkspace(nextWorkspace);
       selectPath(nextPath);
@@ -1507,6 +1641,10 @@ export function App(): React.JSX.Element {
         );
       }
     } catch (caughtError) {
+      if (workspaceApplyVersionRef.current !== markApplyVersion) {
+        return;
+      }
+
       setError(errorMessage(caughtError));
       await refreshWorkspace();
     }
@@ -1538,8 +1676,14 @@ export function App(): React.JSX.Element {
         reviewTargetId: workspace.reviewTarget.id
       });
 
+      const userSelectedPath = selectedPathRef.current;
+      const nextPath =
+        userSelectedPath === optimisticFile.path
+          ? visiblePathOrFirst(result.workspace, optimisticFile.path)
+          : visiblePathOrFirst(result.workspace, userSelectedPath);
+
       setWorkspace(result.workspace);
-      selectPath(visiblePathOrFirst(result.workspace, optimisticFile.path));
+      selectPath(nextPath);
       updateRecentProjectReviewSummary(
         result.workspace.project.id,
         projectReviewSummary(result.workspace)
@@ -1956,6 +2100,7 @@ export function App(): React.JSX.Element {
                       onDeleteComment={(commentId) => {
                         void deleteComment(commentId);
                       }}
+                      onRenderModelReady={handleDiffRenderModelReady}
                       onSaveComment={() => {
                         void saveCommentDraft();
                       }}
@@ -2246,9 +2391,9 @@ function ProjectTabBar({
                 <span>{project.name}</span>
                 {isLoading ? null : isSummaryLoading ? (
                   <span className={styles.tabSummaryLoadingMark} aria-hidden />
-                ) : (
+                ) : tabState === "attention" ? (
                   <span className={styles.statusDot} data-state={tabState} aria-hidden />
-                )}
+                ) : null}
                 <span className={styles.tabCount}>
                   {isLoading
                     ? tabLoadingText(loadingStatus)
@@ -2940,6 +3085,7 @@ function DiffSurface({
   onCancelComment,
   onCommentDraftBodyChange,
   onDeleteComment,
+  onRenderModelReady,
   onSaveComment,
   onScrollPositionChange,
   onStartComment,
@@ -2964,6 +3110,7 @@ function DiffSurface({
   readonly onCancelComment: () => void;
   readonly onCommentDraftBodyChange: (body: string) => void;
   readonly onDeleteComment: (commentId: string) => void;
+  readonly onRenderModelReady: (filePath: string, parseMs: number) => void;
   readonly onSaveComment: () => void;
   readonly onScrollPositionChange: (
     scrollKey: string,
@@ -3029,6 +3176,7 @@ function DiffSurface({
   useEffect(() => {
     let cancelled = false;
     const timeout = window.setTimeout(() => {
+      const parseStartedAt = performance.now();
       const nextModel = createDiffsRenderModel({
         diffHash,
         filePath,
@@ -3038,8 +3186,10 @@ function DiffSurface({
         ...(previousPath !== undefined ? { previousPath } : {}),
         status
       });
+      const parseMs = elapsedSince(parseStartedAt);
 
       if (!cancelled) {
+        onRenderModelReady(filePath, parseMs);
         setParseState({
           key: parseKey,
           model: nextModel,
@@ -3057,7 +3207,17 @@ function DiffSurface({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [diffHash, filePath, newText, oldText, parseKey, patch, previousPath, status]);
+  }, [
+    diffHash,
+    filePath,
+    newText,
+    oldText,
+    onRenderModelReady,
+    parseKey,
+    patch,
+    previousPath,
+    status
+  ]);
 
   return (
     <DiffsVirtualizedSurface
@@ -3313,6 +3473,7 @@ function DiffsVirtualizedSurface({
 
     const restoreSurfaceNode = surfaceNode;
     const nextScrollPosition = scrollPosition ?? topDiffScrollPosition;
+    const hasSavedScrollPosition = scrollPosition !== undefined;
     let animationFrameId: number | undefined;
     let frameCount = 0;
     let lastClientHeight = -1;
@@ -3321,8 +3482,8 @@ function DiffsVirtualizedSurface({
     const resizeObservedElements = new Set<Element>();
     let restoreActive = true;
     let stableFrameCount = 0;
-    const requiredStableFrames = contentReady ? 120 : 12;
-    const maximumRestoreFrames = contentReady ? 900 : 120;
+    const requiredStableFrames = hasSavedScrollPosition && contentReady ? 120 : 12;
+    const maximumRestoreFrames = hasSavedScrollPosition && contentReady ? 900 : 120;
 
     function stopRestoreWatchers(): void {
       restoreActive = false;
@@ -3392,6 +3553,7 @@ function DiffsVirtualizedSurface({
 
       frameCount += 1;
       restoreScrollPosition(restoreSurfaceNode);
+
       const restored =
         Math.abs(restoreSurfaceNode.scrollLeft - nextScrollPosition.left) <= 1 &&
         Math.abs(restoreSurfaceNode.scrollTop - nextScrollPosition.top) <= 1;

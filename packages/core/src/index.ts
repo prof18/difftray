@@ -199,6 +199,21 @@ export function resolveReviewStates(
   input: ResolveReviewStatesInput
 ): readonly FileReviewState[] {
   const reviewTargetId = createReviewTargetId(input.reviewTarget);
+  const marksByPath = new Map<string, ReviewMark[]>();
+
+  for (const mark of input.marks) {
+    if (mark.reviewTargetId !== reviewTargetId) {
+      continue;
+    }
+
+    const pathMarks = marksByPath.get(mark.path);
+
+    if (pathMarks) {
+      pathMarks.push(mark);
+    } else {
+      marksByPath.set(mark.path, [mark]);
+    }
+  }
 
   return input.diffs.map((diff) => {
     const diffHash = createDiffHash(input.reviewTarget, diff);
@@ -210,9 +225,7 @@ export function resolveReviewStates(
         ...(generatedSample !== undefined ? { sample: generatedSample } : {})
       }).isGenerated;
     const visible = input.showGeneratedFiles === true || !generated;
-    const pathMarks = input.marks.filter(
-      (mark) => mark.reviewTargetId === reviewTargetId && mark.path === diff.newPath
-    );
+    const pathMarks = marksByPath.get(diff.newPath) ?? [];
     const reviewed = pathMarks.some((mark) => mark.reviewedDiffHash === diffHash);
 
     return {

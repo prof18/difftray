@@ -23,9 +23,11 @@ import {
   loadBranchDiffs,
   loadBranchDiffSummaries,
   loadBranchFileDiff,
+  loadBranchFileDiffSummary,
   loadWorkingTreeDiffs,
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiff,
+  loadWorkingTreeFileDiffSummary,
   parseStatusPorcelainV2
 } from "../src/index.js";
 
@@ -232,6 +234,7 @@ describe("working tree diff loading", () => {
     await writeFile(path.join(repo, "tracked.txt"), "changed\n");
 
     const summary = await loadWorkingTreeDiffSummaries(repo);
+    const selectedSummary = await loadWorkingTreeFileDiffSummary(repo, "tracked.txt");
     const detail = await loadWorkingTreeFileDiff(repo, "tracked.txt");
 
     expect(summary.files).toEqual([
@@ -241,6 +244,7 @@ describe("working tree diff loading", () => {
         status: "modified"
       })
     ]);
+    expect(selectedSummary).toEqual(summary.files[0]);
     expect(summary.files[0]?.content).not.toEqual(
       expect.objectContaining({ patch: expect.any(String) })
     );
@@ -756,6 +760,7 @@ describe("branch diff loading", () => {
     await git(repo, "commit", "-am", "change tracked");
 
     const summary = await loadBranchDiffSummaries(repo, "main");
+    const selectedSummary = await loadBranchFileDiffSummary(repo, "main", "tracked.txt");
     const detail = await loadBranchFileDiff(repo, "main", "tracked.txt");
 
     expect(summary.files).toEqual([
@@ -765,6 +770,7 @@ describe("branch diff loading", () => {
         status: "modified"
       })
     ]);
+    expect(selectedSummary).toEqual(summary.files[0]);
     expect(detail).toEqual(
       expect.objectContaining({
         content: expect.objectContaining({

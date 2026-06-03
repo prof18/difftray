@@ -19,7 +19,7 @@
   --elev: #2b2d30;
   --hover: #253653;
   --selected: #2e436e;
-  --tab-active-bg: rgba(46, 67, 110, 0.2);
+  --tab-active-bg: var(--panel-2);
   --border: #26282b;
   --border-soft: #202226;
   --border-strong: #3a3d42;
@@ -75,7 +75,7 @@
   --elev: #ebecf0;
   --hover: #ebecf0;
   --selected: #d5e1ff;
-  --tab-active-bg: #e1eaff;
+  --tab-active-bg: var(--panel-2);
   --border: #dfe3ed;
   --border-soft: #ebecf0;
   --border-strong: #aeb3c2;

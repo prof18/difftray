@@ -181,6 +181,27 @@ Viewport/window coverage should match the change. For broad layout changes, chec
 
 Visual verification does not replace unit or workflow tests. It catches rendering and layout failures that tests often miss.
 
+### Performance Benchmarks
+
+Run `pnpm bench:performance` before and after changes that can affect large-repo
+or large-diff behavior.
+
+The benchmark gate applies to changes touching:
+
+- workspace loading, refresh, or project switching
+- file selection, mark/unmark reviewed, review comments, or keyboard navigation
+- Git diff loading, diff summaries, diff hashes, or review-state resolution
+- renderer diff parsing/rendering, file-list rendering, or scroll restoration
+- packaging/bundle changes that can affect renderer payload size
+
+Keep benchmark outputs for the before and after runs and compare the relevant
+metrics before keeping an optimization. If a change makes one measured path
+worse but is still worth shipping, call out the product tradeoff explicitly in
+the handoff or decision note.
+
+Small isolated copy, styling, docs, or test-only changes do not require the
+performance benchmark unless they plausibly affect one of the surfaces above.
+
 ## TDD Workflow
 
 For core behavior:
@@ -237,3 +258,6 @@ current workspace. Set `DIFFTRAY_WINDOW_PRESENTATION=active` when debugging a
 visual test and intentionally interacting with the app window.
 
 No commit or handoff should happen without running `./ci.sh`.
+
+`pnpm bench:performance` is a conditional gate, not part of `./ci.sh`. Run it
+for performance-sensitive work as described above.

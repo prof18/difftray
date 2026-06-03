@@ -21,6 +21,7 @@ Project commands:
 
 - `pnpm install`
 - `pnpm build`
+- `pnpm bench:performance`
 - `pnpm dev`
 - `pnpm format`
 - `pnpm format:write`
@@ -58,6 +59,20 @@ Run `./ci.sh` before committing and before handoff. It is the full local CI gate
 - docs checks, if configured
 
 For visual changes, also run the app, exercise the changed path, inspect screenshots, and confirm the UI is not blank, clipped, overlapped, or unreadable in the relevant viewport/window sizes.
+
+## Performance Gate
+
+Run `pnpm bench:performance` before and after changes that can affect large-repo or large-diff behavior. This is required for changes touching:
+
+- workspace loading, refresh, or project switching
+- file selection, mark/unmark reviewed, review comments, or keyboard navigation
+- Git diff loading, diff summaries, diff hashes, or review-state resolution
+- renderer diff parsing/rendering, file-list rendering, or scroll restoration
+- packaging/bundle changes that can affect renderer payload size
+
+Do not keep a performance optimization only because it is theoretically better. Record the before/after benchmark outputs and keep the change only when the relevant benchmark metric improves or when a product tradeoff is explicitly accepted.
+
+For small isolated copy, styling, docs, or test-only changes with no plausible performance impact, note that the performance gate was not applicable.
 
 ## UI Direction
 

@@ -18,7 +18,7 @@ I built this because I kept losing track of my own reviews. I'd skim a diff, an 
 
 A few things came out of that:
 
-- **Reviewed files don't stay reviewed if they change.** Mark a file as reviewed; if the diff for that file changes later, Difftray drops it back to unreviewed so you know to look again. It doesn't tell you *what* changed, just that something did, and your previous pass is no longer trustworthy.
+- **Reviewed files don't stay reviewed if they change.** Mark a file as reviewed; if the diff for that file changes later, Difftray drops it back to unreviewed so you know to look again. It doesn't tell you _what_ changed, just that something did, and your previous pass is no longer trustworthy.
 - **It's built around the iteration loop.** Uncommitted work or branch changes, same flow. You're not preparing a PR, you're checking what the agent (or you) just did.
 - **Comments are meant to go back to the agent.** Leave line-level notes while reviewing, then copy them out as a prompt.
 
@@ -104,7 +104,12 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:visual
+pnpm bench:performance
 ```
+
+Run `pnpm bench:performance` before and after changes that can affect large
+changesets, workspace loading, file selection, mark-reviewed flow, diff loading,
+diff rendering, review-state resolution, or bundle size.
 
 ## License
 

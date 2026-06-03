@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   base: "./",
   build: {
-    emptyOutDir: false,
+    emptyOutDir: true,
     outDir: "dist/renderer",
     sourcemap: false
   },

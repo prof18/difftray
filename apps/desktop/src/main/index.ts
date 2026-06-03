@@ -14,9 +14,11 @@ import {
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import {
   calculateProgress,
+  createDiffHash,
   createReviewTargetId,
   formatReviewCommentsReport,
   listInstalledEditorPresets,
@@ -34,9 +36,11 @@ import {
 import {
   findGitRepository,
   loadBranchDiffSummaries,
+  loadBranchFileDiffSummary,
   loadBranchFileDiff,
   listBranchRefs,
   loadWorkingTreeDiffSummaries,
+  loadWorkingTreeFileDiffSummary,
   loadWorkingTreeFileDiff,
   type DiffLoadProgress,
   type GitFileDiffSummary,
@@ -95,6 +99,31 @@ let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
+
+function mainPerformanceLoggingEnabled(): boolean {
+  return process.env.DIFFTRAY_PERF_LOG === "1";
+}
+
+function logMainPerformance(
+  event: string,
+  payload: Readonly<Record<string, unknown>>
+): void {
+  if (!mainPerformanceLoggingEnabled()) {
+    return;
+  }
+
+  console.info(
+    "[difftray:perf]",
+    JSON.stringify({
+      event,
+      ...payload
+    })
+  );
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.round(performance.now() - startedAt);
+}
 
 type RecentProjectView = {
   readonly defaultBaseRef?: string;
@@ -564,14 +593,32 @@ handleTrusted(
 handleTrusted(
   "reviews:markFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<MarkReviewedResult> => {
+    const totalStartedAt = performance.now();
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
     const pathName = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
-    const workspace = await loadProjectWorkspace(projectId);
-    const file = workspace.files.find((candidate) => candidate.path === pathName);
+    const project = assertStoredProject(projectId);
+    const storedReviewTarget = getStorage().getReviewTarget(reviewTargetId);
+    const reviewTarget =
+      storedReviewTarget?.projectId === projectId
+        ? reviewTargetFromRecord(storedReviewTarget)
+        : undefined;
+    const fileLoadStartedAt = performance.now();
+    const file =
+      reviewTarget !== undefined
+        ? await loadCurrentReviewFile(project, reviewTarget, pathName)
+        : null;
+    const fileLoadMs = elapsedSince(fileLoadStartedAt);
 
     if (!file) {
+      const workspace = await loadProjectWorkspace(projectId);
+      logMainPerformance("reviews.markFileReviewed", {
+        fileLoadMs,
+        reason: "file_missing",
+        status: "rejected",
+        totalMs: elapsedSince(totalStartedAt)
+      });
       return {
         reason: "file_missing",
         status: "rejected",
@@ -579,10 +626,14 @@ handleTrusted(
       };
     }
 
-    if (
-      workspace.reviewTarget.id !== reviewTargetId ||
-      file.diffHash !== displayedDiffHash
-    ) {
+    if (file.diffHash !== displayedDiffHash) {
+      const workspace = await loadProjectWorkspace(projectId);
+      logMainPerformance("reviews.markFileReviewed", {
+        fileLoadMs,
+        reason: "stale_diff",
+        status: "rejected",
+        totalMs: elapsedSince(totalStartedAt)
+      });
       return {
         reason: "stale_diff",
         status: "rejected",
@@ -593,13 +644,20 @@ handleTrusted(
     const result = getStorage().verifyAndMarkReviewed({
       currentDiffHash: file.diffHash,
       displayedDiffHash,
-      path: file.path,
+      path: pathName,
       ...(file.previousPath ? { previousPath: file.previousPath } : {}),
       projectId,
       reviewTargetId
     });
 
     if (!result.marked) {
+      const workspace = await loadProjectWorkspace(projectId);
+      logMainPerformance("reviews.markFileReviewed", {
+        fileLoadMs,
+        reason: result.reason,
+        status: "rejected",
+        totalMs: elapsedSince(totalStartedAt)
+      });
       return {
         reason: result.reason,
         status: "rejected",
@@ -607,9 +665,21 @@ handleTrusted(
       };
     }
 
+    const workspaceLoadStartedAt = performance.now();
+    const workspace = await loadProjectWorkspace(projectId);
+    const workspaceLoadMs = elapsedSince(workspaceLoadStartedAt);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      fileCount: workspace.files.length,
+      path: pathName,
+      status: "marked",
+      totalMs: elapsedSince(totalStartedAt),
+      workspaceLoadMs
+    });
+
     return {
       status: "marked",
-      workspace: await loadProjectWorkspace(projectId)
+      workspace
     };
   }
 );
@@ -657,9 +727,18 @@ handleTrusted(
       };
     }
 
+    const remainingPathMarks = getStorage()
+      .listReviewMarks(reviewTargetId)
+      .filter((mark) => mark.path === file.path);
+
     return {
       status: "unmarked",
-      workspace: await loadProjectWorkspace(projectId)
+      workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
+        invalidated: remainingPathMarks.some(
+          (mark) => mark.reviewedDiffHash !== file.diffHash
+        ),
+        reviewed: false
+      })
     };
   }
 );
@@ -1344,6 +1423,39 @@ function projectReviewSummaryView(
   };
 }
 
+function workspaceWithUpdatedReviewState(
+  workspace: ReviewWorkspaceView,
+  pathName: string,
+  reviewState: Pick<ReviewFileView, "invalidated" | "reviewed">
+): ReviewWorkspaceView {
+  const files = workspace.files.map((file) =>
+    file.path === pathName ? { ...file, ...reviewState } : file
+  );
+  const progress = reviewProgressView(files);
+
+  return {
+    ...workspace,
+    files,
+    progress,
+    project: {
+      ...workspace.project,
+      reviewSummary: {
+        attentionCount: files.filter((file) => file.visible && file.invalidated).length,
+        progress
+      }
+    }
+  };
+}
+
+function reviewProgressView(files: readonly ReviewFileView[]): ReviewProgressView {
+  const visibleReviewableFiles = files.filter((file) => file.visible && file.reviewable);
+
+  return {
+    reviewedVisibleFiles: visibleReviewableFiles.filter((file) => file.reviewed).length,
+    totalVisibleReviewableFiles: visibleReviewableFiles.length
+  };
+}
+
 async function openFileInEditor(
   projectId: string,
   pathName: string
@@ -1799,6 +1911,58 @@ function reviewTargetFromGit(
         projectId: target.projectId
       };
   }
+}
+
+function reviewTargetFromRecord(record: ReviewTargetRecord): ReviewTarget | undefined {
+  if (!record.headRefSha) {
+    return undefined;
+  }
+
+  switch (record.mode) {
+    case "branch":
+      if (!record.baseRefName || !record.baseRefSha || !record.mergeBaseSha) {
+        return undefined;
+      }
+
+      return {
+        baseRefName: record.baseRefName,
+        baseSha: record.baseRefSha,
+        ...(record.headRefName ? { headRefName: record.headRefName } : {}),
+        headSha: record.headRefSha,
+        kind: "branch",
+        mergeBaseSha: record.mergeBaseSha,
+        projectId: record.projectId
+      };
+    case "working_tree":
+      return {
+        ...(record.headRefName ? { headRefName: record.headRefName } : {}),
+        headSha: record.headRefSha,
+        kind: "working_tree",
+        projectId: record.projectId
+      };
+  }
+}
+
+async function loadCurrentReviewFile(
+  project: StoredProjectRecord,
+  reviewTarget: ReviewTarget,
+  pathName: string
+): Promise<{ readonly diffHash: string; readonly previousPath?: string } | null> {
+  const summary =
+    reviewTarget.kind === "branch"
+      ? await loadBranchFileDiffSummary(project.path, reviewTarget.baseRefName, pathName)
+      : await loadWorkingTreeFileDiffSummary(project.path, pathName);
+
+  if (!summary) {
+    return null;
+  }
+
+  const diff = fileDiffFromGit(summary);
+
+  return {
+    diffHash: createDiffHash(reviewTarget, diff),
+    ...(diff.oldPath ? { previousPath: diff.oldPath } : {})
+  };
 }
 
 function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTargetRecord {

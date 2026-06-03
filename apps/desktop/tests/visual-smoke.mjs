@@ -36,7 +36,7 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
-  await expectProjectTabSummary(window, "visual-secondary-repo", "0/1", "pending");
+  await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
   await window
@@ -363,18 +363,18 @@ async function expectMissing(window, role, text) {
   );
 }
 
-async function expectProjectTabSummary(window, projectName, count, state) {
+async function expectProjectTabSummary(window, projectName, count) {
   await window.waitForFunction(
-    ({ expectedCount, expectedState, targetProjectName }) => {
+    ({ expectedCount, targetProjectName }) => {
       const projectTab = [...document.querySelectorAll("button")].find((button) => {
         const text = button.textContent ?? "";
 
         return text.includes(targetProjectName) && text.includes(expectedCount);
       });
 
-      return Boolean(projectTab?.querySelector(`[data-state="${expectedState}"]`));
+      return Boolean(projectTab) && !projectTab?.querySelector("[data-state]");
     },
-    { expectedCount: count, expectedState: state, targetProjectName: projectName }
+    { expectedCount: count, targetProjectName: projectName }
   );
 }
 
@@ -536,11 +536,20 @@ async function expectDiffScrollTopBetween(window, minimumScrollTop, maximumScrol
 }
 
 async function expectDiffScrollTopAtMost(window, scrollTop) {
-  await window.waitForFunction((maximumScrollTop) => {
-    const surface = document.querySelector("[data-diff-layout]");
+  try {
+    await window.waitForFunction((maximumScrollTop) => {
+      const surface = document.querySelector("[data-diff-layout]");
 
-    return surface instanceof HTMLElement && surface.scrollTop <= maximumScrollTop;
-  }, scrollTop);
+      return surface instanceof HTMLElement && surface.scrollTop <= maximumScrollTop;
+    }, scrollTop);
+  } catch (error) {
+    const actual = await diffScrollState(window);
+
+    throw new Error(
+      `Expected diff scrollTop at most ${scrollTop}, got ${actual.scrollTop} of max ${actual.maxScrollTop}`,
+      { cause: error }
+    );
+  }
 }
 
 async function diffScrollState(window) {

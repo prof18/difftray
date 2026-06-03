@@ -391,6 +391,34 @@ export async function loadWorkingTreeFileDiff(
   return untracked ? ((await synthesizeUntrackedDiff(repoPath, filePath)) ?? null) : null;
 }
 
+export async function loadWorkingTreeFileDiffSummary(
+  repoPath: string,
+  filePath: string
+): Promise<GitFileDiffSummary | null> {
+  const { diffBaseRef } = await loadWorkingTreeReviewTarget(repoPath);
+  const trackedSummaries = await loadTrackedDiffSummaries(
+    repoPath,
+    [diffBaseRef],
+    {
+      oldRef: diffBaseRef
+    },
+    {},
+    [filePath]
+  );
+  const trackedSummary = trackedSummaries.find((diff) => diff.newPath === filePath);
+
+  if (trackedSummary) {
+    return trackedSummary;
+  }
+
+  const status = await getGitStatus(repoPath);
+  const untracked = status.find(
+    (entry) => entry.status === "untracked" && entry.path === filePath
+  );
+
+  return untracked ? ((await summarizeUntrackedDiff(repoPath, filePath)) ?? null) : null;
+}
+
 export async function loadBranchDiffs(
   repoPath: string,
   baseRefName: string,
@@ -455,6 +483,26 @@ export async function loadBranchFileDiff(
   );
 
   return diffs.find((diff) => diff.newPath === filePath) ?? null;
+}
+
+export async function loadBranchFileDiffSummary(
+  repoPath: string,
+  baseRefName: string,
+  filePath: string
+): Promise<GitFileDiffSummary | null> {
+  const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
+  const summaries = await loadTrackedDiffSummaries(
+    repoPath,
+    [reviewTarget.mergeBaseSha, "HEAD"],
+    {
+      newRef: reviewTarget.headSha,
+      oldRef: reviewTarget.mergeBaseSha
+    },
+    {},
+    [filePath]
+  );
+
+  return summaries.find((diff) => diff.newPath === filePath) ?? null;
 }
 
 export function parseStatusPorcelainV2(output: string): readonly GitPorcelainStatus[] {
