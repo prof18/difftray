@@ -76,13 +76,53 @@ import {
   type DiffsRenderModel,
   type DiffSideFocus
 } from "./diffs-renderer.js";
+import {
+  filterCommands,
+  groupCommands,
+  type CommandItem,
+  type PaletteMode
+} from "./command-palette.js";
+import {
+  commentCountsByPath,
+  commentSavePendingMatchesAnnotation,
+  formatReviewCommentLocation,
+  reviewCommentAnnotations,
+  sameCommentSavePending,
+  sortReviewComments,
+  type CommentSavePending,
+  type ReviewCommentAnnotationMetadata,
+  type ReviewCommentDraft
+} from "./review-comments.js";
+import {
+  clampIndex,
+  clampNumber,
+  classList,
+  diffTargetLabel,
+  diffSideFocusForFile,
+  errorMessage,
+  nextPendingPath,
+  omitProjectReviewSummary,
+  projectReviewSummary,
+  reviewState,
+  reviewSummariesEqual,
+  reviewSummaryState,
+  splitPath,
+  suggestedBaseRef,
+  themeModeFromValue,
+  visiblePathOrFirst,
+  type DiffMode,
+  type ReviewDiffTargetMode
+} from "./review-view-model.js";
+import {
+  loadStatusFromProgress,
+  projectTabTitle,
+  tabLoadingText,
+  tabReviewCountText,
+  tabSwitchLoaderDelayMs,
+  type WorkspaceLoadStatus
+} from "./workspace-load-status.js";
 
 type LoadState = "idle" | "loading";
-type DiffMode = "split" | "unified";
-type ReviewDiffTargetMode = "branch" | "working_tree";
-type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
-type PaletteMode = "all" | "files";
-type CommandKind = "action" | "file" | "project";
 type ResolvedTheme = "dark" | "light";
 
 type ReviewNavigationPerformance = {
@@ -92,46 +132,6 @@ type ReviewNavigationPerformance = {
   readonly renderReadyLogged: boolean;
   readonly startedAt: number;
   readonly toPath: string | undefined;
-};
-
-type ReviewCommentDraft = {
-  readonly body: string;
-  readonly diffHash: string;
-  readonly lineEnd: number;
-  readonly lineStart: number;
-  readonly path: string;
-  readonly side: ReviewCommentSide;
-};
-
-type CommentSavePending =
-  | {
-      readonly diffHash: string;
-      readonly kind: "draft";
-      readonly lineEnd: number;
-      readonly lineStart: number;
-      readonly path: string;
-      readonly side: ReviewCommentSide;
-    }
-  | {
-      readonly commentId: string;
-      readonly kind: "update";
-    };
-
-type ReviewCommentAnnotationMetadata =
-  | {
-      readonly comment: ReviewCommentView;
-      readonly kind: "comment";
-    }
-  | {
-      readonly draft: ReviewCommentDraft;
-      readonly kind: "draft";
-    };
-
-type WorkspaceLoadStatus = {
-  readonly detail: string;
-  readonly loadedFiles?: number;
-  readonly title: string;
-  readonly totalFiles?: number;
 };
 
 type DiffParseState =
@@ -145,17 +145,6 @@ type DiffParseState =
       readonly parseMs: number;
       readonly status: "ready";
     };
-
-type CommandItem = {
-  readonly id: string;
-  readonly hint?: string;
-  readonly icon: React.JSX.Element;
-  readonly kind: CommandKind;
-  readonly label: string;
-  readonly run: () => void;
-  readonly shortcut?: string;
-  readonly sub: string;
-};
 
 type WorkspaceCacheEntry = {
   readonly branchRefs: readonly string[];
@@ -195,8 +184,6 @@ const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {
   title: "Loading repository"
 };
 
-const immediateTabSwitchLoaderFileThreshold = 75;
-const delayedTabSwitchLoaderMs = 500;
 const delayedCommentSaveIndicatorMs = 450;
 const delayedFileDiffLoaderMs = 500;
 const fileListRowHeight = 54;
@@ -4618,234 +4605,6 @@ function buildCommands({
   return items;
 }
 
-function groupCommands(commands: readonly CommandItem[]) {
-  return (["project", "file", "action"] as const)
-    .map((kind) => ({
-      items: commands.filter((command) => command.kind === kind),
-      kind
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
-function commandSearchRank(command: CommandItem, query: string): number {
-  const label = command.label.toLowerCase();
-  const sub = command.sub.toLowerCase();
-  const hint = command.hint?.toLowerCase() ?? "";
-
-  if (label === query) {
-    return 0;
-  }
-
-  if (label.startsWith(query)) {
-    return 1;
-  }
-
-  if (label.includes(query)) {
-    return 2;
-  }
-
-  if (sub.startsWith(query)) {
-    return 10;
-  }
-
-  if (sub.includes(query)) {
-    return 11;
-  }
-
-  if (hint.includes(query)) {
-    return 20;
-  }
-
-  return Number.POSITIVE_INFINITY;
-}
-
-function filterCommands(
-  commands: readonly CommandItem[],
-  mode: PaletteMode,
-  query: string
-): readonly CommandItem[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  const modeCommands =
-    mode === "files" ? commands.filter((command) => command.kind === "file") : commands;
-
-  if (normalizedQuery.length === 0) {
-    return modeCommands;
-  }
-
-  return modeCommands
-    .map((command) => ({
-      command,
-      rank: commandSearchRank(command, normalizedQuery)
-    }))
-    .filter((result) => Number.isFinite(result.rank))
-    .sort(
-      (left, right) =>
-        left.rank - right.rank ||
-        commandKindSearchWeight(left.command.kind) -
-          commandKindSearchWeight(right.command.kind) ||
-        left.command.label.localeCompare(right.command.label)
-    )
-    .map((result) => result.command);
-}
-
-function commandKindSearchWeight(kind: CommandKind): number {
-  switch (kind) {
-    case "file":
-      return 0;
-    case "project":
-      return 1;
-    case "action":
-      return 2;
-  }
-}
-
-function nextPendingPath(
-  workspace: ReviewWorkspaceView,
-  reviewedPath: string
-): string | undefined {
-  const visibleFiles = workspace.files.filter((file) => file.visible && !file.reviewed);
-  const reviewedIndex = workspace.files.findIndex((file) => file.path === reviewedPath);
-
-  return (
-    visibleFiles.find(
-      (file) =>
-        workspace.files.findIndex((candidate) => candidate.path === file.path) >
-        reviewedIndex
-    )?.path ?? visibleFiles[0]?.path
-  );
-}
-
-function firstVisiblePath(workspace: ReviewWorkspaceView): string | undefined {
-  return workspace.files.find((file) => file.visible)?.path;
-}
-
-function visiblePathOrFirst(
-  workspace: ReviewWorkspaceView,
-  preferredPath: string | undefined
-): string | undefined {
-  return workspace.files.some((file) => file.path === preferredPath && file.visible)
-    ? preferredPath
-    : firstVisiblePath(workspace);
-}
-
-function loadStatusFromProgress(progress: ProjectLoadProgressView): WorkspaceLoadStatus {
-  return {
-    detail: loadProgressDetail(progress),
-    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
-    title: progress.message,
-    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
-  };
-}
-
-function loadProgressDetail(progress: ProjectLoadProgressView): string {
-  if (progress.phase === "loading_files" && progress.totalFiles !== undefined) {
-    const loadedFiles = progress.loadedFiles ?? 0;
-    const pathSuffix = progress.path ? ` · ${progress.path}` : "";
-
-    return `${String(loadedFiles)} / ${String(progress.totalFiles)} files${pathSuffix}`;
-  }
-
-  return progress.projectName;
-}
-
-function tabLoadingText(status: WorkspaceLoadStatus): string {
-  if (
-    status.loadedFiles !== undefined &&
-    status.totalFiles !== undefined &&
-    status.totalFiles > 0
-  ) {
-    return `${String(status.loadedFiles)}/${String(status.totalFiles)}`;
-  }
-
-  return "Loading";
-}
-
-function tabSwitchLoaderDelayMs(project: RecentProjectView | undefined): number {
-  const changedFileCount = project?.reviewSummary?.progress.totalVisibleReviewableFiles;
-
-  if (
-    changedFileCount !== undefined &&
-    changedFileCount > immediateTabSwitchLoaderFileThreshold
-  ) {
-    return 0;
-  }
-
-  return delayedTabSwitchLoaderMs;
-}
-
-function tabReviewCountText(summary: ProjectReviewSummaryView | undefined): string {
-  if (!summary) {
-    return "-/-";
-  }
-
-  return `${String(summary.progress.reviewedVisibleFiles)}/${String(
-    summary.progress.totalVisibleReviewableFiles
-  )}`;
-}
-
-function projectTabTitle(
-  project: RecentProjectView,
-  summary: ProjectReviewSummaryView | undefined,
-  isSummaryLoading: boolean
-): string {
-  if (isSummaryLoading) {
-    return `${project.path} · Updating review status`;
-  }
-
-  if (!summary) {
-    return `${project.path} · Review status not loaded`;
-  }
-
-  if (summary.attentionCount > 0) {
-    return `${project.path} · ${String(summary.attentionCount)} reviewed files changed`;
-  }
-
-  const total = summary.progress.totalVisibleReviewableFiles;
-  const reviewed = summary.progress.reviewedVisibleFiles;
-
-  if (total === 0) {
-    return `${project.path} · No changed files`;
-  }
-
-  if (reviewed >= total) {
-    return `${project.path} · All files reviewed`;
-  }
-
-  return `${project.path} · ${String(reviewed)} of ${String(total)} files reviewed`;
-}
-
-function projectReviewSummary(workspace: ReviewWorkspaceView): ProjectReviewSummaryView {
-  return {
-    attentionCount: workspace.files.filter((file) => file.visible && file.invalidated)
-      .length,
-    progress: workspace.progress
-  };
-}
-
-function reviewSummariesEqual(
-  left: ProjectReviewSummaryView | undefined,
-  right: ProjectReviewSummaryView
-): boolean {
-  if (!left) {
-    return false;
-  }
-
-  return (
-    left.attentionCount === right.attentionCount &&
-    left.progress.reviewedVisibleFiles === right.progress.reviewedVisibleFiles &&
-    left.progress.totalVisibleReviewableFiles ===
-      right.progress.totalVisibleReviewableFiles
-  );
-}
-
-function omitProjectReviewSummary(project: RecentProjectView): RecentProjectView {
-  const { reviewSummary, ...projectWithoutSummary } = project;
-
-  void reviewSummary;
-
-  return projectWithoutSummary;
-}
-
 function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => {
@@ -4854,243 +4613,4 @@ function nextPaint(): Promise<void> {
       });
     });
   });
-}
-
-function diffTargetLabel(target: ReviewWorkspaceView["reviewTarget"]): string {
-  if (target.kind === "branch") {
-    return `against ${target.baseRefName ?? "base"}`;
-  }
-
-  return target.headRefName ?? "worktree";
-}
-
-function reviewCommentAnnotations({
-  comments,
-  draft
-}: {
-  readonly comments: readonly ReviewCommentView[];
-  readonly draft: ReviewCommentDraft | undefined;
-}): DiffLineAnnotation<ReviewCommentAnnotationMetadata>[] {
-  return [
-    ...comments.map((comment) => ({
-      lineNumber: comment.lineEnd,
-      metadata: {
-        comment,
-        kind: "comment" as const
-      },
-      side: comment.side
-    })),
-    ...(draft
-      ? [
-          {
-            lineNumber: draft.lineEnd,
-            metadata: {
-              draft,
-              kind: "draft" as const
-            },
-            side: draft.side
-          }
-        ]
-      : [])
-  ];
-}
-
-function sameCommentSavePending(
-  left: CommentSavePending | undefined,
-  right: CommentSavePending | undefined
-): boolean {
-  if (left?.kind !== right?.kind || !left || !right) {
-    return false;
-  }
-
-  if (left.kind === "update" && right.kind === "update") {
-    return left.commentId === right.commentId;
-  }
-
-  if (left.kind !== "draft" || right.kind !== "draft") {
-    return false;
-  }
-
-  return (
-    left.diffHash === right.diffHash &&
-    left.lineEnd === right.lineEnd &&
-    left.lineStart === right.lineStart &&
-    left.path === right.path &&
-    left.side === right.side
-  );
-}
-
-function commentSavePendingMatchesAnnotation(
-  pending: CommentSavePending | undefined,
-  annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>
-): boolean {
-  if (!pending) {
-    return false;
-  }
-
-  const { metadata } = annotation;
-
-  if (metadata.kind === "comment") {
-    return pending.kind === "update" && pending.commentId === metadata.comment.id;
-  }
-
-  return (
-    pending.kind === "draft" &&
-    pending.diffHash === metadata.draft.diffHash &&
-    pending.lineEnd === metadata.draft.lineEnd &&
-    pending.lineStart === metadata.draft.lineStart &&
-    pending.path === metadata.draft.path &&
-    pending.side === metadata.draft.side
-  );
-}
-
-function formatReviewCommentLocation(
-  annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>
-): string {
-  const lineStart =
-    annotation.metadata.kind === "draft"
-      ? annotation.metadata.draft.lineStart
-      : annotation.metadata.comment.lineStart;
-  const lineEnd =
-    annotation.metadata.kind === "draft"
-      ? annotation.metadata.draft.lineEnd
-      : annotation.metadata.comment.lineEnd;
-  const side = annotation.side === "additions" ? "New" : "Old";
-  const lineLabel = lineStart === lineEnd ? "line" : "lines";
-  const lineRange =
-    lineStart === lineEnd ? String(lineStart) : `${String(lineStart)}-${String(lineEnd)}`;
-
-  return `${side} ${lineLabel} ${lineRange}`;
-}
-
-function commentCountsByPath(
-  comments: readonly ReviewCommentView[]
-): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const comment of comments) {
-    counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
-function sortReviewComments(
-  comments: readonly ReviewCommentView[]
-): readonly ReviewCommentView[] {
-  return [...comments].sort((left, right) => {
-    const pathCompare = left.path.localeCompare(right.path);
-
-    if (pathCompare !== 0) {
-      return pathCompare;
-    }
-
-    if (left.lineStart !== right.lineStart) {
-      return left.lineStart - right.lineStart;
-    }
-
-    if (left.lineEnd !== right.lineEnd) {
-      return left.lineEnd - right.lineEnd;
-    }
-
-    return left.createdAt.localeCompare(right.createdAt);
-  });
-}
-
-function suggestedBaseRef(
-  branchRefs: readonly string[],
-  headRefName: string | undefined
-): string | undefined {
-  const preferredRefs = ["origin/main", "main", "origin/master", "master", "develop"];
-
-  return (
-    preferredRefs.find(
-      (branchRef) => branchRef !== headRefName && branchRefs.includes(branchRef)
-    ) ?? branchRefs.find((branchRef) => branchRef !== headRefName)
-  );
-}
-
-function reviewState(file: ReviewFileView): ReviewState {
-  if (file.invalidated) {
-    return "attention";
-  }
-
-  return file.reviewed ? "reviewed" : "pending";
-}
-
-function diffSideFocusForFile(
-  file: ReviewFileView,
-  diffMode: DiffMode,
-  requestedFocus: DiffSideFocus
-): DiffSideFocus {
-  if (diffMode === "unified") {
-    return "both";
-  }
-
-  if (file.status === "added" || file.status === "deleted") {
-    return "both";
-  }
-
-  return requestedFocus;
-}
-
-function reviewSummaryState(summary: ProjectReviewSummaryView): ReviewState {
-  if (summary.attentionCount > 0) {
-    return "attention";
-  }
-
-  if (
-    summary.progress.totalVisibleReviewableFiles > 0 &&
-    summary.progress.reviewedVisibleFiles >= summary.progress.totalVisibleReviewableFiles
-  ) {
-    return "reviewed";
-  }
-
-  return "pending";
-}
-
-function splitPath(path: string): {
-  readonly dirname: string;
-  readonly filename: string;
-} {
-  const segments = path.split("/");
-  const filename = segments.at(-1) ?? path;
-  const dirname = segments.slice(0, -1).join("/");
-
-  return {
-    dirname: dirname.length > 0 ? dirname : ".",
-    filename
-  };
-}
-
-function clampIndex(index: number, length: number): number {
-  if (length <= 0) {
-    return 0;
-  }
-
-  if (index < 0) {
-    return length - 1;
-  }
-
-  if (index >= length) {
-    return 0;
-  }
-
-  return index;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function classList(...classes: readonly (string | undefined)[]): string {
-  return classes.filter((className): className is string => Boolean(className)).join(" ");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected Difftray error.";
-}
-
-function themeModeFromValue(value: string): ThemeMode {
-  return value === "dark" || value === "light" || value === "system" ? value : "system";
 }

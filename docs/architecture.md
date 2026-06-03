@@ -63,6 +63,13 @@ Renderer process:
 - keyboard navigation
 - settings UI
 
+Renderer implementation should avoid concentrating review workflow behavior in a
+single React component. Pure view-model helpers, command palette ranking,
+workspace loading status formatting, and review-comment annotation logic live in
+small tested renderer modules. React components and hooks can then compose those
+modules without making the top-level app component the only place behavior can be
+changed.
+
 IPC boundary:
 
 - typed request/response contracts
