@@ -52,7 +52,6 @@ import {
 } from "@difftray/git";
 import {
   type AppSettingsRecord,
-  type EditorLaunchConfig,
   openStorage,
   type DifftrayStorage,
   type ProjectSettingsRecord,
@@ -85,6 +84,7 @@ import {
   readOptionalStringProperty,
   readStringProperty
 } from "./ipc-input.js";
+import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
 import {
   resolveAppRuntimeConfig,
   resolveWindowPresentationMode,
@@ -1677,47 +1677,6 @@ function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
   };
 }
 
-function editorConfigFromInput(
-  command: string | undefined,
-  args: readonly string[] | string | undefined
-): EditorLaunchConfig {
-  const trimmedCommand = command?.trim();
-
-  if (!trimmedCommand) {
-    throw new Error("Editor preset command is required.");
-  }
-
-  const normalizedArgs =
-    typeof args === "string" || args === undefined
-      ? splitEditorArgs(args ?? "")
-      : normalizeEditorArgs(args);
-
-  const launchConfig = {
-    args: normalizedArgs,
-    command: trimmedCommand
-  };
-  const trustedConfig = trustedEditorLaunchConfig(launchConfig);
-
-  if (!trustedConfig) {
-    throw new Error("Only built-in editor presets are supported.");
-  }
-
-  return trustedConfig;
-}
-
-function splitEditorArgs(value: string): readonly string[] {
-  return normalizeEditorArgs(
-    value
-      .trim()
-      .split(/\s+/)
-      .filter((arg) => arg.length > 0)
-  );
-}
-
-function normalizeEditorArgs(args: readonly string[]): readonly string[] {
-  return args.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
-}
-
 async function listInstalledEditorPresetViews(): Promise<readonly EditorPresetView[]> {
   const appPathByName = discoverMacOSApplicationPathsByName();
   const presets = listInstalledEditorPresets({
@@ -2151,20 +2110,4 @@ function summarizePatch(patch: string): { additions: number; deletions: number }
     },
     { additions: 0, deletions: 0 }
   );
-}
-
-function expandEditorArg(
-  arg: string,
-  input: {
-    readonly column: number;
-    readonly filePath: string;
-    readonly line: number;
-    readonly projectPath: string;
-  }
-): string {
-  return arg
-    .replaceAll("{path}", input.filePath)
-    .replaceAll("{line}", String(input.line))
-    .replaceAll("{column}", String(input.column))
-    .replaceAll("{project}", input.projectPath);
 }
