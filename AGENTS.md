@@ -4,6 +4,7 @@
 
 - Keep Difftray focused on local diff review. Do not turn it into an IDE, agent runner, PR platform, or merge tool without an explicit product decision.
 - Prefer small, testable core modules over Electron-specific logic.
+- Keep files reasonably focused and easy to review. When a file grows large or mixes multiple responsibilities, split it into cohesive modules, components, stylesheets, or test helpers where that improves maintainability without creating artificial indirection.
 - Put business logic in packages that can be tested without launching Electron.
 - Treat review invalidation as the product-critical behavior.
 - Follow hard TDD for core logic: write or update failing tests before implementing behavior.
