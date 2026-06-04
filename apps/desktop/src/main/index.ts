@@ -12,7 +12,7 @@ import {
   type OpenDialogOptions
 } from "electron";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -23,7 +23,6 @@ import {
   formatReviewCommentsReport,
   listInstalledEditorPresets,
   resolveReviewStates,
-  type EditorPreset,
   type FileDiff,
   type ReviewCommentReportContext,
   type ReviewCommentReportItem,
@@ -108,6 +107,11 @@ import {
   type ReviewProgressView,
   type ReviewWorkspaceView
 } from "./view-models.js";
+import {
+  appPathForPreset,
+  discoverMacOSApplicationPathsByName,
+  macOSBundleIconPath
+} from "./editor-discovery.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -1575,7 +1579,10 @@ function assertStoredProject(projectId: string): StoredProjectRecord {
 }
 
 async function listInstalledEditorPresetViews(): Promise<readonly EditorPresetView[]> {
-  const appPathByName = discoverMacOSApplicationPathsByName();
+  const appPathByName = discoverMacOSApplicationPathsByName({
+    homePath: app.getPath("home"),
+    platform: process.platform
+  });
   const presets = listInstalledEditorPresets({
     installedMacOSAppNames: [...appPathByName.keys()],
     platform: process.platform
@@ -1595,63 +1602,6 @@ async function listInstalledEditorPresetViews(): Promise<readonly EditorPresetVi
       };
     })
   );
-}
-
-function discoverMacOSApplicationPathsByName(): Map<string, string> {
-  if (process.platform !== "darwin") {
-    return new Map();
-  }
-
-  const applicationDirectories = [
-    "/Applications",
-    "/System/Applications",
-    path.join(app.getPath("home"), "Applications")
-  ];
-  const appPathsByName = new Map<string, string>();
-
-  for (const directory of applicationDirectories) {
-    for (const candidate of macOSApplicationCandidates(directory)) {
-      if (!appPathsByName.has(candidate.appName)) {
-        appPathsByName.set(candidate.appName, candidate.appPath);
-      }
-    }
-  }
-
-  return appPathsByName;
-}
-
-function macOSApplicationCandidates(
-  directory: string
-): readonly { readonly appName: string; readonly appPath: string }[] {
-  if (!existsSync(directory)) {
-    return [];
-  }
-
-  try {
-    return readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.name.endsWith(".app"))
-      .map((entry) => ({
-        appName: entry.name,
-        appPath: path.join(directory, entry.name)
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function appPathForPreset(
-  preset: EditorPreset,
-  appPathByName: ReadonlyMap<string, string>
-): string | undefined {
-  for (const appName of preset.macOS.appNames) {
-    const appPath = appPathByName.get(appName);
-
-    if (appPath) {
-      return appPath;
-    }
-  }
-
-  return undefined;
 }
 
 async function iconDataUrlForAppPath(appPath: string): Promise<string | undefined> {
@@ -1711,42 +1661,6 @@ async function nativeImageWithTimeout(
       }, timeoutMs);
     })
   ]);
-}
-
-function macOSBundleIconPath(appPath: string): string | undefined {
-  const iconFile = macOSBundleIconFile(appPath);
-
-  if (!iconFile) {
-    return undefined;
-  }
-
-  const normalizedIconFile = iconFile.endsWith(".icns") ? iconFile : `${iconFile}.icns`;
-  const iconPath = path.join(appPath, "Contents", "Resources", normalizedIconFile);
-
-  return existsSync(iconPath) ? iconPath : undefined;
-}
-
-function macOSBundleIconFile(appPath: string): string | undefined {
-  try {
-    const infoPlist = readFileSync(path.join(appPath, "Contents", "Info.plist"), "utf8");
-    const match =
-      /<key>CFBundleIconFile<\/key>\s*<string>(?<iconFile>[^<]+)<\/string>/u.exec(
-        infoPlist
-      );
-
-    return match?.groups?.iconFile ? decodeXmlText(match.groups.iconFile) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function decodeXmlText(value: string): string {
-  return value
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'");
 }
 
 async function loadCurrentReviewFile(
