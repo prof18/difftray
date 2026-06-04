@@ -104,6 +104,7 @@ import {
   diffTargetLabel,
   diffSideFocusForFile,
   errorMessage,
+  fileListHeaderMetrics,
   nextPendingPath,
   omitProjectReviewSummary,
   projectReviewSummary,
@@ -2627,9 +2628,7 @@ function FileListHeader({
   readonly progress: ReviewWorkspaceView["progress"];
   readonly reviewTarget: ReviewWorkspaceView["reviewTarget"];
 }): React.JSX.Element {
-  const pendingCount = files.filter((file) => reviewState(file) === "pending").length;
-  const reviewedCount = files.filter((file) => reviewState(file) === "reviewed").length;
-  const total = Math.max(files.length, 1);
+  const fileProgress = fileListHeaderMetrics({ attentionCount, files });
 
   return (
     <div className={styles.fileHeader}>
@@ -2677,22 +2676,22 @@ function FileListHeader({
         <span
           className={styles.progressReviewed}
           style={{
-            flexGrow: reviewedCount,
-            width: `${String((reviewedCount / total) * 100)}%`
+            flexGrow: fileProgress.reviewedCount,
+            width: `${String(fileProgress.reviewedPercent)}%`
           }}
         />
         <span
           className={styles.progressAttention}
           style={{
-            flexGrow: attentionCount,
-            width: `${String((attentionCount / total) * 100)}%`
+            flexGrow: fileProgress.attentionCount,
+            width: `${String(fileProgress.attentionPercent)}%`
           }}
         />
         <span
           className={styles.progressPending}
           style={{
-            flexGrow: pendingCount,
-            width: `${String((pendingCount / total) * 100)}%`
+            flexGrow: fileProgress.pendingCount,
+            width: `${String(fileProgress.pendingPercent)}%`
           }}
         />
       </div>

@@ -9,6 +9,7 @@ import {
   firstVisiblePath,
   nextPendingPath,
   omitProjectReviewSummary,
+  fileListHeaderMetrics,
   projectReviewSummary,
   reviewState,
   reviewSummariesEqual,
@@ -121,6 +122,43 @@ describe("review state helpers", () => {
       diffSideFocusForFile(reviewFile("b.ts", { status: "added" }), "split", "new")
     ).toBe("both");
     expect(diffSideFocusForFile(reviewFile("c.ts"), "split", "new")).toBe("new");
+  });
+});
+
+describe("file list header metrics", () => {
+  it("counts pending, reviewed, and attention files for progress segments", () => {
+    const thirdPercent = (1 / 3) * 100;
+
+    expect(
+      fileListHeaderMetrics({
+        attentionCount: 1,
+        files: [
+          reviewFile("pending.ts"),
+          reviewFile("reviewed.ts", { reviewed: true }),
+          reviewFile("invalidated.ts", { invalidated: true })
+        ]
+      })
+    ).toEqual({
+      attentionCount: 1,
+      attentionPercent: thirdPercent,
+      pendingCount: 1,
+      pendingPercent: thirdPercent,
+      reviewedCount: 1,
+      reviewedPercent: thirdPercent,
+      total: 3
+    });
+  });
+
+  it("keeps progress percentages finite when the file list is empty", () => {
+    expect(fileListHeaderMetrics({ attentionCount: 0, files: [] })).toEqual({
+      attentionCount: 0,
+      attentionPercent: 0,
+      pendingCount: 0,
+      pendingPercent: 0,
+      reviewedCount: 0,
+      reviewedPercent: 0,
+      total: 1
+    });
   });
 });
 

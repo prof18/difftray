@@ -3,6 +3,15 @@ import type { DiffSideFocus } from "./diffs-renderer.js";
 export type DiffMode = "split" | "unified";
 export type ReviewDiffTargetMode = "branch" | "working_tree";
 export type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
+export type FileListHeaderMetrics = {
+  readonly attentionCount: number;
+  readonly attentionPercent: number;
+  readonly pendingCount: number;
+  readonly pendingPercent: number;
+  readonly reviewedCount: number;
+  readonly reviewedPercent: number;
+  readonly total: number;
+};
 
 export function nextPendingPath(
   workspace: ReviewWorkspaceView,
@@ -125,6 +134,28 @@ export function reviewSummaryState(summary: ProjectReviewSummaryView): ReviewSta
   }
 
   return "pending";
+}
+
+export function fileListHeaderMetrics({
+  attentionCount,
+  files
+}: {
+  readonly attentionCount: number;
+  readonly files: readonly ReviewFileView[];
+}): FileListHeaderMetrics {
+  const pendingCount = files.filter((file) => reviewState(file) === "pending").length;
+  const reviewedCount = files.filter((file) => reviewState(file) === "reviewed").length;
+  const total = Math.max(files.length, 1);
+
+  return {
+    attentionCount,
+    attentionPercent: (attentionCount / total) * 100,
+    pendingCount,
+    pendingPercent: (pendingCount / total) * 100,
+    reviewedCount,
+    reviewedPercent: (reviewedCount / total) * 100,
+    total
+  };
 }
 
 export function splitPath(path: string): {
