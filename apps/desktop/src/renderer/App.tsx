@@ -9,6 +9,13 @@ import {
 import { X } from "lucide-react";
 
 import styles from "./App.module.css";
+import {
+  defaultAppSettings,
+  defaultProjectSettings,
+  defaultWorkspaceLoadStatus,
+  delayedCommentSaveIndicatorMs,
+  delayedFileDiffLoaderMs
+} from "./app-defaults.js";
 import { buildCommands } from "./command-builders.js";
 import {
   createDiffScrollKey,
@@ -62,6 +69,7 @@ import {
   type WorkspaceLoadStatus
 } from "./workspace-load-status.js";
 import { editorSettingsError, updateAppSettingsInput } from "./editor-settings.js";
+import { elapsedSince, logRendererPerformance } from "./renderer-performance.js";
 
 type LoadState = "idle" | "loading";
 type ResolvedTheme = "dark" | "light";
@@ -86,64 +94,6 @@ type ApplyWorkspaceOptions = {
   readonly branchRefs?: readonly string[];
   readonly projectSettings?: ProjectSettingsView;
 };
-
-const defaultAppSettings: AppSettingsView = {
-  autoCollapseHunksOver: 120,
-  defaultDiffMode: "split",
-  editorArgs: "",
-  editorArgList: [],
-  editorCommand: "",
-  editorMode: "system",
-  hideWhitespaceOnlyChanges: false,
-  notifyOnDrift: true,
-  reviewResetTrigger: "diff_content",
-  showGeneratedFiles: false,
-  themeMode: "system",
-  wrapDiffLines: true
-};
-
-const defaultProjectSettings: ProjectSettingsView = {
-  fileListCollapsed: false,
-  fileListWidth: 340,
-  projectId: ""
-};
-
-const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {
-  detail: "Preparing local diffs",
-  title: "Loading repository"
-};
-
-const delayedCommentSaveIndicatorMs = 450;
-const delayedFileDiffLoaderMs = 500;
-
-function rendererPerformanceLoggingEnabled(): boolean {
-  try {
-    return window.localStorage.getItem("difftray:perf") === "1";
-  } catch {
-    return false;
-  }
-}
-
-function logRendererPerformance(
-  event: string,
-  payload: Readonly<Record<string, unknown>>
-): void {
-  if (!rendererPerformanceLoggingEnabled()) {
-    return;
-  }
-
-  console.info(
-    "[difftray:perf]",
-    JSON.stringify({
-      event,
-      ...payload
-    })
-  );
-}
-
-function elapsedSince(startedAt: number): number {
-  return Math.round(performance.now() - startedAt);
-}
 
 export function App(): React.JSX.Element {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(defaultAppSettings);
