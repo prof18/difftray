@@ -27,3 +27,38 @@ export type StoredReviewTargetRecord = ReviewTargetRecord & {
   readonly createdAt: string;
   readonly lastUsedAt: string;
 };
+
+export type ReviewMarkInput = {
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly projectId: string;
+  readonly reviewedDiffHash: string;
+  readonly reviewTargetId: string;
+};
+
+export type ReviewMarkRecord = {
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly reviewedDiffHash: string;
+  readonly reviewTargetId: string;
+};
+
+export type ReviewCommentSide = "additions" | "deletions";
+
+export type CreateReviewCommentInput = {
+  readonly body: string;
+  readonly diffHash: string;
+  readonly lineEnd: number;
+  readonly lineStart: number;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+  readonly side: ReviewCommentSide;
+};
+
+export type ReviewCommentRecord = CreateReviewCommentInput & {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly updatedAt: string;
+};
