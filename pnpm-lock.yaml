@@ -38,6 +38,16 @@ importers:
 
   apps/desktop:
     dependencies:
+      chokidar:
+        specifier: ^4.0.3
+        version: 4.0.3
+      electron-log:
+        specifier: ^5.4.4
+        version: 5.4.4
+      electron-updater:
+        specifier: ^6.8.3
+        version: 6.8.3
+    devDependencies:
       '@difftray/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -59,25 +69,6 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.7
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      chokidar:
-        specifier: ^4.0.3
-        version: 4.0.3
-      electron-log:
-        specifier: ^5.4.4
-        version: 5.4.4
-      electron-updater:
-        specifier: ^6.8.3
-        version: 6.8.3
-      lucide-react:
-        specifier: ^0.511.0
-        version: 0.511.0(react@19.2.6)
-      react:
-        specifier: ^19.1.0
-        version: 19.2.6
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.2.6(react@19.2.6)
-    devDependencies:
       '@types/react':
         specifier: ^19.1.5
         version: 19.2.15
@@ -90,9 +81,18 @@ importers:
       electron:
         specifier: ^42.3.0
         version: 42.3.0
+      lucide-react:
+        specifier: ^0.511.0
+        version: 0.511.0(react@19.2.6)
       playwright:
         specifier: ^1.52.0
         version: 1.60.0
+      react:
+        specifier: ^19.1.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.6(react@19.2.6)
       vite:
         specifier: ^6.3.5
         version: 6.4.2(@types/node@24.12.4)(jiti@2.7.0)

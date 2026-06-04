@@ -30,7 +30,7 @@ module.exports = {
     productName,
     version: packageJson.version
   },
-  files: ["dist/**/*", "package.json"],
+  files: ["dist/**/*", "!dist/**/*.map", "!dist/**/*.tsbuildinfo", "package.json"],
   asar: true,
   npmRebuild: false,
   mac: {
