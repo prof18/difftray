@@ -11,6 +11,12 @@ import {
   shortBranchRefFromFullRef,
   type GitPorcelainStatus
 } from "./git-status.js";
+import {
+  parseDiffStats,
+  parseRawDiffs,
+  type DiffStat,
+  type NameStatusDiff
+} from "./git-raw-diff.js";
 
 export {
   parseStatusPorcelainV2,
@@ -505,16 +511,6 @@ export async function loadBranchFileDiffSummary(
   return summaries.find((diff) => diff.newPath === filePath) ?? null;
 }
 
-type NameStatusDiff = {
-  readonly newMode?: string;
-  readonly newObjectId?: string;
-  readonly newPath: string;
-  readonly oldMode?: string;
-  readonly oldObjectId?: string;
-  readonly oldPath?: string;
-  readonly status: GitLoadedFileDiff["status"];
-};
-
 async function loadTrackedDiffs(
   repoPath: string,
   diffArgs: readonly string[],
@@ -644,9 +640,7 @@ async function loadDiffStats(
   repoPath: string,
   diffArgs: readonly string[],
   pathspecs: readonly string[] = []
-): Promise<
-  ReadonlyMap<string, { readonly additions: number; readonly deletions: number }>
-> {
+): Promise<ReadonlyMap<string, DiffStat>> {
   const output = await gitOutput(repoPath, [
     "diff",
     "--numstat",
@@ -654,109 +648,7 @@ async function loadDiffStats(
     ...diffArgs,
     ...(pathspecs.length > 0 ? ["--", ...pathspecs] : [])
   ]);
-  const stats = new Map<
-    string,
-    { readonly additions: number; readonly deletions: number }
-  >();
-
-  for (const line of output.split("\n")) {
-    if (line.length === 0) {
-      continue;
-    }
-
-    const [rawAdditions, rawDeletions, ...pathParts] = line.split("\t");
-    const filePath = normalizeNumstatPath(pathParts.join("\t"));
-
-    if (!rawAdditions || !rawDeletions || filePath.length === 0) {
-      continue;
-    }
-
-    stats.set(filePath, {
-      additions: numberStat(rawAdditions),
-      deletions: numberStat(rawDeletions)
-    });
-  }
-
-  return stats;
-}
-
-function normalizeNumstatPath(filePath: string): string {
-  const braceRename = /^(?<prefix>.*)\{.* => (?<next>.*)\}(?<suffix>.*)$/.exec(filePath);
-
-  if (braceRename?.groups?.next !== undefined) {
-    return `${braceRename.groups.prefix ?? ""}${braceRename.groups.next}${braceRename.groups.suffix ?? ""}`;
-  }
-
-  const plainRename = /^.* => (?<next>.*)$/.exec(filePath);
-
-  return plainRename?.groups?.next ?? filePath;
-}
-
-function numberStat(value: string): number {
-  const parsed = Number(value);
-
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
-}
-
-function parseRawDiffs(output: string): readonly NameStatusDiff[] {
-  const records = output.split("\0").filter((record) => record.length > 0);
-  const diffs: NameStatusDiff[] = [];
-
-  for (let index = 0; index < records.length; index += 1) {
-    const header = records[index];
-
-    if (!header) {
-      continue;
-    }
-
-    if (!header.startsWith(":")) {
-      throw new Error(`Malformed Git raw diff record: ${header}`);
-    }
-
-    const [oldMode, newMode, oldObjectId, newObjectId, rawStatus] = header
-      .slice(1)
-      .split(" ");
-    const statusCode = rawStatus?.[0] ?? "M";
-
-    if (statusCode === "R") {
-      const oldPath = records[index + 1];
-      const newPath = records[index + 2];
-
-      if (!oldPath || !newPath) {
-        throw new Error("Git rename diff is missing a path.");
-      }
-
-      diffs.push({
-        ...(newMode ? { newMode } : {}),
-        ...(newObjectId ? { newObjectId } : {}),
-        newPath,
-        ...(oldMode ? { oldMode } : {}),
-        ...(oldObjectId ? { oldObjectId } : {}),
-        oldPath,
-        status: "renamed"
-      });
-      index += 2;
-      continue;
-    }
-
-    const pathRecord = records[index + 1];
-
-    if (!pathRecord) {
-      continue;
-    }
-
-    diffs.push({
-      ...(newMode ? { newMode } : {}),
-      ...(newObjectId ? { newObjectId } : {}),
-      newPath: pathRecord,
-      ...(oldMode ? { oldMode } : {}),
-      ...(oldObjectId ? { oldObjectId } : {}),
-      status: statusFromRawStatusCode(statusCode)
-    });
-    index += 1;
-  }
-
-  return diffs;
+  return parseDiffStats(output);
 }
 
 type TrackedDiffSnapshotSource = {
@@ -1312,19 +1204,6 @@ function textFromSnapshotBytes(bytes: Buffer): string | undefined {
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
-}
-
-function statusFromRawStatusCode(code: string): GitLoadedFileDiff["status"] {
-  switch (code[0]) {
-    case "A":
-      return "added";
-    case "D":
-      return "deleted";
-    case "M":
-      return "modified";
-    default:
-      return "modified";
-  }
 }
 
 function isSubmoduleDiff(diff: NameStatusDiff): boolean {
