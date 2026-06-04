@@ -68,14 +68,13 @@ import {
 import {
   createDiffsFileDiffOptions,
   createDiffsFocusedFileDiff,
-  createDiffsRenderModel,
   createDiffsWorkerPoolOptions,
   diffFocusClassName,
   diffsVirtualFileMetrics,
   diffsWorkerHighlighterOptions,
-  type DiffsRenderModel,
   type DiffSideFocus
 } from "./diffs-renderer.js";
+import { createReadyDiffParseState, type DiffParseState } from "./diff-parse-state.js";
 import {
   filterCommands,
   groupCommands,
@@ -141,18 +140,6 @@ type ReviewNavigationPerformance = {
   readonly startedAt: number;
   readonly toPath: string | undefined;
 };
-
-type DiffParseState =
-  | {
-      readonly key: string;
-      readonly status: "parsing";
-    }
-  | {
-      readonly key: string;
-      readonly model: DiffsRenderModel;
-      readonly parseMs: number;
-      readonly status: "ready";
-    };
 
 type WorkspaceCacheEntry = {
   readonly branchRefs: readonly string[];
@@ -3401,44 +3388,6 @@ function DiffSurface({
       ) : null}
     </DiffsVirtualizedSurface>
   );
-}
-
-function createReadyDiffParseState({
-  diffHash,
-  filePath,
-  newText,
-  oldText,
-  parseKey,
-  patch,
-  previousPath,
-  status
-}: {
-  readonly diffHash: string;
-  readonly filePath: string;
-  readonly newText: string | undefined;
-  readonly oldText: string | undefined;
-  readonly parseKey: string;
-  readonly patch: string;
-  readonly previousPath: string | undefined;
-  readonly status: ReviewFileView["status"];
-}): DiffParseState {
-  const parseStartedAt = performance.now();
-  const model = createDiffsRenderModel({
-    diffHash,
-    filePath,
-    ...(newText !== undefined ? { newText } : {}),
-    ...(oldText !== undefined ? { oldText } : {}),
-    patch,
-    ...(previousPath !== undefined ? { previousPath } : {}),
-    status
-  });
-
-  return {
-    key: parseKey,
-    model,
-    parseMs: elapsedSince(parseStartedAt),
-    status: "ready"
-  };
 }
 
 function ReviewCommentAnnotation({

@@ -245,9 +245,7 @@ try {
     "before\nbranch\nafter\nagain\n",
     "utf8"
   );
-  await window.evaluate(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
+  await triggerFocusRefresh(window);
   await window
     .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
@@ -468,6 +466,13 @@ async function expectSelectedFile(window, filename) {
 
 async function expectWorkspaceIdle(window) {
   await window.locator('section[aria-busy="false"]').waitFor({ timeout: 10_000 });
+}
+
+async function triggerFocusRefresh(window) {
+  await window.waitForTimeout(800);
+  await window.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
 }
 
 async function clickDiffLineNumber(window, side, lineNumber) {
