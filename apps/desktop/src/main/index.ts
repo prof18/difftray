@@ -21,7 +21,6 @@ import {
   createDiffHash,
   createReviewTargetId,
   formatReviewCommentsReport,
-  listInstalledEditorPresets,
   resolveReviewStates,
   type FileDiff,
   type ReviewCommentReportContext,
@@ -112,10 +111,13 @@ import {
   type ReviewWorkspaceView
 } from "./view-models.js";
 import {
-  appPathForPreset,
   discoverMacOSApplicationPathsByName,
   macOSBundleIconPath
 } from "./editor-discovery.js";
+import {
+  installedEditorPresetViews,
+  type EditorPresetView
+} from "./editor-preset-views.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -170,14 +172,6 @@ type ReviewFileDiffContentView = {
   readonly patch: string;
   readonly path: string;
   readonly status: FileDiff["status"];
-};
-
-type EditorPresetView = {
-  readonly args: readonly string[];
-  readonly command: string;
-  readonly iconDataUrl?: string;
-  readonly id: string;
-  readonly name: string;
 };
 
 type MarkReviewedResult =
@@ -1526,25 +1520,12 @@ async function listInstalledEditorPresetViews(): Promise<readonly EditorPresetVi
     homePath: app.getPath("home"),
     platform: process.platform
   });
-  const presets = listInstalledEditorPresets({
-    installedMacOSAppNames: [...appPathByName.keys()],
+
+  return installedEditorPresetViews({
+    appPathByName,
+    iconDataUrlForAppPath,
     platform: process.platform
   });
-
-  return Promise.all(
-    presets.map(async (preset) => {
-      const appPath = appPathForPreset(preset, appPathByName);
-      const iconDataUrl = appPath ? await iconDataUrlForAppPath(appPath) : undefined;
-
-      return {
-        args: preset.launchConfig.args,
-        command: preset.launchConfig.command,
-        ...(iconDataUrl ? { iconDataUrl } : {}),
-        id: preset.id,
-        name: preset.name
-      };
-    })
-  );
 }
 
 async function iconDataUrlForAppPath(appPath: string): Promise<string | undefined> {
