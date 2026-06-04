@@ -7,6 +7,8 @@ import {
   projectView,
   reviewCommentView,
   reviewFileView,
+  projectReviewSummaryView,
+  reviewProgressView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
   reviewTargetLabel,
@@ -14,7 +16,8 @@ import {
   sameCommentIds,
   settingsView,
   summarizePatch,
-  type FileReviewStateWithSummary
+  type FileReviewStateWithSummary,
+  type ReviewFileView
 } from "./view-models.js";
 
 describe("settings views", () => {
@@ -234,6 +237,46 @@ describe("diff and review file views", () => {
   });
 });
 
+describe("review progress views", () => {
+  it("counts only visible reviewable files in progress", () => {
+    expect(
+      reviewProgressView([
+        reviewFileViewState("reviewed.ts", { reviewed: true }),
+        reviewFileViewState("pending.ts"),
+        reviewFileViewState("hidden.ts", { visible: false }),
+        reviewFileViewState("generated.md", { reviewable: false })
+      ])
+    ).toEqual({
+      reviewedVisibleFiles: 1,
+      totalVisibleReviewableFiles: 2
+    });
+  });
+
+  it("summarizes visible invalidated files as attention count", () => {
+    const progress = {
+      reviewedVisibleFiles: 1,
+      totalVisibleReviewableFiles: 2
+    };
+
+    expect(
+      projectReviewSummaryView(
+        [
+          reviewFileStateWithSummary("visible-invalid.ts", { invalidated: true }),
+          reviewFileStateWithSummary("hidden-invalid.ts", {
+            invalidated: true,
+            visible: false
+          }),
+          reviewFileStateWithSummary("clean.ts", { invalidated: false })
+        ],
+        progress
+      )
+    ).toEqual({
+      attentionCount: 1,
+      progress
+    });
+  });
+});
+
 describe("review comments", () => {
   it("maps review comments and compares expected IDs as a set", () => {
     expect(
@@ -261,28 +304,52 @@ describe("review comments", () => {
   });
 });
 
-function reviewFileStateWithSummary(): FileReviewStateWithSummary {
+function reviewFileViewState(
+  filePath: string,
+  patch: Partial<ReviewFileView> = {}
+): ReviewFileView {
+  return {
+    additions: 1,
+    deletions: 0,
+    diffHash: `hash-${filePath}`,
+    diffLoaded: false,
+    generated: false,
+    invalidated: false,
+    path: filePath,
+    reviewable: true,
+    reviewed: false,
+    status: "modified",
+    visible: true,
+    ...patch
+  };
+}
+
+function reviewFileStateWithSummary(
+  filePath = "src/App.tsx",
+  patch: Partial<FileReviewStateWithSummary["state"]> = {}
+): FileReviewStateWithSummary {
   return {
     state: {
       diff: {
         content: { kind: "text", patch: "summary patch" },
-        newPath: "src/App.tsx",
+        newPath: filePath,
         oldPath: "src/OldApp.tsx",
         status: "renamed"
       },
       diffHash: "hash-1",
       generated: false,
       invalidated: true,
-      path: "src/App.tsx",
+      path: filePath,
       reviewable: true,
       reviewed: false,
-      visible: true
+      visible: true,
+      ...patch
     },
     summary: {
       additions: 2,
       content: { kind: "text", patch: "summary patch" },
       deletions: 1,
-      newPath: "src/App.tsx",
+      newPath: filePath,
       oldPath: "src/OldApp.tsx",
       status: "renamed"
     }

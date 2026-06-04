@@ -1,6 +1,7 @@
 import type {
   FileDiff,
   FileReviewState,
+  ReviewProgress,
   ReviewCommentSide,
   ReviewTarget
 } from "@difftray/core";
@@ -293,6 +294,26 @@ export function sameCommentIds(
     expectedIdSet.size === expectedIds.length &&
     comments.every((comment) => expectedIdSet.has(comment.id))
   );
+}
+
+export function projectReviewSummaryView(
+  files: readonly FileReviewStateWithSummary[],
+  progress: ReviewProgress
+): ProjectReviewSummaryView {
+  return {
+    attentionCount: files.filter((file) => file.state.visible && file.state.invalidated)
+      .length,
+    progress
+  };
+}
+
+export function reviewProgressView(files: readonly ReviewFileView[]): ReviewProgressView {
+  const visibleReviewableFiles = files.filter((file) => file.visible && file.reviewable);
+
+  return {
+    reviewedVisibleFiles: visibleReviewableFiles.filter((file) => file.reviewed).length,
+    totalVisibleReviewableFiles: visibleReviewableFiles.length
+  };
 }
 
 export function reviewTargetLabel(

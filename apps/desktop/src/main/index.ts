@@ -90,6 +90,8 @@ import {
   projectView,
   reviewCommentView,
   reviewFileView,
+  projectReviewSummaryView,
+  reviewProgressView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
   reviewTargetLabel,
@@ -104,7 +106,6 @@ import {
   type RecentProjectView,
   type ReviewCommentView,
   type ReviewFileView,
-  type ReviewProgressView,
   type ReviewWorkspaceView
 } from "./view-models.js";
 import {
@@ -1358,17 +1359,6 @@ async function loadProjectWorkspaceIfAvailable(
   return loadProjectWorkspace(projectId, reportProgress);
 }
 
-function projectReviewSummaryView(
-  files: readonly FileReviewStateWithSummary[],
-  progress: ReviewProgress
-): ProjectReviewSummaryView {
-  return {
-    attentionCount: files.filter((file) => file.state.visible && file.state.invalidated)
-      .length,
-    progress
-  };
-}
-
 function workspaceWithUpdatedReviewState(
   workspace: ReviewWorkspaceView,
   pathName: string,
@@ -1390,15 +1380,6 @@ function workspaceWithUpdatedReviewState(
         progress
       }
     }
-  };
-}
-
-function reviewProgressView(files: readonly ReviewFileView[]): ReviewProgressView {
-  const visibleReviewableFiles = files.filter((file) => file.visible && file.reviewable);
-
-  return {
-    reviewedVisibleFiles: visibleReviewableFiles.filter((file) => file.reviewed).length,
-    totalVisibleReviewableFiles: visibleReviewableFiles.length
   };
 }
 
