@@ -91,7 +91,6 @@ import {
   reviewCommentView,
   reviewFileView,
   projectReviewSummaryView,
-  reviewProgressView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
   reviewTargetLabel,
@@ -99,6 +98,7 @@ import {
   sameCommentIds,
   settingsView,
   summarizePatch,
+  workspaceWithUpdatedReviewState,
   type AppSettingsView,
   type FileReviewStateWithSummary,
   type ProjectLoadProgressPatch,
@@ -107,7 +107,6 @@ import {
   type ProjectSettingsView,
   type RecentProjectView,
   type ReviewCommentView,
-  type ReviewFileView,
   type ReviewWorkspaceView
 } from "./view-models.js";
 import {
@@ -1313,30 +1312,6 @@ async function loadProjectWorkspaceIfAvailable(
   }
 
   return loadProjectWorkspace(projectId, reportProgress);
-}
-
-function workspaceWithUpdatedReviewState(
-  workspace: ReviewWorkspaceView,
-  pathName: string,
-  reviewState: Pick<ReviewFileView, "invalidated" | "reviewed">
-): ReviewWorkspaceView {
-  const files = workspace.files.map((file) =>
-    file.path === pathName ? { ...file, ...reviewState } : file
-  );
-  const progress = reviewProgressView(files);
-
-  return {
-    ...workspace,
-    files,
-    progress,
-    project: {
-      ...workspace.project,
-      reviewSummary: {
-        attentionCount: files.filter((file) => file.visible && file.invalidated).length,
-        progress
-      }
-    }
-  };
 }
 
 async function openFileInEditor(

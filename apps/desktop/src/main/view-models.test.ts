@@ -17,8 +17,10 @@ import {
   sameCommentIds,
   settingsView,
   summarizePatch,
+  workspaceWithUpdatedReviewState,
   type FileReviewStateWithSummary,
-  type ReviewFileView
+  type ReviewFileView,
+  type ReviewWorkspaceView
 } from "./view-models.js";
 
 describe("settings views", () => {
@@ -278,6 +280,46 @@ describe("review progress views", () => {
   });
 });
 
+describe("review workspace views", () => {
+  it("updates a file review state and recalculates workspace progress and attention", () => {
+    const workspace = reviewWorkspaceView([
+      reviewFileViewState("target.ts", {
+        invalidated: true,
+        reviewed: false
+      }),
+      reviewFileViewState("reviewed.ts", {
+        invalidated: false,
+        reviewed: true
+      }),
+      reviewFileViewState("hidden-invalid.ts", {
+        invalidated: true,
+        visible: false
+      })
+    ]);
+
+    const updated = workspaceWithUpdatedReviewState(workspace, "target.ts", {
+      invalidated: false,
+      reviewed: true
+    });
+
+    expect(
+      updated.files.map((file) => [file.path, file.invalidated, file.reviewed])
+    ).toEqual([
+      ["target.ts", false, true],
+      ["reviewed.ts", false, true],
+      ["hidden-invalid.ts", true, false]
+    ]);
+    expect(updated.progress).toEqual({
+      reviewedVisibleFiles: 2,
+      totalVisibleReviewableFiles: 2
+    });
+    expect(updated.project.reviewSummary).toEqual({
+      attentionCount: 0,
+      progress: updated.progress
+    });
+  });
+});
+
 describe("project load progress views", () => {
   it("maps Git loading progress with optional file counts and paths", () => {
     expect(
@@ -352,6 +394,30 @@ function reviewFileViewState(
     status: "modified",
     visible: true,
     ...patch
+  };
+}
+
+function reviewWorkspaceView(files: readonly ReviewFileView[]): ReviewWorkspaceView {
+  const progress = reviewProgressView(files);
+
+  return {
+    comments: [],
+    files,
+    progress,
+    project: {
+      id: "project-1",
+      name: "Difftray",
+      path: "/repo/difftray",
+      reviewSummary: {
+        attentionCount: files.filter((file) => file.visible && file.invalidated).length,
+        progress
+      }
+    },
+    reviewTarget: {
+      headSha: "head-sha",
+      id: "target-1",
+      kind: "working_tree"
+    }
   };
 }
 

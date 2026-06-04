@@ -361,6 +361,30 @@ export function reviewProgressView(files: readonly ReviewFileView[]): ReviewProg
   };
 }
 
+export function workspaceWithUpdatedReviewState(
+  workspace: ReviewWorkspaceView,
+  pathName: string,
+  reviewState: Pick<ReviewFileView, "invalidated" | "reviewed">
+): ReviewWorkspaceView {
+  const files = workspace.files.map((file) =>
+    file.path === pathName ? { ...file, ...reviewState } : file
+  );
+  const progress = reviewProgressView(files);
+
+  return {
+    ...workspace,
+    files,
+    progress,
+    project: {
+      ...workspace.project,
+      reviewSummary: {
+        attentionCount: files.filter((file) => file.visible && file.invalidated).length,
+        progress
+      }
+    }
+  };
+}
+
 export function reviewTargetLabel(
   reviewTarget: Pick<ReviewWorkspaceView["reviewTarget"], "baseRefName" | "kind">
 ): string {
