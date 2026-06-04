@@ -8,7 +8,7 @@ import {
   X
 } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./file-list.module.css";
 import {
   fileListRowHeight,
   fileListVisibleWindow,
@@ -198,16 +198,22 @@ function DiffTargetControl({
 }
 
 export function CollapsedRail({
+  disabled = false,
   files,
   onExpand,
   progress
 }: {
+  readonly disabled?: boolean;
   readonly files: readonly ReviewFileView[];
   readonly onExpand: () => void;
   readonly progress: ReviewWorkspaceView["progress"];
 }): React.JSX.Element {
   return (
-    <aside className={styles.collapsedRail} aria-label="Collapsed file list">
+    <aside
+      className={styles.collapsedRail}
+      aria-disabled={disabled}
+      aria-label="Collapsed file list"
+    >
       <button
         aria-label="Show file list"
         className={styles.railButton}

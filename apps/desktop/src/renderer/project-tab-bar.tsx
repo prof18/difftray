@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Folder, Plus, Settings, X } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./project-tab-bar.module.css";
 import { type ProjectTabDropPosition } from "./project-tabs.js";
 import { classList, reviewSummaryState } from "./review-view-model.js";
 import {

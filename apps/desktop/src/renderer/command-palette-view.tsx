@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./command-palette-view.module.css";
 import { groupCommands, type CommandItem, type PaletteMode } from "./command-palette.js";
 
 export function CommandPalette({

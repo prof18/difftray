@@ -1965,6 +1965,7 @@ export function App(): React.JSX.Element {
           <section className={styles.mainLayout} aria-busy={showActiveWorkspaceLoading}>
             {fileListCollapsed ? (
               <CollapsedRail
+                disabled={showActiveWorkspaceLoading}
                 files={visibleFiles}
                 onExpand={toggleFileListCollapsed}
                 progress={workspace.progress}

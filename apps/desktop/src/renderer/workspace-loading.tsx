@@ -1,4 +1,4 @@
-import styles from "./App.module.css";
+import styles from "./workspace-loading.module.css";
 import { type WorkspaceLoadStatus } from "./workspace-load-status.js";
 
 export function TabLoadBanner({

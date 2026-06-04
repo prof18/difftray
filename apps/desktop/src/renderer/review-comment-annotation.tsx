@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DiffLineAnnotation } from "@pierre/diffs";
 import { MessageSquare, Pencil, Save, Trash2 } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./review-comment-annotation.module.css";
 import {
   formatReviewCommentLocation,
   type ReviewCommentAnnotationMetadata

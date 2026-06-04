@@ -1,0 +1,146 @@
+.sectionLabel {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.paletteOverlay {
+  position: fixed;
+  z-index: 10;
+  top: 38px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.palette {
+  width: min(580px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  margin: 44px auto 0;
+}
+
+.paletteSearch {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+}
+
+.paletteSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  outline: 0;
+}
+
+.paletteScope {
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 6px;
+}
+
+.paletteResults {
+  max-height: 440px;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.paletteGroup .sectionLabel {
+  padding: 10px 16px 4px;
+}
+
+.paletteItem {
+  display: grid;
+  width: calc(100% - 12px);
+  grid-template-columns: 22px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  margin: 0 6px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.paletteItem[data-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--selected);
+}
+
+.paletteItemIcon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 5px;
+}
+
+.paletteItem[data-kind="project"] .paletteItemIcon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.paletteItem[data-kind="action"] .paletteItemIcon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.paletteItem[data-kind="file"] .paletteItemIcon {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.paletteItemCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paletteItemCopy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paletteItemCopy small,
+.paletteHint {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paletteFooter {
+  display: flex;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 8px 14px;
+}

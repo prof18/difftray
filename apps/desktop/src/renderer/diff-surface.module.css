@@ -1,0 +1,84 @@
+.loadingMiniMark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loadingSpin 900ms linear infinite;
+}
+
+.diffSurface {
+  --diff-bottom-review-padding: 56px;
+
+  min-height: 0;
+  flex: 1;
+  background: var(--diff-bg);
+  overflow-anchor: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.diffsFileDiff {
+  display: block;
+  min-width: 100%;
+  background: var(--diff-bg);
+}
+
+.diffPreparingState {
+  display: flex;
+  height: 100%;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12.5px;
+}
+
+.diffPreparingPath {
+  max-width: min(520px, 64vw);
+  overflow: hidden;
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffFallback {
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+  color: var(--text-muted);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12.5px;
+}
+
+.diffFallbackTitle {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.diffFallback pre {
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.diffEndSpacer {
+  height: var(--diff-bottom-review-padding);
+}
+
+@keyframes loadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

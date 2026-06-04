@@ -1,0 +1,66 @@
+.loadingMiniMark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loadingSpin 900ms linear infinite;
+}
+
+.tabLoadBanner {
+  display: flex;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--bg));
+  color: var(--text);
+  padding: 0 14px;
+}
+
+.tabLoadCopy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.tabLoadTitle {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.tabLoadDetail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadingProgress {
+  width: min(220px, 44vw);
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+  margin-top: 12px;
+}
+
+.loadingProgressBar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 120ms ease;
+}
+
+@keyframes loadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

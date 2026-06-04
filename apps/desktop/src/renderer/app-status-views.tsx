@@ -9,7 +9,7 @@ import {
   X
 } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./app-status-views.module.css";
 import { splitPath } from "./review-view-model.js";
 
 export function EmptyState({

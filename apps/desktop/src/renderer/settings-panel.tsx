@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Code2, Save, X } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./settings-panel.module.css";
 import {
   editorChoices,
   editorPatchForSelection,

@@ -10,7 +10,7 @@ import {
   PanelRight
 } from "lucide-react";
 
-import styles from "./App.module.css";
+import styles from "./diff-toolbar.module.css";
 import { type DiffSideFocus } from "./diffs-renderer.js";
 import { classList, reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 

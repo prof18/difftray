@@ -16,7 +16,7 @@ import {
   type OnDiffLineClickProps
 } from "@pierre/diffs";
 
-import styles from "./App.module.css";
+import styles from "./diff-surface.module.css";
 import {
   normalizeDiffScrollPosition,
   topDiffScrollPosition,
