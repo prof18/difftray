@@ -4,7 +4,9 @@ import {
   editorChoices,
   editorOptionMatchesSettings,
   editorPatchForSelection,
-  editorSelectionValue
+  editorSelectionValue,
+  editorSettingsError,
+  updateAppSettingsInput
 } from "./editor-settings.js";
 
 describe("editorChoices", () => {
@@ -138,6 +140,71 @@ describe("editorOptionMatchesSettings", () => {
         })
       )
     ).toBe(false);
+  });
+});
+
+describe("editorSettingsError", () => {
+  it("requires a command only when the editor mode is preset", () => {
+    expect(
+      editorSettingsError(
+        appSettings({
+          editorCommand: " ",
+          editorMode: "preset"
+        })
+      )
+    ).toBe("Editor preset is required.");
+    expect(
+      editorSettingsError(
+        appSettings({
+          editorCommand: " ",
+          editorMode: "system"
+        })
+      )
+    ).toBeUndefined();
+    expect(
+      editorSettingsError(
+        appSettings({
+          editorCommand: "open",
+          editorMode: "preset"
+        })
+      )
+    ).toBeUndefined();
+  });
+});
+
+describe("updateAppSettingsInput", () => {
+  it("maps app settings to the preload update payload without UI-only fields", () => {
+    expect(
+      updateAppSettingsInput(
+        appSettings({
+          autoCollapseHunksOver: 120,
+          defaultDiffMode: "unified",
+          editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
+          editorArgs: "-b com.microsoft.VSCode {path}",
+          editorCommand: "open",
+          editorMode: "preset",
+          hideWhitespaceOnlyChanges: false,
+          notifyOnDrift: false,
+          reviewResetTrigger: "line_count",
+          showGeneratedFiles: true,
+          themeMode: "dark",
+          wrapDiffLines: false
+        })
+      )
+    ).toEqual({
+      autoCollapseHunksOver: 120,
+      defaultDiffMode: "unified",
+      editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
+      editorArgs: "-b com.microsoft.VSCode {path}",
+      editorCommand: "open",
+      editorMode: "preset",
+      hideWhitespaceOnlyChanges: false,
+      notifyOnDrift: false,
+      reviewResetTrigger: "line_count",
+      showGeneratedFiles: true,
+      themeMode: "dark",
+      wrapDiffLines: false
+    });
   });
 });
 

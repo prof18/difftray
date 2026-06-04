@@ -65,6 +65,32 @@ export function editorOptionMatchesSettings(
   );
 }
 
+export function editorSettingsError(appSettings: AppSettingsView): string | undefined {
+  return appSettings.editorMode === "preset" &&
+    appSettings.editorCommand.trim().length === 0
+    ? "Editor preset is required."
+    : undefined;
+}
+
+export function updateAppSettingsInput(
+  appSettings: AppSettingsView
+): UpdateAppSettingsInput {
+  return {
+    autoCollapseHunksOver: appSettings.autoCollapseHunksOver,
+    defaultDiffMode: appSettings.defaultDiffMode,
+    editorArgList: appSettings.editorArgList,
+    editorArgs: appSettings.editorArgs,
+    editorCommand: appSettings.editorCommand,
+    editorMode: appSettings.editorMode,
+    hideWhitespaceOnlyChanges: appSettings.hideWhitespaceOnlyChanges,
+    notifyOnDrift: appSettings.notifyOnDrift,
+    reviewResetTrigger: appSettings.reviewResetTrigger,
+    showGeneratedFiles: appSettings.showGeneratedFiles,
+    themeMode: appSettings.themeMode,
+    wrapDiffLines: appSettings.wrapDiffLines
+  };
+}
+
 function systemEditorPatch(): Partial<AppSettingsView> {
   return {
     editorArgList: [],

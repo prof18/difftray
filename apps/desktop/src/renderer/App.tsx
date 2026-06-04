@@ -124,7 +124,9 @@ import {
 import {
   editorChoices,
   editorPatchForSelection,
+  editorSettingsError,
   editorSelectionValue,
+  updateAppSettingsInput,
   type EditorChoice
 } from "./editor-settings.js";
 
@@ -1335,11 +1337,10 @@ export function App(): React.JSX.Element {
       return;
     }
 
-    if (
-      appSettingsDraft.editorMode === "preset" &&
-      appSettingsDraft.editorCommand.trim().length === 0
-    ) {
-      setError("Editor preset is required.");
+    const settingsError = editorSettingsError(appSettingsDraft);
+
+    if (settingsError) {
+      setError(settingsError);
       return;
     }
 
@@ -1354,20 +1355,7 @@ export function App(): React.JSX.Element {
 
     try {
       const [savedAppSettings, savedSettings] = await Promise.all([
-        window.difftray.updateAppSettings({
-          autoCollapseHunksOver: appSettingsDraft.autoCollapseHunksOver,
-          defaultDiffMode: appSettingsDraft.defaultDiffMode,
-          editorArgList: appSettingsDraft.editorArgList,
-          editorArgs: appSettingsDraft.editorArgs,
-          editorCommand: appSettingsDraft.editorCommand,
-          editorMode: appSettingsDraft.editorMode,
-          hideWhitespaceOnlyChanges: appSettingsDraft.hideWhitespaceOnlyChanges,
-          notifyOnDrift: appSettingsDraft.notifyOnDrift,
-          reviewResetTrigger: appSettingsDraft.reviewResetTrigger,
-          showGeneratedFiles: appSettingsDraft.showGeneratedFiles,
-          themeMode: appSettingsDraft.themeMode,
-          wrapDiffLines: appSettingsDraft.wrapDiffLines
-        }),
+        window.difftray.updateAppSettings(updateAppSettingsInput(appSettingsDraft)),
         window.difftray.updateProjectSettings({
           fileListCollapsed: projectSettings.fileListCollapsed,
           fileListWidth: projectSettings.fileListWidth,
@@ -1447,20 +1435,9 @@ export function App(): React.JSX.Element {
     setAppSettingsDraft(nextSettings);
 
     try {
-      const savedSettings = await window.difftray.updateAppSettings({
-        autoCollapseHunksOver: nextSettings.autoCollapseHunksOver,
-        defaultDiffMode: nextSettings.defaultDiffMode,
-        editorArgList: nextSettings.editorArgList,
-        editorArgs: nextSettings.editorArgs,
-        editorCommand: nextSettings.editorCommand,
-        editorMode: nextSettings.editorMode,
-        hideWhitespaceOnlyChanges: nextSettings.hideWhitespaceOnlyChanges,
-        notifyOnDrift: nextSettings.notifyOnDrift,
-        reviewResetTrigger: nextSettings.reviewResetTrigger,
-        showGeneratedFiles: nextSettings.showGeneratedFiles,
-        themeMode: nextSettings.themeMode,
-        wrapDiffLines: nextSettings.wrapDiffLines
-      });
+      const savedSettings = await window.difftray.updateAppSettings(
+        updateAppSettingsInput(nextSettings)
+      );
 
       setAppSettings(savedSettings);
       setAppSettingsDraft(savedSettings);
