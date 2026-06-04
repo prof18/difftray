@@ -4,6 +4,7 @@ import {
   appSettingsView,
   fileDiffFromGit,
   patchForDiff,
+  projectProgressFromGit,
   projectView,
   reviewCommentView,
   reviewFileView,
@@ -273,6 +274,36 @@ describe("review progress views", () => {
     ).toEqual({
       attentionCount: 1,
       progress
+    });
+  });
+});
+
+describe("project load progress views", () => {
+  it("maps Git loading progress with optional file counts and paths", () => {
+    expect(
+      projectProgressFromGit({
+        loadedFiles: 3,
+        path: "src/App.tsx",
+        phase: "loading_files",
+        totalFiles: 5
+      })
+    ).toEqual({
+      loadedFiles: 3,
+      message: "Loading changed files",
+      path: "src/App.tsx",
+      phase: "loading_files",
+      totalFiles: 5
+    });
+  });
+
+  it("maps Git progress phase messages and omits absent optional fields", () => {
+    expect(projectProgressFromGit({ phase: "resolving_target" })).toEqual({
+      message: "Resolving review target",
+      phase: "resolving_target"
+    });
+    expect(projectProgressFromGit({ phase: "scanning_files" })).toEqual({
+      message: "Scanning changed files",
+      phase: "scanning_files"
     });
   });
 });

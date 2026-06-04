@@ -87,6 +87,7 @@ import {
   appSettingsView,
   fileDiffFromGit,
   patchForDiff,
+  projectProgressFromGit,
   projectView,
   reviewCommentView,
   reviewFileView,
@@ -101,6 +102,8 @@ import {
   summarizePatch,
   type AppSettingsView,
   type FileReviewStateWithSummary,
+  type ProjectLoadProgressPatch,
+  type ProjectLoadProgressView,
   type ProjectReviewSummaryView,
   type ProjectSettingsView,
   type RecentProjectView,
@@ -157,25 +160,7 @@ function elapsedSince(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
 }
 
-type ProjectLoadProgressView = {
-  readonly loadedFiles?: number;
-  readonly message: string;
-  readonly path?: string;
-  readonly phase:
-    | "loading_files"
-    | "preparing_workspace"
-    | "resolving_review_state"
-    | "resolving_target"
-    | "scanning_files";
-  readonly projectId: string;
-  readonly projectName: string;
-  readonly projectPath: string;
-  readonly totalFiles?: number;
-};
-
-type ProjectLoadProgressReporter = (
-  progress: Omit<ProjectLoadProgressView, "projectId" | "projectName" | "projectPath">
-) => void;
+type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
 
 type ReviewFileDiffContentView = {
   readonly additions: number;
@@ -1153,29 +1138,6 @@ function projectLoadProgressReporter(
 
     sender.send("projects:loadProgress", payload);
   };
-}
-
-function projectProgressFromGit(
-  progress: DiffLoadProgress
-): Omit<ProjectLoadProgressView, "projectId" | "projectName" | "projectPath"> {
-  return {
-    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
-    message: gitProgressMessage(progress.phase),
-    ...(progress.path ? { path: progress.path } : {}),
-    phase: progress.phase,
-    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
-  };
-}
-
-function gitProgressMessage(progress: DiffLoadProgress["phase"]): string {
-  switch (progress) {
-    case "resolving_target":
-      return "Resolving review target";
-    case "scanning_files":
-      return "Scanning changed files";
-    case "loading_files":
-      return "Loading changed files";
-  }
 }
 
 async function openProjectFromDialog(

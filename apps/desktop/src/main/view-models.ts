@@ -6,6 +6,7 @@ import type {
   ReviewTarget
 } from "@difftray/core";
 import type {
+  DiffLoadProgress,
   GitBranchReviewTarget,
   GitFileDiffSummary,
   GitLoadedFileDiff,
@@ -72,6 +73,27 @@ export type ReviewWorkspaceView = {
     readonly kind: ReviewTarget["kind"];
   };
 };
+
+export type ProjectLoadProgressView = {
+  readonly loadedFiles?: number;
+  readonly message: string;
+  readonly path?: string;
+  readonly phase:
+    | "loading_files"
+    | "preparing_workspace"
+    | "resolving_review_state"
+    | "resolving_target"
+    | "scanning_files";
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectPath: string;
+  readonly totalFiles?: number;
+};
+
+export type ProjectLoadProgressPatch = Omit<
+  ProjectLoadProgressView,
+  "projectId" | "projectName" | "projectPath"
+>;
 
 export type ReviewCommentView = {
   readonly body: string;
@@ -153,6 +175,29 @@ export function projectView(
     path: project.path,
     ...(reviewSummary ? { reviewSummary } : {})
   };
+}
+
+export function projectProgressFromGit(
+  progress: DiffLoadProgress
+): ProjectLoadProgressPatch {
+  return {
+    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
+    message: gitProgressMessage(progress.phase),
+    ...(progress.path ? { path: progress.path } : {}),
+    phase: progress.phase,
+    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
+  };
+}
+
+function gitProgressMessage(progress: DiffLoadProgress["phase"]): string {
+  switch (progress) {
+    case "resolving_target":
+      return "Resolving review target";
+    case "scanning_files":
+      return "Scanning changed files";
+    case "loading_files":
+      return "Loading changed files";
+  }
 }
 
 export function reviewTargetFromGit(
