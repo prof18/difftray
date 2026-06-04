@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   appSettingsView,
+  commentReportContext,
   fileDiffFromGit,
   patchForDiff,
   projectProgressFromGit,
@@ -19,6 +20,7 @@ import {
   summarizePatch,
   workspaceWithUpdatedReviewState,
   type FileReviewStateWithSummary,
+  type ReviewFileDiffContentView,
   type ReviewFileView,
   type ReviewWorkspaceView
 } from "./view-models.js";
@@ -375,6 +377,72 @@ describe("review comments", () => {
     expect(sameCommentIds([{ id: "b" }, { id: "a" }], ["a", "b"])).toBe(true);
     expect(sameCommentIds([{ id: "a" }, { id: "b" }], ["a", "a"])).toBe(false);
   });
+
+  it("builds bounded report context around commented addition lines", () => {
+    expect(
+      commentReportContext(
+        reviewCommentViewRecord({
+          lineEnd: 4,
+          lineStart: 4,
+          side: "additions"
+        }),
+        reviewFileDiffContentView({
+          newText: ["one", "two", "three", "four", "five", "six"].join("\n")
+        })
+      )
+    ).toEqual({
+      lines: [
+        { kind: "context", lineNumber: 1, text: "one" },
+        { kind: "context", lineNumber: 2, text: "two" },
+        { kind: "context", lineNumber: 3, text: "three" },
+        { kind: "commented", lineNumber: 4, text: "four" },
+        { kind: "context", lineNumber: 5, text: "five" },
+        { kind: "context", lineNumber: 6, text: "six" }
+      ],
+      side: "additions"
+    });
+  });
+
+  it("uses deletion text for deletion comments and skips unavailable context", () => {
+    expect(
+      commentReportContext(
+        reviewCommentViewRecord({
+          lineEnd: 2,
+          lineStart: 1,
+          side: "deletions"
+        }),
+        reviewFileDiffContentView({
+          oldText: "old one\nold two\n"
+        })
+      )
+    ).toEqual({
+      lines: [
+        { kind: "commented", lineNumber: 1, text: "old one" },
+        { kind: "commented", lineNumber: 2, text: "old two" }
+      ],
+      side: "deletions"
+    });
+    expect(
+      commentReportContext(
+        reviewCommentViewRecord({
+          lineEnd: 9,
+          lineStart: 9,
+          side: "additions"
+        }),
+        reviewFileDiffContentView({
+          newText: "only one line"
+        })
+      )
+    ).toBeUndefined();
+    expect(
+      commentReportContext(
+        reviewCommentViewRecord({
+          side: "additions"
+        }),
+        reviewFileDiffContentView({})
+      )
+    ).toBeUndefined();
+  });
 });
 
 function reviewFileViewState(
@@ -418,6 +486,36 @@ function reviewWorkspaceView(files: readonly ReviewFileView[]): ReviewWorkspaceV
       id: "target-1",
       kind: "working_tree"
     }
+  };
+}
+
+function reviewCommentViewRecord(
+  patch: Partial<Parameters<typeof commentReportContext>[0]> = {}
+): Parameters<typeof commentReportContext>[0] {
+  return {
+    body: "Looks wrong",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    diffHash: "hash-1",
+    id: "comment-1",
+    lineEnd: 1,
+    lineStart: 1,
+    path: "src/App.tsx",
+    side: "additions",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...patch
+  };
+}
+
+function reviewFileDiffContentView(
+  patch: Partial<ReviewFileDiffContentView>
+): ReviewFileDiffContentView {
+  return {
+    additions: 1,
+    deletions: 1,
+    patch: "patch",
+    path: "src/App.tsx",
+    status: "modified",
+    ...patch
   };
 }
 

@@ -1,6 +1,7 @@
 import type {
   FileDiff,
   FileReviewState,
+  ReviewCommentReportContext,
   ReviewProgress,
   ReviewCommentSide,
   ReviewTarget
@@ -58,6 +59,16 @@ export type ReviewFileView = {
   readonly reviewed: boolean;
   readonly status: FileDiff["status"];
   readonly visible: boolean;
+};
+
+export type ReviewFileDiffContentView = {
+  readonly additions: number;
+  readonly deletions: number;
+  readonly newText?: string;
+  readonly oldText?: string;
+  readonly patch: string;
+  readonly path: string;
+  readonly status: FileDiff["status"];
 };
 
 export type ReviewWorkspaceView = {
@@ -339,6 +350,49 @@ export function sameCommentIds(
     expectedIdSet.size === expectedIds.length &&
     comments.every((comment) => expectedIdSet.has(comment.id))
   );
+}
+
+export function commentReportContext(
+  comment: ReviewCommentView,
+  diff: ReviewFileDiffContentView | null
+): ReviewCommentReportContext | undefined {
+  const text = comment.side === "additions" ? diff?.newText : diff?.oldText;
+
+  if (text === undefined) {
+    return undefined;
+  }
+
+  const lines = textLines(text);
+
+  if (comment.lineStart > lines.length) {
+    return undefined;
+  }
+
+  const contextRadius = 3;
+  const lineStart = Math.max(1, comment.lineStart - contextRadius);
+  const lineEnd = Math.min(lines.length, comment.lineEnd + contextRadius);
+
+  return {
+    lines: Array.from({ length: lineEnd - lineStart + 1 }, (_, index) => {
+      const lineNumber = lineStart + index;
+
+      return {
+        kind:
+          lineNumber >= comment.lineStart && lineNumber <= comment.lineEnd
+            ? "commented"
+            : "context",
+        lineNumber,
+        text: lines[lineNumber - 1] ?? ""
+      };
+    }),
+    side: comment.side
+  };
+}
+
+function textLines(text: string): readonly string[] {
+  const lines = text.split("\n");
+
+  return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
 }
 
 export function projectReviewSummaryView(
