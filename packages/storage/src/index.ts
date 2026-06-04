@@ -2,14 +2,25 @@ import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import {
-  projectFromRow,
+  deleteProject,
+  getProject,
+  getReviewTarget,
+  listRecentProjects,
+  updateProjectDefaultBaseRef,
+  upsertProject,
+  upsertReviewTarget
+} from "./project-store.js";
+import {
+  type ProjectRecord,
+  type ReviewTargetRecord,
+  type StoredProjectRecord,
+  type StoredReviewTargetRecord
+} from "./records.js";
+import {
   reviewCommentFromRow,
   reviewMarkFromRow,
-  reviewTargetFromRow,
-  type ProjectRow,
   type ReviewCommentRow,
-  type ReviewMarkRow,
-  type ReviewTargetRow
+  type ReviewMarkRow
 } from "./rows.js";
 import { runMigrations } from "./schema.js";
 import { type AppSettingsRecord, type ProjectSettingsRecord } from "./settings.js";
@@ -22,6 +33,13 @@ import {
 import { currentTimestamp } from "./timestamps.js";
 
 export {
+  type ProjectRecord,
+  type ReviewTargetRecord,
+  type StoredProjectRecord,
+  type StoredReviewTargetRecord
+} from "./records.js";
+
+export {
   type AppSettingsRecord,
   type DiffMode,
   type EditorLaunchConfig,
@@ -29,36 +47,6 @@ export {
   type ReviewResetTrigger,
   type ThemeMode
 } from "./settings.js";
-
-export type ProjectRecord = {
-  readonly defaultBaseRef?: string;
-  readonly id: string;
-  readonly lastOpenedAt?: string;
-  readonly name: string;
-  readonly path: string;
-};
-
-export type StoredProjectRecord = ProjectRecord & {
-  readonly createdAt: string;
-  readonly updatedAt: string;
-};
-
-export type ReviewTargetRecord = {
-  readonly baseRefName?: string;
-  readonly baseRefSha?: string;
-  readonly headKind: "ref" | "working_tree";
-  readonly headRefName?: string;
-  readonly headRefSha?: string;
-  readonly id: string;
-  readonly mergeBaseSha?: string;
-  readonly mode: "branch" | "working_tree";
-  readonly projectId: string;
-};
-
-export type StoredReviewTargetRecord = ReviewTargetRecord & {
-  readonly createdAt: string;
-  readonly lastUsedAt: string;
-};
 
 export type ReviewMarkInput = {
   readonly path: string;
@@ -247,143 +235,6 @@ export function openStorage(filename: string): DifftrayStorage {
       return { unmarked: true };
     }
   };
-}
-
-function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
-  const now = currentTimestamp();
-  db.prepare(
-    `
-    insert into projects (
-      id,
-      name,
-      path,
-      default_base_ref,
-      created_at,
-      updated_at,
-      last_opened_at
-    ) values (?, ?, ?, ?, ?, ?, ?)
-    on conflict(id) do update set
-      name = excluded.name,
-      path = excluded.path,
-      default_base_ref = case
-        when excluded.default_base_ref is null then projects.default_base_ref
-        else excluded.default_base_ref
-      end,
-      updated_at = excluded.updated_at,
-      last_opened_at = excluded.last_opened_at
-  `
-  ).run(
-    project.id,
-    project.name,
-    project.path,
-    project.defaultBaseRef ?? null,
-    now,
-    now,
-    project.lastOpenedAt ?? null
-  );
-}
-
-function updateProjectDefaultBaseRef(
-  db: DatabaseSync,
-  projectId: string,
-  defaultBaseRef: string | undefined
-): void {
-  db.prepare(
-    `
-      update projects
-      set default_base_ref = ?,
-          updated_at = ?
-      where id = ?
-    `
-  ).run(defaultBaseRef ?? null, currentTimestamp(), projectId);
-}
-
-function deleteProject(db: DatabaseSync, projectId: string): void {
-  db.prepare("delete from projects where id = ?").run(projectId);
-}
-
-function getProject(
-  db: DatabaseSync,
-  column: "id" | "path",
-  value: string
-): StoredProjectRecord | null {
-  const row = db.prepare(`select * from projects where ${column} = ?`).get(value);
-
-  if (!row) {
-    return null;
-  }
-
-  return projectFromRow(row as ProjectRow);
-}
-
-function listRecentProjects(db: DatabaseSync): readonly StoredProjectRecord[] {
-  const rows = db
-    .prepare(
-      `
-        select *
-        from projects
-        order by
-          last_opened_at is null,
-          last_opened_at desc,
-          updated_at desc
-      `
-    )
-    .all();
-
-  return rows.map((row) => projectFromRow(row as ProjectRow));
-}
-
-function upsertReviewTarget(db: DatabaseSync, target: ReviewTargetRecord): void {
-  const now = currentTimestamp();
-  db.prepare(
-    `
-    insert into review_targets (
-      id,
-      project_id,
-      mode,
-      base_ref_name,
-      base_ref_sha,
-      head_ref_name,
-      head_ref_sha,
-      merge_base_sha,
-      head_kind,
-      created_at,
-      last_used_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    on conflict(id) do update set
-      project_id = excluded.project_id,
-      mode = excluded.mode,
-      base_ref_name = excluded.base_ref_name,
-      base_ref_sha = excluded.base_ref_sha,
-      head_ref_name = excluded.head_ref_name,
-      head_ref_sha = excluded.head_ref_sha,
-      merge_base_sha = excluded.merge_base_sha,
-      head_kind = excluded.head_kind,
-      last_used_at = excluded.last_used_at
-  `
-  ).run(
-    target.id,
-    target.projectId,
-    target.mode,
-    target.baseRefName ?? null,
-    target.baseRefSha ?? null,
-    target.headRefName ?? null,
-    target.headRefSha ?? null,
-    target.mergeBaseSha ?? null,
-    target.headKind,
-    now,
-    now
-  );
-}
-
-function getReviewTarget(db: DatabaseSync, id: string): StoredReviewTargetRecord | null {
-  const row = db.prepare("select * from review_targets where id = ?").get(id);
-
-  if (!row) {
-    return null;
-  }
-
-  return reviewTargetFromRow(row as ReviewTargetRow);
 }
 
 function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
