@@ -121,6 +121,12 @@ import {
   tabSwitchLoaderDelayMs,
   type WorkspaceLoadStatus
 } from "./workspace-load-status.js";
+import {
+  editorChoices,
+  editorPatchForSelection,
+  editorSelectionValue,
+  type EditorChoice
+} from "./editor-settings.js";
 
 type LoadState = "idle" | "loading";
 type ResolvedTheme = "dark" | "light";
@@ -4155,12 +4161,6 @@ function SettingsSection({
   );
 }
 
-type EditorChoice = {
-  readonly iconDataUrl?: string;
-  readonly label: string;
-  readonly value: string;
-};
-
 function EditorPicker({
   appSettings,
   disabled,
@@ -4174,17 +4174,7 @@ function EditorPicker({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const choices = useMemo(
-    () => [
-      { label: "System default", value: "system" },
-      ...editorOptions.map((option) => ({
-        ...(option.iconDataUrl ? { iconDataUrl: option.iconDataUrl } : {}),
-        label: option.name,
-        value: `preset:${option.id}`
-      }))
-    ],
-    [editorOptions]
-  );
+  const choices = useMemo(() => editorChoices(editorOptions), [editorOptions]);
   const selectedValue = editorSelectionValue(appSettings, editorOptions);
   const selectedChoice =
     choices.find((choice) => choice.value === selectedValue) ??
@@ -4252,9 +4242,7 @@ function EditorPicker({
               data-selected={choice.value === selectedValue}
               key={choice.value}
               onClick={() => {
-                onChangeAppSettings(
-                  editorPatchForSelection(choice.value, appSettings, editorOptions)
-                );
+                onChangeAppSettings(editorPatchForSelection(choice.value, editorOptions));
                 setOpen(false);
               }}
               role="option"
@@ -4293,71 +4281,6 @@ function EditorChoiceIcon({
     <span className={styles.editorPickerIcon} data-fallback="true">
       <Code2 size={14} strokeWidth={1.5} aria-hidden />
     </span>
-  );
-}
-
-function editorSelectionValue(
-  appSettings: AppSettingsView,
-  editorOptions: readonly EditorPresetView[]
-): string {
-  if (appSettings.editorMode === "system") {
-    return "system";
-  }
-
-  const matchingOption = editorOptions.find((option) =>
-    editorOptionMatchesSettings(option, appSettings)
-  );
-
-  return matchingOption ? `preset:${matchingOption.id}` : "system";
-}
-
-function editorPatchForSelection(
-  value: string,
-  appSettings: AppSettingsView,
-  editorOptions: readonly EditorPresetView[]
-): Partial<AppSettingsView> {
-  if (value === "system") {
-    return {
-      editorArgList: [],
-      editorArgs: "",
-      editorCommand: "",
-      editorMode: "system"
-    };
-  }
-
-  const presetId = value.replace(/^preset:/, "");
-  const option = editorOptions.find((candidate) => candidate.id === presetId);
-
-  if (!option) {
-    return {
-      editorArgList: [],
-      editorArgs: "",
-      editorCommand: "",
-      editorMode: "system"
-    };
-  }
-
-  return {
-    editorArgList: option.args,
-    editorArgs: option.args.join(" "),
-    editorCommand: option.command,
-    editorMode: "preset"
-  };
-}
-
-function editorOptionMatchesSettings(
-  option: EditorPresetView,
-  appSettings: AppSettingsView
-): boolean {
-  return (
-    option.command === appSettings.editorCommand.trim() &&
-    arraysAreEqual(option.args, appSettings.editorArgList)
-  );
-}
-
-function arraysAreEqual(left: readonly string[], right: readonly string[]): boolean {
-  return (
-    left.length === right.length && left.every((value, index) => value === right[index])
   );
 }
 
