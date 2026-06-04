@@ -54,6 +54,11 @@ import {
   type DiffScrollPosition
 } from "./diff-scroll-state.js";
 import {
+  fileListRowHeight,
+  fileListVisibleWindow,
+  nextFileListScrollTopForSelection
+} from "./file-list-virtualization.js";
+import {
   mergeProjectTabs,
   reorderProjectTabs,
   type ProjectTabDropPosition
@@ -181,8 +186,6 @@ const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {
 
 const delayedCommentSaveIndicatorMs = 450;
 const delayedFileDiffLoaderMs = 500;
-const fileListRowHeight = 54;
-const fileListOverscanRows = 8;
 
 function rendererPerformanceLoggingEnabled(): boolean {
   try {
@@ -2830,15 +2833,11 @@ function FileList({
   const selectedIndex = selectedPath
     ? files.findIndex((file) => file.path === selectedPath)
     : -1;
-  const startIndex = Math.max(
-    0,
-    Math.floor(scrollTop / fileListRowHeight) - fileListOverscanRows
-  );
-  const visibleRowCount = Math.ceil(viewportHeight / fileListRowHeight);
-  const endIndex = Math.min(
-    files.length,
-    startIndex + visibleRowCount + fileListOverscanRows * 2
-  );
+  const { endIndex, startIndex } = fileListVisibleWindow({
+    fileCount: files.length,
+    scrollTop,
+    viewportHeight
+  });
   const renderedFiles = files.slice(startIndex, endIndex);
 
   useLayoutEffect(() => {
@@ -2875,16 +2874,13 @@ function FileList({
       listElement.contains(document.activeElement) &&
       document.activeElement.matches("button");
 
-    const rowTop = selectedIndex * fileListRowHeight;
-    const rowBottom = rowTop + fileListRowHeight;
-    const viewportTop = listElement.scrollTop;
-    const viewportBottom = viewportTop + listElement.clientHeight;
+    const nextScrollTop = nextFileListScrollTopForSelection({
+      clientHeight: listElement.clientHeight,
+      currentScrollTop: listElement.scrollTop,
+      selectedIndex
+    });
 
-    if (rowTop < viewportTop) {
-      listElement.scrollTop = rowTop;
-      setScrollTop(rowTop);
-    } else if (rowBottom > viewportBottom) {
-      const nextScrollTop = Math.max(0, rowBottom - listElement.clientHeight);
+    if (nextScrollTop !== listElement.scrollTop) {
       listElement.scrollTop = nextScrollTop;
       setScrollTop(nextScrollTop);
     }
