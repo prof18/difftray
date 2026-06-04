@@ -88,7 +88,6 @@ import {
   projectProgressFromGit,
   projectView,
   reviewCommentView,
-  reviewFileView,
   projectReviewSummaryView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
@@ -118,6 +117,7 @@ import {
   type EditorPresetView
 } from "./editor-preset-views.js";
 import { elapsedSince, logMainPerformance } from "./main-performance.js";
+import { reviewWorkspaceView } from "./project-workspace-view.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -1161,7 +1161,6 @@ async function loadProjectWorkspace(
     project,
     reportProgress
   );
-  const reviewSummary = projectReviewSummaryView(files, progress);
 
   watchActiveProjectInBackground(project);
   reportProgress?.({
@@ -1169,21 +1168,14 @@ async function loadProjectWorkspace(
     phase: "preparing_workspace"
   });
 
-  return {
-    comments: activeReviewCommentViews(reviewTargetId, files),
-    files: files.map((file) => reviewFileView(file)),
+  return reviewWorkspaceView({
+    comments: getStorage().listReviewComments(reviewTargetId),
+    files,
     progress,
-    project: projectView(project, reviewSummary),
-    reviewTarget: {
-      ...(reviewTarget.kind === "branch"
-        ? { baseRefName: reviewTarget.baseRefName }
-        : {}),
-      ...(reviewTarget.headRefName ? { headRefName: reviewTarget.headRefName } : {}),
-      headSha: reviewTarget.headSha,
-      id: reviewTargetId,
-      kind: reviewTarget.kind
-    }
-  };
+    project,
+    reviewTarget,
+    reviewTargetId
+  });
 }
 
 async function loadProjectReviewSummaryIfAvailable(
@@ -1515,18 +1507,4 @@ async function loadCurrentProjectReviewTarget(
     : (await loadWorkingTreeReviewTarget(project.path)).reviewTarget;
 
   return reviewTargetFromGit(target);
-}
-
-function activeReviewCommentViews(
-  reviewTargetId: string,
-  files: readonly FileReviewStateWithSummary[]
-): readonly ReviewCommentView[] {
-  const activeDiffHashByPath = new Map(
-    files.map((file) => [file.state.path, file.state.diffHash])
-  );
-
-  return getStorage()
-    .listReviewComments(reviewTargetId)
-    .filter((comment) => activeDiffHashByPath.get(comment.path) === comment.diffHash)
-    .map(reviewCommentView);
 }
