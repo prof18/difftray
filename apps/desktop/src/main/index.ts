@@ -117,6 +117,7 @@ import {
   installedEditorPresetViews,
   type EditorPresetView
 } from "./editor-preset-views.js";
+import { elapsedSince, logMainPerformance } from "./main-performance.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -135,31 +136,6 @@ let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
-
-function mainPerformanceLoggingEnabled(): boolean {
-  return process.env.DIFFTRAY_PERF_LOG === "1";
-}
-
-function logMainPerformance(
-  event: string,
-  payload: Readonly<Record<string, unknown>>
-): void {
-  if (!mainPerformanceLoggingEnabled()) {
-    return;
-  }
-
-  console.info(
-    "[difftray:perf]",
-    JSON.stringify({
-      event,
-      ...payload
-    })
-  );
-}
-
-function elapsedSince(startedAt: number): number {
-  return Math.round(performance.now() - startedAt);
-}
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
 
