@@ -10,6 +10,8 @@ import type {
 export type ProjectRow = {
   readonly created_at: string;
   readonly default_base_ref: null | string;
+  readonly default_commit_ref: null | string;
+  readonly default_diff_target_mode: "branch" | "commit" | "working_tree";
   readonly id: string;
   readonly last_opened_at: null | string;
   readonly name: string;
@@ -20,6 +22,9 @@ export type ProjectRow = {
 export type ReviewTargetRow = {
   readonly base_ref_name: null | string;
   readonly base_ref_sha: null | string;
+  readonly commit_sha: null | string;
+  readonly commit_short_sha: null | string;
+  readonly commit_subject: null | string;
   readonly created_at: string;
   readonly head_kind: "ref" | "working_tree";
   readonly head_ref_name: null | string;
@@ -27,7 +32,8 @@ export type ReviewTargetRow = {
   readonly id: string;
   readonly last_used_at: string;
   readonly merge_base_sha: null | string;
-  readonly mode: "branch" | "working_tree";
+  readonly mode: "branch" | "commit" | "working_tree";
+  readonly parent_sha: null | string;
   readonly project_id: string;
 };
 
@@ -70,6 +76,8 @@ export function projectFromRow(row: ProjectRow): StoredProjectRecord {
   return {
     createdAt: row.created_at,
     ...(row.default_base_ref ? { defaultBaseRef: row.default_base_ref } : {}),
+    ...(row.default_commit_ref ? { defaultCommitRef: row.default_commit_ref } : {}),
+    defaultDiffTargetMode: row.default_diff_target_mode,
     id: row.id,
     ...(row.last_opened_at ? { lastOpenedAt: row.last_opened_at } : {}),
     name: row.name,
@@ -82,6 +90,9 @@ export function reviewTargetFromRow(row: ReviewTargetRow): StoredReviewTargetRec
   return {
     ...(row.base_ref_name ? { baseRefName: row.base_ref_name } : {}),
     ...(row.base_ref_sha ? { baseRefSha: row.base_ref_sha } : {}),
+    ...(row.commit_sha ? { commitSha: row.commit_sha } : {}),
+    ...(row.commit_short_sha ? { commitShortSha: row.commit_short_sha } : {}),
+    ...(row.commit_subject ? { commitSubject: row.commit_subject } : {}),
     createdAt: row.created_at,
     headKind: row.head_kind,
     ...(row.head_ref_name ? { headRefName: row.head_ref_name } : {}),
@@ -90,6 +101,7 @@ export function reviewTargetFromRow(row: ReviewTargetRow): StoredReviewTargetRec
     lastUsedAt: row.last_used_at,
     ...(row.merge_base_sha ? { mergeBaseSha: row.merge_base_sha } : {}),
     mode: row.mode,
+    ...(row.parent_sha ? { parentSha: row.parent_sha } : {}),
     projectId: row.project_id
   };
 }

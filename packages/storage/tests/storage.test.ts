@@ -50,12 +50,50 @@ describe("storage", () => {
 
     storage.upsertProject({
       ...project,
+      defaultBaseRef: "main",
+      defaultDiffTargetMode: "branch"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultBaseRef: "main",
+        defaultDiffTargetMode: "branch",
+        id: project.id
+      })
+    );
+    storage.close();
+  });
+
+  it("infers branch target mode from a project default base ref", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      ...project,
       defaultBaseRef: "main"
     });
 
     expect(storage.getProject(project.id)).toEqual(
       expect.objectContaining({
         defaultBaseRef: "main",
+        defaultDiffTargetMode: "branch",
+        id: project.id
+      })
+    );
+    storage.close();
+  });
+
+  it("infers commit target mode from a project default commit ref", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      ...project,
+      defaultCommitRef: "abc123"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultCommitRef: "abc123",
+        defaultDiffTargetMode: "commit",
         id: project.id
       })
     );
@@ -67,7 +105,8 @@ describe("storage", () => {
 
     storage.upsertProject({
       ...project,
-      defaultBaseRef: "main"
+      defaultBaseRef: "main",
+      defaultDiffTargetMode: "branch"
     });
     storage.upsertProject({
       ...project,
@@ -77,29 +116,55 @@ describe("storage", () => {
     expect(storage.getProject(project.id)).toEqual(
       expect.objectContaining({
         defaultBaseRef: "main",
+        defaultDiffTargetMode: "branch",
         lastOpenedAt: "2026-01-01T00:00:00.000Z"
       })
     );
     storage.close();
   });
 
-  it("updates and clears a project default base ref", () => {
+  it("updates and clears a project default branch target", () => {
     const storage = openStorage(":memory:");
     storage.upsertProject(project);
 
-    storage.updateProjectDefaultBaseRef(project.id, "origin/main");
+    storage.updateProjectDefaultDiffTarget(project.id, {
+      mode: "branch",
+      ref: "origin/main"
+    });
 
     expect(storage.getProject(project.id)).toEqual(
       expect.objectContaining({
-        defaultBaseRef: "origin/main"
+        defaultBaseRef: "origin/main",
+        defaultDiffTargetMode: "branch"
       })
     );
 
-    storage.updateProjectDefaultBaseRef(project.id, undefined);
+    storage.updateProjectDefaultDiffTarget(project.id, { mode: "working_tree" });
 
     expect(storage.getProject(project.id)).toEqual(
-      expect.not.objectContaining({
-        defaultBaseRef: expect.any(String)
+      expect.objectContaining({
+        defaultDiffTargetMode: "working_tree"
+      })
+    );
+    expect(storage.getProject(project.id)).toEqual(
+      expect.not.objectContaining({ defaultBaseRef: expect.any(String) })
+    );
+    storage.close();
+  });
+
+  it("updates a project default commit target", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+
+    storage.updateProjectDefaultDiffTarget(project.id, {
+      mode: "commit",
+      ref: "abc123"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultCommitRef: "abc123",
+        defaultDiffTargetMode: "commit"
       })
     );
     storage.close();
@@ -253,6 +318,34 @@ describe("storage", () => {
       expect.objectContaining({
         headRefSha: "2222222222222222222222222222222222222222",
         id: reviewTarget.id
+      })
+    );
+    storage.close();
+  });
+
+  it("upserts commit review targets", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+
+    storage.upsertReviewTarget({
+      commitSha: "2222222222222222222222222222222222222222",
+      commitShortSha: "2222222",
+      commitSubject: "Change focused file",
+      headKind: "ref",
+      headRefSha: "2222222222222222222222222222222222222222",
+      id: "target-commit",
+      mode: "commit",
+      parentSha: "1111111111111111111111111111111111111111",
+      projectId: project.id
+    });
+
+    expect(storage.getReviewTarget("target-commit")).toEqual(
+      expect.objectContaining({
+        commitSha: "2222222222222222222222222222222222222222",
+        commitShortSha: "2222222",
+        commitSubject: "Change focused file",
+        mode: "commit",
+        parentSha: "1111111111111111111111111111111111111111"
       })
     );
     storage.close();

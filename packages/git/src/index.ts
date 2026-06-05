@@ -68,6 +68,23 @@ export type GitBranchReviewTarget = {
   readonly projectId: string;
 };
 
+export type GitCommitSummary = {
+  readonly authoredAt: string;
+  readonly sha: string;
+  readonly shortSha: string;
+  readonly subject: string;
+};
+
+export type GitCommitReviewTarget = {
+  readonly commitSha: string;
+  readonly commitShortSha: string;
+  readonly commitSubject?: string;
+  readonly headSha: string;
+  readonly kind: "commit";
+  readonly parentSha: string;
+  readonly projectId: string;
+};
+
 export type GitLoadedFileDiff = {
   readonly content:
     | {
@@ -117,6 +134,11 @@ export type BranchDiffResult = {
   readonly reviewTarget: GitBranchReviewTarget;
 };
 
+export type CommitDiffResult = {
+  readonly files: readonly GitLoadedFileDiff[];
+  readonly reviewTarget: GitCommitReviewTarget;
+};
+
 export type WorkingTreeDiffSummaryResult = {
   readonly files: readonly GitFileDiffSummary[];
   readonly reviewTarget: GitWorkingTreeReviewTarget;
@@ -125,6 +147,11 @@ export type WorkingTreeDiffSummaryResult = {
 export type BranchDiffSummaryResult = {
   readonly files: readonly GitFileDiffSummary[];
   readonly reviewTarget: GitBranchReviewTarget;
+};
+
+export type CommitDiffSummaryResult = {
+  readonly files: readonly GitFileDiffSummary[];
+  readonly reviewTarget: GitCommitReviewTarget;
 };
 
 export type DiffLoadProgress = {
@@ -216,6 +243,35 @@ export async function listBranchRefs(repoPath: string): Promise<readonly string[
   );
 }
 
+export async function listRecentCommits(
+  repoPath: string,
+  options: { readonly limit?: number } = {}
+): Promise<readonly GitCommitSummary[]> {
+  const limit = clampRecentCommitLimit(options.limit ?? 25);
+  const output = await gitOutputOrNull(repoPath, [
+    "log",
+    `-${String(limit)}`,
+    "--date-order",
+    "--abbrev=12",
+    "--format=%H%x1f%h%x1f%s%x1f%aI"
+  ]);
+
+  return (output ?? "")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [sha, shortSha, subject, authoredAt] = line.split("\x1f");
+
+      return {
+        authoredAt: authoredAt ?? "",
+        sha: sha ?? "",
+        shortSha: shortSha ?? "",
+        subject: subject ?? ""
+      };
+    })
+    .filter((commit) => commit.sha.length > 0);
+}
+
 export async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
   readonly diffBaseRef: string;
   readonly reviewTarget: GitWorkingTreeReviewTarget;
@@ -265,6 +321,42 @@ export async function loadBranchReviewTarget(
     headSha,
     kind: "branch",
     mergeBaseSha,
+    projectId: repoPath
+  };
+}
+
+export async function loadCommitReviewTarget(
+  repoPath: string,
+  commitRef: string
+): Promise<GitCommitReviewTarget> {
+  const commitSha = await gitOutputOrNull(repoPath, [
+    "rev-parse",
+    "--verify",
+    `${commitRef}^{commit}`
+  ]);
+
+  if (!commitSha) {
+    throw new Error(`Unable to resolve commit "${commitRef}"`);
+  }
+
+  const parentSha =
+    (await gitOutputOrNull(repoPath, ["rev-parse", "--verify", `${commitSha}^`])) ??
+    emptyTreeObjectId;
+  const [commitShortSha, commitSubject] = await gitLines(repoPath, [
+    "show",
+    "-s",
+    "--abbrev=12",
+    "--format=%h%n%s",
+    commitSha
+  ]);
+
+  return {
+    commitSha,
+    commitShortSha: commitShortSha ?? commitSha.slice(0, 12),
+    ...(commitSubject ? { commitSubject } : {}),
+    headSha: commitSha,
+    kind: "commit",
+    parentSha,
     projectId: repoPath
   };
 }
@@ -477,6 +569,52 @@ export async function loadBranchDiffSummaries(
   };
 }
 
+export async function loadCommitDiffs(
+  repoPath: string,
+  commitRef: string,
+  options: DiffLoadOptions = {}
+): Promise<CommitDiffResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  return {
+    files: await loadTrackedDiffs(
+      repoPath,
+      [reviewTarget.parentSha, reviewTarget.commitSha],
+      {
+        newRef: reviewTarget.commitSha,
+        oldRef: reviewTarget.parentSha
+      },
+      options
+    ),
+    reviewTarget
+  };
+}
+
+export async function loadCommitDiffSummaries(
+  repoPath: string,
+  commitRef: string,
+  options: DiffLoadOptions = {}
+): Promise<CommitDiffSummaryResult> {
+  reportDiffLoadProgress(options, { phase: "resolving_target" });
+  const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
+
+  reportDiffLoadProgress(options, { phase: "scanning_files" });
+  return {
+    files: await loadTrackedDiffSummaries(
+      repoPath,
+      [reviewTarget.parentSha, reviewTarget.commitSha],
+      {
+        newRef: reviewTarget.commitSha,
+        oldRef: reviewTarget.parentSha
+      },
+      options
+    ),
+    reviewTarget
+  };
+}
+
 export async function loadBranchFileDiff(
   repoPath: string,
   baseRefName: string,
@@ -509,6 +647,46 @@ export async function loadBranchFileDiffSummary(
     {
       newRef: reviewTarget.headSha,
       oldRef: reviewTarget.mergeBaseSha
+    },
+    {},
+    [filePath]
+  );
+
+  return summaries.find((diff) => diff.newPath === filePath) ?? null;
+}
+
+export async function loadCommitFileDiff(
+  repoPath: string,
+  commitRef: string,
+  filePath: string
+): Promise<GitLoadedFileDiff | null> {
+  const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
+  const diffs = await loadTrackedDiffs(
+    repoPath,
+    [reviewTarget.parentSha, reviewTarget.commitSha],
+    {
+      newRef: reviewTarget.commitSha,
+      oldRef: reviewTarget.parentSha
+    },
+    {},
+    [filePath]
+  );
+
+  return diffs.find((diff) => diff.newPath === filePath) ?? null;
+}
+
+export async function loadCommitFileDiffSummary(
+  repoPath: string,
+  commitRef: string,
+  filePath: string
+): Promise<GitFileDiffSummary | null> {
+  const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
+  const summaries = await loadTrackedDiffSummaries(
+    repoPath,
+    [reviewTarget.parentSha, reviewTarget.commitSha],
+    {
+      newRef: reviewTarget.commitSha,
+      oldRef: reviewTarget.parentSha
     },
     {},
     [filePath]
@@ -678,6 +856,14 @@ async function loadPatchForDiff(
 
 function patchPathspecs(diff: NameStatusDiff): readonly string[] {
   return [...new Set([diff.oldPath, diff.newPath].filter(isDefined))];
+}
+
+function clampRecentCommitLimit(limit: number): number {
+  if (!Number.isSafeInteger(limit)) {
+    return 25;
+  }
+
+  return Math.min(100, Math.max(1, limit));
 }
 
 async function currentBranchName(repoPath: string): Promise<string | undefined> {

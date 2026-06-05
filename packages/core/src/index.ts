@@ -35,7 +35,20 @@ export type BranchReviewTarget = {
   readonly projectId: string;
 };
 
-export type ReviewTarget = BranchReviewTarget | WorkingTreeReviewTarget;
+export type CommitReviewTarget = {
+  readonly commitSha: string;
+  readonly commitShortSha: string;
+  readonly commitSubject?: string;
+  readonly headSha: string;
+  readonly kind: "commit";
+  readonly parentSha: string;
+  readonly projectId: string;
+};
+
+export type ReviewTarget =
+  | BranchReviewTarget
+  | CommitReviewTarget
+  | WorkingTreeReviewTarget;
 
 export type FileDiffStatus =
   | "added"
@@ -385,6 +398,14 @@ function canonicalReviewTarget(target: ReviewTarget): readonly unknown[] {
         target.headRefName ?? null,
         target.headSha,
         target.mergeBaseSha
+      ];
+    case "commit":
+      return [
+        reviewTargetFingerprintVersion,
+        target.projectId,
+        target.kind,
+        target.parentSha,
+        target.commitSha
       ];
     case "working_tree":
       return [

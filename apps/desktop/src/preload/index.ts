@@ -42,6 +42,9 @@ export type DifftrayApi = {
   ) => Promise<ProjectReviewSummaryView | null>;
   readonly listInstalledEditors: () => Promise<readonly EditorPresetView[]>;
   readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
+  readonly listProjectRecentCommits: (
+    projectId: string
+  ) => Promise<readonly RecentCommitView[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly loadFileDiff: (
     input: LoadFileDiffInput
@@ -100,11 +103,20 @@ export type EditorPresetView = {
 
 export type RecentProjectView = {
   readonly defaultBaseRef?: string;
+  readonly defaultCommitRef?: string;
+  readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
   readonly id: string;
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
   readonly reviewSummary?: ProjectReviewSummaryView;
+};
+
+export type RecentCommitView = {
+  readonly authoredAt: string;
+  readonly sha: string;
+  readonly shortSha: string;
+  readonly subject: string;
 };
 
 export type LoadProjectOptions = {
@@ -176,10 +188,13 @@ export type ReviewWorkspaceView = {
   readonly progress: ReviewProgressView;
   readonly reviewTarget: {
     readonly baseRefName?: string;
+    readonly commitSha?: string;
+    readonly commitShortSha?: string;
+    readonly commitSubject?: string;
     readonly headRefName?: string;
     readonly headSha: string;
     readonly id: string;
-    readonly kind: "branch" | "working_tree";
+    readonly kind: "branch" | "commit" | "working_tree";
   };
 };
 
@@ -312,6 +327,11 @@ export type UpdateProjectDiffTargetInput =
       readonly baseRefName: string;
       readonly mode: "branch";
       readonly projectId: string;
+    }
+  | {
+      readonly commitRef: string;
+      readonly mode: "commit";
+      readonly projectId: string;
     };
 
 export type UpdateAppSettingsInput = {
@@ -375,6 +395,10 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("projects:listBranchRefs", {
       projectId
     }) as Promise<readonly string[]>,
+  listProjectRecentCommits: async (projectId) =>
+    ipcRenderer.invoke("projects:listRecentCommits", {
+      projectId
+    }) as Promise<readonly RecentCommitView[]>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
   loadFileDiff: async (input) =>

@@ -71,6 +71,7 @@
 }
 
 .diffTargetControl {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -91,9 +92,14 @@
   white-space: nowrap;
 }
 
-.baseRefSelect {
+.diffTargetTrigger {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
   min-width: 0;
   height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--elev);
@@ -103,14 +109,214 @@
   font-feature-settings:
     "zero" 1,
     "ss02" 1;
+  font-weight: 500;
   outline: 0;
   padding: 0 8px;
-  text-overflow: ellipsis;
 }
 
-.baseRefSelect:focus {
+.diffTargetTrigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffTargetTrigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.diffTargetTrigger:focus,
+.diffTargetTrigger[aria-expanded="true"] {
   border-color: var(--accent-2);
   box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.diffTargetTrigger:disabled {
+  opacity: 0.6;
+}
+
+.diffTargetPopover {
+  position: absolute;
+  z-index: 20;
+  top: 34px;
+  left: 0;
+  width: min(420px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--elev);
+  box-shadow:
+    0 16px 44px color-mix(in srgb, var(--shadow) 42%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.diffTargetTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel);
+  padding: 4px;
+}
+
+.diffTargetTab {
+  -webkit-app-region: no-drag;
+  height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.diffTargetTab:hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.diffTargetTab[aria-selected="true"] {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.diffTargetPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+
+.diffTargetSearch {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  font-feature-settings:
+    "zero" 1,
+    "ss02" 1;
+  outline: 0;
+  padding: 0 8px;
+}
+
+.diffTargetSearch:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.diffTargetCommitForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.diffTargetUseButton {
+  -webkit-app-region: no-drag;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--selected);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 0 10px;
+}
+
+.diffTargetUseButton:hover:not(:disabled) {
+  border-color: var(--accent-2);
+  background: var(--accent-soft);
+}
+
+.diffTargetUseButton:disabled {
+  opacity: 0.52;
+}
+
+.diffTargetOptions {
+  display: flex;
+  max-height: 238px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+}
+
+.diffTargetOption {
+  -webkit-app-region: no-drag;
+  display: grid;
+  min-height: 28px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 4px 7px;
+  text-align: left;
+}
+
+.diffTargetOption:hover {
+  background: var(--hover);
+}
+
+.diffTargetOption[data-active="true"] {
+  background: var(--selected);
+}
+
+.diffTargetOptionIcon {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  color: var(--accent);
+}
+
+.diffTargetOptionMain,
+.diffTargetCommitSha,
+.diffTargetCommitSubject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffTargetOptionMain,
+.diffTargetCommitText {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  font-feature-settings:
+    "zero" 1,
+    "ss02" 1;
+}
+
+.diffTargetCommitText {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.diffTargetCommitSha {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.diffTargetCommitSubject {
+  color: var(--text-muted);
+}
+
+.diffTargetEmpty {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  padding: 8px 8px 10px 29px;
 }
 
 .progressTrack {

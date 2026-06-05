@@ -5,7 +5,7 @@ import {
   getProject,
   getReviewTarget,
   listRecentProjects,
-  updateProjectDefaultBaseRef,
+  updateProjectDefaultDiffTarget,
   upsertProject,
   upsertReviewTarget
 } from "./project-store.js";
@@ -117,9 +117,20 @@ export type DifftrayStorage = {
     path: string,
     reviewedDiffHash: string
   ) => void;
-  readonly updateProjectDefaultBaseRef: (
+  readonly updateProjectDefaultDiffTarget: (
     projectId: string,
-    defaultBaseRef: string | undefined
+    target:
+      | {
+          readonly mode: "branch";
+          readonly ref: string;
+        }
+      | {
+          readonly mode: "commit";
+          readonly ref: string;
+        }
+      | {
+          readonly mode: "working_tree";
+        }
   ) => void;
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
   readonly upsertProject: (project: ProjectRecord) => void;
@@ -164,8 +175,8 @@ export function openStorage(filename: string): DifftrayStorage {
     unmarkReviewed: (reviewTargetId, filePath, reviewedDiffHash) => {
       unmarkReviewed(db, reviewTargetId, filePath, reviewedDiffHash);
     },
-    updateProjectDefaultBaseRef: (projectId, defaultBaseRef) => {
-      updateProjectDefaultBaseRef(db, projectId, defaultBaseRef);
+    updateProjectDefaultDiffTarget: (projectId, target) => {
+      updateProjectDefaultDiffTarget(db, projectId, target);
     },
     updateReviewComment: (id, body) => updateReviewComment(db, id, body),
     upsertProject: (project) => {

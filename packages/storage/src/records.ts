@@ -1,5 +1,7 @@
 export type ProjectRecord = {
   readonly defaultBaseRef?: string;
+  readonly defaultCommitRef?: string;
+  readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
   readonly id: string;
   readonly lastOpenedAt?: string;
   readonly name: string;
@@ -14,12 +16,16 @@ export type StoredProjectRecord = ProjectRecord & {
 export type ReviewTargetRecord = {
   readonly baseRefName?: string;
   readonly baseRefSha?: string;
+  readonly commitSha?: string;
+  readonly commitShortSha?: string;
+  readonly commitSubject?: string;
   readonly headKind: "ref" | "working_tree";
   readonly headRefName?: string;
   readonly headRefSha?: string;
   readonly id: string;
   readonly mergeBaseSha?: string;
-  readonly mode: "branch" | "working_tree";
+  readonly mode: "branch" | "commit" | "working_tree";
+  readonly parentSha?: string;
   readonly projectId: string;
 };
 

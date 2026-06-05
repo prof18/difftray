@@ -39,7 +39,18 @@ export function reviewWorkspaceView({
       ...(reviewTarget.kind === "branch"
         ? { baseRefName: reviewTarget.baseRefName }
         : {}),
-      ...(reviewTarget.headRefName ? { headRefName: reviewTarget.headRefName } : {}),
+      ...(reviewTarget.kind === "commit"
+        ? {
+            commitSha: reviewTarget.commitSha,
+            commitShortSha: reviewTarget.commitShortSha,
+            ...(reviewTarget.commitSubject
+              ? { commitSubject: reviewTarget.commitSubject }
+              : {})
+          }
+        : {}),
+      ...(reviewTarget.kind !== "commit" && reviewTarget.headRefName
+        ? { headRefName: reviewTarget.headRefName }
+        : {}),
       headSha: reviewTarget.headSha,
       id: reviewTargetId,
       kind: reviewTarget.kind

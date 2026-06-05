@@ -9,6 +9,7 @@ import type {
 import type {
   DiffLoadProgress,
   GitBranchReviewTarget,
+  GitCommitReviewTarget,
   GitFileDiffSummary,
   GitLoadedFileDiff,
   GitWorkingTreeReviewTarget
@@ -26,6 +27,8 @@ import { trustedEditorLaunchConfig } from "./security.js";
 
 export type RecentProjectView = {
   readonly defaultBaseRef?: string;
+  readonly defaultCommitRef?: string;
+  readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
   readonly id: string;
   readonly lastOpenedAt?: string;
   readonly name: string;
@@ -78,6 +81,9 @@ export type ReviewWorkspaceView = {
   readonly progress: ReviewProgressView;
   readonly reviewTarget: {
     readonly baseRefName?: string;
+    readonly commitSha?: string;
+    readonly commitShortSha?: string;
+    readonly commitSubject?: string;
     readonly headRefName?: string;
     readonly headSha: string;
     readonly id: string;
@@ -180,6 +186,10 @@ export function projectView(
 ): RecentProjectView {
   return {
     ...(project.defaultBaseRef ? { defaultBaseRef: project.defaultBaseRef } : {}),
+    ...(project.defaultCommitRef ? { defaultCommitRef: project.defaultCommitRef } : {}),
+    ...(project.defaultDiffTargetMode
+      ? { defaultDiffTargetMode: project.defaultDiffTargetMode }
+      : {}),
     id: project.id,
     ...(project.lastOpenedAt ? { lastOpenedAt: project.lastOpenedAt } : {}),
     name: project.name,
@@ -212,7 +222,7 @@ function gitProgressMessage(progress: DiffLoadProgress["phase"]): string {
 }
 
 export function reviewTargetFromGit(
-  target: GitBranchReviewTarget | GitWorkingTreeReviewTarget
+  target: GitBranchReviewTarget | GitCommitReviewTarget | GitWorkingTreeReviewTarget
 ): ReviewTarget {
   switch (target.kind) {
     case "branch":
@@ -223,6 +233,16 @@ export function reviewTargetFromGit(
         headSha: target.headSha,
         kind: "branch",
         mergeBaseSha: target.mergeBaseSha,
+        projectId: target.projectId
+      };
+    case "commit":
+      return {
+        commitSha: target.commitSha,
+        commitShortSha: target.commitShortSha,
+        ...(target.commitSubject ? { commitSubject: target.commitSubject } : {}),
+        headSha: target.headSha,
+        kind: "commit",
+        parentSha: target.parentSha,
         projectId: target.projectId
       };
     case "working_tree":
@@ -257,6 +277,20 @@ export function reviewTargetFromRecord(
         mergeBaseSha: record.mergeBaseSha,
         projectId: record.projectId
       };
+    case "commit":
+      if (!record.commitSha || !record.commitShortSha || !record.parentSha) {
+        return undefined;
+      }
+
+      return {
+        commitSha: record.commitSha,
+        commitShortSha: record.commitShortSha,
+        ...(record.commitSubject ? { commitSubject: record.commitSubject } : {}),
+        headSha: record.headRefSha,
+        kind: "commit",
+        parentSha: record.parentSha,
+        projectId: record.projectId
+      };
     case "working_tree":
       return {
         ...(record.headRefName ? { headRefName: record.headRefName } : {}),
@@ -288,6 +322,18 @@ export function reviewTargetRecord(id: string, target: ReviewTarget): ReviewTarg
         id,
         mergeBaseSha: target.mergeBaseSha,
         mode: "branch",
+        projectId: target.projectId
+      };
+    case "commit":
+      return {
+        commitSha: target.commitSha,
+        commitShortSha: target.commitShortSha,
+        ...(target.commitSubject ? { commitSubject: target.commitSubject } : {}),
+        headKind: "ref",
+        headRefSha: target.headSha,
+        id,
+        mode: "commit",
+        parentSha: target.parentSha,
         projectId: target.projectId
       };
   }
@@ -440,11 +486,21 @@ export function workspaceWithUpdatedReviewState(
 }
 
 export function reviewTargetLabel(
-  reviewTarget: Pick<ReviewWorkspaceView["reviewTarget"], "baseRefName" | "kind">
+  reviewTarget: Pick<
+    ReviewWorkspaceView["reviewTarget"],
+    "baseRefName" | "commitShortSha" | "kind"
+  >
 ): string {
-  return reviewTarget.kind === "branch" && reviewTarget.baseRefName
-    ? `Against ${reviewTarget.baseRefName}`
-    : "Git changes";
+  switch (reviewTarget.kind) {
+    case "branch":
+      return reviewTarget.baseRefName ? `Against ${reviewTarget.baseRefName}` : "Branch";
+    case "commit":
+      return reviewTarget.commitShortSha
+        ? `Commit ${reviewTarget.commitShortSha}`
+        : "Commit";
+    case "working_tree":
+      return "Git changes";
+  }
 }
 
 export function fileDiffFromGit(file: GitLoadedFileDiff | GitFileDiffSummary): FileDiff {

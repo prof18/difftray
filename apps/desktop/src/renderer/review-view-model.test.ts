@@ -58,6 +58,16 @@ describe("review target labels", () => {
     ).toBe("against origin/main");
     expect(
       diffTargetLabel({
+        commitSha: "1111111111111111111111111111111111111111",
+        commitShortSha: "1111111",
+        commitSubject: "Change selected file",
+        headSha: "1111111111111111111111111111111111111111",
+        id: "target-commit",
+        kind: "commit"
+      })
+    ).toBe("commit 1111111");
+    expect(
+      diffTargetLabel({
         headSha: "abc123",
         id: "target-working-tree",
         kind: "working_tree"

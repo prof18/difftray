@@ -7,6 +7,8 @@ export function runMigrations(db: DatabaseSync): void {
       name text not null,
       path text not null unique,
       default_base_ref text,
+      default_commit_ref text,
+      default_diff_target_mode text not null default 'working_tree',
       created_at text not null,
       updated_at text not null,
       last_opened_at text
@@ -18,9 +20,13 @@ export function runMigrations(db: DatabaseSync): void {
       mode text not null,
       base_ref_name text,
       base_ref_sha text,
+      commit_sha text,
+      commit_short_sha text,
+      commit_subject text,
       head_ref_name text,
       head_ref_sha text,
       merge_base_sha text,
+      parent_sha text,
       head_kind text not null,
       created_at text not null,
       last_used_at text not null,
@@ -29,9 +35,11 @@ export function runMigrations(db: DatabaseSync): void {
         mode,
         base_ref_name,
         base_ref_sha,
+        commit_sha,
         head_ref_name,
         head_ref_sha,
         merge_base_sha,
+        parent_sha,
         head_kind
       )
     );
@@ -86,6 +94,22 @@ export function runMigrations(db: DatabaseSync): void {
       updated_at text not null
     );
   `);
+  ensureProjectColumn(db, "default_commit_ref", "text");
+  ensureProjectColumn(
+    db,
+    "default_diff_target_mode",
+    "text not null default 'working_tree'"
+  );
+  db.exec(`
+    update projects
+    set default_diff_target_mode = 'branch'
+    where default_base_ref is not null
+      and default_diff_target_mode = 'working_tree'
+  `);
+  ensureReviewTargetColumn(db, "commit_sha", "text");
+  ensureReviewTargetColumn(db, "commit_short_sha", "text");
+  ensureReviewTargetColumn(db, "commit_subject", "text");
+  ensureReviewTargetColumn(db, "parent_sha", "text");
   ensureProjectSettingsColumn(db, "file_list_width", "integer not null default 340");
   ensureProjectSettingsColumn(db, "file_list_collapsed", "integer not null default 0");
   ensureProjectSettingsColumn(db, "default_diff_mode", "text not null default 'split'");
@@ -107,13 +131,38 @@ export function runMigrations(db: DatabaseSync): void {
   );
 }
 
+function ensureProjectColumn(
+  db: DatabaseSync,
+  columnName: string,
+  columnDefinition: string
+): void {
+  ensureColumn(db, "projects", columnName, columnDefinition);
+}
+
 function ensureProjectSettingsColumn(
   db: DatabaseSync,
   columnName: string,
   columnDefinition: string
 ): void {
+  ensureColumn(db, "project_settings", columnName, columnDefinition);
+}
+
+function ensureReviewTargetColumn(
+  db: DatabaseSync,
+  columnName: string,
+  columnDefinition: string
+): void {
+  ensureColumn(db, "review_targets", columnName, columnDefinition);
+}
+
+function ensureColumn(
+  db: DatabaseSync,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string
+): void {
   const rows = db
-    .prepare("pragma table_info(project_settings)")
+    .prepare(`pragma table_info(${tableName})`)
     .all() as unknown as readonly {
     readonly name: string;
   }[];
@@ -122,5 +171,5 @@ function ensureProjectSettingsColumn(
     return;
   }
 
-  db.exec(`alter table project_settings add column ${columnName} ${columnDefinition}`);
+  db.exec(`alter table ${tableName} add column ${columnName} ${columnDefinition}`);
 }

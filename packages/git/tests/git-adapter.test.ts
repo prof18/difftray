@@ -20,10 +20,15 @@ import {
   getGitStatus,
   getWorktreeInfo,
   listBranchRefs,
+  listRecentCommits,
   loadBranchDiffs,
   loadBranchDiffSummaries,
   loadBranchFileDiff,
   loadBranchFileDiffSummary,
+  loadCommitDiffs,
+  loadCommitDiffSummaries,
+  loadCommitFileDiff,
+  loadCommitFileDiffSummary,
   loadWorkingTreeDiffs,
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiff,
@@ -831,6 +836,101 @@ describe("branch diff loading", () => {
 
     await expect(loadBranchDiffs(repo, "missing/base")).rejects.toThrow(
       /Unable to resolve base ref/
+    );
+  });
+});
+
+describe("commit diff loading", () => {
+  it("lists recent commits for commit selection with a bounded limit", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "second\n");
+    await git(repo, "commit", "-am", "second commit");
+    const secondSha = await gitOutput(repo, "rev-parse", "HEAD");
+    const secondShortSha = await gitOutput(repo, "rev-parse", "--short=12", "HEAD");
+    const secondAuthoredAt = await gitOutput(repo, "show", "-s", "--format=%aI", "HEAD");
+    await writeFile(path.join(repo, "tracked.txt"), "third\n");
+    await git(repo, "commit", "-am", "third commit");
+    const thirdSha = await gitOutput(repo, "rev-parse", "HEAD");
+    const thirdAuthoredAt = await gitOutput(repo, "show", "-s", "--format=%aI", "HEAD");
+
+    await expect(listRecentCommits(repo, { limit: 2 })).resolves.toEqual([
+      {
+        authoredAt: thirdAuthoredAt,
+        sha: thirdSha,
+        shortSha: expect.any(String),
+        subject: "third commit"
+      },
+      {
+        authoredAt: secondAuthoredAt,
+        sha: secondSha,
+        shortSha: secondShortSha,
+        subject: "second commit"
+      }
+    ]);
+  });
+
+  it("compares the selected commit against its first parent", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "commit target\n");
+    await git(repo, "commit", "-am", "change tracked for commit review");
+    const commitSha = await gitOutput(repo, "rev-parse", "HEAD");
+    const commitShortSha = await gitOutput(repo, "rev-parse", "--short=12", "HEAD");
+    const parentSha = await gitOutput(repo, "rev-parse", "HEAD^");
+
+    const result = await loadCommitDiffs(repo, commitSha);
+
+    expect(result.reviewTarget).toEqual({
+      commitSha,
+      commitShortSha,
+      commitSubject: "change tracked for commit review",
+      headSha: commitSha,
+      kind: "commit",
+      parentSha,
+      projectId: repo
+    });
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          patch: expect.stringContaining("+commit target")
+        }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+  });
+
+  it("loads commit summaries separately from selected file details", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "commit summary\n");
+    await git(repo, "commit", "-am", "commit summary");
+    const commitSha = await gitOutput(repo, "rev-parse", "HEAD");
+
+    const summary = await loadCommitDiffSummaries(repo, commitSha);
+    const selectedSummary = await loadCommitFileDiffSummary(
+      repo,
+      commitSha,
+      "tracked.txt"
+    );
+    const detail = await loadCommitFileDiff(repo, commitSha, "tracked.txt");
+
+    expect(summary.files).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({ kind: "binary" }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
+    ]);
+    expect(selectedSummary).toEqual(summary.files[0]);
+    expect(detail).toEqual(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          kind: "text",
+          patch: expect.stringContaining("+commit summary")
+        }),
+        newPath: "tracked.txt",
+        status: "modified"
+      })
     );
   });
 });

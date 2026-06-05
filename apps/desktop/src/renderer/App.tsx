@@ -85,6 +85,7 @@ type ReviewNavigationPerformance = {
 
 type WorkspaceCacheEntry = {
   readonly branchRefs: readonly string[];
+  readonly recentCommits: readonly RecentCommitView[];
   readonly projectSettings: ProjectSettingsView;
   readonly workspace: ReviewWorkspaceView;
 };
@@ -92,6 +93,7 @@ type WorkspaceCacheEntry = {
 type ApplyWorkspaceOptions = {
   readonly appSettings?: AppSettingsView;
   readonly branchRefs?: readonly string[];
+  readonly recentCommits?: readonly RecentCommitView[];
   readonly projectSettings?: ProjectSettingsView;
 };
 
@@ -101,6 +103,7 @@ export function App(): React.JSX.Element {
     useState<AppSettingsView>(defaultAppSettings);
   const [baseRefDraft, setBaseRefDraft] = useState("");
   const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
+  const [commitRefDraft, setCommitRefDraft] = useState("");
   const [commentDraft, setCommentDraft] = useState<ReviewCommentDraft | undefined>();
   const [commentSavePending, setCommentSavePending] = useState<
     CommentSavePending | undefined
@@ -115,6 +118,7 @@ export function App(): React.JSX.Element {
   const [fileListWidth, setFileListWidth] = useState(340);
   const [hasBootstrapped, setHasBootstrapped] = useState(false);
   const [loadingDiffPath, setLoadingDiffPath] = useState<string | undefined>();
+  const [recentCommits, setRecentCommits] = useState<readonly RecentCommitView[]>([]);
   const [visibleLoadingDiffPath, setVisibleLoadingDiffPath] = useState<
     string | undefined
   >();
@@ -560,6 +564,7 @@ export function App(): React.JSX.Element {
         setWorkspace(nextWorkspace);
         workspaceCacheRef.current.set(projectId, {
           branchRefs,
+          recentCommits,
           projectSettings,
           workspace: nextWorkspace
         });
@@ -578,7 +583,7 @@ export function App(): React.JSX.Element {
         );
       }
     },
-    [branchRefs, projectSettings]
+    [branchRefs, projectSettings, recentCommits]
   );
 
   useEffect(() => {
@@ -842,18 +847,22 @@ export function App(): React.JSX.Element {
       detail: workspaceToApply.project.name,
       title: "Preparing workspace"
     });
-    const [nextSettings, nextBranchRefs] = await Promise.all([
+    const [nextSettings, nextBranchRefs, nextRecentCommits] = await Promise.all([
       options.projectSettings
         ? Promise.resolve(options.projectSettings)
         : window.difftray.getProjectSettings(workspaceToApply.project.id),
       options.branchRefs
         ? Promise.resolve(options.branchRefs)
-        : window.difftray.listProjectBranchRefs(workspaceToApply.project.id)
+        : window.difftray.listProjectBranchRefs(workspaceToApply.project.id),
+      options.recentCommits
+        ? Promise.resolve(options.recentCommits)
+        : window.difftray.listProjectRecentCommits(workspaceToApply.project.id)
     ]);
     const nextAppSettings = options.appSettings ?? appSettings;
 
     workspaceCacheRef.current.set(workspaceToApply.project.id, {
       branchRefs: nextBranchRefs,
+      recentCommits: nextRecentCommits,
       projectSettings: nextSettings,
       workspace: workspaceToApply
     });
@@ -861,10 +870,16 @@ export function App(): React.JSX.Element {
     setWorkspace(workspaceToApply);
     setProjectSettings(nextSettings);
     setBranchRefs(nextBranchRefs);
+    setRecentCommits(nextRecentCommits);
     setBaseRefDraft(
       workspaceToApply.reviewTarget.baseRefName ??
         suggestedBaseRef(nextBranchRefs, workspaceToApply.reviewTarget.headRefName) ??
         ""
+    );
+    setCommitRefDraft(
+      workspaceToApply.reviewTarget.kind === "commit"
+        ? (workspaceToApply.reviewTarget.commitSha ?? "")
+        : (nextRecentCommits[0]?.sha ?? "")
     );
     setDiffMode(nextAppSettings.defaultDiffMode);
     setFileListWidth(nextSettings.fileListWidth);
@@ -916,9 +931,10 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      const [nextSettings, nextBranchRefs] = await Promise.all([
+      const [nextSettings, nextBranchRefs, nextRecentCommits] = await Promise.all([
         window.difftray.getProjectSettings(nextWorkspace.project.id),
-        window.difftray.listProjectBranchRefs(nextWorkspace.project.id)
+        window.difftray.listProjectBranchRefs(nextWorkspace.project.id),
+        window.difftray.listProjectRecentCommits(nextWorkspace.project.id)
       ]);
 
       if (!canApplySilentWorkspaceRefresh(projectId, requestApplyVersion)) {
@@ -927,6 +943,7 @@ export function App(): React.JSX.Element {
 
       await applyWorkspace(nextWorkspace, selectedPathRef.current, {
         branchRefs: nextBranchRefs,
+        recentCommits: nextRecentCommits,
         projectSettings: nextSettings
       });
       await refreshRecentProjects();
@@ -1018,6 +1035,7 @@ export function App(): React.JSX.Element {
         selectedPathByProjectRef.current.get(projectId),
         {
           branchRefs: cachedWorkspace.branchRefs,
+          recentCommits: cachedWorkspace.recentCommits,
           projectSettings: cachedWorkspace.projectSettings
         }
       );
@@ -1287,6 +1305,7 @@ export function App(): React.JSX.Element {
       setProjectSettings(savedSettings);
       workspaceCacheRef.current.set(workspace.project.id, {
         branchRefs,
+        recentCommits,
         projectSettings: savedSettings,
         workspace
       });
@@ -1339,14 +1358,14 @@ export function App(): React.JSX.Element {
 
   async function setProjectDiffTarget(
     mode: ReviewDiffTargetMode,
-    baseRefName?: string
+    refName?: string
   ): Promise<void> {
     if (!workspace) {
       return;
     }
 
     if (mode === "branch") {
-      const nextBaseRef = (baseRefName ?? baseRefDraft).trim();
+      const nextBaseRef = (refName ?? baseRefDraft).trim();
 
       if (nextBaseRef.length === 0) {
         setError("Choose a base branch before switching to branch diff.");
@@ -1364,6 +1383,31 @@ export function App(): React.JSX.Element {
         selectedFile?.path,
         {
           detail: nextBaseRef,
+          title: "Switching diff target"
+        }
+      );
+      return;
+    }
+
+    if (mode === "commit") {
+      const nextCommitRef = (refName ?? commitRefDraft).trim();
+
+      if (nextCommitRef.length === 0) {
+        setError("Choose a commit before switching to commit diff.");
+        return;
+      }
+
+      setCommitRefDraft(nextCommitRef);
+      await runWorkspaceLoad(
+        () =>
+          window.difftray.updateProjectDiffTarget({
+            commitRef: nextCommitRef,
+            mode: "commit",
+            projectId: workspace.project.id
+          }),
+        selectedFile?.path,
+        {
+          detail: nextCommitRef,
           title: "Switching diff target"
         }
       );
@@ -1452,6 +1496,7 @@ export function App(): React.JSX.Element {
     workspaceRef.current = optimisticWorkspace;
     workspaceCacheRef.current.set(optimisticWorkspace.project.id, {
       branchRefs,
+      recentCommits,
       projectSettings,
       workspace: optimisticWorkspace
     });
@@ -1530,6 +1575,7 @@ export function App(): React.JSX.Element {
       );
       workspaceCacheRef.current.set(nextWorkspace.project.id, {
         branchRefs,
+        recentCommits,
         projectSettings,
         workspace: nextWorkspace
       });
@@ -1598,6 +1644,7 @@ export function App(): React.JSX.Element {
       );
       workspaceCacheRef.current.set(nextWorkspace.project.id, {
         branchRefs,
+        recentCommits,
         projectSettings,
         workspace: nextWorkspace
       });
@@ -1665,6 +1712,7 @@ export function App(): React.JSX.Element {
 
       workspaceCacheRef.current.set(nextWorkspace.project.id, {
         branchRefs,
+        recentCommits,
         projectSettings,
         workspace: nextWorkspace
       });
@@ -1980,12 +2028,17 @@ export function App(): React.JSX.Element {
                   attentionCount={attentionFiles.length}
                   baseRefDraft={baseRefDraft}
                   branchRefs={branchRefs}
+                  commitRefDraft={commitRefDraft}
                   disabled={loadState === "loading"}
                   files={visibleFiles}
                   onBaseRefDraftChange={setBaseRefDraft}
+                  onCommitRefDraftChange={setCommitRefDraft}
                   onCollapse={toggleFileListCollapsed}
                   onUseBranchDiff={(baseRefName) => {
                     void setProjectDiffTarget("branch", baseRefName);
+                  }}
+                  onUseCommitDiff={(commitRef) => {
+                    void setProjectDiffTarget("commit", commitRef);
                   }}
                   onUseWorkingTreeDiff={() => {
                     void setProjectDiffTarget("working_tree");
@@ -1994,6 +2047,7 @@ export function App(): React.JSX.Element {
                     void refreshWorkspace();
                   }}
                   progress={workspace.progress}
+                  recentCommits={recentCommits}
                   reviewTarget={workspace.reviewTarget}
                 />
                 <FileList

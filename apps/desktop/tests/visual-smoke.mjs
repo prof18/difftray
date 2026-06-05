@@ -120,14 +120,21 @@ try {
   await expectComboboxValue(window, /Appearance/, "light");
   await expectEditorChoice(window, "System default");
   await window.getByRole("button", { name: "Close settings" }).click();
-  await window.getByLabel("Compare against branch").selectOption("main");
+  await window.getByRole("button", { name: "Choose diff target" }).click();
+  await window.getByRole("dialog", { name: "Diff target" }).waitFor({
+    timeout: 10_000
+  });
+  await window.getByRole("tab", { name: "Branch" }).click();
+  await window.getByLabel("Search branches").fill("main");
+  await window.getByRole("option", { name: "main" }).click();
   await window.getByText("against main").waitFor({ timeout: 10_000 });
-  await expectComboboxValue(window, "Compare against branch", "main");
-  await window.getByRole("button", { name: "Reset to Git changes" }).click();
+  await expectDiffTargetLabel(window, "main");
+  await window.getByRole("button", { name: "Choose diff target" }).click();
+  await window.getByRole("tab", { name: "Git changes" }).click();
   await window
     .getByRole("button", { name: /schema\.generated\.ts/ })
     .waitFor({ timeout: 10_000 });
-  await expectComboboxValue(window, "Compare against branch", "");
+  await expectDiffTargetLabel(window, "Git changes");
   await expectButtonEnabled(window, "Mark reviewed");
   await window.getByRole("button", { name: "Hide file list" }).click();
   await window.getByRole("button", { name: "Show file list" }).waitFor({
@@ -690,6 +697,16 @@ async function expectComboboxValue(window, name, expectedValue) {
   if (actualValue !== expectedValue) {
     throw new Error(`Expected combobox to be ${expectedValue}, got ${actualValue}`);
   }
+}
+
+async function expectDiffTargetLabel(window, expectedLabel) {
+  await window.waitForFunction((targetLabel) => {
+    const button = [...document.querySelectorAll("button")].find(
+      (candidate) => candidate.getAttribute("aria-label") === "Choose diff target"
+    );
+
+    return button?.textContent?.trim() === targetLabel;
+  }, expectedLabel);
 }
 
 async function expectSettingsDiffModeSelector(window, expectedMode) {

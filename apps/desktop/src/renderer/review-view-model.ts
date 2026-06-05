@@ -1,7 +1,7 @@
 import type { DiffSideFocus } from "./diffs-renderer.js";
 
 export type DiffMode = "split" | "unified";
-export type ReviewDiffTargetMode = "branch" | "working_tree";
+export type ReviewDiffTargetMode = "branch" | "commit" | "working_tree";
 export type ReviewState = "attention" | "pending" | "reviewed" | "unknown";
 export type FileListHeaderMetrics = {
   readonly attentionCount: number;
@@ -45,6 +45,10 @@ export function visiblePathOrFirst(
 export function diffTargetLabel(target: ReviewWorkspaceView["reviewTarget"]): string {
   if (target.kind === "branch") {
     return `against ${target.baseRefName ?? "base"}`;
+  }
+
+  if (target.kind === "commit") {
+    return `commit ${target.commitShortSha ?? target.commitSha ?? "selected"}`;
   }
 
   return target.headRefName ?? "worktree";

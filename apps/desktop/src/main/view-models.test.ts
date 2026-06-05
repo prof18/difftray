@@ -128,6 +128,25 @@ describe("project and review target views", () => {
     expect(reviewTargetFromRecord(branchRecord)).toEqual(branchTarget);
     expect(
       reviewTargetFromGit({
+        commitSha: "commit-sha",
+        commitShortSha: "commit",
+        commitSubject: "Change focused file",
+        headSha: "commit-sha",
+        kind: "commit",
+        parentSha: "parent-sha",
+        projectId: "project-1"
+      })
+    ).toEqual({
+      commitSha: "commit-sha",
+      commitShortSha: "commit",
+      commitSubject: "Change focused file",
+      headSha: "commit-sha",
+      kind: "commit",
+      parentSha: "parent-sha",
+      projectId: "project-1"
+    });
+    expect(
+      reviewTargetFromGit({
         headSha: "head-sha",
         kind: "working_tree",
         projectId: "project-1"
@@ -153,7 +172,46 @@ describe("project and review target views", () => {
     expect(reviewTargetLabel({ baseRefName: "origin/main", kind: "branch" })).toBe(
       "Against origin/main"
     );
+    expect(reviewTargetLabel({ commitShortSha: "abc1234", kind: "commit" })).toBe(
+      "Commit abc1234"
+    );
     expect(reviewTargetLabel({ kind: "working_tree" })).toBe("Git changes");
+  });
+
+  it("maps commit review targets between storage and core", () => {
+    const commitTarget = reviewTargetFromGit({
+      commitSha: "commit-sha",
+      commitShortSha: "commit",
+      commitSubject: "Change focused file",
+      headSha: "commit-sha",
+      kind: "commit",
+      parentSha: "parent-sha",
+      projectId: "project-1"
+    });
+    const commitRecord = reviewTargetRecord("target-commit", commitTarget);
+
+    expect(commitRecord).toEqual({
+      commitSha: "commit-sha",
+      commitShortSha: "commit",
+      commitSubject: "Change focused file",
+      headKind: "ref",
+      headRefSha: "commit-sha",
+      id: "target-commit",
+      mode: "commit",
+      parentSha: "parent-sha",
+      projectId: "project-1"
+    });
+    expect(reviewTargetFromRecord(commitRecord)).toEqual(commitTarget);
+    expect(
+      reviewTargetFromRecord({
+        commitSha: "commit-sha",
+        headKind: "ref",
+        headRefSha: "commit-sha",
+        id: "target-commit",
+        mode: "commit",
+        projectId: "project-1"
+      })
+    ).toBeUndefined();
   });
 });
 

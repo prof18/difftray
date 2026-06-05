@@ -23,16 +23,27 @@ export function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
       name,
       path,
       default_base_ref,
+      default_commit_ref,
+      default_diff_target_mode,
       created_at,
       updated_at,
       last_opened_at
-    ) values (?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(id) do update set
       name = excluded.name,
       path = excluded.path,
       default_base_ref = case
         when excluded.default_base_ref is null then projects.default_base_ref
         else excluded.default_base_ref
+      end,
+      default_commit_ref = case
+        when excluded.default_commit_ref is null then projects.default_commit_ref
+        else excluded.default_commit_ref
+      end,
+      default_diff_target_mode = case
+        when excluded.default_diff_target_mode = 'working_tree'
+          then projects.default_diff_target_mode
+        else excluded.default_diff_target_mode
       end,
       updated_at = excluded.updated_at,
       last_opened_at = excluded.last_opened_at
@@ -42,25 +53,54 @@ export function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
     project.name,
     project.path,
     project.defaultBaseRef ?? null,
+    project.defaultCommitRef ?? null,
+    project.defaultDiffTargetMode ??
+      (project.defaultCommitRef
+        ? "commit"
+        : project.defaultBaseRef
+          ? "branch"
+          : "working_tree"),
     now,
     now,
     project.lastOpenedAt ?? null
   );
 }
 
-export function updateProjectDefaultBaseRef(
+export function updateProjectDefaultDiffTarget(
   db: DatabaseSync,
   projectId: string,
-  defaultBaseRef: string | undefined
+  target:
+    | {
+        readonly mode: "branch";
+        readonly ref: string;
+      }
+    | {
+        readonly mode: "commit";
+        readonly ref: string;
+      }
+    | {
+        readonly mode: "working_tree";
+      }
 ): void {
+  const defaultBaseRef = target.mode === "branch" ? target.ref : undefined;
+  const defaultCommitRef = target.mode === "commit" ? target.ref : undefined;
+
   db.prepare(
     `
       update projects
       set default_base_ref = ?,
+          default_commit_ref = ?,
+          default_diff_target_mode = ?,
           updated_at = ?
       where id = ?
     `
-  ).run(defaultBaseRef ?? null, currentTimestamp(), projectId);
+  ).run(
+    defaultBaseRef ?? null,
+    defaultCommitRef ?? null,
+    target.mode,
+    currentTimestamp(),
+    projectId
+  );
 }
 
 export function deleteProject(db: DatabaseSync, projectId: string): void {
@@ -108,21 +148,29 @@ export function upsertReviewTarget(db: DatabaseSync, target: ReviewTargetRecord)
       mode,
       base_ref_name,
       base_ref_sha,
+      commit_sha,
+      commit_short_sha,
+      commit_subject,
       head_ref_name,
       head_ref_sha,
       merge_base_sha,
+      parent_sha,
       head_kind,
       created_at,
       last_used_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(id) do update set
       project_id = excluded.project_id,
       mode = excluded.mode,
       base_ref_name = excluded.base_ref_name,
       base_ref_sha = excluded.base_ref_sha,
+      commit_sha = excluded.commit_sha,
+      commit_short_sha = excluded.commit_short_sha,
+      commit_subject = excluded.commit_subject,
       head_ref_name = excluded.head_ref_name,
       head_ref_sha = excluded.head_ref_sha,
       merge_base_sha = excluded.merge_base_sha,
+      parent_sha = excluded.parent_sha,
       head_kind = excluded.head_kind,
       last_used_at = excluded.last_used_at
   `
@@ -132,9 +180,13 @@ export function upsertReviewTarget(db: DatabaseSync, target: ReviewTargetRecord)
     target.mode,
     target.baseRefName ?? null,
     target.baseRefSha ?? null,
+    target.commitSha ?? null,
+    target.commitShortSha ?? null,
+    target.commitSubject ?? null,
     target.headRefName ?? null,
     target.headRefSha ?? null,
     target.mergeBaseSha ?? null,
+    target.parentSha ?? null,
     target.headKind,
     now,
     now

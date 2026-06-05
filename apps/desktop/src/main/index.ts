@@ -34,6 +34,11 @@ import {
   loadBranchFileDiffSummary,
   loadBranchFileDiff,
   listBranchRefs,
+  listRecentCommits,
+  loadCommitReviewTarget,
+  loadCommitDiffSummaries,
+  loadCommitFileDiffSummary,
+  loadCommitFileDiff,
   loadWorkingTreeReviewTarget,
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiffSummary,
@@ -384,6 +389,18 @@ handleTrusted(
   }
 );
 handleTrusted(
+  "projects:listRecentCommits",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<Awaited<ReturnType<typeof listRecentCommits>>> => {
+    const projectId = readStringProperty(input, "projectId");
+    const project = assertStoredProject(projectId);
+
+    return listRecentCommits(project.path);
+  }
+);
+handleTrusted(
   "projects:close",
   async (
     _event: IpcMainInvokeEvent,
@@ -419,10 +436,14 @@ handleTrusted(
   "projects:updateDiffTarget",
   async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
     const projectId = readStringProperty(input, "projectId");
-    const mode = readEnumProperty(input, "mode", ["branch", "working_tree"]);
+    const mode = readEnumProperty(input, "mode", ["branch", "commit", "working_tree"]);
     const project = assertStoredProject(projectId);
     const reportProgress = projectLoadProgressReporter(event.sender, projectId);
-    const previousBaseRef = project.defaultBaseRef;
+    const previousTarget = {
+      defaultBaseRef: project.defaultBaseRef,
+      defaultCommitRef: project.defaultCommitRef,
+      defaultDiffTargetMode: project.defaultDiffTargetMode
+    };
 
     if (mode === "branch") {
       const baseRefName = readStringProperty(input, "baseRefName").trim();
@@ -431,15 +452,37 @@ handleTrusted(
         throw new Error("Base branch is required.");
       }
 
-      getStorage().updateProjectDefaultBaseRef(projectId, baseRefName);
+      getStorage().updateProjectDefaultDiffTarget(projectId, {
+        mode: "branch",
+        ref: baseRefName
+      });
+    } else if (mode === "commit") {
+      const commitRef = readStringProperty(input, "commitRef").trim();
+
+      if (commitRef.length === 0) {
+        throw new Error("Commit is required.");
+      }
+
+      getStorage().updateProjectDefaultDiffTarget(projectId, {
+        mode: "commit",
+        ref: commitRef
+      });
     } else {
-      getStorage().updateProjectDefaultBaseRef(projectId, undefined);
+      getStorage().updateProjectDefaultDiffTarget(projectId, { mode: "working_tree" });
     }
 
     try {
       return await loadProjectWorkspace(projectId, reportProgress);
     } catch (caughtError) {
-      getStorage().updateProjectDefaultBaseRef(projectId, previousBaseRef);
+      getStorage().updateProjectDefaultDiffTarget(
+        projectId,
+        previousTarget.defaultDiffTargetMode === "branch" && previousTarget.defaultBaseRef
+          ? { mode: "branch", ref: previousTarget.defaultBaseRef }
+          : previousTarget.defaultDiffTargetMode === "commit" &&
+              previousTarget.defaultCommitRef
+            ? { mode: "commit", ref: previousTarget.defaultCommitRef }
+            : { mode: "working_tree" }
+      );
       throw caughtError;
     }
   }
@@ -1212,9 +1255,16 @@ async function loadProjectReviewState(
       reportProgress?.(projectProgressFromGit(progress));
     }
   };
-  const diffResult = project.defaultBaseRef
-    ? await loadBranchDiffSummaries(project.path, project.defaultBaseRef, gitProgress)
-    : await loadWorkingTreeDiffSummaries(project.path, gitProgress);
+  const diffResult =
+    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
+      ? await loadBranchDiffSummaries(project.path, project.defaultBaseRef, gitProgress)
+      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
+        ? await loadCommitDiffSummaries(
+            project.path,
+            project.defaultCommitRef,
+            gitProgress
+          )
+        : await loadWorkingTreeDiffSummaries(project.path, gitProgress);
   const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
   const reviewTargetId = createReviewTargetId(reviewTarget);
   const settings = getStorage().getAppSettings();
@@ -1344,9 +1394,12 @@ async function loadProjectFileDiff(
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
-  const gitDiff = project.defaultBaseRef
-    ? await loadBranchFileDiff(project.path, project.defaultBaseRef, pathName)
-    : await loadWorkingTreeFileDiff(project.path, pathName);
+  const gitDiff =
+    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
+      ? await loadBranchFileDiff(project.path, project.defaultBaseRef, pathName)
+      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
+        ? await loadCommitFileDiff(project.path, project.defaultCommitRef, pathName)
+        : await loadWorkingTreeFileDiff(project.path, pathName);
 
   if (!gitDiff) {
     return null;
@@ -1485,7 +1538,9 @@ async function loadCurrentReviewFile(
   const summary =
     reviewTarget.kind === "branch"
       ? await loadBranchFileDiffSummary(project.path, reviewTarget.baseRefName, pathName)
-      : await loadWorkingTreeFileDiffSummary(project.path, pathName);
+      : reviewTarget.kind === "commit"
+        ? await loadCommitFileDiffSummary(project.path, reviewTarget.commitSha, pathName)
+        : await loadWorkingTreeFileDiffSummary(project.path, pathName);
 
   if (!summary) {
     return null;
@@ -1502,9 +1557,12 @@ async function loadCurrentReviewFile(
 async function loadCurrentProjectReviewTarget(
   project: StoredProjectRecord
 ): Promise<ReviewTarget> {
-  const target = project.defaultBaseRef
-    ? await loadBranchReviewTarget(project.path, project.defaultBaseRef)
-    : (await loadWorkingTreeReviewTarget(project.path)).reviewTarget;
+  const target =
+    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
+      ? await loadBranchReviewTarget(project.path, project.defaultBaseRef)
+      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
+        ? await loadCommitReviewTarget(project.path, project.defaultCommitRef)
+        : (await loadWorkingTreeReviewTarget(project.path)).reviewTarget;
 
   return reviewTargetFromGit(target);
 }

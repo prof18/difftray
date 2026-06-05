@@ -29,6 +29,16 @@ const branchTarget = {
   projectId: "project-a"
 } satisfies ReviewTarget;
 
+const commitTarget = {
+  commitSha: "6666666666666666666666666666666666666666",
+  commitShortSha: "6666666",
+  commitSubject: "Change focused file",
+  headSha: "6666666666666666666666666666666666666666",
+  kind: "commit",
+  parentSha: "5555555555555555555555555555555555555555",
+  projectId: "project-a"
+} satisfies ReviewTarget;
+
 const textDiff = {
   content: {
     kind: "text",
@@ -50,6 +60,15 @@ describe("review target identity", () => {
       createReviewTargetId({
         ...branchTarget,
         mergeBaseSha: "5555555555555555555555555555555555555555"
+      })
+    );
+  });
+
+  it("includes commit parent and selected commit identity", () => {
+    expect(createReviewTargetId(commitTarget)).not.toBe(
+      createReviewTargetId({
+        ...commitTarget,
+        parentSha: "7777777777777777777777777777777777777777"
       })
     );
   });

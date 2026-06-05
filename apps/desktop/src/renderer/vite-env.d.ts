@@ -21,6 +21,9 @@ declare global {
     ) => Promise<ProjectReviewSummaryView | null>;
     readonly listInstalledEditors: () => Promise<readonly EditorPresetView[]>;
     readonly listProjectBranchRefs: (projectId: string) => Promise<readonly string[]>;
+    readonly listProjectRecentCommits: (
+      projectId: string
+    ) => Promise<readonly RecentCommitView[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
     readonly loadFileDiff: (
       input: LoadFileDiffInput
@@ -81,11 +84,20 @@ declare global {
 
   type RecentProjectView = {
     readonly defaultBaseRef?: string;
+    readonly defaultCommitRef?: string;
+    readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
     readonly id: string;
     readonly lastOpenedAt?: string;
     readonly name: string;
     readonly path: string;
     readonly reviewSummary?: ProjectReviewSummaryView;
+  };
+
+  type RecentCommitView = {
+    readonly authoredAt: string;
+    readonly sha: string;
+    readonly shortSha: string;
+    readonly subject: string;
   };
 
   type LoadProjectOptions = {
@@ -189,10 +201,13 @@ declare global {
     readonly progress: ReviewProgressView;
     readonly reviewTarget: {
       readonly baseRefName?: string;
+      readonly commitSha?: string;
+      readonly commitShortSha?: string;
+      readonly commitSubject?: string;
       readonly headRefName?: string;
       readonly headSha: string;
       readonly id: string;
-      readonly kind: "branch" | "working_tree";
+      readonly kind: "branch" | "commit" | "working_tree";
     };
   };
 
@@ -324,6 +339,11 @@ declare global {
     | {
         readonly baseRefName: string;
         readonly mode: "branch";
+        readonly projectId: string;
+      }
+    | {
+        readonly commitRef: string;
+        readonly mode: "commit";
         readonly projectId: string;
       };
 
