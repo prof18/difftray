@@ -141,7 +141,7 @@
   z-index: 20;
   top: 34px;
   left: 0;
-  width: min(420px, calc(100vw - 24px));
+  width: min(420px, 100%, calc(100vw - 24px));
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -153,7 +153,9 @@
 
 .diffTargetTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(max-content, 1.35fr)
+    repeat(2, minmax(max-content, 1fr));
   gap: 2px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--panel);
@@ -170,6 +172,7 @@
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .diffTargetTab:hover {

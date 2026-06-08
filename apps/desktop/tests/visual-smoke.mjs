@@ -120,10 +120,13 @@ try {
   await expectComboboxValue(window, /Appearance/, "light");
   await expectEditorChoice(window, "System default");
   await window.getByRole("button", { name: "Close settings" }).click();
+  await resizeFilePane(window, 220);
   await window.getByRole("button", { name: "Choose diff target" }).click();
   await window.getByRole("dialog", { name: "Diff target" }).waitFor({
     timeout: 10_000
   });
+  await expectDiffTargetInsideFilePane(window);
+  await expectDiffTargetTabsSingleLine(window);
   await window.getByRole("tab", { name: "Branch" }).click();
   await window.getByLabel("Search branches").fill("main");
   await window.getByRole("option", { name: "main" }).click();
@@ -707,6 +710,57 @@ async function expectDiffTargetLabel(window, expectedLabel) {
 
     return button?.textContent?.trim() === targetLabel;
   }, expectedLabel);
+}
+
+async function expectDiffTargetInsideFilePane(window) {
+  await window.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-label="Diff target"]');
+    const filePane = document.querySelector('nav[aria-label="Changed files"]');
+
+    if (!(dialog instanceof HTMLElement) || !(filePane instanceof HTMLElement)) {
+      return false;
+    }
+
+    const dialogRect = dialog.getBoundingClientRect();
+    const filePaneRect = filePane.getBoundingClientRect();
+
+    return dialogRect.right <= filePaneRect.right + 0.5;
+  });
+}
+
+async function expectDiffTargetTabsSingleLine(window) {
+  await window.waitForFunction(() => {
+    const tabs = [
+      ...document.querySelectorAll(
+        '[role="tablist"][aria-label="Diff target type"] button'
+      )
+    ];
+
+    return (
+      tabs.length === 3 && tabs.every((tab) => tab.getBoundingClientRect().height <= 28)
+    );
+  });
+}
+
+async function resizeFilePane(window, targetWidth) {
+  const filePane = window.locator('nav[aria-label="Changed files"]');
+  const resizeHandle = window.getByRole("separator", { name: "Resize file list" });
+  const [filePaneBox, handleBox] = await Promise.all([
+    filePane.boundingBox(),
+    resizeHandle.boundingBox()
+  ]);
+
+  if (!filePaneBox || !handleBox) {
+    throw new Error("Unable to measure file pane resize handles");
+  }
+
+  const handleX = handleBox.x + handleBox.width / 2;
+  const handleY = handleBox.y + handleBox.height / 2;
+
+  await window.mouse.move(handleX, handleY);
+  await window.mouse.down();
+  await window.mouse.move(filePaneBox.x + targetWidth, handleY);
+  await window.mouse.up();
 }
 
 async function expectSettingsDiffModeSelector(window, expectedMode) {
