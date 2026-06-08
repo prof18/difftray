@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.4 - 2026-06-08
+
+### Added
+
+- Check for app updates once per day while Difftray remains open.
+- Added a manual update check action to the review toolbar.
+
+### Fixed
+
+- Kept downloaded updates ready to install even if a later automatic check runs.
+- Show update-check errors instead of reporting the app as up to date when the
+  updater cannot be loaded.
+
 ## 0.0.3 - 2026-06-08
 
 ### Fixed
