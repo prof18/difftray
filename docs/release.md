@@ -65,7 +65,17 @@ from. The repo must be public for `electron-updater` to fetch
 anonymously).
 
 ```sh
-pnpm release:upload -- v0.1.0
-pnpm release:upload -- v0.1.0 --draft
-pnpm release:upload -- v0.1.0 dev --draft
+./scripts/release-upload.sh v0.1.0
+./scripts/release-upload.sh v0.1.0 --draft
+./scripts/release-upload.sh v0.1.0 dev --draft
+```
+
+Use the script directly for uploads. With pnpm script argument forwarding, the
+`--` separator can be passed through to `release-upload.sh` as the tag value.
+
+After publishing, update the GitHub release notes from the matching
+`CHANGELOG.md` entry instead of leaving only the generated compare link:
+
+```sh
+gh release edit v0.1.0 --repo prof18/difftray --notes-file <release-notes.md>
 ```
