@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.3 - 2026-06-08
+
+### Fixed
+
+- Improved file-list sizing in narrow panes so diff targets remain readable and
+  aligned during local review.
+
 ## 0.0.2 - 2026-06-07
 
 ### Added
