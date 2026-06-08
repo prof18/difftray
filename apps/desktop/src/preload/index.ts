@@ -23,6 +23,7 @@ export {
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly checkForUpdates: () => Promise<UpdatePhase>;
   readonly getUpdatePhase: () => Promise<UpdatePhase>;
   readonly installAndRelaunch: () => Promise<void>;
   readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
@@ -351,6 +352,8 @@ export type UpdateAppSettingsInput = {
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  checkForUpdates: async () =>
+    ipcRenderer.invoke("updates:checkNow") as Promise<UpdatePhase>,
   getUpdatePhase: async () =>
     ipcRenderer.invoke("updates:getPhase") as Promise<UpdatePhase>,
   installAndRelaunch: async () =>

@@ -84,6 +84,7 @@ import {
   type AppRuntimeConfig
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
+import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
   appSettingsView,
@@ -139,6 +140,8 @@ let didConfigureAppRuntime = false;
 let isQuitting = false;
 let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
+let updateCheckScheduler: UpdateCheckScheduler | undefined;
+let updateCheckSchedulerPromise: Promise<UpdateCheckScheduler | undefined> | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
 
@@ -297,6 +300,11 @@ app.on("web-contents-created", (_event, contents) => {
 
 handleTrusted("app:version", () => app.getVersion());
 handleTrusted("updates:getPhase", (): UpdatePhase => updateState.phase);
+handleTrusted("updates:checkNow", async (): Promise<UpdatePhase> => {
+  await checkForUpdatesNow();
+
+  return updateState.phase;
+});
 handleTrusted("updates:installAndRelaunch", async (): Promise<void> => {
   if (resolvedAppRuntimeConfig?.variant !== "production") {
     return;
@@ -837,6 +845,8 @@ app.on("before-quit", () => {
   pendingProjectWatcherSync = undefined;
   void projectWatchService?.close();
   projectWatchService = undefined;
+  updateCheckScheduler?.stop();
+  updateCheckScheduler = undefined;
   storage?.close();
   storage = undefined;
 });
@@ -953,11 +963,47 @@ function scheduleAutoUpdaterWiring(): void {
   didWireAutoUpdater = true;
 
   setTimeout(() => {
-    void wireAutoUpdater();
+    void startAutoUpdaterChecks();
   }, 3_000);
 }
 
-async function wireAutoUpdater(): Promise<void> {
+async function checkForUpdatesNow(): Promise<void> {
+  if (resolvedAppRuntimeConfig?.variant !== "production") {
+    return;
+  }
+
+  const scheduler = await ensureAutoUpdaterScheduler();
+
+  if (!scheduler) {
+    throw new Error(
+      updateState.phase.kind === "error"
+        ? updateState.phase.message
+        : "Unable to check for updates."
+    );
+  }
+
+  await scheduler.checkNow();
+}
+
+async function startAutoUpdaterChecks(): Promise<void> {
+  const scheduler = await ensureAutoUpdaterScheduler();
+
+  scheduler?.start();
+}
+
+async function ensureAutoUpdaterScheduler(): Promise<UpdateCheckScheduler | undefined> {
+  if (updateCheckScheduler) {
+    return updateCheckScheduler;
+  }
+
+  updateCheckSchedulerPromise ??= wireAutoUpdater().finally(() => {
+    updateCheckSchedulerPromise = undefined;
+  });
+
+  return updateCheckSchedulerPromise;
+}
+
+async function wireAutoUpdater(): Promise<UpdateCheckScheduler | undefined> {
   const log = (await import("electron-log/main.js")).default;
 
   log.transports.file.level = "info";
@@ -968,9 +1014,13 @@ async function wireAutoUpdater(): Promise<void> {
   try {
     autoUpdater = await loadAutoUpdater();
   } catch (caughtError) {
+    const error =
+      caughtError instanceof Error ? caughtError : new Error(String(caughtError));
+
+    updateState.handleEvent({ kind: "error", message: error.message });
     log.error("autoUpdater failed to load:", caughtError);
     console.error("autoUpdater failed to load:", caughtError);
-    return;
+    return undefined;
   }
 
   autoUpdater.logger = log;
@@ -999,13 +1049,22 @@ async function wireAutoUpdater(): Promise<void> {
     handleUpdateEvent({ kind: "error", message: error.message })
   );
 
-  try {
-    log.info("autoUpdater checking for updates");
-    await autoUpdater.checkForUpdates();
-  } catch (caughtError) {
-    log.error("autoUpdater.checkForUpdates failed:", caughtError);
-    console.error("autoUpdater.checkForUpdates failed:", caughtError);
-  }
+  updateCheckScheduler = new UpdateCheckScheduler({
+    checkForUpdates: async () => {
+      try {
+        log.info("autoUpdater checking for updates");
+        await autoUpdater.checkForUpdates();
+      } catch (caughtError) {
+        const error =
+          caughtError instanceof Error ? caughtError : new Error(String(caughtError));
+        handleUpdateEvent({ kind: "error", message: error.message });
+        log.error("autoUpdater.checkForUpdates failed:", caughtError);
+        console.error("autoUpdater.checkForUpdates failed:", caughtError);
+      }
+    }
+  });
+
+  return updateCheckScheduler;
 }
 
 function getStorage(): DifftrayStorage {

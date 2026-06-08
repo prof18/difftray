@@ -305,6 +305,10 @@
   animation: loadingSpin 900ms linear infinite;
 }
 
+.spinningIcon {
+  animation: loadingSpin 900ms linear infinite;
+}
+
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .iconButton:disabled {

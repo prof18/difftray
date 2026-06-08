@@ -18,12 +18,14 @@ describe("diff toolbar components", () => {
           deletions: 4,
           invalidated: true
         })}
+        onCheckForUpdates={vi.fn()}
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
         onToggleReviewed={vi.fn()}
         refName="against origin/main"
         reportCommentCount={3}
+        updatePhase={{ kind: "idle" }}
       />
     );
 
@@ -34,6 +36,7 @@ describe("diff toolbar components", () => {
     expect(html).toContain("+7");
     expect(html).toContain("-4");
     expect(html).toContain("Copy comments report");
+    expect(html).toContain('aria-label="Check for updates"');
     expect(html).toContain('aria-label="Diff side focus"');
     expect(html).toContain('aria-label="Show new version"');
     expect(html).toContain('data-active="true"');
@@ -50,19 +53,47 @@ describe("diff toolbar components", () => {
         diffSideFocus="both"
         disabled={true}
         file={reviewFile("README.md", { reviewed: true })}
+        onCheckForUpdates={vi.fn()}
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
         onToggleReviewed={vi.fn()}
         refName="worktree"
         reportCommentCount={1}
+        updatePhase={{ kind: "checking" }}
       />
     );
 
     expect(html).not.toContain('aria-label="Diff side focus"');
-    expect(html).toContain('aria-busy="true"');
     expect(html).toContain("Generating message");
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('aria-label="Checking for updates"');
     expect(html).toContain("Unmark reviewed");
+    expect(html).toContain('disabled=""');
+  });
+
+  it("disables update checks when an update is ready to install", () => {
+    const html = renderToStaticMarkup(
+      <DiffToolbar
+        commentCount={0}
+        copyDisabled={false}
+        copyPending={false}
+        diffMode="split"
+        diffSideFocus="both"
+        disabled={false}
+        file={reviewFile("README.md")}
+        onCheckForUpdates={vi.fn()}
+        onCopyCommentsReport={vi.fn()}
+        onDiffSideFocusChange={vi.fn()}
+        onOpenEditor={vi.fn()}
+        onToggleReviewed={vi.fn()}
+        refName="worktree"
+        reportCommentCount={0}
+        updatePhase={{ kind: "downloaded", version: "1.2.3" }}
+      />
+    );
+
+    expect(html).toContain('aria-label="Update ready to install"');
     expect(html).toContain('disabled=""');
   });
 

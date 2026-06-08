@@ -5,6 +5,7 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly checkForUpdates: () => Promise<UpdatePhase>;
     readonly getUpdatePhase: () => Promise<UpdatePhase>;
     readonly installAndRelaunch: () => Promise<void>;
     readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;

@@ -64,6 +64,10 @@ from. The repo must be public for `electron-updater` to fetch
 `latest-mac.yml` and the `.zip` artifacts (the in-app updater authenticates
 anonymously).
 
+Production builds check this feed shortly after launch, every 24 hours while the
+app remains open, and whenever the user presses the review toolbar update check
+button.
+
 ```sh
 ./scripts/release-upload.sh v0.1.0
 ./scripts/release-upload.sh v0.1.0 --draft

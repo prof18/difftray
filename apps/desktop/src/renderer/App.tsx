@@ -1908,6 +1908,24 @@ export function App(): React.JSX.Element {
     }
   }
 
+  async function checkForUpdates(): Promise<void> {
+    setError(undefined);
+
+    try {
+      const phase = await window.difftray.checkForUpdates();
+
+      setUpdatePhase(phase);
+
+      if (phase.kind === "idle") {
+        setCommentToast("Difftray is up to date");
+      } else if (phase.kind === "error") {
+        setError(phase.message);
+      }
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
   async function deleteComment(commentId: string): Promise<void> {
     setError(undefined);
 
@@ -2137,6 +2155,9 @@ export function App(): React.JSX.Element {
                     diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
                     file={selectedFile}
+                    onCheckForUpdates={() => {
+                      void checkForUpdates();
+                    }}
                     onCopyCommentsReport={() => {
                       void copyReviewCommentsReport();
                     }}
@@ -2149,6 +2170,7 @@ export function App(): React.JSX.Element {
                     }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
                     reportCommentCount={workspace.comments.length}
+                    updatePhase={updatePhase}
                   />
                   {selectedFile.patch ? (
                     <DiffSurface

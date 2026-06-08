@@ -47,6 +47,10 @@ export function nextUpdatePhase(
   previousPhase: UpdatePhase,
   event: UpdateEvent
 ): UpdatePhase {
+  if (previousPhase.kind === "downloaded" && event.kind !== "downloaded") {
+    return previousPhase;
+  }
+
   switch (event.kind) {
     case "checking":
       return { kind: "checking" };

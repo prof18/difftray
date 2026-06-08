@@ -27,6 +27,16 @@ describe("UpdateState", () => {
     });
   });
 
+  it("keeps a downloaded update ready across later check events", () => {
+    const downloaded = { kind: "downloaded", version: "0.1.0" } as const;
+
+    expect(nextUpdatePhase(downloaded, { kind: "checking" })).toEqual(downloaded);
+    expect(nextUpdatePhase(downloaded, { kind: "not-available" })).toEqual(downloaded);
+    expect(nextUpdatePhase(downloaded, { kind: "error", message: "offline" })).toEqual(
+      downloaded
+    );
+  });
+
   it("surfaces errors and can recover on a later check", () => {
     let phase = nextUpdatePhase(
       { kind: "checking" },
