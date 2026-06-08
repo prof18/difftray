@@ -26,7 +26,12 @@ import {
 import { DiffSurface } from "./diff-surface.js";
 import { DiffLoadingState, DiffToolbar } from "./diff-toolbar.js";
 import { CollapsedRail, FileList, FileListHeader } from "./file-list.js";
-import { DriftToast, EmptyState, SimpleToast } from "./app-status-views.js";
+import {
+  DriftToast,
+  EmptyState,
+  SimpleToast,
+  UpdateRestartBanner
+} from "./app-status-views.js";
 import { mergeProjectTabs, reorderProjectTabs } from "./project-tabs.js";
 import { ProjectTabBar } from "./project-tab-bar.js";
 import { LoadingProgress, TabLoadBanner } from "./workspace-loading.js";
@@ -144,6 +149,7 @@ export function App(): React.JSX.Element {
     string | undefined
   >();
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
+  const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: "idle" });
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
   const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
@@ -224,6 +230,30 @@ export function App(): React.JSX.Element {
       selectedPathByProjectRef.current.set(workspace.project.id, selectedPath);
     }
   }, [selectedPath, workspace]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.difftray
+      .getUpdatePhase()
+      .then((phase) => {
+        if (!cancelled) {
+          setUpdatePhase(phase);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        console.error("Failed to read update phase", caughtError);
+      });
+
+    const unsubscribe = window.difftray.onUpdatePhase((phase) => {
+      setUpdatePhase(phase);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!commentToast) {
@@ -1870,6 +1900,14 @@ export function App(): React.JSX.Element {
     );
   }
 
+  async function installDownloadedUpdate(): Promise<void> {
+    try {
+      await window.difftray.installAndRelaunch();
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
   async function deleteComment(commentId: string): Promise<void> {
     setError(undefined);
 
@@ -2005,6 +2043,15 @@ export function App(): React.JSX.Element {
             <X size={14} aria-hidden />
           </button>
         </div>
+      ) : null}
+
+      {updatePhase.kind === "downloaded" ? (
+        <UpdateRestartBanner
+          onRestart={() => {
+            void installDownloadedUpdate();
+          }}
+          version={updatePhase.version}
+        />
       ) : null}
 
       {workspace ? (

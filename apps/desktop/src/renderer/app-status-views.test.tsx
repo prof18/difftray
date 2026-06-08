@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { DriftToast, EmptyState, SimpleToast } from "./app-status-views.js";
+import {
+  DriftToast,
+  EmptyState,
+  SimpleToast,
+  UpdateRestartBanner
+} from "./app-status-views.js";
 
 describe("app status views", () => {
   it("renders the empty repository state with recent projects capped", () => {
@@ -62,6 +67,17 @@ describe("app status views", () => {
 
     expect(html).toContain('role="status"');
     expect(html).toContain("Saved review state");
+  });
+
+  it("renders the downloaded update restart banner", () => {
+    const html = renderToStaticMarkup(
+      <UpdateRestartBanner onRestart={vi.fn()} version="1.2.3" />
+    );
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Update ready");
+    expect(html).toContain("Difftray 1.2.3 is ready.");
+    expect(html).toContain("Restart to update");
   });
 });
 

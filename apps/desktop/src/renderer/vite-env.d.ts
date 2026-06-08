@@ -5,6 +5,9 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly getUpdatePhase: () => Promise<UpdatePhase>;
+    readonly installAndRelaunch: () => Promise<void>;
+    readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly copyReviewCommentsReport: (
       input: CopyReviewCommentsReportInput
@@ -140,6 +143,16 @@ declare global {
   };
 
   type ProjectLoadProgressListener = (progress: ProjectLoadProgressView) => void;
+
+  type UpdatePhase =
+    | { readonly kind: "idle" }
+    | { readonly kind: "checking" }
+    | { readonly kind: "available"; readonly version: string }
+    | { readonly kind: "downloading"; readonly percent: number; readonly version: string }
+    | { readonly kind: "downloaded"; readonly version: string }
+    | { readonly kind: "error"; readonly message: string };
+
+  type UpdatePhaseListener = (phase: UpdatePhase) => void;
 
   type ReviewProgressView = {
     readonly reviewedVisibleFiles: number;

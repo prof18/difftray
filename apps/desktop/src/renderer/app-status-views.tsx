@@ -6,6 +6,7 @@ import {
   Diff,
   Folder,
   FolderOpen,
+  RefreshCw,
   X
 } from "lucide-react";
 
@@ -143,6 +144,30 @@ export function SimpleToast({
     <aside className={styles.simpleToast} role="status">
       <Check size={15} strokeWidth={1.5} aria-hidden />
       <span>{message}</span>
+    </aside>
+  );
+}
+
+export function UpdateRestartBanner({
+  onRestart,
+  version
+}: {
+  readonly onRestart: () => void;
+  readonly version: string;
+}): React.JSX.Element {
+  return (
+    <aside className={styles.updateBanner} role="status">
+      <div className={styles.updateIcon}>
+        <RefreshCw size={15} strokeWidth={1.5} aria-hidden />
+      </div>
+      <div className={styles.updateContent}>
+        <strong>Update ready</strong>
+        <span>Difftray {version} is ready.</span>
+      </div>
+      <button className={styles.primaryButton} onClick={onRestart} type="button">
+        <RefreshCw size={14} strokeWidth={1.5} aria-hidden />
+        Restart to update
+      </button>
     </aside>
   );
 }

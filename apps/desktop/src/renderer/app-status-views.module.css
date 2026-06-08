@@ -236,6 +236,62 @@
   color: var(--ok);
 }
 
+.updateBanner {
+  -webkit-app-region: no-drag;
+  display: grid;
+  min-height: 42px;
+  flex: 0 0 auto;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 14%, var(--panel)) 0%,
+    var(--panel) 64%
+  );
+  color: var(--text);
+  padding: 6px 14px;
+}
+
+.updateIcon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.updateContent {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.updateContent strong,
+.updateContent span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.updateContent strong {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.updateContent span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .toastStrip {
   height: 3px;
   background: var(--warn);
