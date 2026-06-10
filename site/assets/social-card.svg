@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Difftray social preview</title>
+  <desc id="desc">A dark branded social card for Difftray, showing local Git diff review with drift detection.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07070a" />
+      <stop offset="0.48" stop-color="#111218" />
+      <stop offset="1" stop-color="#060607" />
+    </linearGradient>
+    <linearGradient id="violet-glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a99f7" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#5dc28a" stop-opacity="0.68" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#20212b" />
+      <stop offset="1" stop-color="#121318" />
+    </linearGradient>
+    <linearGradient id="logo-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b2d38" />
+      <stop offset="1" stop-color="#111218" />
+    </linearGradient>
+    <filter id="soft-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="30" stdDeviation="36" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+    <filter id="tight-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.46" />
+    </filter>
+    <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse">
+      <path d="M52 0H0V52" fill="none" stroke="#262833" stroke-width="1" opacity="0.48" />
+    </pattern>
+    <linearGradient id="energy-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6c7df0" stop-opacity="0" />
+      <stop offset="0.48" stop-color="#6c7df0" stop-opacity="0.34" />
+      <stop offset="1" stop-color="#6c7df0" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="energy-b" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#5dc28a" stop-opacity="0" />
+      <stop offset="0.52" stop-color="#5dc28a" stop-opacity="0.2" />
+      <stop offset="1" stop-color="#5dc28a" stop-opacity="0" />
+    </linearGradient>
+    <clipPath id="card-clip">
+      <rect x="660" y="104" width="404" height="374" rx="8" />
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#background)" />
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.48" />
+  <path d="M-80 346C135 204 306 178 493 257C659 328 806 333 1282 89V270C954 441 742 469 519 382C318 303 142 329 -80 505Z" fill="url(#energy-a)" opacity="0.82" />
+  <path d="M-58 182C210 273 397 268 604 172C814 75 994 104 1258 221V367C982 245 829 232 643 323C397 444 175 422 -58 335Z" fill="url(#energy-b)" opacity="0.86" />
+  <path d="M35 520C188 436 289 448 418 500C552 554 658 590 819 515C941 458 1050 421 1167 487" fill="none" stroke="#8a99f7" stroke-width="2" opacity="0.18" />
+  <path d="M-14 118C126 174 251 174 374 121C499 66 655 60 783 116C909 171 1027 173 1213 85" fill="none" stroke="#5dc28a" stroke-width="2" opacity="0.14" />
+
+  <g transform="translate(78 48)">
+    <rect x="0" y="0" width="74" height="74" rx="8" fill="url(#logo-tile)" stroke="#393b48" filter="url(#tight-shadow)" />
+    <rect x="19" y="44" width="40" height="10" rx="3" fill="#d8d9e2" />
+    <rect x="26" y="31" width="46" height="10" rx="3" fill="#ee5258" />
+    <rect x="17" y="18" width="50" height="10" rx="3" fill="#5dc28a" />
+    <circle cx="22" cy="23" r="2.2" fill="#f0f1f5" />
+  </g>
+
+  <text x="170" y="96" fill="#f3f3f6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="30" font-weight="700" letter-spacing="0">Difftray</text>
+  <text x="78" y="188" fill="#f7f7fa" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="62" font-weight="800" letter-spacing="0">
+    Review local
+  </text>
+  <text x="78" y="255" fill="#f7f7fa" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="62" font-weight="800" letter-spacing="0">
+    Git changes.
+  </text>
+  <text x="78" y="322" fill="url(#violet-glow)" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="62" font-weight="800" letter-spacing="0">
+    Catch drift fast.
+  </text>
+  <text x="82" y="392" fill="#b8bac6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="26" font-weight="500" letter-spacing="0">
+    A focused macOS desk for reviewing diffs,
+  </text>
+  <text x="82" y="427" fill="#b8bac6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="26" font-weight="500" letter-spacing="0">
+    tracking reviewed files, and re-flagging drift.
+  </text>
+
+  <g transform="translate(80 500)">
+    <rect x="0" y="0" width="164" height="48" rx="8" fill="#202229" stroke="#343746" />
+    <circle cx="28" cy="24" r="6" fill="#5dc28a" />
+    <text x="46" y="31" fill="#eff3f5" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="17" font-weight="700" letter-spacing="0">Reviewed</text>
+    <rect x="181" y="0" width="150" height="48" rx="8" fill="#202229" stroke="#343746" />
+    <path d="M209 17L219 31M219 17L209 31" stroke="#ee5258" stroke-width="3" stroke-linecap="round" />
+    <text x="236" y="31" fill="#eff3f5" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="17" font-weight="700" letter-spacing="0">Drifted</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="660" y="104" width="404" height="374" rx="8" fill="url(#panel)" stroke="#3c3f4f" />
+    <g clip-path="url(#card-clip)">
+      <rect x="660" y="104" width="404" height="58" fill="#181920" />
+      <circle cx="696" cy="133" r="6" fill="#ee5258" />
+      <circle cx="718" cy="133" r="6" fill="#e9b04a" />
+      <circle cx="740" cy="133" r="6" fill="#5dc28a" />
+      <text x="783" y="140" fill="#8f93a1" font-family="'Menlo', monospace" font-size="14" font-weight="700">review.diff</text>
+
+      <rect x="696" y="194" width="156" height="20" rx="6" fill="#2a2d39" />
+      <rect x="696" y="232" width="303" height="28" rx="8" fill="#331f25" />
+      <rect x="714" y="242" width="14" height="8" rx="4" fill="#ee5258" />
+      <rect x="742" y="242" width="206" height="8" rx="4" fill="#ee5258" opacity="0.82" />
+      <rect x="696" y="274" width="328" height="28" rx="8" fill="#1e3028" />
+      <rect x="714" y="284" width="14" height="8" rx="4" fill="#5dc28a" />
+      <rect x="742" y="284" width="242" height="8" rx="4" fill="#5dc28a" opacity="0.86" />
+      <rect x="696" y="316" width="270" height="28" rx="8" fill="#22242e" />
+      <rect x="714" y="326" width="14" height="8" rx="4" fill="#d4d5df" opacity="0.72" />
+      <rect x="742" y="326" width="178" height="8" rx="4" fill="#d4d5df" opacity="0.5" />
+
+      <path d="M832 370C877 344 920 355 948 402" fill="none" stroke="#8a99f7" stroke-width="7" stroke-linecap="round" opacity="0.85" />
+      <path d="M929 393L948 402L946 381" fill="none" stroke="#8a99f7" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
+      <rect x="714" y="379" width="132" height="42" rx="8" fill="#2a2d39" stroke="#494d61" />
+      <circle cx="738" cy="400" r="6" fill="#5dc28a" />
+      <text x="758" y="406" fill="#f1f2f5" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="16" font-weight="700">reviewed</text>
+      <rect x="858" y="406" width="176" height="42" rx="8" fill="#35232a" stroke="#69323b" />
+      <path d="M884 417L894 431M894 417L884 431" stroke="#ee5258" stroke-width="3" stroke-linecap="round" />
+      <text x="910" y="433" fill="#ffb6bb" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="16" font-weight="700">changed again</text>
+    </g>
+  </g>
+
+  <g transform="translate(930 492)">
+    <rect x="0" y="0" width="184" height="50" rx="8" fill="#111218" stroke="#3a3d4b" opacity="0.95" />
+    <text x="22" y="32" fill="#d6d8e1" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="18" font-weight="700">difftray.app</text>
+  </g>
+</svg>

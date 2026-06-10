@@ -83,3 +83,25 @@ After publishing, update the GitHub release notes from the matching
 ```sh
 gh release edit v0.1.0 --repo prof18/difftray --notes-file <release-notes.md>
 ```
+
+## Landing Page
+
+The static landing page publishes from `site/` through the `Deploy landing page`
+GitHub Actions workflow. GitHub Pages must be enabled with the GitHub Actions
+publishing source and the custom domain `difftray.app`.
+
+Cloudflare DNS should contain these records for GitHub Pages:
+
+- `A @ 185.199.108.153`
+- `A @ 185.199.109.153`
+- `A @ 185.199.110.153`
+- `A @ 185.199.111.153`
+- `AAAA @ 2606:50c0:8000::153`
+- `AAAA @ 2606:50c0:8001::153`
+- `AAAA @ 2606:50c0:8002::153`
+- `AAAA @ 2606:50c0:8003::153`
+- `CNAME www prof18.github.io`
+
+Keep the GitHub Pages records DNS-only in Cloudflare while GitHub provisions the
+certificate. After the certificate is issued, enable HTTPS enforcement in the
+repository Pages settings.
