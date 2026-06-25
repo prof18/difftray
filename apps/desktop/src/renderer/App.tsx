@@ -32,7 +32,7 @@ import {
   SimpleToast,
   UpdateRestartBanner
 } from "./app-status-views.js";
-import { mergeProjectTabs, reorderProjectTabs } from "./project-tabs.js";
+import { mergeProjectTabs, reorderProjectTabs, createProjectTabOrderSaveQueue } from "./project-tabs.js";
 import { ProjectTabBar } from "./project-tab-bar.js";
 import { LoadingProgress, TabLoadBanner } from "./workspace-loading.js";
 import {
@@ -169,6 +169,7 @@ export function App(): React.JSX.Element {
   const selectedPathByProjectRef = useRef<Map<string, string>>(new Map());
   const tabSummaryInvalidationRef = useRef<Map<string, number>>(new Map());
   const tabSummaryLoadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const projectTabOrderSaveQueueRef = useRef(createProjectTabOrderSaveQueue());
   const tabSummaryLoadsInFlightRef = useRef<Set<string>>(new Set());
   const tabSummaryLoadSkippedRef = useRef<Set<string>>(new Set());
   const visibleCommentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
@@ -2035,9 +2036,23 @@ export function App(): React.JSX.Element {
             void openSettings();
           }}
           onReorderProjects={(draggedProjectId, targetProjectId, position) => {
-            setRecentProjects((projects) =>
-              reorderProjectTabs(projects, draggedProjectId, targetProjectId, position)
+            const rollbackProjects = recentProjects;
+            const nextProjects = reorderProjectTabs(
+              rollbackProjects,
+              draggedProjectId,
+              targetProjectId,
+              position
             );
+
+            setRecentProjects(nextProjects);
+            projectTabOrderSaveQueueRef.current.enqueue({
+              onFailure: (caughtError: unknown) => {
+                setRecentProjects(rollbackProjects);
+                setError(errorMessage(caughtError));
+              },
+              projectIds: nextProjects.map((project) => project.id),
+              save: (projectIds) => window.difftray.saveProjectTabOrder(projectIds)
+            });
           }}
           onSelectProject={(projectId) => {
             void loadProject(projectId);

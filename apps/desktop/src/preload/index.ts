@@ -47,6 +47,7 @@ export type DifftrayApi = {
     projectId: string
   ) => Promise<readonly RecentCommitView[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+  readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
   readonly loadFileDiff: (
     input: LoadFileDiffInput
   ) => Promise<ReviewFileDiffContentView | null>;
@@ -404,6 +405,9 @@ const api: DifftrayApi = {
     }) as Promise<readonly RecentCommitView[]>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
+  saveProjectTabOrder: async (projectIds) => {
+    await ipcRenderer.invoke("projects:saveTabOrder", { projectIds });
+  },
   loadFileDiff: async (input) =>
     ipcRenderer.invoke(
       "files:loadDiff",

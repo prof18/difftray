@@ -29,6 +29,7 @@ declare global {
       projectId: string
     ) => Promise<readonly RecentCommitView[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+    readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
     readonly loadFileDiff: (
       input: LoadFileDiffInput
     ) => Promise<ReviewFileDiffContentView | null>;

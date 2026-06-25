@@ -7,6 +7,7 @@ import {
   readOptionalBooleanProperty,
   readOptionalStringArrayProperty,
   readOptionalStringProperty,
+  readStringArrayProperty,
   readStringProperty,
   readUnknownProperty
 } from "./ipc-input.js";
@@ -77,6 +78,16 @@ describe("IPC input property readers", () => {
     expect(() =>
       readEnumProperty({ mode: "commit_range" }, "mode", ["branch", "working_tree"])
     ).toThrow("Invalid IPC payload: unsupported mode");
+  });
+
+  it("reads required string arrays", () => {
+    expect(readStringArrayProperty({ projectIds: ["a", "b"] }, "projectIds")).toEqual([
+      "a",
+      "b"
+    ]);
+    expect(() => readStringArrayProperty({}, "projectIds")).toThrow(
+      "Invalid IPC payload: missing projectIds"
+    );
   });
 
   it("reads unknown own properties only", () => {

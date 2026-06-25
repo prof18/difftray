@@ -25,6 +25,19 @@ export function readOptionalStringProperty(
   return value;
 }
 
+export function readStringArrayProperty(
+  input: unknown,
+  property: string
+): readonly string[] {
+  const value = readOptionalStringArrayProperty(input, property);
+
+  if (!value) {
+    throw new Error(`Invalid IPC payload: missing ${property}`);
+  }
+
+  return value;
+}
+
 export function readOptionalStringArrayProperty(
   input: unknown,
   property: string

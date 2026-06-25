@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { mergeProjectTabs, reorderProjectTabs } from "./project-tabs.js";
+import {
+  createProjectTabOrderSaveQueue,
+  mergeProjectTabs,
+  reorderProjectTabs
+} from "./project-tabs.js";
 
 describe("mergeProjectTabs", () => {
   it("keeps the storage order for the initial tab list", () => {
@@ -80,6 +84,89 @@ describe("reorderProjectTabs", () => {
     expect(reorderProjectTabs(projects, "reader-flow", "missing", "after")).toBe(
       projects
     );
+  });
+});
+
+describe("createProjectTabOrderSaveQueue", () => {
+  it("serializes tab order saves so later writes cannot be overwritten by earlier ones", async () => {
+    const queue = createProjectTabOrderSaveQueue();
+    const persistedOrders: string[][] = [];
+    let releaseFirstSave: (() => void) | undefined;
+
+    queue.enqueue({
+      onFailure: () => {
+        throw new Error("first save should not fail");
+      },
+      projectIds: ["a", "b"],
+      save: async (projectIds) => {
+        await new Promise<void>((resolve) => {
+          releaseFirstSave = resolve;
+        });
+        persistedOrders.push([...projectIds]);
+      }
+    });
+    queue.enqueue({
+      onFailure: () => {
+        throw new Error("second save should not fail");
+      },
+      projectIds: ["b", "a"],
+      save: async (projectIds) => {
+        persistedOrders.push([...projectIds]);
+      }
+    });
+
+    await Promise.resolve();
+    releaseFirstSave?.();
+    await queue.whenIdle();
+
+    expect(persistedOrders).toEqual([
+      ["a", "b"],
+      ["b", "a"]
+    ]);
+  });
+
+  it("does not roll back when an older save fails after a newer reorder", async () => {
+    const queue = createProjectTabOrderSaveQueue();
+    const onFailure = vi.fn();
+    let rejectFirstSave: ((error: Error) => void) | undefined;
+
+    queue.enqueue({
+      onFailure,
+      projectIds: ["a", "b"],
+      save: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectFirstSave = reject;
+        })
+    });
+    queue.enqueue({
+      onFailure,
+      projectIds: ["b", "a"],
+      save: async () => undefined
+    });
+
+    await Promise.resolve();
+    expect(rejectFirstSave).toBeDefined();
+    rejectFirstSave?.(new Error("stale save failed"));
+    await queue.whenIdle();
+
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("rolls back only the latest save when it fails", async () => {
+    const queue = createProjectTabOrderSaveQueue();
+    const onFailure = vi.fn();
+
+    queue.enqueue({
+      onFailure,
+      projectIds: ["b", "a"],
+      save: async () => {
+        throw new Error("latest save failed");
+      }
+    });
+    await queue.whenIdle();
+
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(onFailure.mock.calls[0]?.[0]).toEqual(new Error("latest save failed"));
   });
 });
 

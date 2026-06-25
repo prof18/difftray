@@ -25,7 +25,7 @@ the background summary queue catches up. The renderer preserves the visible tab
 order and already-loaded summaries across recent-project refreshes and appends newly
 opened repositories at the end of the tab strip, even though storage keeps recent
 projects ordered by last-opened time. Users can drag tabs to reorder the visible tab
-strip.
+strip. The tab strip order is persisted in app settings and restored on launch.
 
 Selecting an uncached project tab makes that tab active immediately. During the
 load, the previous repository's review controls remain visible but blocked, with

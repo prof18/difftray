@@ -32,11 +32,19 @@ import {
 import { runMigrations } from "./schema.js";
 import { type AppSettingsRecord, type ProjectSettingsRecord } from "./settings.js";
 import {
+  appendProjectToTabOrder,
+  getProjectTabOrder,
+  removeProjectFromTabOrder,
+  upsertProjectTabOrder
+} from "./project-tab-order.js";
+import {
   getAppSettings,
   getProjectSettings,
   upsertAppSettings,
   upsertProjectSettings
 } from "./settings-store.js";
+
+export { applyProjectTabOrder, parseStoredProjectTabOrder, sanitizeProjectTabOrder } from "./project-tab-order.js";
 
 export {
   type CreateReviewCommentInput,
@@ -102,6 +110,7 @@ export type DifftrayStorage = {
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
+  readonly getProjectTabOrder: () => readonly string[];
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
   readonly isReviewed: (
     reviewTargetId: string,
@@ -133,8 +142,11 @@ export type DifftrayStorage = {
         }
   ) => void;
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
+  readonly appendProjectToTabOrder: (projectId: string) => void;
+  readonly removeProjectFromTabOrder: (projectId: string) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
+  readonly upsertProjectTabOrder: (projectIds: readonly string[]) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
   readonly verifyAndMarkReviewed: (
@@ -163,6 +175,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
+    getProjectTabOrder: () => getProjectTabOrder(db),
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
@@ -179,11 +192,20 @@ export function openStorage(filename: string): DifftrayStorage {
       updateProjectDefaultDiffTarget(db, projectId, target);
     },
     updateReviewComment: (id, body) => updateReviewComment(db, id, body),
+    appendProjectToTabOrder: (projectId) => {
+      appendProjectToTabOrder(db, projectId);
+    },
+    removeProjectFromTabOrder: (projectId) => {
+      removeProjectFromTabOrder(db, projectId);
+    },
     upsertProject: (project) => {
       upsertProject(db, project);
     },
     upsertAppSettings: (settings) => {
       upsertAppSettings(db, settings);
+    },
+    upsertProjectTabOrder: (projectIds) => {
+      upsertProjectTabOrder(db, projectIds);
     },
     upsertProjectSettings: (settings) => {
       upsertProjectSettings(db, settings);

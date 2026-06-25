@@ -69,3 +69,36 @@ export function reorderProjectTabs<TProject extends ProjectTabRecord>(
     ...remainingProjects.slice(insertIndex)
   ];
 }
+
+export type ProjectTabOrderSaveQueue = {
+  enqueue(input: {
+    readonly onFailure: (error: unknown) => void;
+    readonly projectIds: readonly string[];
+    readonly save: (projectIds: readonly string[]) => Promise<void>;
+  }): void;
+  whenIdle(): Promise<void>;
+};
+
+export function createProjectTabOrderSaveQueue(): ProjectTabOrderSaveQueue {
+  let queue: Promise<void> = Promise.resolve();
+  let latestVersion = 0;
+
+  return {
+    enqueue({ onFailure, projectIds, save }) {
+      const saveVersion = ++latestVersion;
+
+      queue = queue
+        .then(async () => {
+          await save(projectIds);
+        })
+        .catch((caughtError: unknown) => {
+          if (latestVersion === saveVersion) {
+            onFailure(caughtError);
+          }
+        });
+    },
+    whenIdle() {
+      return queue;
+    }
+  };
+}

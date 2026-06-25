@@ -46,6 +46,8 @@ import {
   type DiffLoadProgress
 } from "@difftray/git";
 import {
+  applyProjectTabOrder,
+  sanitizeProjectTabOrder,
   type AppSettingsRecord,
   openStorage,
   type DifftrayStorage,
@@ -75,6 +77,7 @@ import {
   readOptionalBooleanProperty,
   readOptionalStringArrayProperty,
   readOptionalStringProperty,
+  readStringArrayProperty,
   readStringProperty
 } from "./ipc-input.js";
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
@@ -377,6 +380,17 @@ handleTrusted(
 );
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
 handleTrusted(
+  "projects:saveTabOrder",
+  (_event: IpcMainInvokeEvent, input: unknown): void => {
+    const projectIds = readStringArrayProperty(input, "projectIds");
+    const knownProjects = getStorage().listRecentProjects();
+
+    getStorage().upsertProjectTabOrder(
+      sanitizeProjectTabOrder(knownProjects, projectIds)
+    );
+  }
+);
+handleTrusted(
   "projects:getReviewSummary",
   async (
     _event: IpcMainInvokeEvent,
@@ -416,7 +430,7 @@ handleTrusted(
   ): Promise<readonly RecentProjectView[]> => {
     const projectId = readStringProperty(input, "projectId");
 
-    getStorage().deleteProject(projectId);
+    deleteStoredProject(projectId);
     await getProjectWatchService().stopProject(projectId);
 
     return listAvailableRecentProjectViews();
@@ -1166,11 +1180,14 @@ function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
 
   for (const project of projects) {
     if (!existsSync(project.path)) {
-      getStorage().deleteProject(project.id);
+      deleteStoredProject(project.id);
     }
   }
 
-  return getStorage().listRecentProjects();
+  return applyProjectTabOrder(
+    getStorage().listRecentProjects(),
+    getStorage().getProjectTabOrder()
+  );
 }
 
 function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
@@ -1290,7 +1307,7 @@ async function loadProjectReviewSummaryIfAvailable(
   }
 
   if (!existsSync(project.path)) {
-    getStorage().deleteProject(project.id);
+    deleteStoredProject(project.id);
     await projectWatchService?.stopProject(project.id);
     return null;
   }
@@ -1373,7 +1390,7 @@ async function loadProjectWorkspaceIfAvailable(
   }
 
   if (!existsSync(project.path)) {
-    getStorage().deleteProject(project.id);
+    deleteStoredProject(project.id);
     await projectWatchService?.stopProject(project.id);
     return null;
   }
@@ -1505,6 +1522,12 @@ async function reviewCommentReportItems(
 
 function upsertOpenedProject(project: ProjectRecord): void {
   getStorage().upsertProject(project);
+  getStorage().appendProjectToTabOrder(project.id);
+}
+
+function deleteStoredProject(projectId: string): void {
+  getStorage().removeProjectFromTabOrder(projectId);
+  getStorage().deleteProject(projectId);
 }
 
 function assertStoredProject(projectId: string): StoredProjectRecord {

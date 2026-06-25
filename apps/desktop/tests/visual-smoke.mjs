@@ -18,7 +18,7 @@ const userDataPath = await mkdtemp(path.join(tmpdir(), "difftray-user-data-"));
 await mkdir(artifactsDir, { recursive: true });
 await seedRecentProject(userDataPath, secondaryRepoPath);
 
-const app = await electron.launch({
+let app = await electron.launch({
   args: [path.resolve(cwd, "dist/main/index.cjs")],
   cwd,
   env: {
@@ -31,7 +31,7 @@ const app = await electron.launch({
 });
 
 try {
-  const window = await app.firstWindow();
+  let window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded");
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
@@ -39,6 +39,27 @@ try {
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
+  await window.evaluate(({ projectIds }) => {
+    return window.difftray.saveProjectTabOrder(projectIds);
+  }, { projectIds: [secondaryRepoPath, repoPath] });
+  await app.close();
+  app = await electron.launch({
+    args: [path.resolve(cwd, "dist/main/index.cjs")],
+    cwd,
+    env: {
+      ...process.env,
+      DIFFTRAY_BOOT_PROJECT: repoPath,
+      DIFFTRAY_USER_DATA_DIR: userDataPath,
+      DIFFTRAY_WINDOW_PRESENTATION: process.env.DIFFTRAY_WINDOW_PRESENTATION ?? "inactive"
+    },
+    executablePath
+  });
+  window = await app.firstWindow();
+  await window.waitForLoadState("domcontentloaded");
+  await window
+    .getByRole("button", { name: /tracked\.txt modified/ })
+    .waitFor({ timeout: 10_000 });
+  await expectProjectTabOrder(window, ["visual-secondary-repo", "visual-repo"]);
   await window
     .locator('[data-project-tab-name="visual-repo"][draggable="true"]')
     .waitFor({ timeout: 10_000 });
