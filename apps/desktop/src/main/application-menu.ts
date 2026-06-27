@@ -1,6 +1,9 @@
 import { BrowserWindow, dialog, Menu, MenuItem, type MessageBoxOptions } from "electron";
 
-import { resolveUpdateMenuItemState, type UpdateMenuItemState } from "./update-menu-item.js";
+import {
+  resolveUpdateMenuItemState,
+  type UpdateMenuItemState
+} from "./update-menu-item.js";
 import type { UpdatePhase } from "./update-state.js";
 
 export type ApplicationMenuDependencies = {
