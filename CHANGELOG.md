@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.5 - 2026-06-27
+
+### Added
+
+- Reorder open project tabs by dragging; tabs rearrange live as you drag.
+- Remember project tab order across app restarts.
+
 ## 0.0.4 - 2026-06-08
 
 ### Added
