@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.6 - 2026-06-27
+
+### Added
+
+- Check for app updates from the native menu bar in production builds.
+
 ## 0.0.5 - 2026-06-27
 
 ### Added
