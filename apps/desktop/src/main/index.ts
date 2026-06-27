@@ -87,6 +87,7 @@ import {
   type AppRuntimeConfig
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
+import { ApplicationMenuController } from "./application-menu.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
@@ -143,6 +144,7 @@ let didConfigureAppRuntime = false;
 let isQuitting = false;
 let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
+let applicationMenuController: ApplicationMenuController | undefined;
 let updateCheckScheduler: UpdateCheckScheduler | undefined;
 let updateCheckSchedulerPromise: Promise<UpdateCheckScheduler | undefined> | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
@@ -861,6 +863,8 @@ app.on("before-quit", () => {
   projectWatchService = undefined;
   updateCheckScheduler?.stop();
   updateCheckScheduler = undefined;
+  applicationMenuController?.dispose();
+  applicationMenuController = undefined;
   storage?.close();
   storage = undefined;
 });
@@ -880,6 +884,7 @@ app.on("activate", () => {
 
 void app.whenReady().then(async () => {
   configureAppRuntime();
+  installApplicationMenu();
   await createMainWindow();
   scheduleAutoUpdaterWiring();
 });
@@ -922,6 +927,21 @@ function configureAppRuntime(): void {
   }
 
   updateState.subscribe(emitUpdatePhase);
+}
+
+function installApplicationMenu(): void {
+  if (applicationMenuController || !resolvedAppRuntimeConfig) {
+    return;
+  }
+
+  applicationMenuController = new ApplicationMenuController({
+    appName: resolvedAppRuntimeConfig.name,
+    checkForUpdates: checkForUpdatesNow,
+    getUpdatePhase: () => updateState.phase,
+    onUpdatePhaseChange: (listener) => updateState.subscribe(listener),
+    updatesEnabled: resolvedAppRuntimeConfig.variant === "production"
+  });
+  applicationMenuController.install();
 }
 
 function handleTrusted(
