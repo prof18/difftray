@@ -44,7 +44,11 @@ import {
   upsertProjectSettings
 } from "./settings-store.js";
 
-export { applyProjectTabOrder, parseStoredProjectTabOrder, sanitizeProjectTabOrder } from "./project-tab-order.js";
+export {
+  applyProjectTabOrder,
+  parseStoredProjectTabOrder,
+  sanitizeProjectTabOrder
+} from "./project-tab-order.js";
 
 export {
   type CreateReviewCommentInput,

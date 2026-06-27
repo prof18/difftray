@@ -39,9 +39,12 @@ try {
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
-  await window.evaluate(({ projectIds }) => {
-    return window.difftray.saveProjectTabOrder(projectIds);
-  }, { projectIds: [secondaryRepoPath, repoPath] });
+  await window.evaluate(
+    ({ projectIds }) => {
+      return window.difftray.saveProjectTabOrder(projectIds);
+    },
+    { projectIds: [secondaryRepoPath, repoPath] }
+  );
   await app.close();
   app = await electron.launch({
     args: [path.resolve(cwd, "dist/main/index.cjs")],
@@ -60,6 +63,8 @@ try {
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-secondary-repo", "visual-repo"]);
+  await dragProjectTabBefore(window, "visual-repo", "visual-secondary-repo");
+  await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
   await window
     .locator('[data-project-tab-name="visual-repo"][draggable="true"]')
     .waitFor({ timeout: 10_000 });
@@ -405,6 +410,24 @@ async function expectProjectTabSummary(window, projectName, count) {
     },
     { expectedCount: count, targetProjectName: projectName }
   );
+}
+
+async function dragProjectTabBefore(window, draggedProjectName, targetProjectName) {
+  const draggedTab = window.locator(`[data-project-tab-name="${draggedProjectName}"]`);
+  const targetTab = window.locator(`[data-project-tab-name="${targetProjectName}"]`);
+  const targetBox = await targetTab.boundingBox();
+
+  if (!targetBox) {
+    throw new Error(`Missing project tab bounds for ${targetProjectName}`);
+  }
+
+  await draggedTab.dragTo(targetTab, {
+    force: true,
+    targetPosition: {
+      x: 8,
+      y: Math.max(1, Math.floor(targetBox.height / 2))
+    }
+  });
 }
 
 async function expectProjectTabOrder(window, projectNames) {

@@ -1,8 +1,14 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Folder, Plus, Settings, X } from "lucide-react";
 
 import styles from "./project-tab-bar.module.css";
-import { type ProjectTabDropPosition } from "./project-tabs.js";
+import {
+  projectTabOrdersMatch,
+  resolveLiveProjectTabReorder,
+  shouldCancelActiveTabDrag,
+  type ProjectTabDropTarget,
+  type ProjectTabLayout
+} from "./project-tabs.js";
 import { classList, reviewSummaryState } from "./review-view-model.js";
 import {
   projectTabTitle,
@@ -19,14 +25,15 @@ export type ProjectTabBarProps = {
   readonly onCloseActiveProject: () => void;
   readonly onOpenProject: () => void;
   readonly onOpenSettings: () => void;
-  readonly onReorderProjects: (
-    draggedProjectId: string,
-    targetProjectId: string,
-    position: ProjectTabDropPosition
-  ) => void;
+  readonly onReorderProjects: (nextProjects: readonly RecentProjectView[]) => void;
+  readonly onCommitProjectOrder: (input: {
+    readonly nextProjects: readonly RecentProjectView[];
+    readonly rollbackProjects: readonly RecentProjectView[];
+  }) => void;
   readonly onSelectProject: (projectId: string) => void;
   readonly projects: readonly RecentProjectView[];
   readonly summaryLoadingProjectIds: ReadonlySet<string>;
+  readonly tabDragCancelKey?: number;
 };
 
 export function ProjectTabBar({
@@ -38,20 +45,21 @@ export function ProjectTabBar({
   onOpenProject,
   onOpenSettings,
   onReorderProjects,
+  onCommitProjectOrder,
   onSelectProject,
   projects,
-  summaryLoadingProjectIds
+  summaryLoadingProjectIds,
+  tabDragCancelKey = 0
 }: ProjectTabBarProps): React.JSX.Element {
   const tabScrollerRef = useRef<HTMLDivElement>(null);
   const inlineOpenButtonRef = useRef<HTMLButtonElement>(null);
+  const dragProjectsRef = useRef(projects);
+  const dragStartProjectsRef = useRef(projects);
+  const droppedRef = useRef(false);
+  const lastAppliedOrderIndexRef = useRef<number | undefined>(undefined);
+  const previousTabDragCancelKeyRef = useRef(0);
   const [draggedProjectId, setDraggedProjectId] = useState<string | undefined>();
-  const [dropTarget, setDropTarget] = useState<
-    | {
-        readonly position: ProjectTabDropPosition;
-        readonly projectId: string;
-      }
-    | undefined
-  >();
+  const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | undefined>();
   const [openButtonInline, setOpenButtonInline] = useState(false);
 
   useLayoutEffect(() => {
@@ -89,6 +97,52 @@ export function ProjectTabBar({
   function clearDragState(): void {
     setDraggedProjectId(undefined);
     setDropTarget(undefined);
+    lastAppliedOrderIndexRef.current = undefined;
+  }
+
+  useEffect(() => {
+    if (!draggedProjectId) {
+      dragProjectsRef.current = projects;
+    }
+  }, [draggedProjectId, projects]);
+
+  useEffect(() => {
+    if (
+      !shouldCancelActiveTabDrag({
+        nextCancelKey: tabDragCancelKey,
+        previousCancelKey: previousTabDragCancelKeyRef.current
+      })
+    ) {
+      return;
+    }
+
+    previousTabDragCancelKeyRef.current = tabDragCancelKey;
+    dragProjectsRef.current = projects;
+    clearDragState();
+  }, [tabDragCancelKey, projects]);
+
+  function applyLiveTabReorder(draggedId: string, pointerX: number): void {
+    const reorder = resolveLiveProjectTabReorder({
+      dragProjects: dragProjectsRef.current,
+      draggedProjectId: draggedId,
+      lastAppliedOrderIndex: lastAppliedOrderIndexRef.current,
+      layouts: tabLayoutsFromScroller(),
+      pointerX
+    });
+
+    if (reorder.dropTarget) {
+      setDropTarget(reorder.dropTarget);
+    } else {
+      setDropTarget(undefined);
+    }
+
+    if (!reorder.shouldReorder) {
+      return;
+    }
+
+    dragProjectsRef.current = reorder.nextDragProjects;
+    lastAppliedOrderIndexRef.current = reorder.nextAppliedOrderIndex;
+    onReorderProjects(reorder.nextDragProjects);
   }
 
   function projectIdFromDrag(event: React.DragEvent<HTMLElement>): string | undefined {
@@ -109,17 +163,87 @@ export function ProjectTabBar({
     return plainProjectId.length > 0 ? plainProjectId : undefined;
   }
 
-  function dropPositionForEvent(
-    event: React.DragEvent<HTMLElement>
-  ): ProjectTabDropPosition {
-    const bounds = event.currentTarget.getBoundingClientRect();
+  function tabLayoutsFromScroller(): readonly ProjectTabLayout[] {
+    const scroller = tabScrollerRef.current;
 
-    return event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+    if (!scroller) {
+      return [];
+    }
+
+    return [...scroller.querySelectorAll<HTMLElement>("[data-project-id]")].map(
+      (tabElement) => {
+        const bounds = tabElement.getBoundingClientRect();
+
+        return {
+          projectId: tabElement.dataset.projectId ?? "",
+          left: bounds.left,
+          width: bounds.width
+        };
+      }
+    );
+  }
+
+  function updateDropTarget(event: React.DragEvent<HTMLElement>): void {
+    const draggedId = projectIdFromDrag(event);
+
+    if (!draggedId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    applyLiveTabReorder(draggedId, event.clientX);
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLElement>): void {
+    const draggedId = projectIdFromDrag(event);
+
+    if (!draggedId) {
+      clearDragState();
+      return;
+    }
+
+    event.preventDefault();
+    applyLiveTabReorder(draggedId, event.clientX);
+    droppedRef.current = true;
+    onCommitProjectOrder({
+      nextProjects: dragProjectsRef.current,
+      rollbackProjects: dragStartProjectsRef.current
+    });
+    clearDragState();
+  }
+
+  function handleDragEnd(): void {
+    if (
+      !droppedRef.current &&
+      !projectTabOrdersMatch(dragProjectsRef.current, dragStartProjectsRef.current)
+    ) {
+      onReorderProjects(dragStartProjectsRef.current);
+    }
+
+    clearDragState();
   }
 
   return (
     <div className={styles.projectTabs} data-open-inline={openButtonInline}>
-      <div className={styles.tabScroller} ref={tabScrollerRef}>
+      <div
+        className={styles.tabScroller}
+        onDragLeave={(event) => {
+          const relatedTarget = event.relatedTarget;
+
+          if (
+            relatedTarget instanceof Node &&
+            event.currentTarget.contains(relatedTarget)
+          ) {
+            return;
+          }
+
+          setDropTarget(undefined);
+        }}
+        onDragOver={updateDropTarget}
+        onDrop={handleDrop}
+        ref={tabScrollerRef}
+      >
         {projects.map((project) => {
           const isActive = project.id === activeProjectId;
           const isLoading = isActive && loadingStatus !== undefined;
@@ -137,24 +261,11 @@ export function ProjectTabBar({
               data-drop-position={
                 dropTarget?.projectId === project.id ? dropTarget.position : undefined
               }
+              data-project-id={project.id}
               data-project-tab-name={project.name}
               draggable={!disabled}
               key={project.id}
-              onDragEnd={clearDragState}
-              onDragOver={(event) => {
-                const draggedId = projectIdFromDrag(event);
-
-                if (!draggedId || draggedId === project.id) {
-                  return;
-                }
-
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setDropTarget({
-                  position: dropPositionForEvent(event),
-                  projectId: project.id
-                });
-              }}
+              onDragEnd={handleDragEnd}
               onDragStart={(event) => {
                 if (disabled) {
                   event.preventDefault();
@@ -162,6 +273,12 @@ export function ProjectTabBar({
                 }
 
                 setDraggedProjectId(project.id);
+                dragProjectsRef.current = projects;
+                dragStartProjectsRef.current = projects;
+                droppedRef.current = false;
+                lastAppliedOrderIndexRef.current = projects.findIndex(
+                  (entry) => entry.id === project.id
+                );
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData(
                   "application/x-difftray-project-id",
@@ -169,23 +286,10 @@ export function ProjectTabBar({
                 );
                 event.dataTransfer.setData("text/plain", project.id);
               }}
-              onDrop={(event) => {
-                const draggedId = projectIdFromDrag(event);
-
-                if (!draggedId || draggedId === project.id) {
-                  clearDragState();
-                  return;
-                }
-
-                event.preventDefault();
-                onReorderProjects(draggedId, project.id, dropPositionForEvent(event));
-                clearDragState();
-              }}
             >
               <button
                 className={styles.projectTabSelect}
                 disabled={disabled}
-                draggable={!disabled}
                 onClick={() => {
                   onSelectProject(project.id);
                 }}

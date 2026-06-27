@@ -81,6 +81,7 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     onOpenProject: vi.fn(),
     onOpenSettings: vi.fn(),
     onReorderProjects: vi.fn(),
+    onCommitProjectOrder: vi.fn(),
     onSelectProject: vi.fn(),
     projects: [],
     summaryLoadingProjectIds: new Set(),

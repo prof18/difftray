@@ -28,10 +28,7 @@ describe("applyProjectTabOrder", () => {
 
   it("appends projects missing from the stored tab order", () => {
     expect(
-      applyProjectTabOrder(
-        [project("newest"), project("older")],
-        ["older"]
-      )
+      applyProjectTabOrder([project("newest"), project("older")], ["older"])
     ).toEqual([project("older"), project("newest")]);
   });
 
@@ -107,10 +104,18 @@ describe("stored project tab order", () => {
       storage.upsertProjectTabOrder(["project-a", "project-b"]);
       storage.appendProjectToTabOrder("project-c");
 
-      expect(storage.getProjectTabOrder()).toEqual(["project-a", "project-b", "project-c"]);
+      expect(storage.getProjectTabOrder()).toEqual([
+        "project-a",
+        "project-b",
+        "project-c"
+      ]);
       storage.appendProjectToTabOrder("project-b");
 
-      expect(storage.getProjectTabOrder()).toEqual(["project-a", "project-b", "project-c"]);
+      expect(storage.getProjectTabOrder()).toEqual([
+        "project-a",
+        "project-b",
+        "project-c"
+      ]);
     } finally {
       storage.close();
     }

@@ -32,7 +32,11 @@ import {
   SimpleToast,
   UpdateRestartBanner
 } from "./app-status-views.js";
-import { mergeProjectTabs, reorderProjectTabs, createProjectTabOrderSaveQueue } from "./project-tabs.js";
+import {
+  mergeProjectTabs,
+  prepareProjectTabReorderUpdate,
+  createProjectTabOrderSaveQueue
+} from "./project-tabs.js";
 import { ProjectTabBar } from "./project-tab-bar.js";
 import { LoadingProgress, TabLoadBanner } from "./workspace-loading.js";
 import {
@@ -138,6 +142,7 @@ export function App(): React.JSX.Element {
   const [projectSettings, setProjectSettings] =
     useState<ProjectSettingsView>(defaultProjectSettings);
   const [recentProjects, setRecentProjects] = useState<readonly RecentProjectView[]>([]);
+  const [tabDragCancelKey, setTabDragCancelKey] = useState(0);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2026,6 +2031,7 @@ export function App(): React.JSX.Element {
           {...(activeReviewSummary ? { activeReviewSummary } : {})}
           disabled={loadState === "loading"}
           {...(loadState === "loading" ? { loadingStatus: loadStatus } : {})}
+          tabDragCancelKey={tabDragCancelKey}
           onOpenProject={() => {
             void openProject();
           }}
@@ -2035,22 +2041,27 @@ export function App(): React.JSX.Element {
           onOpenSettings={() => {
             void openSettings();
           }}
-          onReorderProjects={(draggedProjectId, targetProjectId, position) => {
-            const rollbackProjects = recentProjects;
-            const nextProjects = reorderProjectTabs(
+          onReorderProjects={(nextProjects) => {
+            setRecentProjects(nextProjects);
+          }}
+          onCommitProjectOrder={({ nextProjects, rollbackProjects }) => {
+            const reorderUpdate = prepareProjectTabReorderUpdate(
               rollbackProjects,
-              draggedProjectId,
-              targetProjectId,
-              position
+              nextProjects
             );
 
-            setRecentProjects(nextProjects);
+            if (!reorderUpdate) {
+              return;
+            }
+
+            setRecentProjects(reorderUpdate.nextProjects);
             projectTabOrderSaveQueueRef.current.enqueue({
               onFailure: (caughtError: unknown) => {
-                setRecentProjects(rollbackProjects);
+                setRecentProjects(reorderUpdate.rollbackProjects);
                 setError(errorMessage(caughtError));
+                setTabDragCancelKey((key) => key + 1);
               },
-              projectIds: nextProjects.map((project) => project.id),
+              projectIds: reorderUpdate.nextProjects.map((project) => project.id),
               save: (projectIds) => window.difftray.saveProjectTabOrder(projectIds)
             });
           }}
