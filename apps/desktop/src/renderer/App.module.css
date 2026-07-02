@@ -149,6 +149,7 @@
 }
 
 .errorBanner {
+  -webkit-app-region: no-drag;
   position: fixed;
   z-index: 20;
   top: 10px;
@@ -176,6 +177,7 @@
 }
 
 .errorBannerClose {
+  -webkit-app-region: no-drag;
   display: inline-grid;
   width: 24px;
   height: 24px;

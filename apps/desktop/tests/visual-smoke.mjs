@@ -13,6 +13,7 @@ const artifactsDir = path.resolve(cwd, "../../artifacts/screenshots");
 const executablePath = require("electron");
 const repoPath = await createChangedRepository();
 const secondaryRepoPath = await createChangedRepository("visual-secondary-repo");
+const nonGitPath = await mkdtemp(path.join(tmpdir(), "difftray-non-git-"));
 const userDataPath = await mkdtemp(path.join(tmpdir(), "difftray-user-data-"));
 
 await mkdir(artifactsDir, { recursive: true });
@@ -281,7 +282,8 @@ try {
     "before\nbranch\nafter\nagain\n",
     "utf8"
   );
-  await triggerFocusRefresh(window);
+  await window.getByRole("button", { name: "Refresh project" }).click();
+  await expectWorkspaceIdle(window);
   await window
     .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
@@ -290,6 +292,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
+  await expectDismissibleOpenProjectError(app, window, nonGitPath);
   await window.getByRole("button", { name: "Close repository" }).click();
   await window
     .getByRole("button", { name: /visual-secondary-repo/ })
@@ -412,6 +415,36 @@ async function expectProjectTabSummary(window, projectName, count) {
   );
 }
 
+async function dismissErrorBanner(window, errorText) {
+  await window.getByText(errorText).waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: "Dismiss error" }).click();
+  await window.getByText(errorText).waitFor({ state: "detached", timeout: 10_000 });
+}
+
+async function expectDismissibleOpenProjectError(app, window, folderPath) {
+  await app.evaluate(({ dialog }, selectedPath) => {
+    const originalShowOpenDialog = dialog.showOpenDialog;
+
+    globalThis.__difftrayRestoreShowOpenDialog = () => {
+      dialog.showOpenDialog = originalShowOpenDialog;
+    };
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [selectedPath]
+    });
+  }, folderPath);
+
+  try {
+    await window.getByRole("button", { name: "Open repository" }).click();
+    await dismissErrorBanner(window, "Selected folder is not inside a Git repository.");
+  } finally {
+    await app.evaluate(() => {
+      globalThis.__difftrayRestoreShowOpenDialog?.();
+      delete globalThis.__difftrayRestoreShowOpenDialog;
+    });
+  }
+}
+
 async function dragProjectTabBefore(window, draggedProjectName, targetProjectName) {
   const draggedTab = window.locator(`[data-project-tab-name="${draggedProjectName}"]`);
   const targetTab = window.locator(`[data-project-tab-name="${targetProjectName}"]`);
@@ -520,13 +553,6 @@ async function expectSelectedFile(window, filename) {
 
 async function expectWorkspaceIdle(window) {
   await window.locator('section[aria-busy="false"]').waitFor({ timeout: 10_000 });
-}
-
-async function triggerFocusRefresh(window) {
-  await window.waitForTimeout(800);
-  await window.evaluate(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
 }
 
 async function clickDiffLineNumber(window, side, lineNumber) {
