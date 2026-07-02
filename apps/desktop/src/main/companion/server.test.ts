@@ -58,12 +58,19 @@ describe("companion server core", () => {
   it("rejects bad Host headers before routing", async () => {
     const { baseUrl } = await startServer();
 
-    const response = await rawRequest(`${baseUrl}/companion/v1/handshake`, {
+    const evil = await rawRequest(`${baseUrl}/companion/v1/handshake`, {
       host: "evil.example:48620"
     });
+    const unrelatedTailnet = await rawRequest(`${baseUrl}/companion/v1/handshake`, {
+      host: "not-this-mac.tailnet.ts.net:48620"
+    });
 
-    expect(response.status).toBe(403);
-    expect(response.body).toMatchObject({
+    expect(evil.status).toBe(403);
+    expect(evil.body).toMatchObject({
+      error: { code: "forbidden", protocolVersion: 1 }
+    });
+    expect(unrelatedTailnet.status).toBe(403);
+    expect(unrelatedTailnet.body).toMatchObject({
       error: { code: "forbidden", protocolVersion: 1 }
     });
   });
@@ -90,11 +97,21 @@ describe("companion server core", () => {
 
   it("rate limits repeated requests per remote address", async () => {
     const { baseUrl } = await startServer();
-    const responses = await Promise.all(
-      Array.from({ length: 70 }, () => fetch(`${baseUrl}/companion/v1/handshake`))
+    const handshakeResponses = await sequentialRequests(31, () =>
+      fetch(`${baseUrl}/companion/v1/handshake`)
+    );
+    const pairResponses = await sequentialRequests(11, () =>
+      fetch(`${baseUrl}/companion/v1/pair`, {
+        body: "{}",
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      })
     );
 
-    expect(responses.some((response) => response.status === 429)).toBe(true);
+    expect(handshakeResponses.at(29)?.status).not.toBe(429);
+    expect(handshakeResponses.at(30)?.status).toBe(429);
+    expect(pairResponses.at(9)?.status).not.toBe(429);
+    expect(pairResponses.at(10)?.status).toBe(429);
   });
 
   it("validates file diff paths against the current workspace before loading content", async () => {
@@ -129,8 +146,51 @@ describe("companion server core", () => {
     const traversal = await fetch(
       `${baseUrl}/companion/v1/projects/project-1/files/diff?path=..%2Fsecret.txt`
     );
+    const absolute = await fetch(
+      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=%2Fetc%2Fpasswd`
+    );
+    const outsideDiff = await fetch(
+      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=README.md`
+    );
+
     expect(traversal.status).toBe(404);
+    expect(absolute.status).toBe(404);
+    expect(outsideDiff.status).toBe(404);
     expect(calls).toEqual(["src/app.ts"]);
+  });
+
+  it("coalesces concurrent workspace loads per project", async () => {
+    let loadCount = 0;
+    let resolveWorkspace:
+      | ((workspace: Awaited<ReturnType<CompanionDeps["loadWorkspaceView"]>>) => void)
+      | undefined;
+    const workspacePromise = new Promise<
+      Awaited<ReturnType<CompanionDeps["loadWorkspaceView"]>>
+    >((resolve) => {
+      resolveWorkspace = resolve;
+    });
+    const { baseUrl } = await startServer({
+      loadWorkspaceView: async (projectId) => {
+        loadCount += 1;
+
+        return await workspacePromise.then((workspace) => ({
+          ...workspace,
+          project: { ...workspace.project, id: projectId }
+        }));
+      }
+    });
+
+    const workspaceRequests = Promise.all([
+      fetch(`${baseUrl}/companion/v1/projects/project-1/workspace`),
+      fetch(`${baseUrl}/companion/v1/projects/project-1/comments`)
+    ]);
+
+    await waitFor(() => loadCount === 1);
+    resolveWorkspace?.(testWorkspace("project-1"));
+    const responses = await workspaceRequests;
+
+    expect(loadCount).toBe(1);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
   });
 });
 
@@ -149,38 +209,7 @@ async function startServer(
     loadFileDiff: async () => {
       throw new Error("unexpected loadFileDiff call");
     },
-    loadWorkspaceView: async (projectId) => ({
-      comments: [],
-      files: [
-        {
-          additions: 1,
-          deletions: 0,
-          diffHash: "diff-hash",
-          diffLoaded: false,
-          generated: false,
-          invalidated: false,
-          path: "src/app.ts",
-          reviewable: true,
-          reviewed: false,
-          status: "modified",
-          visible: true
-        }
-      ],
-      progress: {
-        reviewedVisibleFiles: 0,
-        totalVisibleReviewableFiles: 1
-      },
-      project: {
-        id: projectId,
-        name: "Project",
-        path: "/tmp/project"
-      },
-      reviewTarget: {
-        headSha: "head-sha",
-        id: "target-1",
-        kind: "working_tree"
-      }
-    }),
+    loadWorkspaceView: async (projectId) => testWorkspace(projectId),
     markReviewed: async () => ({
       marked: true,
       workspaceSummary: {
@@ -215,6 +244,70 @@ async function startServer(
   startedServers.push(started);
 
   return started;
+}
+
+function testWorkspace(
+  projectId: string
+): Awaited<ReturnType<CompanionDeps["loadWorkspaceView"]>> {
+  return {
+    comments: [],
+    files: [
+      {
+        additions: 1,
+        deletions: 0,
+        diffHash: "diff-hash",
+        diffLoaded: false,
+        generated: false,
+        invalidated: false,
+        path: "src/app.ts",
+        reviewable: true,
+        reviewed: false,
+        status: "modified",
+        visible: true
+      }
+    ],
+    progress: {
+      reviewedVisibleFiles: 0,
+      totalVisibleReviewableFiles: 1
+    },
+    project: {
+      id: projectId,
+      name: "Project",
+      path: "/tmp/project"
+    },
+    reviewTarget: {
+      headSha: "head-sha",
+      id: "target-1",
+      kind: "working_tree"
+    }
+  };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
+  }
+
+  throw new Error("Timed out waiting for condition");
+}
+
+async function sequentialRequests(
+  count: number,
+  requestFactory: () => Promise<Response>
+): Promise<readonly Response[]> {
+  const responses: Response[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    responses.push(await requestFactory());
+  }
+
+  return responses;
 }
 
 async function rawRequest(

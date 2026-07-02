@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import os from "node:os";
 
 import { companionError, type CompanionHandler } from "./api.js";
 
@@ -10,7 +11,6 @@ export type RouteDefinition = {
 };
 
 const bodyLimitBytes = 256 * 1024;
-const requestLimit = 60;
 const requestWindowMs = 60_000;
 const urlLimitBytes = 4096;
 
@@ -21,13 +21,15 @@ type RateBucket = {
 
 export function createCompanionRouter(routes: readonly RouteDefinition[]) {
   const buckets = new Map<string, RateBucket>();
+  const allowedHosts = new Set(["localhost", os.hostname().toLowerCase()]);
+  allowedHosts.add(`${os.hostname().toLowerCase()}.local`);
 
   return async function route(
     request: IncomingMessage,
     response: ServerResponse
   ): Promise<void> {
     try {
-      if (!isAllowedHost(request.headers.host)) {
+      if (!isAllowedHost(request.headers.host, allowedHosts)) {
         writeJson(response, 403, companionError("forbidden", "Host is not allowed"));
         return;
       }
@@ -37,12 +39,13 @@ export function createCompanionRouter(routes: readonly RouteDefinition[]) {
         return;
       }
 
-      if (!consumeRateLimit(buckets, request)) {
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
+
+      if (!consumeRateLimit(buckets, request, url.pathname)) {
         writeJson(response, 429, companionError("bad_request", "Rate limit exceeded"));
         return;
       }
 
-      const url = new URL(request.url ?? "/", "http://127.0.0.1");
       const routeMatch = matchRoute(routes, request.method ?? "GET", url.pathname);
 
       if (!routeMatch) {
@@ -70,14 +73,17 @@ export function createCompanionRouter(routes: readonly RouteDefinition[]) {
   };
 }
 
-export function isAllowedHost(hostHeader: string | undefined): boolean {
+export function isAllowedHost(
+  hostHeader: string | undefined,
+  allowedHosts = new Set(["localhost", os.hostname().toLowerCase()])
+): boolean {
   if (!hostHeader) {
     return false;
   }
 
   const host = hostWithoutPort(hostHeader).toLowerCase();
 
-  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".ts.net")) {
+  if (allowedHosts.has(host)) {
     return true;
   }
 
@@ -86,9 +92,12 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
 
 function consumeRateLimit(
   buckets: Map<string, RateBucket>,
-  request: IncomingMessage
+  request: IncomingMessage,
+  pathname: string
 ): boolean {
-  const key = request.socket.remoteAddress ?? "unknown";
+  const method = request.method ?? "GET";
+  const limit = rateLimitFor(method, pathname);
+  const key = `${request.socket.remoteAddress ?? "unknown"}:${method}:${pathname}`;
   const now = Date.now();
   const bucket = buckets.get(key);
 
@@ -102,7 +111,23 @@ function consumeRateLimit(
 
   bucket.count += 1;
 
-  return bucket.count <= requestLimit;
+  return bucket.count <= limit;
+}
+
+function rateLimitFor(method: string, pathname: string): number {
+  if (method === "GET" && pathname === "/companion/v1/handshake") {
+    return 30;
+  }
+
+  if (method === "POST" && pathname === "/companion/v1/pair") {
+    return 10;
+  }
+
+  if (method === "GET" && /^\/companion\/v1\/pair\/[^/]+$/.test(pathname)) {
+    return 40;
+  }
+
+  return 60;
 }
 
 function hostWithoutPort(hostHeader: string): string {
