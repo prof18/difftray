@@ -78,6 +78,7 @@ describe("companion server core", () => {
         cancelPairing: () => undefined,
         denyPairRequest: () => ({ status: "denied" }),
         getActivePairingSession: () => null,
+        getPairRequestStatus: () => ({ reason: "not_found", status: "rejected" }),
         listPendingPairRequests: () => [],
         pairDevice: (requestBody) => {
           pairRequests.push(requestBody);
@@ -138,6 +139,75 @@ describe("companion server core", () => {
         secret: "pairing-secret"
       }
     ]);
+  });
+
+  it("returns pair request status for manual-code polling", async () => {
+    const { baseUrl } = await startServer({
+      companionAuth: {
+        approvePairRequest: () => ({ reason: "not_found", status: "rejected" }),
+        cancelPairing: () => undefined,
+        denyPairRequest: () => ({ status: "denied" }),
+        getActivePairingSession: () => null,
+        getPairRequestStatus: (id) => {
+          switch (id) {
+            case "pending-request":
+              return { devicePublicKey, status: "pending" };
+            case "approved-request":
+              return { devicePublicKey, status: "approved" };
+            case "denied-request":
+              return { status: "denied" };
+            case "expired-request":
+              return { reason: "pairing_expired", status: "rejected" };
+            default:
+              return { reason: "not_found", status: "rejected" };
+          }
+        },
+        listPendingPairRequests: () => [],
+        pairDevice: () => ({ reason: "pairing_expired", status: "rejected" }),
+        startPairing: () => ({
+          code: "123456",
+          expiresAt: "2026-07-02T12:05:00.000Z",
+          secret: "pairing-secret"
+        })
+      }
+    });
+
+    const pending = await boxedPairStatusRequest({
+      baseUrl,
+      pairRequestId: "pending-request"
+    });
+    const approved = await boxedPairStatusRequest({
+      baseUrl,
+      pairRequestId: "approved-request"
+    });
+    const denied = await fetch(`${baseUrl}/companion/v1/pair/denied-request`);
+    const expired = await fetch(`${baseUrl}/companion/v1/pair/expired-request`);
+    const missing = await fetch(`${baseUrl}/companion/v1/pair/missing-request`);
+
+    expect(pending).toEqual({
+      body: { status: "pending" },
+      wireStatus: 200
+    });
+    expect(approved).toEqual({
+      body: {
+        serverId: "server-test",
+        serverName: "Test Mac",
+        status: "approved"
+      },
+      wireStatus: 200
+    });
+    expect(denied.status).toBe(403);
+    await expect(denied.json()).resolves.toMatchObject({
+      error: { code: "forbidden", protocolVersion: 1 }
+    });
+    expect(expired.status).toBe(410);
+    await expect(expired.json()).resolves.toMatchObject({
+      error: { code: "pairing_expired", protocolVersion: 1 }
+    });
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toMatchObject({
+      error: { code: "not_found", protocolVersion: 1 }
+    });
   });
 
   it("rejects bad Host headers before routing", async () => {
@@ -416,6 +486,7 @@ async function startServer(
       cancelPairing: () => undefined,
       denyPairRequest: () => ({ reason: "not_found", status: "rejected" }),
       getActivePairingSession: () => null,
+      getPairRequestStatus: () => ({ reason: "not_found", status: "rejected" }),
       listPendingPairRequests: () => [],
       pairDevice: () => ({ reason: "pairing_expired", status: "rejected" }),
       startPairing: () => ({
@@ -673,6 +744,33 @@ async function boxedPairRequest(input: {
 
   if (!opened.ok) {
     throw new Error(`Failed to open companion pair response: ${opened.error}`);
+  }
+
+  return {
+    body: opened.value,
+    wireStatus: response.status
+  };
+}
+
+async function boxedPairStatusRequest(input: {
+  readonly baseUrl: string;
+  readonly pairRequestId: string;
+}): Promise<{
+  readonly body: unknown;
+  readonly wireStatus: number;
+}> {
+  const response = await fetch(
+    `${input.baseUrl}/companion/v1/pair/${input.pairRequestId}`
+  );
+  const responseBody = (await response.json()) as EncryptedEnvelope;
+  const opened = openEnvelope({
+    envelope: responseBody,
+    recipientSecretKey: deviceSecretKey,
+    senderPublicKey: serverPublicKey
+  });
+
+  if (!opened.ok) {
+    throw new Error(`Failed to open companion pair status response: ${opened.error}`);
   }
 
   return {

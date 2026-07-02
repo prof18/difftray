@@ -227,6 +227,59 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       path: "/companion/v1/pair"
     },
     {
+      handler: ({ params }) => {
+        const pairRequestId = params.get("pairRequestId");
+
+        if (!pairRequestId) {
+          return {
+            body: companionError("not_found", "Pair request not found"),
+            status: 404
+          };
+        }
+
+        const result = deps.companionAuth.getPairRequestStatus(pairRequestId);
+
+        if (result.status === "pending") {
+          return sealPairResponse(deps, result.devicePublicKey, {
+            body: { status: "pending" },
+            status: 200
+          });
+        }
+
+        if (result.status === "approved") {
+          const identity = deps.serverIdentity();
+
+          return sealPairResponse(deps, result.devicePublicKey, {
+            body: {
+              serverId: identity.serverId,
+              serverName: identity.serverName,
+              status: "approved"
+            },
+            status: 200
+          });
+        }
+
+        if (result.status === "denied") {
+          return {
+            body: companionError("forbidden", "Pair request was denied"),
+            status: 403
+          };
+        }
+
+        return result.reason === "pairing_expired"
+          ? {
+              body: companionError("pairing_expired", "Pairing has expired"),
+              status: 410
+            }
+          : {
+              body: companionError("not_found", "Pair request not found"),
+              status: 404
+            };
+      },
+      method: "GET",
+      path: "/companion/v1/pair/:pairRequestId"
+    },
+    {
       handler: async ({ body, params, query }) => {
         const projectId = params.get("projectId");
         const requestedPath = query.get("path") ?? readFileDiffPath(body);

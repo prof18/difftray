@@ -92,11 +92,27 @@ export type PairRequestDecisionResult =
       readonly status: "rejected";
     };
 
+export type PairRequestStatusResult =
+  | {
+      readonly devicePublicKey: string;
+      readonly status: "approved";
+    }
+  | {
+      readonly devicePublicKey: string;
+      readonly status: "pending";
+    }
+  | { readonly status: "denied" }
+  | {
+      readonly reason: "not_found" | "pairing_expired";
+      readonly status: "rejected";
+    };
+
 export type CompanionAuthManager = {
   readonly approvePairRequest: (id: string) => PairRequestDecisionResult;
   readonly cancelPairing: () => void;
   readonly denyPairRequest: (id: string) => PairRequestDecisionResult;
   readonly getActivePairingSession: () => CompanionPairingSessionView | null;
+  readonly getPairRequestStatus: (id: string) => PairRequestStatusResult;
   readonly listPendingPairRequests: () => readonly PendingPairRequestView[];
   readonly pairDevice: (request: PairRequestBody) => PairDeviceResult;
   readonly startPairing: () => CompanionPairingSessionView;
@@ -476,6 +492,7 @@ export function createCompanionAuthManager(input: {
     now
   });
   const pendingRequests = new Map<string, PendingPairRequest>();
+  const resolvedRequests = new Map<string, ResolvedPairRequest>();
 
   function isExpiredPendingRequest(request: PendingPairRequest): boolean {
     if (Date.parse(request.expiresAt) <= now().getTime()) {
@@ -489,6 +506,12 @@ export function createCompanionAuthManager(input: {
     for (const [id, request] of pendingRequests) {
       if (isExpiredPendingRequest(request)) {
         pendingRequests.delete(id);
+      }
+    }
+
+    for (const [id, request] of resolvedRequests) {
+      if (Date.parse(request.expiresAt) <= now().getTime()) {
+        resolvedRequests.delete(id);
       }
     }
   }
@@ -526,6 +549,11 @@ export function createCompanionAuthManager(input: {
       pendingRequests.delete(id);
 
       const result = registerDevice(request.requestBody);
+      resolvedRequests.set(id, {
+        devicePublicKey: result.devicePublicKey,
+        expiresAt: request.expiresAt,
+        status: "approved"
+      });
 
       input.onStateChanged?.();
 
@@ -543,11 +571,49 @@ export function createCompanionAuthManager(input: {
       }
 
       pendingRequests.delete(id);
+      resolvedRequests.set(id, {
+        expiresAt: request.expiresAt,
+        status: "denied"
+      });
       input.onStateChanged?.();
 
       return { status: "denied" };
     },
     getActivePairingSession: () => pairingSessions.getActivePairingSession(),
+    getPairRequestStatus: (id) => {
+      const request = pendingRequests.get(id);
+
+      if (request) {
+        if (isExpiredPendingRequest(request)) {
+          pendingRequests.delete(id);
+          input.onStateChanged?.();
+
+          return { reason: "pairing_expired", status: "rejected" };
+        }
+
+        return {
+          devicePublicKey: request.requestBody.devicePublicKey,
+          status: "pending"
+        };
+      }
+
+      pruneExpiredPendingRequests();
+
+      const resolved = resolvedRequests.get(id);
+
+      if (resolved?.status === "approved" && resolved.devicePublicKey) {
+        return {
+          devicePublicKey: resolved.devicePublicKey,
+          status: "approved"
+        };
+      }
+
+      if (resolved?.status === "denied") {
+        return { status: "denied" };
+      }
+
+      return { reason: "not_found", status: "rejected" };
+    },
     listPendingPairRequests: () => {
       pruneExpiredPendingRequests();
 
@@ -697,6 +763,12 @@ type PendingPairRequest = {
   readonly expiresAt: string;
   readonly id: string;
   readonly requestBody: PairRequestBody;
+};
+
+type ResolvedPairRequest = {
+  readonly devicePublicKey?: string;
+  readonly expiresAt: string;
+  readonly status: "approved" | "denied";
 };
 
 function getOrCreateCompanionServerKeyPair(storage: DifftrayStorage): {

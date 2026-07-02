@@ -218,6 +218,10 @@ describe("companion auth", () => {
         pairRequestId: "pair-request-1",
         status: "pending"
       });
+      expect(manager.getPairRequestStatus("pair-request-1")).toEqual({
+        devicePublicKey: firstPublicKey,
+        status: "pending"
+      });
       expect(manager.listPendingPairRequests()).toEqual([
         {
           deviceId: "device-1",
@@ -230,6 +234,9 @@ describe("companion auth", () => {
         }
       ]);
       expect(manager.denyPairRequest("pair-request-1")).toEqual({
+        status: "denied"
+      });
+      expect(manager.getPairRequestStatus("pair-request-1")).toEqual({
         status: "denied"
       });
       expect(storage.findCompanionDeviceByPublicKey(firstPublicKey)).toBeNull();
@@ -250,8 +257,12 @@ describe("companion auth", () => {
       });
 
       now = new Date("2026-07-02T12:05:00.001Z");
-      expect(manager.approvePairRequest("pair-request-2")).toEqual({
+      expect(manager.getPairRequestStatus("pair-request-2")).toEqual({
         reason: "pairing_expired",
+        status: "rejected"
+      });
+      expect(manager.approvePairRequest("pair-request-2")).toEqual({
+        reason: "not_found",
         status: "rejected"
       });
       expect(storage.findCompanionDeviceByPublicKey(secondPublicKey)).toBeNull();
@@ -293,6 +304,10 @@ describe("companion auth", () => {
       });
       expect(manager.approvePairRequest("pair-request-1")).toEqual({
         deviceId: "device-1",
+        devicePublicKey,
+        status: "approved"
+      });
+      expect(manager.getPairRequestStatus("pair-request-1")).toEqual({
         devicePublicKey,
         status: "approved"
       });
