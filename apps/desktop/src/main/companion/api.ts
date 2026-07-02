@@ -320,10 +320,15 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
           };
         }
 
-        return {
-          body: { deleted: await deps.deleteComment(commentId) },
-          status: 200
-        };
+        return (await deps.deleteComment(commentId))
+          ? {
+              body: { deleted: true },
+              status: 200
+            }
+          : {
+              body: companionError("not_found", "Comment not found"),
+              status: 404
+            };
       },
       method: "DELETE",
       path: "/companion/v1/comments/:commentId"

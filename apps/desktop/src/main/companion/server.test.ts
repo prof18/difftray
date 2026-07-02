@@ -193,6 +193,21 @@ describe("companion server core", () => {
     expect(loadCount).toBe(1);
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
   });
+
+  it("maps missing comments to not_found on delete", async () => {
+    const { baseUrl } = await startServer({
+      deleteComment: async () => false
+    });
+
+    const response = await fetch(`${baseUrl}/companion/v1/comments/comment-1`, {
+      method: "DELETE"
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "not_found", protocolVersion: 1 }
+    });
+  });
 });
 
 async function startServer(
