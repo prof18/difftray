@@ -95,11 +95,11 @@ describe("companion server core", () => {
       }
     });
 
-    const response = await fetch(`${baseUrl}/companion/v1/pair`, {
+    const plaintextResponse = await fetch(`${baseUrl}/companion/v1/pair`, {
       body: JSON.stringify({
         deviceId: "device-1",
         deviceName: "Marco's iPhone",
-        devicePublicKey: "device-public-key-1",
+        devicePublicKey,
         platform: "ios",
         protocolVersion: 1,
         secret: "pairing-secret"
@@ -107,9 +107,22 @@ describe("companion server core", () => {
       headers: { "content-type": "application/json" },
       method: "POST"
     });
+    expect(plaintextResponse.status).toBe(401);
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    const response = await boxedPairRequest({
+      baseUrl,
+      body: {
+        deviceId: "device-1",
+        deviceName: "Marco's iPhone",
+        devicePublicKey,
+        platform: "ios",
+        protocolVersion: 1,
+        secret: "pairing-secret"
+      }
+    });
+
+    expect(response.wireStatus).toBe(200);
+    expect(response.body).toEqual({
       serverId: "server-test",
       serverName: "Test Mac",
       status: "approved"
@@ -118,7 +131,7 @@ describe("companion server core", () => {
       {
         deviceId: "device-1",
         deviceName: "Marco's iPhone",
-        devicePublicKey: "device-public-key-1",
+        devicePublicKey,
         platform: "ios",
         protocolVersion: 1,
         secret: "pairing-secret"
@@ -511,6 +524,41 @@ async function encryptedRequest(input: {
 
   return {
     plain: opened.value as EnvelopeResponsePlain,
+    wireStatus: response.status
+  };
+}
+
+async function boxedPairRequest(input: {
+  readonly baseUrl: string;
+  readonly body: unknown;
+}): Promise<{
+  readonly body: unknown;
+  readonly wireStatus: number;
+}> {
+  const envelope = sealEnvelope({
+    devicePublicKey,
+    plaintext: input.body,
+    recipientPublicKey: serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
+  const response = await fetch(`${input.baseUrl}/companion/v1/pair`, {
+    body: JSON.stringify(envelope),
+    headers: { "content-type": "application/x-difftray-envelope" },
+    method: "POST"
+  });
+  const responseBody = (await response.json()) as EncryptedEnvelope;
+  const opened = openEnvelope({
+    envelope: responseBody,
+    recipientSecretKey: deviceSecretKey,
+    senderPublicKey: serverPublicKey
+  });
+
+  if (!opened.ok) {
+    throw new Error(`Failed to open companion pair response: ${opened.error}`);
+  }
+
+  return {
+    body: opened.value,
     wireStatus: response.status
   };
 }

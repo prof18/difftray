@@ -102,12 +102,29 @@ export type CompanionAuthManager = {
 };
 
 export type CompanionEnvelopeVerifier = {
+  readonly openPairRequestEnvelope: (input: unknown) => CompanionPairEnvelopeOpenResult;
+  readonly sealPairResponseEnvelope: (
+    input: CompanionPairEnvelopeResponseInput
+  ) => EncryptedEnvelope;
   readonly sealResponseEnvelope: (
     input: CompanionEnvelopeResponseInput
   ) => EncryptedEnvelope;
   readonly verifyRequestEnvelope: (
     input: CompanionEnvelopeVerificationInput
   ) => CompanionEnvelopeVerificationResult;
+};
+
+export type CompanionPairEnvelopeOpenResult =
+  | {
+      readonly body: unknown;
+      readonly devicePublicKey: string;
+      readonly ok: true;
+    }
+  | { readonly ok: false };
+
+export type CompanionPairEnvelopeResponseInput = {
+  readonly body: unknown;
+  readonly devicePublicKey: string;
 };
 
 export type CompanionEnvelopeVerificationInput = {
@@ -157,10 +174,45 @@ export function createCompanionEnvelopeVerifier(input: {
 }): CompanionEnvelopeVerifier {
   const now = input.now ?? (() => new Date());
   const replayCache = new Map<string, number>();
+  const storage = input.storage;
 
   return {
+    openPairRequestEnvelope: (body) => {
+      const envelope = readEncryptedEnvelope(body);
+
+      if (!envelope.ok) {
+        return { ok: false };
+      }
+
+      const serverKeyPair = getOrCreateCompanionServerKeyPair(storage);
+      const opened = openEnvelope({
+        envelope: envelope.value,
+        recipientSecretKey: serverKeyPair.secretKey,
+        senderPublicKey: envelope.value.devicePk
+      });
+
+      if (!opened.ok) {
+        return { ok: false };
+      }
+
+      return {
+        body: opened.value,
+        devicePublicKey: envelope.value.devicePk,
+        ok: true
+      };
+    },
+    sealPairResponseEnvelope: ({ body, devicePublicKey }) => {
+      const serverKeyPair = getOrCreateCompanionServerKeyPair(storage);
+
+      return sealEnvelope({
+        devicePublicKey,
+        plaintext: body,
+        recipientPublicKey: devicePublicKey,
+        senderSecretKey: serverKeyPair.secretKey
+      });
+    },
     sealResponseEnvelope: ({ body, devicePublicKey, requestId, status }) => {
-      const serverKeyPair = getOrCreateCompanionServerKeyPair(input.storage);
+      const serverKeyPair = getOrCreateCompanionServerKeyPair(storage);
 
       return sealEnvelope({
         devicePublicKey,
@@ -175,13 +227,13 @@ export function createCompanionEnvelopeVerifier(input: {
       });
     },
     verifyRequestEnvelope: ({ envelope, logicalMethod, path }) => {
-      const device = input.storage.findCompanionDeviceByPublicKey(envelope.devicePk);
+      const device = storage.findCompanionDeviceByPublicKey(envelope.devicePk);
 
       if (!device || device.revokedAt) {
         return { ok: false, reason: "unauthorized" };
       }
 
-      const serverKeyPair = input.storage.getCompanionServerKeyPair();
+      const serverKeyPair = storage.getCompanionServerKeyPair();
 
       if (!serverKeyPair) {
         return { ok: false, reason: "unauthorized" };
@@ -229,6 +281,35 @@ export function createCompanionEnvelopeVerifier(input: {
         ok: true,
         requestId: plaintext.requestId
       };
+    }
+  };
+}
+
+function readEncryptedEnvelope(
+  input: unknown
+): { readonly ok: true; readonly value: EncryptedEnvelope } | { readonly ok: false } {
+  if (typeof input !== "object" || input === null) {
+    return { ok: false };
+  }
+
+  const envelope = input as Partial<EncryptedEnvelope>;
+
+  if (
+    envelope.v !== 1 ||
+    typeof envelope.devicePk !== "string" ||
+    typeof envelope.nonce !== "string" ||
+    typeof envelope.box !== "string"
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      box: envelope.box,
+      devicePk: envelope.devicePk,
+      nonce: envelope.nonce,
+      v: 1
     }
   };
 }

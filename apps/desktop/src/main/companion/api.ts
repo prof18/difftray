@@ -156,17 +156,38 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
     },
     {
       handler: ({ body }) => {
-        const parsed = parsePairRequestBody(body);
+        const openedPairEnvelope = deps.companionEnvelope.openPairRequestEnvelope(body);
+
+        if (!openedPairEnvelope.ok) {
+          return {
+            body: companionError("unauthorized", "Unauthorized"),
+            status: 401
+          };
+        }
+
+        const parsed = parsePairRequestBody(openedPairEnvelope.body);
 
         if (!parsed.ok) {
-          return badRequest(parsed.error);
+          return sealPairResponse(
+            deps,
+            openedPairEnvelope.devicePublicKey,
+            badRequest(parsed.error)
+          );
+        }
+
+        if (parsed.value.devicePublicKey !== openedPairEnvelope.devicePublicKey) {
+          return sealPairResponse(
+            deps,
+            openedPairEnvelope.devicePublicKey,
+            badRequest("devicePublicKey must match envelope sender")
+          );
         }
 
         if (parsed.value.protocolVersion !== COMPANION_PROTOCOL_VERSION) {
-          return {
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
             body: companionError("protocol_mismatch", "Unsupported protocol version"),
             status: 400
-          };
+          });
         }
 
         const result = deps.companionAuth.pairDevice(parsed.value);
@@ -174,33 +195,33 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         if (result.status === "approved") {
           const identity = deps.serverIdentity();
 
-          return {
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
             body: {
               serverId: identity.serverId,
               serverName: identity.serverName,
               status: "approved"
             },
             status: 200
-          };
+          });
         }
 
         if (result.status === "pending") {
-          return {
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
             body: {
               pairRequestId: result.pairRequestId,
               status: "pending"
             },
             status: 202
-          };
+          });
         }
 
-        return {
+        return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
           body: companionError(
             result.reason === "pairing_expired" ? "pairing_expired" : "unauthorized",
             pairingFailureMessage(result.reason)
           ),
           status: 401
-        };
+        });
       },
       method: "POST",
       path: "/companion/v1/pair"
@@ -478,6 +499,20 @@ function badRequest(message: string): CompanionResponse {
   return {
     body: companionError("bad_request", message),
     status: 400
+  };
+}
+
+function sealPairResponse(
+  deps: CompanionDeps,
+  devicePublicKey: string,
+  response: CompanionResponse
+): CompanionResponse {
+  return {
+    body: deps.companionEnvelope.sealPairResponseEnvelope({
+      body: response.body,
+      devicePublicKey
+    }),
+    status: response.status
   };
 }
 
