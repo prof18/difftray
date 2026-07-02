@@ -348,6 +348,9 @@ describe("companion auth", () => {
         ok: true,
         requestId: "ycrLzM3Oz9DR0tPU1dbX2Nna29zd3t_g"
       });
+      expect(storage.findCompanionDeviceByPublicKey(devicePublicKey)).toMatchObject({
+        lastSeenAt: expect.any(String) as string
+      });
       expect(
         verifier.verifyRequestEnvelope({
           envelope,

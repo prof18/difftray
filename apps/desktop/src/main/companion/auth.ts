@@ -271,6 +271,7 @@ export function createCompanionEnvelopeVerifier(input: {
 
       replayCache.set(replayKey, now().getTime());
       pruneReplayCache(replayCache, now().getTime());
+      storage.touchCompanionDeviceLastSeen(device.id);
 
       return {
         body: plaintext.body,
