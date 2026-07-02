@@ -18,7 +18,7 @@ type ConnectedSocket = {
 };
 
 export function createCompanionServer(deps: CompanionDeps): CompanionServer {
-  const router = createCompanionRouter(createCompanionApi(deps));
+  const router = createCompanionRouter(createCompanionApi(deps), deps.companionEnvelope);
   const httpServer = createServer((request, response) => {
     void router(request, response);
   });

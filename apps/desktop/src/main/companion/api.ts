@@ -21,7 +21,11 @@ import {
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
 
-import type { CompanionAuthManager, CompanionDeviceContext } from "./auth.js";
+import type {
+  CompanionAuthManager,
+  CompanionDeviceContext,
+  CompanionEnvelopeVerifier
+} from "./auth.js";
 import type { RouteDefinition } from "./router.js";
 
 export type MarkResult =
@@ -52,6 +56,7 @@ export type CommitInfo = {
 
 export type CompanionDeps = {
   readonly companionAuth: CompanionAuthManager;
+  readonly companionEnvelope: CompanionEnvelopeVerifier;
   readonly storage: DifftrayStorage;
   readonly loadWorkspaceView: (projectId: string) => Promise<ReviewWorkspaceView>;
   readonly loadFileDiff: (
@@ -201,9 +206,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       path: "/companion/v1/pair"
     },
     {
-      handler: async ({ params, query }) => {
+      handler: async ({ body, params, query }) => {
         const projectId = params.get("projectId");
-        const requestedPath = query.get("path");
+        const requestedPath = query.get("path") ?? readFileDiffPath(body);
 
         if (!projectId || !requestedPath || !isSafeRelativePath(requestedPath)) {
           return {
@@ -230,7 +235,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/files/diff"
+      path: "/companion/v1/projects/:projectId/files/diff",
+      requiresAuth: true
     },
     {
       handler: () => ({
@@ -238,7 +244,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         status: 200
       }),
       method: "GET",
-      path: "/companion/v1/projects"
+      path: "/companion/v1/projects",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -257,7 +264,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/workspace"
+      path: "/companion/v1/projects/:projectId/workspace",
+      requiresAuth: true
     },
     {
       handler: async ({ body, params }) => {
@@ -275,7 +283,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
           : { body: result, status: 200 };
       },
       method: "POST",
-      path: "/companion/v1/projects/:projectId/reviews/mark"
+      path: "/companion/v1/projects/:projectId/reviews/mark",
+      requiresAuth: true
     },
     {
       handler: async ({ body, params }) => {
@@ -293,7 +302,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
           : { body: result, status: 200 };
       },
       method: "POST",
-      path: "/companion/v1/projects/:projectId/reviews/unmark"
+      path: "/companion/v1/projects/:projectId/reviews/unmark",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -312,7 +322,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/comments"
+      path: "/companion/v1/projects/:projectId/comments",
+      requiresAuth: true
     },
     {
       handler: async ({ body, params }) => {
@@ -332,7 +343,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "POST",
-      path: "/companion/v1/projects/:projectId/comments"
+      path: "/companion/v1/projects/:projectId/comments",
+      requiresAuth: true
     },
     {
       handler: async ({ body, params }) => {
@@ -353,7 +365,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
           : { body: companionError("not_found", "Comment not found"), status: 404 };
       },
       method: "PATCH",
-      path: "/companion/v1/comments/:commentId"
+      path: "/companion/v1/comments/:commentId",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -377,7 +390,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
             };
       },
       method: "DELETE",
-      path: "/companion/v1/comments/:commentId"
+      path: "/companion/v1/comments/:commentId",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -396,7 +410,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/comments/report"
+      path: "/companion/v1/projects/:projectId/comments/report",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -415,7 +430,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/branches"
+      path: "/companion/v1/projects/:projectId/branches",
+      requiresAuth: true
     },
     {
       handler: async ({ params }) => {
@@ -434,7 +450,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "GET",
-      path: "/companion/v1/projects/:projectId/commits"
+      path: "/companion/v1/projects/:projectId/commits",
+      requiresAuth: true
     },
     {
       handler: async ({ body, params }) => {
@@ -451,7 +468,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         };
       },
       method: "POST",
-      path: "/companion/v1/projects/:projectId/diff-target"
+      path: "/companion/v1/projects/:projectId/diff-target",
+      requiresAuth: true
     }
   ];
 }
@@ -475,6 +493,16 @@ function pairingFailureMessage(
     case "wrong_code":
       return "Pairing code is incorrect";
   }
+}
+
+function readFileDiffPath(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+
+  const path = (body as { readonly path?: unknown }).path;
+
+  return typeof path === "string" ? path : null;
 }
 
 export function companionError(

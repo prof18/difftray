@@ -3,8 +3,9 @@ import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 import {
   encodeBase64Url,
-  openEnvelope,
   fingerprintPublicKey,
+  openEnvelope,
+  sealEnvelope,
   shortFingerprint,
   type EncryptedEnvelope,
   type EnvelopeRequestPlain,
@@ -101,6 +102,9 @@ export type CompanionAuthManager = {
 };
 
 export type CompanionEnvelopeVerifier = {
+  readonly sealResponseEnvelope: (
+    input: CompanionEnvelopeResponseInput
+  ) => EncryptedEnvelope;
   readonly verifyRequestEnvelope: (
     input: CompanionEnvelopeVerificationInput
   ) => CompanionEnvelopeVerificationResult;
@@ -110,6 +114,13 @@ export type CompanionEnvelopeVerificationInput = {
   readonly envelope: EncryptedEnvelope;
   readonly logicalMethod: string;
   readonly path: string;
+};
+
+export type CompanionEnvelopeResponseInput = {
+  readonly body: unknown;
+  readonly devicePublicKey: string;
+  readonly requestId: string;
+  readonly status: number;
 };
 
 export type CompanionEnvelopeVerificationResult =
@@ -148,6 +159,21 @@ export function createCompanionEnvelopeVerifier(input: {
   const replayCache = new Map<string, number>();
 
   return {
+    sealResponseEnvelope: ({ body, devicePublicKey, requestId, status }) => {
+      const serverKeyPair = getOrCreateCompanionServerKeyPair(input.storage);
+
+      return sealEnvelope({
+        devicePublicKey,
+        plaintext: {
+          body,
+          requestId,
+          status,
+          ts: now().toISOString()
+        },
+        recipientPublicKey: devicePublicKey,
+        senderSecretKey: serverKeyPair.secretKey
+      });
+    },
     verifyRequestEnvelope: ({ envelope, logicalMethod, path }) => {
       const device = input.storage.findCompanionDeviceByPublicKey(envelope.devicePk);
 

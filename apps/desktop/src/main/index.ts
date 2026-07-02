@@ -98,6 +98,7 @@ import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
 import {
   createCompanionAuthManager,
+  createCompanionEnvelopeVerifier,
   getOrCreateCompanionServerIdentity
 } from "./companion/auth.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
@@ -1084,6 +1085,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
 
   return {
     companionAuth: createCompanionAuthManager({ storage }),
+    companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
     commentsReport: async (projectId) =>
       formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
     createComment: async (input) => {

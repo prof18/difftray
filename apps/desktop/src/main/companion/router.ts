@@ -2,14 +2,19 @@ import { isIP } from "node:net";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 
-import { COMPANION_PROTOCOL_VERSION } from "@difftray/companion-protocol";
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type EncryptedEnvelope
+} from "@difftray/companion-protocol";
 
 import { companionError, type CompanionHandler } from "./api.js";
+import type { CompanionEnvelopeVerifier } from "./auth.js";
 
 export type RouteDefinition = {
   readonly handler: CompanionHandler;
   readonly method: string;
   readonly path: string;
+  readonly requiresAuth?: boolean;
 };
 
 const bodyLimitBytes = 256 * 1024;
@@ -21,7 +26,10 @@ type RateBucket = {
   resetAt: number;
 };
 
-export function createCompanionRouter(routes: readonly RouteDefinition[]) {
+export function createCompanionRouter(
+  routes: readonly RouteDefinition[],
+  envelopeVerifier: CompanionEnvelopeVerifier
+) {
   const buckets = new Map<string, RateBucket>();
   const allowedHosts = new Set(["localhost", os.hostname().toLowerCase()]);
   allowedHosts.add(`${os.hostname().toLowerCase()}.local`);
@@ -48,10 +56,15 @@ export function createCompanionRouter(routes: readonly RouteDefinition[]) {
         return;
       }
 
-      const routeMatch = matchRoute(routes, request.method ?? "GET", url.pathname);
+      const routeMatches = matchRoutes(routes, request.method ?? "GET", url.pathname);
 
-      if (!routeMatch) {
+      if (routeMatches.length === 0) {
         writeJson(response, 404, companionError("not_found", "Route not found"));
+        return;
+      }
+
+      if (!routeMatches.some((routeMatch) => routeMatch.methodAllowed)) {
+        writeJson(response, 401, companionError("unauthorized", "Unauthorized"));
         return;
       }
 
@@ -59,6 +72,68 @@ export function createCompanionRouter(routes: readonly RouteDefinition[]) {
 
       if (!body.ok) {
         writeJson(response, body.status, companionError("bad_request", body.error));
+        return;
+      }
+
+      const authMatches = routeMatches.filter(
+        (routeMatch) => routeMatch.route.requiresAuth && routeMatch.methodAllowed
+      );
+
+      if (authMatches.length > 0) {
+        const envelope = readEncryptedEnvelope(body.value);
+
+        if (!envelope.ok) {
+          writeJson(response, 401, companionError("unauthorized", "Unauthorized"));
+          return;
+        }
+
+        for (const routeMatch of authMatches) {
+          const verified = envelopeVerifier.verifyRequestEnvelope({
+            envelope: envelope.value,
+            logicalMethod: routeMatch.route.method,
+            path: url.pathname
+          });
+
+          if (!verified.ok) {
+            if (verified.reason === "clock_skew") {
+              writeJson(
+                response,
+                401,
+                companionError(
+                  "unauthorized",
+                  "Check that the clocks on your phone and computer are correct"
+                )
+              );
+              return;
+            }
+
+            continue;
+          }
+
+          const result = await routeMatch.route.handler({
+            body: verified.body,
+            device: verified.device,
+            params: routeMatch.params,
+            query: new URLSearchParams()
+          });
+          const responseEnvelope = envelopeVerifier.sealResponseEnvelope({
+            body: result.body,
+            devicePublicKey: verified.device.devicePublicKey,
+            requestId: verified.requestId,
+            status: result.status
+          });
+
+          writeJson(response, result.status, responseEnvelope);
+          return;
+        }
+
+        writeJson(response, 401, companionError("unauthorized", "Unauthorized"));
+        return;
+      }
+
+      const routeMatch = routeMatches[0];
+      if (!routeMatch) {
+        writeJson(response, 404, companionError("not_found", "Route not found"));
         return;
       }
 
@@ -147,23 +222,21 @@ function hostWithoutPort(hostHeader: string): string {
   return hostHeader.slice(0, colonIndex);
 }
 
-function matchRoute(
+type RouteMatch = {
+  readonly methodAllowed: boolean;
+  readonly params: ReadonlyMap<string, string>;
+  readonly route: RouteDefinition;
+};
+
+function matchRoutes(
   routes: readonly RouteDefinition[],
   method: string,
   pathname: string
-):
-  | {
-      readonly params: ReadonlyMap<string, string>;
-      readonly route: RouteDefinition;
-    }
-  | undefined {
+): readonly RouteMatch[] {
   const pathParts = pathname.split("/").filter(Boolean);
+  const matches: RouteMatch[] = [];
 
   for (const route of routes) {
-    if (route.method !== method) {
-      continue;
-    }
-
     const routeParts = route.path.split("/").filter(Boolean);
 
     if (routeParts.length !== pathParts.length) {
@@ -185,11 +258,48 @@ function matchRoute(
     }
 
     if (matched) {
-      return { params, route };
+      if (!route.requiresAuth && route.method !== method) {
+        continue;
+      }
+
+      matches.push({
+        methodAllowed: route.requiresAuth ? method === "POST" : route.method === method,
+        params,
+        route
+      });
     }
   }
 
-  return undefined;
+  return matches;
+}
+
+function readEncryptedEnvelope(
+  input: unknown
+): { readonly ok: true; readonly value: EncryptedEnvelope } | { readonly ok: false } {
+  if (typeof input !== "object" || input === null) {
+    return { ok: false };
+  }
+
+  const envelope = input as Partial<EncryptedEnvelope>;
+
+  if (
+    envelope.v !== 1 ||
+    typeof envelope.devicePk !== "string" ||
+    typeof envelope.nonce !== "string" ||
+    typeof envelope.box !== "string"
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      box: envelope.box,
+      devicePk: envelope.devicePk,
+      nonce: envelope.nonce,
+      v: 1
+    }
+  };
 }
 
 async function readRequestBody(

@@ -1,7 +1,15 @@
 import { request, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  openEnvelope,
+  sealEnvelope,
+  type EncryptedEnvelope,
+  type EnvelopeResponsePlain
+} from "@difftray/companion-protocol";
+
 import type { CompanionDeps } from "./api.js";
+import { createCompanionEnvelopeVerifier } from "./auth.js";
 import { createCompanionServer } from "./server.js";
 
 type StartedServer = {
@@ -10,6 +18,11 @@ type StartedServer = {
 };
 
 const startedServers: StartedServer[] = [];
+const serverPublicKey = "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw";
+const serverSecretKey = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA";
+const devicePublicKey = "VxR2nRFr92Q2rnS8eT0sMK0ZA8WaxSc4BcfiaYtBDDY";
+const deviceSecretKey = "ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5_gIGCg4Q";
+let requestCounter = 0;
 
 afterEach(async () => {
   const servers = startedServers.splice(0);
@@ -29,7 +42,7 @@ describe("companion server core", () => {
       protocolVersion: 1,
       serverId: "server-test",
       serverName: "Test Mac",
-      serverPublicKey: ""
+      serverPublicKey
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
@@ -192,29 +205,53 @@ describe("companion server core", () => {
       }
     });
 
-    const valid = await fetch(
-      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=src%2Fapp.ts`
-    );
-    expect(valid.status).toBe(200);
-    await expect(valid.json()).resolves.toMatchObject({
+    const valid = await encryptedRequest({
+      baseUrl,
+      body: { path: "src/app.ts" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/diff"
+    });
+    expect(valid.wireStatus).toBe(200);
+    expect(valid.plain.status).toBe(200);
+    expect(valid.plain.body).toMatchObject({
       contentKind: "text",
       diffHash: "diff-hash"
     });
 
-    const traversal = await fetch(
-      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=..%2Fsecret.txt`
-    );
-    const absolute = await fetch(
-      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=%2Fetc%2Fpasswd`
-    );
-    const outsideDiff = await fetch(
-      `${baseUrl}/companion/v1/projects/project-1/files/diff?path=README.md`
-    );
+    const traversal = await encryptedRequest({
+      baseUrl,
+      body: { path: "../secret.txt" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/diff"
+    });
+    const absolute = await encryptedRequest({
+      baseUrl,
+      body: { path: "/etc/passwd" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/diff"
+    });
+    const outsideDiff = await encryptedRequest({
+      baseUrl,
+      body: { path: "README.md" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/diff"
+    });
 
-    expect(traversal.status).toBe(404);
-    expect(absolute.status).toBe(404);
-    expect(outsideDiff.status).toBe(404);
+    expect(traversal.plain.status).toBe(404);
+    expect(absolute.plain.status).toBe(404);
+    expect(outsideDiff.plain.status).toBe(404);
     expect(calls).toEqual(["src/app.ts"]);
+  });
+
+  it("rejects plaintext access to authenticated routes", async () => {
+    const { baseUrl } = await startServer();
+
+    const response = await fetch(`${baseUrl}/companion/v1/projects`);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "unauthorized", protocolVersion: 1 }
+    });
   });
 
   it("coalesces concurrent workspace loads per project", async () => {
@@ -239,8 +276,16 @@ describe("companion server core", () => {
     });
 
     const workspaceRequests = Promise.all([
-      fetch(`${baseUrl}/companion/v1/projects/project-1/workspace`),
-      fetch(`${baseUrl}/companion/v1/projects/project-1/comments`)
+      encryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: "/companion/v1/projects/project-1/workspace"
+      }),
+      encryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: "/companion/v1/projects/project-1/comments"
+      })
     ]);
 
     await waitFor(() => loadCount === 1);
@@ -248,7 +293,7 @@ describe("companion server core", () => {
     const responses = await workspaceRequests;
 
     expect(loadCount).toBe(1);
-    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(responses.map((response) => response.plain.status)).toEqual([200, 200]);
   });
 
   it("maps missing comments to not_found on delete", async () => {
@@ -256,12 +301,14 @@ describe("companion server core", () => {
       deleteComment: async () => false
     });
 
-    const response = await fetch(`${baseUrl}/companion/v1/comments/comment-1`, {
-      method: "DELETE"
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "DELETE",
+      path: "/companion/v1/comments/comment-1"
     });
 
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toMatchObject({
+    expect(response.wireStatus).toBe(404);
+    expect(response.plain.body).toMatchObject({
       error: { code: "not_found", protocolVersion: 1 }
     });
   });
@@ -284,6 +331,10 @@ async function startServer(
         secret: "test-secret"
       })
     },
+    companionEnvelope: createCompanionEnvelopeVerifier({
+      now: () => new Date("2026-07-02T12:01:00.000Z"),
+      storage: testCompanionStorage()
+    }),
     commentsReport: async () => "",
     createComment: async () => {
       throw new Error("not implemented in test");
@@ -308,9 +359,9 @@ async function startServer(
       appVersion: "0.0.0-test",
       serverId: "server-test",
       serverName: "Test Mac",
-      serverPublicKey: ""
+      serverPublicKey
     }),
-    storage: {} as CompanionDeps["storage"],
+    storage: testCompanionStorage(),
     unmarkReviewed: async () => ({
       unmarked: true,
       workspaceSummary: {
@@ -370,6 +421,27 @@ function testWorkspace(
   };
 }
 
+function testCompanionStorage(): CompanionDeps["storage"] {
+  return {
+    findCompanionDeviceByPublicKey: (publicKey: string) =>
+      publicKey === devicePublicKey
+        ? {
+            createdAt: "2026-07-02T12:00:00.000Z",
+            id: "device-1",
+            name: "Phone",
+            platform: "ios",
+            publicKey: devicePublicKey
+          }
+        : null,
+    getCompanionServerKeyPair: () => ({
+      publicKey: serverPublicKey,
+      secretKey: serverSecretKey
+    }),
+    touchCompanionDeviceLastSeen: () => undefined,
+    upsertCompanionServerKeyPair: () => undefined
+  } as unknown as CompanionDeps["storage"];
+}
+
 async function waitFor(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (predicate()) {
@@ -395,6 +467,52 @@ async function sequentialRequests(
   }
 
   return responses;
+}
+
+async function encryptedRequest(input: {
+  readonly baseUrl: string;
+  readonly body?: unknown;
+  readonly logicalMethod: string;
+  readonly path: string;
+}): Promise<{
+  readonly plain: EnvelopeResponsePlain;
+  readonly wireStatus: number;
+}> {
+  requestCounter += 1;
+  const requestId = `request-${requestCounter}`;
+  const envelope = sealEnvelope({
+    devicePublicKey,
+    plaintext: {
+      ...(input.body === undefined ? {} : { body: input.body }),
+      method: input.logicalMethod,
+      path: input.path,
+      requestId,
+      ts: "2026-07-02T12:00:00.000Z"
+    },
+    recipientPublicKey: serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
+  const response = await fetch(`${input.baseUrl}${input.path}`, {
+    body: JSON.stringify(envelope),
+    headers: { "content-type": "application/x-difftray-envelope" },
+    method: "POST"
+  });
+  const responseBody = (await response.json()) as EncryptedEnvelope;
+  const opened = openEnvelope({
+    envelope: responseBody,
+    expectedRequestId: requestId,
+    recipientSecretKey: deviceSecretKey,
+    senderPublicKey: serverPublicKey
+  });
+
+  if (!opened.ok) {
+    throw new Error(`Failed to open companion response: ${opened.error}`);
+  }
+
+  return {
+    plain: opened.value as EnvelopeResponsePlain,
+    wireStatus: response.status
+  };
 }
 
 async function rawRequest(
