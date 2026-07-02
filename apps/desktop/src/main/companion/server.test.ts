@@ -267,6 +267,25 @@ describe("companion server core", () => {
     });
   });
 
+  it("returns plaintext 401 for revoked devices on authenticated routes", async () => {
+    const { baseUrl } = await startServer({
+      companionEnvelope: createCompanionEnvelopeVerifier({
+        now: () => new Date("2026-07-02T12:01:00.000Z"),
+        storage: testCompanionStorage({ revoked: true })
+      })
+    });
+    const response = await rawEncryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({
+      error: { code: "unauthorized", protocolVersion: 1 }
+    });
+  });
+
   it("coalesces concurrent workspace loads per project", async () => {
     let loadCount = 0;
     let resolveWorkspace:
@@ -434,7 +453,9 @@ function testWorkspace(
   };
 }
 
-function testCompanionStorage(): CompanionDeps["storage"] {
+function testCompanionStorage(
+  options: { readonly revoked?: boolean } = {}
+): CompanionDeps["storage"] {
   return {
     findCompanionDeviceByPublicKey: (publicKey: string) =>
       publicKey === devicePublicKey
@@ -443,7 +464,8 @@ function testCompanionStorage(): CompanionDeps["storage"] {
             id: "device-1",
             name: "Phone",
             platform: "ios",
-            publicKey: devicePublicKey
+            publicKey: devicePublicKey,
+            ...(options.revoked ? { revokedAt: "2026-07-02T12:00:30.000Z" } : {})
           }
         : null,
     getCompanionServerKeyPair: () => ({
@@ -525,6 +547,37 @@ async function encryptedRequest(input: {
   return {
     plain: opened.value as EnvelopeResponsePlain,
     wireStatus: response.status
+  };
+}
+
+async function rawEncryptedRequest(input: {
+  readonly baseUrl: string;
+  readonly body?: unknown;
+  readonly logicalMethod: string;
+  readonly path: string;
+}): Promise<{ readonly body: unknown; readonly status: number }> {
+  requestCounter += 1;
+  const envelope = sealEnvelope({
+    devicePublicKey,
+    plaintext: {
+      ...(input.body === undefined ? {} : { body: input.body }),
+      method: input.logicalMethod,
+      path: input.path,
+      requestId: `request-${requestCounter}`,
+      ts: "2026-07-02T12:00:00.000Z"
+    },
+    recipientPublicKey: serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
+  const response = await fetch(`${input.baseUrl}${input.path}`, {
+    body: JSON.stringify(envelope),
+    headers: { "content-type": "application/x-difftray-envelope" },
+    method: "POST"
+  });
+
+  return {
+    body: (await response.json()) as unknown,
+    status: response.status
   };
 }
 

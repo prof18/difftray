@@ -262,6 +262,52 @@ describe("companion auth", () => {
     }
   });
 
+  it("approves code pair requests and stores the device", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const devicePublicKey = testDevicePublicKey(3);
+
+    try {
+      const storage = openStorage(storagePath);
+      const manager = createCompanionAuthManager({
+        generateCode: () => "123456",
+        generatePairRequestId: () => "pair-request-1",
+        generateSecret: () => "pairing-secret",
+        now: () => new Date("2026-07-02T12:00:00.000Z"),
+        storage
+      });
+
+      manager.startPairing();
+      expect(
+        manager.pairDevice({
+          code: "123456",
+          deviceId: "device-1",
+          deviceName: "Pixel",
+          devicePublicKey,
+          platform: "android",
+          protocolVersion: 1
+        })
+      ).toEqual({
+        pairRequestId: "pair-request-1",
+        status: "pending"
+      });
+      expect(manager.approvePairRequest("pair-request-1")).toEqual({
+        deviceId: "device-1",
+        devicePublicKey,
+        status: "approved"
+      });
+      expect(storage.findCompanionDeviceByPublicKey(devicePublicKey)).toMatchObject({
+        id: "device-1",
+        name: "Pixel",
+        platform: "android",
+        publicKey: devicePublicKey
+      });
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
   it("verifies registered device envelopes and rejects replayed envelopes", () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
     const storagePath = path.join(storageDir, "difftray.sqlite");
@@ -305,6 +351,37 @@ describe("companion auth", () => {
       expect(
         verifier.verifyRequestEnvelope({
           envelope,
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "unauthorized" });
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects unregistered device envelopes", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertCompanionServerKeyPair({
+        publicKey: serverPublicKey,
+        secretKey: serverSecretKey
+      });
+      const verifier = createCompanionEnvelopeVerifier({
+        now: () => new Date("2026-07-02T12:01:00.000Z"),
+        storage
+      });
+
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope: testEnvelope({
+            nonce: "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+            ts: "2026-07-02T12:00:00.000Z"
+          }),
           logicalMethod: "POST",
           path: "/companion/v1/projects/project-1/reviews/mark"
         })
