@@ -27,6 +27,14 @@ import {
   type ReviewProgress,
   type ReviewTarget
 } from "@difftray/core";
+import type {
+  CreateCommentBody as CompanionCreateCommentBody,
+  DiffTargetBody,
+  FileDiffContentKind,
+  MarkReviewedBody as CompanionMarkReviewedBody,
+  UpdateCommentBody as CompanionUpdateCommentBody,
+  WorkspaceSummary
+} from "@difftray/companion-protocol";
 import {
   findGitRepository,
   loadBranchReviewTarget,
@@ -128,6 +136,11 @@ import {
 } from "./editor-preset-views.js";
 import { elapsedSince, logMainPerformance } from "./main-performance.js";
 import { reviewWorkspaceView } from "./project-workspace-view.js";
+import type {
+  CompanionDeps,
+  MarkResult as CompanionMarkResult,
+  UnmarkResult as CompanionUnmarkResult
+} from "./companion/api.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -407,9 +420,8 @@ handleTrusted(
   "projects:listBranchRefs",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<readonly string[]> => {
     const projectId = readStringProperty(input, "projectId");
-    const project = assertStoredProject(projectId);
 
-    return listBranchRefs(project.path);
+    return listBranchRefsForProject(projectId);
   }
 );
 handleTrusted(
@@ -419,9 +431,8 @@ handleTrusted(
     input: unknown
   ): Promise<Awaited<ReturnType<typeof listRecentCommits>>> => {
     const projectId = readStringProperty(input, "projectId");
-    const project = assertStoredProject(projectId);
 
-    return listRecentCommits(project.path);
+    return listRecentCommitsForProject(projectId);
   }
 );
 handleTrusted(
@@ -461,54 +472,21 @@ handleTrusted(
   async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
     const projectId = readStringProperty(input, "projectId");
     const mode = readEnumProperty(input, "mode", ["branch", "commit", "working_tree"]);
-    const project = assertStoredProject(projectId);
     const reportProgress = projectLoadProgressReporter(event.sender, projectId);
-    const previousTarget = {
-      defaultBaseRef: project.defaultBaseRef,
-      defaultCommitRef: project.defaultCommitRef,
-      defaultDiffTargetMode: project.defaultDiffTargetMode
-    };
+    const target =
+      mode === "branch"
+        ? ({
+            mode,
+            ref: readStringProperty(input, "baseRefName")
+          } satisfies DiffTargetBody)
+        : mode === "commit"
+          ? ({
+              mode,
+              ref: readStringProperty(input, "commitRef")
+            } satisfies DiffTargetBody)
+          : ({ mode } satisfies DiffTargetBody);
 
-    if (mode === "branch") {
-      const baseRefName = readStringProperty(input, "baseRefName").trim();
-
-      if (baseRefName.length === 0) {
-        throw new Error("Base branch is required.");
-      }
-
-      getStorage().updateProjectDefaultDiffTarget(projectId, {
-        mode: "branch",
-        ref: baseRefName
-      });
-    } else if (mode === "commit") {
-      const commitRef = readStringProperty(input, "commitRef").trim();
-
-      if (commitRef.length === 0) {
-        throw new Error("Commit is required.");
-      }
-
-      getStorage().updateProjectDefaultDiffTarget(projectId, {
-        mode: "commit",
-        ref: commitRef
-      });
-    } else {
-      getStorage().updateProjectDefaultDiffTarget(projectId, { mode: "working_tree" });
-    }
-
-    try {
-      return await loadProjectWorkspace(projectId, reportProgress);
-    } catch (caughtError) {
-      getStorage().updateProjectDefaultDiffTarget(
-        projectId,
-        previousTarget.defaultDiffTargetMode === "branch" && previousTarget.defaultBaseRef
-          ? { mode: "branch", ref: previousTarget.defaultBaseRef }
-          : previousTarget.defaultDiffTargetMode === "commit" &&
-              previousTarget.defaultCommitRef
-            ? { mode: "commit", ref: previousTarget.defaultCommitRef }
-            : { mode: "working_tree" }
-      );
-      throw caughtError;
-    }
+    return updateProjectDiffTarget(projectId, target, reportProgress);
   }
 );
 handleTrusted(
@@ -544,94 +522,17 @@ handleTrusted(
 handleTrusted(
   "reviews:markFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<MarkReviewedResult> => {
-    const totalStartedAt = performance.now();
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
-    const project = assertStoredProject(projectId);
-    const storedReviewTarget = getStorage().getReviewTarget(reviewTargetId);
-    const reviewTarget =
-      storedReviewTarget?.projectId === projectId
-        ? reviewTargetFromRecord(storedReviewTarget)
-        : undefined;
-    const fileLoadStartedAt = performance.now();
-    const file =
-      reviewTarget !== undefined
-        ? await loadCurrentReviewFile(project, reviewTarget, pathName)
-        : null;
-    const fileLoadMs = elapsedSince(fileLoadStartedAt);
 
-    if (!file) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: "file_missing",
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: "file_missing",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    if (file.diffHash !== displayedDiffHash) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: "stale_diff",
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: "stale_diff",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const result = getStorage().verifyAndMarkReviewed({
-      currentDiffHash: file.diffHash,
+    return markProjectFileReviewed({
       displayedDiffHash,
-      path: pathName,
-      ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      path,
       projectId,
       reviewTargetId
     });
-
-    if (!result.marked) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: result.reason,
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: result.reason,
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const workspaceLoadStartedAt = performance.now();
-    const workspace = await loadProjectWorkspace(projectId);
-    const workspaceLoadMs = elapsedSince(workspaceLoadStartedAt);
-    logMainPerformance("reviews.markFileReviewed", {
-      fileLoadMs,
-      fileCount: workspace.files.length,
-      path: pathName,
-      status: "marked",
-      totalMs: elapsedSince(totalStartedAt),
-      workspaceLoadMs
-    });
-
-    return {
-      status: "marked",
-      workspace
-    };
   }
 );
 handleTrusted(
@@ -639,58 +540,15 @@ handleTrusted(
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<UnmarkReviewedResult> => {
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
-    const workspace = await loadProjectWorkspace(projectId);
-    const file = workspace.files.find((candidate) => candidate.path === pathName);
 
-    if (!file) {
-      return {
-        reason: "file_missing",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    if (
-      workspace.reviewTarget.id !== reviewTargetId ||
-      file.diffHash !== displayedDiffHash
-    ) {
-      return {
-        reason: "stale_diff",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const result = getStorage().verifyAndUnmarkReviewed({
-      currentDiffHash: file.diffHash,
+    return unmarkProjectFileReviewed({
       displayedDiffHash,
-      path: file.path,
+      path,
+      projectId,
       reviewTargetId
     });
-
-    if (!result.unmarked) {
-      return {
-        reason: result.reason,
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const remainingPathMarks = getStorage()
-      .listReviewMarks(reviewTargetId)
-      .filter((mark) => mark.path === file.path);
-
-    return {
-      status: "unmarked",
-      workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
-        invalidated: remainingPathMarks.some(
-          (mark) => mark.reviewedDiffHash !== file.diffHash
-        ),
-        reviewed: false
-      })
-    };
   }
 );
 handleTrusted(
@@ -701,99 +559,38 @@ handleTrusted(
   ): Promise<CreateReviewCommentResult> => {
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
     const side = readEnumProperty(input, "side", ["additions", "deletions"]);
     const lineStart = readNumberProperty(input, "lineStart");
     const lineEnd = readNumberProperty(input, "lineEnd");
-    const body = readStringProperty(input, "body").trim();
-    const project = assertStoredProject(projectId);
-    const reviewTarget = await loadCurrentProjectReviewTarget(project);
-    const currentReviewTargetId = createReviewTargetId(reviewTarget);
+    const body = readStringProperty(input, "body");
 
-    if (currentReviewTargetId !== reviewTargetId) {
-      return {
-        reason: "stale_diff",
-        status: "rejected"
-      };
-    }
-
-    const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
-
-    if (!file) {
-      return {
-        reason: "file_missing",
-        status: "rejected"
-      };
-    }
-
-    if (file.diffHash !== displayedDiffHash) {
-      return {
-        reason: "stale_diff",
-        status: "rejected"
-      };
-    }
-
-    if (body.length === 0) {
-      throw new Error("Review comment body is required.");
-    }
-
-    const comment = getStorage().createReviewComment({
+    return createProjectReviewComment({
       body,
-      diffHash: file.diffHash,
+      diffHash: displayedDiffHash,
       lineEnd,
       lineStart,
-      path: pathName,
-      ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      path,
       projectId,
       reviewTargetId,
       side
     });
-
-    return {
-      comment: reviewCommentView(comment),
-      status: "created"
-    };
   }
 );
 handleTrusted(
   "comments:update",
   (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewCommentResult => {
-    const commentId = readStringProperty(input, "id");
-    const body = readStringProperty(input, "body").trim();
-
-    if (body.length === 0) {
-      throw new Error("Review comment body is required.");
-    }
-
-    const comment = getStorage().updateReviewComment(commentId, body);
-
-    if (!comment) {
-      return {
-        reason: "comment_missing",
-        status: "rejected"
-      };
-    }
-
-    return {
-      comment: reviewCommentView(comment),
-      status: "updated"
-    };
+    return updateProjectReviewComment({
+      body: readStringProperty(input, "body"),
+      id: readStringProperty(input, "id")
+    });
   }
 );
 handleTrusted(
   "comments:delete",
   (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewCommentResult => {
-    const commentId = readStringProperty(input, "id");
-
-    if (!getStorage().deleteReviewComment(commentId)) {
-      return {
-        reason: "comment_missing",
-        status: "rejected"
-      };
-    }
-
-    return { status: "deleted" };
+    return deleteProjectReviewComment(readStringProperty(input, "id"));
   }
 );
 handleTrusted(
@@ -818,15 +615,7 @@ handleTrusted(
       };
     }
 
-    const comments = await reviewCommentReportItems(projectId, workspace.comments);
-
-    clipboard.writeText(
-      formatReviewCommentsReport({
-        comments,
-        projectName: workspace.project.name,
-        targetLabel: reviewTargetLabel(workspace.reviewTarget)
-      })
-    );
+    clipboard.writeText(await formatProjectCommentsReport(projectId, workspace));
 
     return {
       commentCount: workspace.comments.length,
@@ -852,7 +641,9 @@ handleTrusted(
     const projectId = readStringProperty(input, "projectId");
     const pathName = readStringProperty(input, "path");
 
-    return loadProjectFileDiff(projectId, pathName);
+    const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+
+    return diff?.content ?? null;
   }
 );
 
@@ -1216,6 +1007,125 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   return projects.map((project) => projectView(project));
 }
 
+function listBranchRefsForProject(projectId: string): Promise<readonly string[]> {
+  const project = assertStoredProject(projectId);
+
+  return listBranchRefs(project.path);
+}
+
+function listRecentCommitsForProject(
+  projectId: string
+): Promise<Awaited<ReturnType<typeof listRecentCommits>>> {
+  const project = assertStoredProject(projectId);
+
+  return listRecentCommits(project.path);
+}
+
+async function updateProjectDiffTarget(
+  projectId: string,
+  target: DiffTargetBody,
+  reportProgress?: ProjectLoadProgressReporter
+): Promise<ReviewWorkspaceView> {
+  const project = assertStoredProject(projectId);
+  const previousTarget = {
+    defaultBaseRef: project.defaultBaseRef,
+    defaultCommitRef: project.defaultCommitRef,
+    defaultDiffTargetMode: project.defaultDiffTargetMode
+  };
+
+  if (target.mode === "branch") {
+    const baseRefName = target.ref.trim();
+
+    if (baseRefName.length === 0) {
+      throw new Error("Base branch is required.");
+    }
+
+    getStorage().updateProjectDefaultDiffTarget(projectId, {
+      mode: "branch",
+      ref: baseRefName
+    });
+  } else if (target.mode === "commit") {
+    const commitRef = target.ref.trim();
+
+    if (commitRef.length === 0) {
+      throw new Error("Commit is required.");
+    }
+
+    getStorage().updateProjectDefaultDiffTarget(projectId, {
+      mode: "commit",
+      ref: commitRef
+    });
+  } else {
+    getStorage().updateProjectDefaultDiffTarget(projectId, { mode: "working_tree" });
+  }
+
+  try {
+    return await loadProjectWorkspace(projectId, reportProgress);
+  } catch (caughtError) {
+    getStorage().updateProjectDefaultDiffTarget(
+      projectId,
+      previousTarget.defaultDiffTargetMode === "branch" && previousTarget.defaultBaseRef
+        ? { mode: "branch", ref: previousTarget.defaultBaseRef }
+        : previousTarget.defaultDiffTargetMode === "commit" &&
+            previousTarget.defaultCommitRef
+          ? { mode: "commit", ref: previousTarget.defaultCommitRef }
+          : { mode: "working_tree" }
+    );
+    throw caughtError;
+  }
+}
+
+export function createDesktopCompanionDeps(): CompanionDeps {
+  return {
+    commentsReport: async (projectId) =>
+      formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
+    createComment: async (input) => {
+      const result = await createProjectReviewComment(input);
+
+      if (result.status === "rejected") {
+        throw new Error(result.reason);
+      }
+
+      return result.comment;
+    },
+    deleteComment: (id) =>
+      Promise.resolve(deleteProjectReviewComment(id).status === "deleted"),
+    listBranchRefs: listBranchRefsForProject,
+    listRecentCommits: listRecentCommitsForProject,
+    listRecentProjects: listAvailableRecentProjectViews,
+    loadFileDiff: async (projectId, pathName) => {
+      const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+
+      if (!diff) {
+        throw new Error(`File diff is not available: ${pathName}`);
+      }
+
+      return diff;
+    },
+    loadWorkspaceView: loadProjectWorkspace,
+    markReviewed: async (input) =>
+      companionMarkResult(await markProjectFileReviewed(input)),
+    notifyDesktopRenderer,
+    serverIdentity: () => ({
+      appVersion: app.getVersion(),
+      serverId: "",
+      serverName: app.getName()
+    }),
+    storage: getStorage(),
+    unmarkReviewed: async (input) =>
+      companionUnmarkResult(await unmarkProjectFileReviewed(input)),
+    updateComment: (input) => {
+      const result = updateProjectReviewComment({
+        body: input.body,
+        id: input.commentId
+      });
+
+      return Promise.resolve(result.status === "updated" ? result.comment : null);
+    },
+    updateDiffTarget: updateProjectDiffTarget
+  };
+}
+
 function projectLoadProgressReporter(
   sender: WebContents,
   projectId: string
@@ -1418,6 +1328,313 @@ async function loadProjectWorkspaceIfAvailable(
   return loadProjectWorkspace(projectId, reportProgress);
 }
 
+async function markProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<MarkReviewedResult> {
+  const totalStartedAt = performance.now();
+  const { displayedDiffHash, path: pathName, projectId, reviewTargetId } = input;
+  const project = assertStoredProject(projectId);
+  const storedReviewTarget = getStorage().getReviewTarget(reviewTargetId);
+  const reviewTarget =
+    storedReviewTarget?.projectId === projectId
+      ? reviewTargetFromRecord(storedReviewTarget)
+      : undefined;
+  const fileLoadStartedAt = performance.now();
+  const file =
+    reviewTarget !== undefined
+      ? await loadCurrentReviewFile(project, reviewTarget, pathName)
+      : null;
+  const fileLoadMs = elapsedSince(fileLoadStartedAt);
+
+  if (!file) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: "file_missing",
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: "file_missing",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  if (file.diffHash !== displayedDiffHash) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: "stale_diff",
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: "stale_diff",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const result = getStorage().verifyAndMarkReviewed({
+    currentDiffHash: file.diffHash,
+    displayedDiffHash,
+    path: pathName,
+    ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+    projectId,
+    reviewTargetId
+  });
+
+  if (!result.marked) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: result.reason,
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: result.reason,
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const workspaceLoadStartedAt = performance.now();
+  const workspace = await loadProjectWorkspace(projectId);
+  const workspaceLoadMs = elapsedSince(workspaceLoadStartedAt);
+  logMainPerformance("reviews.markFileReviewed", {
+    fileLoadMs,
+    fileCount: workspace.files.length,
+    path: pathName,
+    status: "marked",
+    totalMs: elapsedSince(totalStartedAt),
+    workspaceLoadMs
+  });
+
+  return {
+    status: "marked",
+    workspace
+  };
+}
+
+async function unmarkProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<UnmarkReviewedResult> {
+  const { displayedDiffHash, path: pathName, projectId, reviewTargetId } = input;
+  const workspace = await loadProjectWorkspace(projectId);
+  const file = workspace.files.find((candidate) => candidate.path === pathName);
+
+  if (!file) {
+    return {
+      reason: "file_missing",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  if (
+    workspace.reviewTarget.id !== reviewTargetId ||
+    file.diffHash !== displayedDiffHash
+  ) {
+    return {
+      reason: "stale_diff",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const result = getStorage().verifyAndUnmarkReviewed({
+    currentDiffHash: file.diffHash,
+    displayedDiffHash,
+    path: file.path,
+    reviewTargetId
+  });
+
+  if (!result.unmarked) {
+    return {
+      reason: result.reason,
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const remainingPathMarks = getStorage()
+    .listReviewMarks(reviewTargetId)
+    .filter((mark) => mark.path === file.path);
+
+  return {
+    status: "unmarked",
+    workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
+      invalidated: remainingPathMarks.some(
+        (mark) => mark.reviewedDiffHash !== file.diffHash
+      ),
+      reviewed: false
+    })
+  };
+}
+
+async function createProjectReviewComment(
+  input: CompanionCreateCommentBody & { readonly projectId: string }
+): Promise<CreateReviewCommentResult> {
+  const {
+    body: rawBody,
+    diffHash,
+    lineEnd,
+    lineStart,
+    path: pathName,
+    projectId,
+    reviewTargetId,
+    side
+  } = input;
+  const body = rawBody.trim();
+  const project = assertStoredProject(projectId);
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+  const currentReviewTargetId = createReviewTargetId(reviewTarget);
+
+  if (currentReviewTargetId !== reviewTargetId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
+
+  if (!file) {
+    return {
+      reason: "file_missing",
+      status: "rejected"
+    };
+  }
+
+  if (file.diffHash !== diffHash) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  if (body.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  const comment = getStorage().createReviewComment({
+    body,
+    diffHash: file.diffHash,
+    lineEnd,
+    lineStart,
+    path: pathName,
+    ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+    projectId,
+    reviewTargetId,
+    side
+  });
+
+  return {
+    comment: reviewCommentView(comment),
+    status: "created"
+  };
+}
+
+function updateProjectReviewComment(
+  input: CompanionUpdateCommentBody & { readonly id: string }
+): UpdateReviewCommentResult {
+  const body = input.body.trim();
+
+  if (body.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  const comment = getStorage().updateReviewComment(input.id, body);
+
+  if (!comment) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return {
+    comment: reviewCommentView(comment),
+    status: "updated"
+  };
+}
+
+function deleteProjectReviewComment(commentId: string): DeleteReviewCommentResult {
+  if (!getStorage().deleteReviewComment(commentId)) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return { status: "deleted" };
+}
+
+async function formatProjectCommentsReport(
+  projectId: string,
+  workspace: ReviewWorkspaceView
+): Promise<string> {
+  const comments = await reviewCommentReportItems(projectId, workspace.comments);
+
+  return formatReviewCommentsReport({
+    comments,
+    projectName: workspace.project.name,
+    targetLabel: reviewTargetLabel(workspace.reviewTarget)
+  });
+}
+
+function companionMarkResult(result: MarkReviewedResult): CompanionMarkResult {
+  return result.status === "marked"
+    ? {
+        marked: true,
+        workspaceSummary: workspaceSummaryFromWorkspace(result.workspace)
+      }
+    : {
+        stale: true,
+        workspace: result.workspace
+      };
+}
+
+function companionUnmarkResult(result: UnmarkReviewedResult): CompanionUnmarkResult {
+  return result.status === "unmarked"
+    ? {
+        unmarked: true,
+        workspaceSummary: workspaceSummaryFromWorkspace(result.workspace)
+      }
+    : {
+        stale: true,
+        workspace: result.workspace
+      };
+}
+
+function workspaceSummaryFromWorkspace(workspace: ReviewWorkspaceView): WorkspaceSummary {
+  return {
+    files: workspace.files.map((file) => ({
+      invalidated: file.invalidated,
+      path: file.path,
+      reviewed: file.reviewed
+    })),
+    progress: workspace.progress
+  };
+}
+
+function notifyDesktopRenderer(projectId: string): void {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    return;
+  }
+
+  emitProjectChange({
+    projectId,
+    projectPath: project.path,
+    reasons: ["worktree"],
+    sequence: Date.now()
+  });
+}
+
 async function openFileInEditor(
   projectId: string,
   pathName: string
@@ -1484,17 +1701,31 @@ async function loadProjectFileDiff(
   projectId: string,
   pathName: string
 ): Promise<ReviewFileDiffContentView | null> {
+  const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+
+  return diff?.content ?? null;
+}
+
+async function loadProjectFileDiffForCompanion(
+  projectId: string,
+  pathName: string
+): Promise<{
+  readonly content: ReviewFileDiffContentView;
+  readonly contentKind: FileDiffContentKind;
+  readonly diffHash: string;
+} | null> {
   const project = getStorage().getProject(projectId);
 
   if (!project) {
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
   const gitDiff =
-    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
-      ? await loadBranchFileDiff(project.path, project.defaultBaseRef, pathName)
-      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
-        ? await loadCommitFileDiff(project.path, project.defaultCommitRef, pathName)
+    reviewTarget.kind === "branch"
+      ? await loadBranchFileDiff(project.path, reviewTarget.baseRefName, pathName)
+      : reviewTarget.kind === "commit"
+        ? await loadCommitFileDiff(project.path, reviewTarget.commitSha, pathName)
         : await loadWorkingTreeFileDiff(project.path, pathName);
 
   if (!gitDiff) {
@@ -1507,13 +1738,17 @@ async function loadProjectFileDiff(
   const textContent = diff.content.kind === "text" ? diff.content : undefined;
 
   return {
-    additions: summary.additions,
-    deletions: summary.deletions,
-    ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
-    ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
-    patch,
-    path: diff.newPath,
-    status: diff.status
+    content: {
+      additions: summary.additions,
+      deletions: summary.deletions,
+      ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
+      ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
+      patch,
+      path: diff.newPath,
+      status: diff.status
+    },
+    contentKind: diff.content.kind,
+    diffHash: createDiffHash(reviewTarget, diff)
   };
 }
 
