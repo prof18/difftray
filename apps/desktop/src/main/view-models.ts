@@ -3,9 +3,17 @@ import type {
   FileReviewState,
   ReviewCommentReportContext,
   ReviewProgress,
-  ReviewCommentSide,
   ReviewTarget
 } from "@difftray/core";
+import type {
+  ProjectReviewSummaryView,
+  RecentProjectView,
+  ReviewCommentView,
+  ReviewFileDiffContentView,
+  ReviewFileView,
+  ReviewProgressView,
+  ReviewWorkspaceView
+} from "@difftray/companion-protocol";
 import type {
   DiffLoadProgress,
   GitBranchReviewTarget,
@@ -25,71 +33,15 @@ import type {
 
 import { trustedEditorLaunchConfig } from "./security.js";
 
-export type RecentProjectView = {
-  readonly defaultBaseRef?: string;
-  readonly defaultCommitRef?: string;
-  readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
-  readonly id: string;
-  readonly lastOpenedAt?: string;
-  readonly name: string;
-  readonly path: string;
-  readonly reviewSummary?: ProjectReviewSummaryView;
-};
-
-export type ProjectReviewSummaryView = {
-  readonly attentionCount: number;
-  readonly progress: ReviewProgressView;
-};
-
-export type ReviewProgressView = {
-  readonly reviewedVisibleFiles: number;
-  readonly totalVisibleReviewableFiles: number;
-};
-
-export type ReviewFileView = {
-  readonly additions: number;
-  readonly deletions: number;
-  readonly diffHash: string;
-  readonly diffLoaded: boolean;
-  readonly generated: boolean;
-  readonly invalidated: boolean;
-  readonly newText?: string;
-  readonly oldText?: string;
-  readonly path: string;
-  readonly patch?: string;
-  readonly previousPath?: string;
-  readonly reviewable: boolean;
-  readonly reviewed: boolean;
-  readonly status: FileDiff["status"];
-  readonly visible: boolean;
-};
-
-export type ReviewFileDiffContentView = {
-  readonly additions: number;
-  readonly deletions: number;
-  readonly newText?: string;
-  readonly oldText?: string;
-  readonly patch: string;
-  readonly path: string;
-  readonly status: FileDiff["status"];
-};
-
-export type ReviewWorkspaceView = {
-  readonly comments: readonly ReviewCommentView[];
-  readonly files: readonly ReviewFileView[];
-  readonly project: RecentProjectView;
-  readonly progress: ReviewProgressView;
-  readonly reviewTarget: {
-    readonly baseRefName?: string;
-    readonly commitSha?: string;
-    readonly commitShortSha?: string;
-    readonly commitSubject?: string;
-    readonly headRefName?: string;
-    readonly headSha: string;
-    readonly id: string;
-    readonly kind: ReviewTarget["kind"];
-  };
-};
+export type {
+  ProjectReviewSummaryView,
+  RecentProjectView,
+  ReviewCommentView,
+  ReviewFileDiffContentView,
+  ReviewFileView,
+  ReviewProgressView,
+  ReviewWorkspaceView
+} from "@difftray/companion-protocol";
 
 export type ProjectLoadProgressView = {
   readonly loadedFiles?: number;
@@ -111,19 +63,6 @@ export type ProjectLoadProgressPatch = Omit<
   ProjectLoadProgressView,
   "projectId" | "projectName" | "projectPath"
 >;
-
-export type ReviewCommentView = {
-  readonly body: string;
-  readonly createdAt: string;
-  readonly diffHash: string;
-  readonly id: string;
-  readonly lineEnd: number;
-  readonly lineStart: number;
-  readonly path: string;
-  readonly previousPath?: string;
-  readonly side: ReviewCommentSide;
-  readonly updatedAt: string;
-};
 
 export type FileReviewStateWithSummary = {
   readonly state: FileReviewState;

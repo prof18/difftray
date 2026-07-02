@@ -1,0 +1,1 @@
+export const COMPANION_PROTOCOL_VERSION = 1;
