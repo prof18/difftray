@@ -2,6 +2,8 @@ import { isIP } from "node:net";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 
+import { COMPANION_PROTOCOL_VERSION } from "@difftray/companion-protocol";
+
 import { companionError, type CompanionHandler } from "./api.js";
 
 export type RouteDefinition = {
@@ -62,6 +64,7 @@ export function createCompanionRouter(routes: readonly RouteDefinition[]) {
 
       const result = await routeMatch.route.handler({
         body: body.value,
+        device: null,
         params: routeMatch.params,
         query: url.searchParams
       });
@@ -227,5 +230,6 @@ async function readRequestBody(
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.statusCode = status;
   response.setHeader("content-type", "application/json; charset=utf-8");
+  response.setHeader("x-difftray-protocol", COMPANION_PROTOCOL_VERSION.toString());
   response.end(JSON.stringify(body));
 }

@@ -33,6 +33,7 @@ describe("companion server core", () => {
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(response.headers.get("x-difftray-protocol")).toBe("1");
   });
 
   it("maps unknown routes and malformed JSON to companion error bodies", async () => {

@@ -20,6 +20,7 @@ import {
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
 
+import type { CompanionDeviceContext } from "./auth.js";
 import type { RouteDefinition } from "./router.js";
 
 export type MarkResult =
@@ -95,6 +96,7 @@ export type CompanionResponse = {
 
 export type CompanionHandlerInput = {
   readonly body: unknown;
+  readonly device: CompanionDeviceContext | null;
   readonly params: ReadonlyMap<string, string>;
   readonly query: URLSearchParams;
 };
