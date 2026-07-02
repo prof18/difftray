@@ -86,6 +86,7 @@ export type CompanionDeps = {
     readonly appVersion: string;
     readonly serverId: string;
     readonly serverName: string;
+    readonly serverPublicKey: string;
   };
 };
 
@@ -138,7 +139,7 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
             protocolVersion: COMPANION_PROTOCOL_VERSION,
             serverId: identity.serverId,
             serverName: identity.serverName,
-            serverPublicKey: ""
+            serverPublicKey: identity.serverPublicKey
           },
           status: 200
         };

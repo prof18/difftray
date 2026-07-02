@@ -799,4 +799,30 @@ describe("storage", () => {
     expect(storage.listCompanionDevices()).toEqual([device]);
     storage.close();
   });
+
+  it("persists the companion server keypair in app settings", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      expect(storage.getCompanionServerKeyPair()).toBeNull();
+
+      storage.upsertCompanionServerKeyPair({
+        publicKey: "server-public-key",
+        secretKey: "server-secret-key"
+      });
+      storage.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.getCompanionServerKeyPair()).toEqual({
+        publicKey: "server-public-key",
+        secretKey: "server-secret-key"
+      });
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
 });

@@ -96,6 +96,7 @@ import {
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
+import { getOrCreateCompanionServerIdentity } from "./companion/auth.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
@@ -1106,11 +1107,11 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     markReviewed: async (input) =>
       companionMarkResult(await markProjectFileReviewed(input)),
     notifyDesktopRenderer,
-    serverIdentity: () => ({
-      appVersion: app.getVersion(),
-      serverId: "",
-      serverName: app.getName()
-    }),
+    serverIdentity: () =>
+      getOrCreateCompanionServerIdentity({
+        appVersion: app.getVersion(),
+        storage: getStorage()
+      }),
     storage: getStorage(),
     unmarkReviewed: async (input) =>
       companionUnmarkResult(await unmarkProjectFileReviewed(input)),

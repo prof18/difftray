@@ -237,7 +237,8 @@ async function startServer(
     serverIdentity: () => ({
       appVersion: "0.0.0-test",
       serverId: "server-test",
-      serverName: "Test Mac"
+      serverName: "Test Mac",
+      serverPublicKey: ""
     }),
     storage: {} as CompanionDeps["storage"],
     unmarkReviewed: async () => ({

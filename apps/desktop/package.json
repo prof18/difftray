@@ -20,6 +20,7 @@
     "chokidar": "^4.0.3",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.3",
+    "tweetnacl": "^1.0.3",
     "ws": "^8.21.0"
   },
   "devDependencies": {

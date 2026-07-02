@@ -16,6 +16,11 @@ import {
 } from "./settings.js";
 import { currentTimestamp } from "./timestamps.js";
 
+export type CompanionServerKeyPairRecord = {
+  readonly publicKey: string;
+  readonly secretKey: string;
+};
+
 type AppSettingsRow = {
   readonly value: string;
 };
@@ -129,6 +134,23 @@ export function getAppSettings(db: DatabaseSync): AppSettingsRecord {
     themeMode: isThemeMode(themeMode) ? themeMode : "system",
     wrapDiffLines: appBooleanSetting(wrapDiffLines, legacySettings.wrapDiffLines)
   };
+}
+
+export function getCompanionServerKeyPair(
+  db: DatabaseSync
+): CompanionServerKeyPairRecord | null {
+  const publicKey = getAppSetting(db, "companion_server_pk");
+  const secretKey = getAppSetting(db, "companion_server_sk");
+
+  return publicKey && secretKey ? { publicKey, secretKey } : null;
+}
+
+export function upsertCompanionServerKeyPair(
+  db: DatabaseSync,
+  keyPair: CompanionServerKeyPairRecord
+): void {
+  upsertAppSetting(db, "companion_server_pk", keyPair.publicKey);
+  upsertAppSetting(db, "companion_server_sk", keyPair.secretKey);
 }
 
 function upsertAppSetting(db: DatabaseSync, key: string, value: string): void {

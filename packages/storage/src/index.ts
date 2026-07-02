@@ -48,8 +48,11 @@ import {
 } from "./project-tab-order.js";
 import {
   getAppSettings,
+  getCompanionServerKeyPair,
   getProjectSettings,
+  type CompanionServerKeyPairRecord,
   upsertAppSettings,
+  upsertCompanionServerKeyPair,
   upsertProjectSettings
 } from "./settings-store.js";
 
@@ -81,6 +84,7 @@ export {
   type ReviewResetTrigger,
   type ThemeMode
 } from "./settings.js";
+export { type CompanionServerKeyPairRecord } from "./settings-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
@@ -125,6 +129,7 @@ export type DifftrayStorage = {
     publicKey: string
   ) => CompanionDeviceRecord | null;
   readonly getAppSettings: () => AppSettingsRecord;
+  readonly getCompanionServerKeyPair: () => CompanionServerKeyPairRecord | null;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
@@ -168,6 +173,7 @@ export type DifftrayStorage = {
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
   readonly upsertCompanionDevice: (device: CompanionDeviceInput) => void;
+  readonly upsertCompanionServerKeyPair: (keyPair: CompanionServerKeyPairRecord) => void;
   readonly upsertProjectTabOrder: (projectIds: readonly string[]) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
@@ -196,6 +202,7 @@ export function openStorage(filename: string): DifftrayStorage {
     findCompanionDeviceByPublicKey: (publicKey) =>
       findCompanionDeviceByPublicKey(db, publicKey),
     getAppSettings: () => getAppSettings(db),
+    getCompanionServerKeyPair: () => getCompanionServerKeyPair(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
@@ -237,6 +244,9 @@ export function openStorage(filename: string): DifftrayStorage {
     },
     upsertCompanionDevice: (device) => {
       upsertCompanionDevice(db, device);
+    },
+    upsertCompanionServerKeyPair: (keyPair) => {
+      upsertCompanionServerKeyPair(db, keyPair);
     },
     upsertProjectTabOrder: (projectIds) => {
       upsertProjectTabOrder(db, projectIds);

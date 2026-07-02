@@ -47,6 +47,9 @@ importers:
       electron-updater:
         specifier: ^6.8.3
         version: 6.8.3
+      tweetnacl:
+        specifier: ^1.0.3
+        version: 1.0.3
       ws:
         specifier: ^8.21.0
         version: 8.21.0
