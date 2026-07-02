@@ -23,6 +23,15 @@ export const defaultProjectSettings: ProjectSettingsView = {
   projectId: ""
 };
 
+export const defaultCompanionState: CompanionStateView = {
+  activePairing: null,
+  addresses: [],
+  devices: [],
+  enabled: false,
+  pendingPairRequests: [],
+  status: "stopped"
+};
+
 export const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {
   detail: "Preparing local diffs",
   title: "Loading repository"

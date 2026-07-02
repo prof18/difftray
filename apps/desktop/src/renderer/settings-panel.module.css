@@ -230,6 +230,197 @@
   padding: 0 8px;
 }
 
+.companionStatusRow {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 12px 14px;
+}
+
+.companionStatusLabel,
+.companionDeviceTitle {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.companionError {
+  margin-top: 4px;
+  color: var(--danger, var(--warn));
+  font-size: 12px;
+}
+
+.companionPairRequest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--accent-soft);
+  padding: 12px 14px;
+}
+
+.companionEyebrow,
+.companionDevicesHeader {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.companionStack {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.companionPairRequest {
+  background: var(--panel-2);
+}
+
+.companionPairRequest:not(:last-child) {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.companionFingerprint,
+.companionDeviceMeta,
+.companionEmpty {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.companionFingerprint {
+  font-family: var(--font-mono);
+}
+
+.companionActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.companionDevices {
+  padding: 12px 14px;
+}
+
+.companionDevicesHeader {
+  margin-bottom: 10px;
+}
+
+.companionDeviceRow {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 28px auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+
+.companionDeviceRow:not(:last-child) {
+  margin-bottom: 10px;
+}
+
+.companionDeviceIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--elev);
+  color: var(--text-muted);
+}
+
+.companionRevokeLabel {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.companionPairingDialog {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-soft);
+}
+
+.companionPairingPanel {
+  display: grid;
+  width: min(360px, calc(100vw - 64px));
+  gap: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  padding: 20px;
+}
+
+.companionPairingPanel h3 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.companionQrFrame {
+  display: grid;
+  width: 224px;
+  height: 224px;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.companionQrFrame img {
+  width: 100%;
+  height: 100%;
+}
+
+.companionQrPending {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, transparent 47%, #222 47% 53%, transparent 53%),
+    linear-gradient(0deg, transparent 47%, #222 47% 53%, transparent 53%), #f5f5f5;
+  opacity: 0.24;
+}
+
+.companionCodeBlock {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 12px;
+}
+
+.companionCodeBlock span,
+.companionCodeBlock small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.companionCodeBlock strong {
+  color: var(--text);
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.companionDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .editorPicker {
   position: relative;
   width: min(280px, 58%);
