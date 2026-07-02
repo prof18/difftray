@@ -7,6 +7,7 @@ import {
   type EncryptedEnvelope,
   type EnvelopeResponsePlain
 } from "@difftray/companion-protocol";
+import { WebSocket } from "ws";
 
 import type { CompanionDeps } from "./api.js";
 import { createCompanionEnvelopeVerifier } from "./auth.js";
@@ -286,6 +287,64 @@ describe("companion server core", () => {
     });
   });
 
+  it("closes websocket connections that do not authenticate with an envelope", async () => {
+    const { baseUrl } = await startServer();
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    socket.send(JSON.stringify({ kind: "auth" }));
+
+    await expect(waitForSocketClose(socket)).resolves.toBe(1008);
+  });
+
+  it("authenticates websocket connections and seals broadcast frames per device", async () => {
+    const { baseUrl, server } = await startServer();
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    const helloMessage = waitForSocketMessage(socket);
+    socket.send(
+      JSON.stringify(
+        sealEnvelope({
+          devicePublicKey,
+          plaintext: { kind: "auth", ts: "2026-07-02T12:00:00.000Z" },
+          recipientPublicKey: serverPublicKey,
+          senderSecretKey: deviceSecretKey
+        })
+      )
+    );
+
+    const helloWire = await helloMessage;
+    expect(helloWire).not.toContain("hello");
+    expect(openServerEventEnvelope(helloWire)).toEqual({
+      kind: "hello",
+      protocolVersion: 1,
+      serverName: "Test Mac"
+    });
+
+    const eventMessage = waitForSocketMessage(socket);
+    server.broadcast({
+      kind: "workspace_changed",
+      projectId: "project-1",
+      reason: "filesystem"
+    });
+    const eventWire = await eventMessage;
+
+    expect(eventWire).not.toContain("workspace_changed");
+    expect(eventWire).not.toContain("project-1");
+    expect(openServerEventEnvelope(eventWire)).toEqual({
+      kind: "workspace_changed",
+      projectId: "project-1",
+      reason: "filesystem"
+    });
+
+    socket.close();
+  });
+
   it("coalesces concurrent workspace loads per project", async () => {
     let loadCount = 0;
     let resolveWorkspace:
@@ -321,6 +380,8 @@ describe("companion server core", () => {
     ]);
 
     await waitFor(() => loadCount === 1);
+    await delay(50);
+    expect(loadCount).toBe(1);
     resolveWorkspace?.(testWorkspace("project-1"));
     const responses = await workspaceRequests;
 
@@ -483,12 +544,16 @@ async function waitFor(predicate: () => boolean): Promise<void> {
       return;
     }
 
-    await new Promise((resolve) => {
-      setTimeout(resolve, 5);
-    });
+    await delay(5);
   }
 
   throw new Error("Timed out waiting for condition");
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function sequentialRequests(
@@ -614,6 +679,75 @@ async function boxedPairRequest(input: {
     body: opened.value,
     wireStatus: response.status
   };
+}
+
+function openServerEventEnvelope(data: string): unknown {
+  const opened = openEnvelope({
+    envelope: JSON.parse(data) as EncryptedEnvelope,
+    recipientSecretKey: deviceSecretKey,
+    senderPublicKey: serverPublicKey
+  });
+
+  if (!opened.ok) {
+    throw new Error(`Failed to open companion websocket event: ${opened.error}`);
+  }
+
+  return opened.value;
+}
+
+async function waitForSocketOpen(socket: WebSocket): Promise<void> {
+  if (socket.readyState === WebSocket.OPEN) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+}
+
+async function waitForSocketClose(socket: WebSocket): Promise<number> {
+  return await withTimeout(
+    new Promise<number>((resolve) => {
+      socket.once("close", (code) => {
+        resolve(code);
+      });
+    }),
+    "Timed out waiting for websocket close"
+  );
+}
+
+async function waitForSocketMessage(socket: WebSocket): Promise<string> {
+  return await withTimeout(
+    new Promise<string>((resolve, reject) => {
+      socket.once("close", (code) => {
+        reject(new Error(`WebSocket closed before message: ${code}`));
+      });
+      socket.once("message", (data) => {
+        resolve(data.toString("utf8"));
+      });
+    }),
+    "Timed out waiting for websocket message"
+  );
+}
+
+async function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(message));
+        }, 500);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 async function rawRequest(

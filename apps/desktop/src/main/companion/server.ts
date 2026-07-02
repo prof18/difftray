@@ -1,7 +1,11 @@
 import { createServer, type Server as HttpServer } from "node:http";
 
-import { type CompanionServerEvent } from "@difftray/companion-protocol";
-import { WebSocketServer, type WebSocket } from "ws";
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type CompanionServerEvent,
+  type EncryptedEnvelope
+} from "@difftray/companion-protocol";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 
 import { createCompanionApi, type CompanionDeps } from "./api.js";
 import { createCompanionRouter } from "./router.js";
@@ -13,9 +17,11 @@ export type CompanionServer = {
 };
 
 type ConnectedSocket = {
-  readonly devicePk: string;
+  readonly devicePublicKey: string;
   readonly socket: WebSocket;
 };
+
+const webSocketAuthTimeoutMs = 5_000;
 
 export function createCompanionServer(deps: CompanionDeps): CompanionServer {
   const router = createCompanionRouter(createCompanionApi(deps), deps.companionEnvelope);
@@ -32,23 +38,62 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
     }
 
     webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-      const connected = {
-        devicePk: "",
-        socket: webSocket
-      };
-      sockets.add(connected);
+      let connected: ConnectedSocket | undefined;
+      const authTimeout = setTimeout(() => {
+        closeUnauthorized(webSocket);
+      }, webSocketAuthTimeoutMs);
+
       webSocket.once("close", () => {
-        sockets.delete(connected);
+        clearTimeout(authTimeout);
+
+        if (connected) {
+          sockets.delete(connected);
+        }
+      });
+      webSocket.once("message", (data) => {
+        const envelope = readWebSocketEnvelope(data);
+
+        if (!envelope.ok) {
+          closeUnauthorized(webSocket);
+          return;
+        }
+
+        const verified = deps.companionEnvelope.verifyWebSocketAuthEnvelope(
+          envelope.value
+        );
+
+        if (!verified.ok) {
+          closeUnauthorized(webSocket);
+          return;
+        }
+
+        clearTimeout(authTimeout);
+        connected = {
+          devicePublicKey: verified.device.devicePublicKey,
+          socket: webSocket
+        };
+        sockets.add(connected);
+        sendWebSocketBody(deps, webSocket, verified.device.devicePublicKey, {
+          kind: "hello",
+          protocolVersion: COMPANION_PROTOCOL_VERSION,
+          serverName: deps.serverIdentity().serverName
+        });
+        webSocket.on("message", (message) => {
+          handleAuthenticatedWebSocketMessage(
+            deps,
+            webSocket,
+            verified.device.devicePublicKey,
+            message
+          );
+        });
       });
     });
   });
 
   return {
     broadcast: (event) => {
-      const serialized = JSON.stringify(event);
-
-      for (const { socket } of sockets) {
-        socket.send(serialized);
+      for (const { devicePublicKey, socket } of sockets) {
+        sendWebSocketBody(deps, socket, devicePublicKey, event);
       }
     },
     start: (preferredPort) =>
@@ -83,6 +128,120 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
       await closeHttpServer(httpServer);
     }
   };
+}
+
+function handleAuthenticatedWebSocketMessage(
+  deps: CompanionDeps,
+  socket: WebSocket,
+  devicePublicKey: string,
+  data: RawData
+): void {
+  const envelope = readWebSocketEnvelope(data);
+
+  if (!envelope.ok) {
+    closeUnauthorized(socket);
+    return;
+  }
+
+  const opened = deps.companionEnvelope.openWebSocketClientEnvelope({
+    devicePublicKey,
+    envelope: envelope.value
+  });
+
+  if (!opened.ok) {
+    closeUnauthorized(socket);
+    return;
+  }
+
+  if (isWebSocketPing(opened.body)) {
+    sendWebSocketBody(deps, socket, devicePublicKey, { kind: "pong" });
+  }
+}
+
+function sendWebSocketBody(
+  deps: CompanionDeps,
+  socket: WebSocket,
+  devicePublicKey: string,
+  body: CompanionServerEvent | { readonly kind: "pong" }
+): void {
+  if (socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  socket.send(
+    JSON.stringify(
+      deps.companionEnvelope.sealWebSocketEnvelope({
+        body,
+        devicePublicKey
+      })
+    )
+  );
+}
+
+function readWebSocketEnvelope(
+  data: RawData
+): { readonly ok: true; readonly value: EncryptedEnvelope } | { readonly ok: false } {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(webSocketDataToString(data)) as unknown;
+  } catch {
+    return { ok: false };
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return { ok: false };
+  }
+
+  const envelope = parsed as Partial<EncryptedEnvelope>;
+
+  if (
+    envelope.v !== 1 ||
+    typeof envelope.devicePk !== "string" ||
+    typeof envelope.nonce !== "string" ||
+    typeof envelope.box !== "string"
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    value: {
+      box: envelope.box,
+      devicePk: envelope.devicePk,
+      nonce: envelope.nonce,
+      v: 1
+    }
+  };
+}
+
+function webSocketDataToString(data: RawData): string {
+  if (Array.isArray(data)) {
+    return Buffer.concat(data).toString("utf8");
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString("utf8");
+  }
+
+  return Buffer.from(data).toString("utf8");
+}
+
+function isWebSocketPing(input: unknown): input is { readonly kind: "ping" } {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    (input as Record<string, unknown>).kind === "ping"
+  );
+}
+
+function closeUnauthorized(socket: WebSocket): void {
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CONNECTING
+  ) {
+    socket.close(1008, "Unauthorized");
+  }
 }
 
 function closeWebSocketServer(server: WebSocketServer): Promise<void> {

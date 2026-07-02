@@ -7,6 +7,7 @@ import {
   openEnvelope,
   sealEnvelope,
   shortFingerprint,
+  type CompanionServerEvent,
   type EncryptedEnvelope,
   type EnvelopeRequestPlain,
   type PairRequestBody
@@ -109,9 +110,18 @@ export type CompanionEnvelopeVerifier = {
   readonly sealResponseEnvelope: (
     input: CompanionEnvelopeResponseInput
   ) => EncryptedEnvelope;
+  readonly sealWebSocketEnvelope: (
+    input: CompanionWebSocketEnvelopeInput
+  ) => EncryptedEnvelope;
   readonly verifyRequestEnvelope: (
     input: CompanionEnvelopeVerificationInput
   ) => CompanionEnvelopeVerificationResult;
+  readonly verifyWebSocketAuthEnvelope: (
+    envelope: EncryptedEnvelope
+  ) => CompanionWebSocketAuthResult;
+  readonly openWebSocketClientEnvelope: (
+    input: CompanionWebSocketClientEnvelopeInput
+  ) => CompanionWebSocketClientEnvelopeOpenResult;
 };
 
 export type CompanionPairEnvelopeOpenResult =
@@ -151,6 +161,30 @@ export type CompanionEnvelopeVerificationResult =
       readonly ok: false;
       readonly reason: "clock_skew" | "unauthorized";
     };
+
+export type CompanionWebSocketEnvelopeInput = {
+  readonly body: CompanionServerEvent | { readonly kind: "pong" };
+  readonly devicePublicKey: string;
+};
+
+export type CompanionWebSocketAuthResult =
+  | {
+      readonly device: CompanionDeviceContext;
+      readonly ok: true;
+    }
+  | { readonly ok: false };
+
+export type CompanionWebSocketClientEnvelopeInput = {
+  readonly devicePublicKey: string;
+  readonly envelope: EncryptedEnvelope;
+};
+
+export type CompanionWebSocketClientEnvelopeOpenResult =
+  | {
+      readonly body: unknown;
+      readonly ok: true;
+    }
+  | { readonly ok: false };
 
 export function getOrCreateCompanionServerIdentity(input: {
   readonly appVersion: string;
@@ -226,6 +260,16 @@ export function createCompanionEnvelopeVerifier(input: {
         senderSecretKey: serverKeyPair.secretKey
       });
     },
+    sealWebSocketEnvelope: ({ body, devicePublicKey }) => {
+      const serverKeyPair = getOrCreateCompanionServerKeyPair(storage);
+
+      return sealEnvelope({
+        devicePublicKey,
+        plaintext: body,
+        recipientPublicKey: devicePublicKey,
+        senderSecretKey: serverKeyPair.secretKey
+      });
+    },
     verifyRequestEnvelope: ({ envelope, logicalMethod, path }) => {
       const device = storage.findCompanionDeviceByPublicKey(envelope.devicePk);
 
@@ -282,6 +326,46 @@ export function createCompanionEnvelopeVerifier(input: {
         ok: true,
         requestId: plaintext.requestId
       };
+    },
+    verifyWebSocketAuthEnvelope: (envelope) => {
+      const opened = openRegisteredDeviceEnvelope({
+        envelope,
+        maxClockSkewMs: envelopeMaxClockSkewMs,
+        now: now(),
+        storage
+      });
+
+      if (!opened.ok || !isWebSocketAuthPlain(opened.body)) {
+        return { ok: false };
+      }
+
+      storage.touchCompanionDeviceLastSeen(opened.device.deviceId);
+
+      return {
+        device: opened.device,
+        ok: true
+      };
+    },
+    openWebSocketClientEnvelope: ({ devicePublicKey, envelope }) => {
+      if (envelope.devicePk !== devicePublicKey) {
+        return { ok: false };
+      }
+
+      const opened = openRegisteredDeviceEnvelope({
+        envelope,
+        storage
+      });
+
+      if (!opened.ok) {
+        return { ok: false };
+      }
+
+      storage.touchCompanionDeviceLastSeen(opened.device.deviceId);
+
+      return {
+        body: opened.body,
+        ok: true
+      };
     }
   };
 }
@@ -313,6 +397,67 @@ function readEncryptedEnvelope(
       v: 1
     }
   };
+}
+
+function openRegisteredDeviceEnvelope(input: {
+  readonly envelope: EncryptedEnvelope;
+  readonly maxClockSkewMs?: number;
+  readonly now?: Date;
+  readonly storage: DifftrayStorage;
+}):
+  | {
+      readonly body: unknown;
+      readonly device: CompanionDeviceContext;
+      readonly ok: true;
+    }
+  | { readonly ok: false } {
+  const device = input.storage.findCompanionDeviceByPublicKey(input.envelope.devicePk);
+
+  if (!device || device.revokedAt) {
+    return { ok: false };
+  }
+
+  const serverKeyPair = input.storage.getCompanionServerKeyPair();
+
+  if (!serverKeyPair) {
+    return { ok: false };
+  }
+
+  const opened = openEnvelope({
+    envelope: input.envelope,
+    ...(input.maxClockSkewMs === undefined
+      ? {}
+      : { maxClockSkewMs: input.maxClockSkewMs }),
+    ...(input.now === undefined ? {} : { now: input.now }),
+    recipientSecretKey: serverKeyPair.secretKey,
+    senderPublicKey: device.publicKey
+  });
+
+  if (!opened.ok) {
+    return { ok: false };
+  }
+
+  return {
+    body: opened.value,
+    device: {
+      deviceId: device.id,
+      devicePublicKey: device.publicKey
+    },
+    ok: true
+  };
+}
+
+function isWebSocketAuthPlain(input: unknown): input is {
+  readonly kind: "auth";
+  readonly ts: string;
+} {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+
+  const record = input as Record<string, unknown>;
+
+  return record.kind === "auth" && typeof record.ts === "string";
 }
 
 export function createCompanionAuthManager(input: {
