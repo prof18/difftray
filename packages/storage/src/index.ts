@@ -14,11 +14,20 @@ import {
   type ReviewTargetRecord,
   type StoredProjectRecord,
   type StoredReviewTargetRecord,
+  type CompanionDeviceInput,
+  type CompanionDeviceRecord,
   type CreateReviewCommentInput,
   type ReviewCommentRecord,
   type ReviewMarkInput,
   type ReviewMarkRecord
 } from "./records.js";
+import {
+  findCompanionDeviceByPublicKey,
+  listCompanionDevices,
+  revokeCompanionDevice,
+  touchCompanionDeviceLastSeen,
+  upsertCompanionDevice
+} from "./companion-device-store.js";
 import {
   createReviewComment,
   deleteReviewComment,
@@ -51,6 +60,8 @@ export {
 } from "./project-tab-order.js";
 
 export {
+  type CompanionDeviceInput,
+  type CompanionDeviceRecord,
   type CreateReviewCommentInput,
   type ProjectRecord,
   type ReviewCommentRecord,
@@ -110,6 +121,9 @@ export type DifftrayStorage = {
   readonly createReviewComment: (input: CreateReviewCommentInput) => ReviewCommentRecord;
   readonly deleteProject: (id: string) => void;
   readonly deleteReviewComment: (id: string) => boolean;
+  readonly findCompanionDeviceByPublicKey: (
+    publicKey: string
+  ) => CompanionDeviceRecord | null;
   readonly getAppSettings: () => AppSettingsRecord;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
@@ -121,6 +135,7 @@ export type DifftrayStorage = {
     path: string,
     currentDiffHash: string
   ) => boolean;
+  readonly listCompanionDevices: () => readonly CompanionDeviceRecord[];
   readonly listReviewComments: (reviewTargetId: string) => readonly ReviewCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
@@ -148,8 +163,11 @@ export type DifftrayStorage = {
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
   readonly appendProjectToTabOrder: (projectId: string) => void;
   readonly removeProjectFromTabOrder: (projectId: string) => void;
+  readonly revokeCompanionDevice: (id: string) => void;
+  readonly touchCompanionDeviceLastSeen: (id: string) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
+  readonly upsertCompanionDevice: (device: CompanionDeviceInput) => void;
   readonly upsertProjectTabOrder: (projectIds: readonly string[]) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
@@ -175,6 +193,8 @@ export function openStorage(filename: string): DifftrayStorage {
       deleteProject(db, id);
     },
     deleteReviewComment: (id) => deleteReviewComment(db, id),
+    findCompanionDeviceByPublicKey: (publicKey) =>
+      findCompanionDeviceByPublicKey(db, publicKey),
     getAppSettings: () => getAppSettings(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
@@ -183,6 +203,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
+    listCompanionDevices: () => listCompanionDevices(db),
     listReviewComments: (reviewTargetId) => listReviewComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
@@ -202,11 +223,20 @@ export function openStorage(filename: string): DifftrayStorage {
     removeProjectFromTabOrder: (projectId) => {
       removeProjectFromTabOrder(db, projectId);
     },
+    revokeCompanionDevice: (id) => {
+      revokeCompanionDevice(db, id);
+    },
+    touchCompanionDeviceLastSeen: (id) => {
+      touchCompanionDeviceLastSeen(db, id);
+    },
     upsertProject: (project) => {
       upsertProject(db, project);
     },
     upsertAppSettings: (settings) => {
       upsertAppSettings(db, settings);
+    },
+    upsertCompanionDevice: (device) => {
+      upsertCompanionDevice(db, device);
     },
     upsertProjectTabOrder: (projectIds) => {
       upsertProjectTabOrder(db, projectIds);

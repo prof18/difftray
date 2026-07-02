@@ -726,4 +726,77 @@ describe("storage", () => {
       rmSync(storageDir, { force: true, recursive: true });
     }
   });
+
+  it("persists companion devices and looks them up by public key", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertCompanionDevice({
+        id: "device-1",
+        name: "Marco's iPhone",
+        platform: "ios",
+        publicKey: "device-public-key-1"
+      });
+      storage.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.listCompanionDevices()).toEqual([
+        expect.objectContaining({
+          id: "device-1",
+          name: "Marco's iPhone",
+          platform: "ios",
+          publicKey: "device-public-key-1"
+        })
+      ]);
+      expect(
+        reopenedStorage.findCompanionDeviceByPublicKey("device-public-key-1")
+      ).toEqual(
+        expect.objectContaining({
+          id: "device-1",
+          name: "Marco's iPhone"
+        })
+      );
+      expect(reopenedStorage.findCompanionDeviceByPublicKey("missing")).toBeNull();
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("updates companion device metadata, last-seen timestamps, and revocation", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertCompanionDevice({
+      id: "device-1",
+      name: "Marco's iPhone",
+      platform: "ios",
+      publicKey: "device-public-key-1"
+    });
+    storage.upsertCompanionDevice({
+      id: "device-1",
+      name: "Marco's iPhone 17",
+      platform: "ios",
+      publicKey: "device-public-key-1"
+    });
+    storage.touchCompanionDeviceLastSeen("device-1");
+    storage.revokeCompanionDevice("device-1");
+
+    const device = storage.findCompanionDeviceByPublicKey("device-public-key-1");
+
+    expect(device).toEqual(
+      expect.objectContaining({
+        id: "device-1",
+        lastSeenAt: expect.any(String) as string,
+        name: "Marco's iPhone 17",
+        platform: "ios",
+        publicKey: "device-public-key-1",
+        revokedAt: expect.any(String) as string
+      })
+    );
+    expect(storage.listCompanionDevices()).toEqual([device]);
+    storage.close();
+  });
 });

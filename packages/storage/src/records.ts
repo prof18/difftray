@@ -68,3 +68,16 @@ export type ReviewCommentRecord = CreateReviewCommentInput & {
   readonly id: string;
   readonly updatedAt: string;
 };
+
+export type CompanionDeviceInput = {
+  readonly id: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly publicKey: string;
+};
+
+export type CompanionDeviceRecord = CompanionDeviceInput & {
+  readonly createdAt: string;
+  readonly lastSeenAt?: string;
+  readonly revokedAt?: string;
+};
