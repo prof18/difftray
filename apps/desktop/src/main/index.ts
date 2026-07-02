@@ -1497,13 +1497,24 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     listRecentCommits: listRecentCommitsForProject,
     listRecentProjects: listAvailableRecentProjectViews,
     loadFileDiff: async (projectId, pathName) => {
-      const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+      const [diff, workspace] = await Promise.all([
+        loadProjectFileDiffForCompanion(projectId, pathName),
+        loadProjectWorkspace(projectId)
+      ]);
 
       if (!diff) {
         throw new Error(`File diff is not available: ${pathName}`);
       }
+      const workspaceFile = workspace.files.find((file) => file.path === pathName);
 
-      return diff;
+      if (!workspaceFile) {
+        throw new Error(`File diff is not in the current workspace: ${pathName}`);
+      }
+
+      return {
+        ...diff,
+        diffHash: workspaceFile.diffHash
+      };
     },
     loadWorkspaceView: loadProjectWorkspace,
     markReviewed: async (input) => {
