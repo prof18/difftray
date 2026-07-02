@@ -96,7 +96,10 @@ import {
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
-import { getOrCreateCompanionServerIdentity } from "./companion/auth.js";
+import {
+  createCompanionAuthManager,
+  getOrCreateCompanionServerIdentity
+} from "./companion/auth.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
@@ -1077,7 +1080,10 @@ async function updateProjectDiffTarget(
 }
 
 export function createDesktopCompanionDeps(): CompanionDeps {
+  const storage = getStorage();
+
   return {
+    companionAuth: createCompanionAuthManager({ storage }),
     commentsReport: async (projectId) =>
       formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
     createComment: async (input) => {
@@ -1110,9 +1116,9 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     serverIdentity: () =>
       getOrCreateCompanionServerIdentity({
         appVersion: app.getVersion(),
-        storage: getStorage()
+        storage
       }),
-    storage: getStorage(),
+    storage,
     unmarkReviewed: async (input) =>
       companionUnmarkResult(await unmarkProjectFileReviewed(input)),
     updateComment: (input) => {

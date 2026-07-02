@@ -56,6 +56,63 @@ describe("companion server core", () => {
     });
   });
 
+  it("approves QR pair requests through the pairing route", async () => {
+    const pairRequests: unknown[] = [];
+    const { baseUrl } = await startServer({
+      companionAuth: {
+        approvePairRequest: () => ({ reason: "not_found", status: "rejected" }),
+        cancelPairing: () => undefined,
+        denyPairRequest: () => ({ status: "denied" }),
+        getActivePairingSession: () => null,
+        listPendingPairRequests: () => [],
+        pairDevice: (requestBody) => {
+          pairRequests.push(requestBody);
+
+          return {
+            deviceId: requestBody.deviceId,
+            devicePublicKey: requestBody.devicePublicKey,
+            status: "approved"
+          };
+        },
+        startPairing: () => ({
+          code: "123456",
+          expiresAt: "2026-07-02T12:05:00.000Z",
+          secret: "pairing-secret"
+        })
+      }
+    });
+
+    const response = await fetch(`${baseUrl}/companion/v1/pair`, {
+      body: JSON.stringify({
+        deviceId: "device-1",
+        deviceName: "Marco's iPhone",
+        devicePublicKey: "device-public-key-1",
+        platform: "ios",
+        protocolVersion: 1,
+        secret: "pairing-secret"
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      serverId: "server-test",
+      serverName: "Test Mac",
+      status: "approved"
+    });
+    expect(pairRequests).toEqual([
+      {
+        deviceId: "device-1",
+        deviceName: "Marco's iPhone",
+        devicePublicKey: "device-public-key-1",
+        platform: "ios",
+        protocolVersion: 1,
+        secret: "pairing-secret"
+      }
+    ]);
+  });
+
   it("rejects bad Host headers before routing", async () => {
     const { baseUrl } = await startServer();
 
@@ -214,6 +271,19 @@ async function startServer(
   overrides: Partial<CompanionDeps> = {}
 ): Promise<StartedServer> {
   const server = createCompanionServer({
+    companionAuth: {
+      approvePairRequest: () => ({ reason: "not_found", status: "rejected" }),
+      cancelPairing: () => undefined,
+      denyPairRequest: () => ({ reason: "not_found", status: "rejected" }),
+      getActivePairingSession: () => null,
+      listPendingPairRequests: () => [],
+      pairDevice: () => ({ reason: "pairing_expired", status: "rejected" }),
+      startPairing: () => ({
+        code: "000000",
+        expiresAt: "2026-07-02T12:05:00.000Z",
+        secret: "test-secret"
+      })
+    },
     commentsReport: async () => "",
     createComment: async () => {
       throw new Error("not implemented in test");

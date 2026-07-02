@@ -16,11 +16,12 @@ import {
   parseCreateCommentBody,
   parseDiffTargetBody,
   parseMarkReviewedBody,
+  parsePairRequestBody,
   parseUpdateCommentBody
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
 
-import type { CompanionDeviceContext } from "./auth.js";
+import type { CompanionAuthManager, CompanionDeviceContext } from "./auth.js";
 import type { RouteDefinition } from "./router.js";
 
 export type MarkResult =
@@ -50,6 +51,7 @@ export type CommitInfo = {
 };
 
 export type CompanionDeps = {
+  readonly companionAuth: CompanionAuthManager;
   readonly storage: DifftrayStorage;
   readonly loadWorkspaceView: (projectId: string) => Promise<ReviewWorkspaceView>;
   readonly loadFileDiff: (
@@ -148,10 +150,53 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       path: "/companion/v1/handshake"
     },
     {
-      handler: () => ({
-        body: companionError("bad_request", "Pairing is not implemented yet"),
-        status: 400
-      }),
+      handler: ({ body }) => {
+        const parsed = parsePairRequestBody(body);
+
+        if (!parsed.ok) {
+          return badRequest(parsed.error);
+        }
+
+        if (parsed.value.protocolVersion !== COMPANION_PROTOCOL_VERSION) {
+          return {
+            body: companionError("protocol_mismatch", "Unsupported protocol version"),
+            status: 400
+          };
+        }
+
+        const result = deps.companionAuth.pairDevice(parsed.value);
+
+        if (result.status === "approved") {
+          const identity = deps.serverIdentity();
+
+          return {
+            body: {
+              serverId: identity.serverId,
+              serverName: identity.serverName,
+              status: "approved"
+            },
+            status: 200
+          };
+        }
+
+        if (result.status === "pending") {
+          return {
+            body: {
+              pairRequestId: result.pairRequestId,
+              status: "pending"
+            },
+            status: 202
+          };
+        }
+
+        return {
+          body: companionError(
+            result.reason === "pairing_expired" ? "pairing_expired" : "unauthorized",
+            pairingFailureMessage(result.reason)
+          ),
+          status: 401
+        };
+      },
       method: "POST",
       path: "/companion/v1/pair"
     },
@@ -418,12 +463,27 @@ function badRequest(message: string): CompanionResponse {
   };
 }
 
+function pairingFailureMessage(
+  reason: "locked" | "not_found" | "pairing_expired" | "wrong_code"
+): string {
+  switch (reason) {
+    case "locked":
+      return "Pairing is locked after too many incorrect codes";
+    case "not_found":
+    case "pairing_expired":
+      return "Pairing has expired";
+    case "wrong_code":
+      return "Pairing code is incorrect";
+  }
+}
+
 export function companionError(
   code:
     | "bad_request"
     | "forbidden"
     | "internal"
     | "not_found"
+    | "pairing_expired"
     | "protocol_mismatch"
     | "stale_diff"
     | "unauthorized",

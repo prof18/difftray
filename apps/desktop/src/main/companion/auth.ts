@@ -1,7 +1,12 @@
 import os from "node:os";
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
-import { encodeBase64Url, fingerprintPublicKey } from "@difftray/companion-protocol";
+import {
+  encodeBase64Url,
+  fingerprintPublicKey,
+  shortFingerprint,
+  type PairRequestBody
+} from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
 import nacl from "tweetnacl";
 
@@ -33,6 +38,62 @@ export type PairingCodeVerificationResult =
       readonly reason: "expired" | "locked" | "wrong_code";
     };
 
+export type PendingPairRequestView = {
+  readonly deviceId: string;
+  readonly deviceName: string;
+  readonly devicePublicKey: string;
+  readonly devicePublicKeyFingerprint: string;
+  readonly expiresAt: string;
+  readonly id: string;
+  readonly platform: PairRequestBody["platform"];
+};
+
+export type PairDeviceResult =
+  | {
+      readonly deviceId: string;
+      readonly devicePublicKey: string;
+      readonly status: "approved";
+    }
+  | {
+      readonly pairRequestId: string;
+      readonly status: "pending";
+    }
+  | {
+      readonly reason: "locked" | "not_found" | "pairing_expired" | "wrong_code";
+      readonly status: "rejected";
+    };
+
+type ApprovedPairDeviceResult = Extract<
+  PairDeviceResult,
+  { readonly status: "approved" }
+>;
+type PairRejectionReason = Extract<
+  PairDeviceResult,
+  { readonly status: "rejected" }
+>["reason"];
+
+export type PairRequestDecisionResult =
+  | {
+      readonly deviceId: string;
+      readonly devicePublicKey: string;
+      readonly status: "approved";
+    }
+  | { readonly status: "denied" }
+  | {
+      readonly reason: "not_found" | "pairing_expired";
+      readonly status: "rejected";
+    };
+
+export type CompanionAuthManager = {
+  readonly approvePairRequest: (id: string) => PairRequestDecisionResult;
+  readonly cancelPairing: () => void;
+  readonly denyPairRequest: (id: string) => PairRequestDecisionResult;
+  readonly getActivePairingSession: () => CompanionPairingSessionView | null;
+  readonly listPendingPairRequests: () => readonly PendingPairRequestView[];
+  readonly pairDevice: (request: PairRequestBody) => PairDeviceResult;
+  readonly startPairing: () => CompanionPairingSessionView;
+};
+
 export function getOrCreateCompanionServerIdentity(input: {
   readonly appVersion: string;
   readonly serverName?: string;
@@ -46,6 +107,129 @@ export function getOrCreateCompanionServerIdentity(input: {
     serverId: fingerprintPublicKey(serverPublicKey),
     serverName: cleanedServerName(input.serverName ?? os.hostname()),
     serverPublicKey
+  };
+}
+
+export function createCompanionAuthManager(input: {
+  readonly generateCode?: () => string;
+  readonly generatePairRequestId?: () => string;
+  readonly generateSecret?: () => string;
+  readonly now?: () => Date;
+  readonly storage: DifftrayStorage;
+}): CompanionAuthManager {
+  const now = input.now ?? (() => new Date());
+  const generatePairRequestId = input.generatePairRequestId ?? randomPairRequestId;
+  const pairingSessions = createCompanionPairingSessionManager({
+    ...(input.generateCode ? { generateCode: input.generateCode } : {}),
+    ...(input.generateSecret ? { generateSecret: input.generateSecret } : {}),
+    now
+  });
+  const pendingRequests = new Map<string, PendingPairRequest>();
+
+  function isExpiredPendingRequest(request: PendingPairRequest): boolean {
+    if (Date.parse(request.expiresAt) <= now().getTime()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function pruneExpiredPendingRequests(): void {
+    for (const [id, request] of pendingRequests) {
+      if (isExpiredPendingRequest(request)) {
+        pendingRequests.delete(id);
+      }
+    }
+  }
+
+  function registerDevice(request: PairRequestBody): ApprovedPairDeviceResult {
+    input.storage.upsertCompanionDevice({
+      id: request.deviceId,
+      name: request.deviceName,
+      platform: request.platform,
+      publicKey: request.devicePublicKey
+    });
+
+    return {
+      deviceId: request.deviceId,
+      devicePublicKey: request.devicePublicKey,
+      status: "approved"
+    };
+  }
+
+  return {
+    approvePairRequest: (id) => {
+      const request = pendingRequests.get(id);
+
+      if (!request) {
+        return { reason: "not_found", status: "rejected" };
+      }
+
+      if (isExpiredPendingRequest(request)) {
+        pendingRequests.delete(id);
+
+        return { reason: "pairing_expired", status: "rejected" };
+      }
+
+      pendingRequests.delete(id);
+
+      return registerDevice(request.requestBody);
+    },
+    cancelPairing: () => {
+      pairingSessions.cancelPairing();
+    },
+    denyPairRequest: (id) => {
+      const request = pendingRequests.get(id);
+
+      if (!request) {
+        return { reason: "not_found", status: "rejected" };
+      }
+
+      pendingRequests.delete(id);
+
+      return { status: "denied" };
+    },
+    getActivePairingSession: () => pairingSessions.getActivePairingSession(),
+    listPendingPairRequests: () => {
+      pruneExpiredPendingRequests();
+
+      return Array.from(pendingRequests.values(), pendingPairRequestView);
+    },
+    pairDevice: (request) => {
+      if (request.secret !== undefined) {
+        const consumed = pairingSessions.consumeQrSecret(request.secret);
+
+        return consumed.ok
+          ? registerDevice(request)
+          : { reason: "pairing_expired", status: "rejected" };
+      }
+
+      const activeSession = pairingSessions.getActivePairingSession();
+      const verified = pairingSessions.verifyPairingCode(request.code ?? "");
+
+      if (!verified.ok) {
+        return {
+          reason: codeFailureReason(verified.reason),
+          status: "rejected"
+        };
+      }
+
+      if (!activeSession) {
+        return { reason: "pairing_expired", status: "rejected" };
+      }
+
+      pairingSessions.cancelPairing();
+
+      const pairRequestId = generatePairRequestId();
+      pendingRequests.set(pairRequestId, {
+        expiresAt: activeSession.expiresAt,
+        id: pairRequestId,
+        requestBody: request
+      });
+
+      return { pairRequestId, status: "pending" };
+    },
+    startPairing: () => pairingSessions.startPairing()
   };
 }
 
@@ -138,6 +322,12 @@ export function createCompanionPairingSessionManager(
   };
 }
 
+type PendingPairRequest = {
+  readonly expiresAt: string;
+  readonly id: string;
+  readonly requestBody: PairRequestBody;
+};
+
 function getOrCreateCompanionServerKeyPair(storage: DifftrayStorage): {
   readonly publicKey: string;
   readonly secretKey: string;
@@ -181,6 +371,28 @@ function randomPairingCode(): string {
 
 function randomPairingSecret(): string {
   return encodeBase64Url(randomBytes(32));
+}
+
+function randomPairRequestId(): string {
+  return encodeBase64Url(randomBytes(16));
+}
+
+function pendingPairRequestView(request: PendingPairRequest): PendingPairRequestView {
+  return {
+    deviceId: request.requestBody.deviceId,
+    deviceName: request.requestBody.deviceName,
+    devicePublicKey: request.requestBody.devicePublicKey,
+    devicePublicKeyFingerprint: shortFingerprint(request.requestBody.devicePublicKey),
+    expiresAt: request.expiresAt,
+    id: request.id,
+    platform: request.requestBody.platform
+  };
+}
+
+function codeFailureReason(
+  reason: "expired" | "locked" | "wrong_code"
+): PairRejectionReason {
+  return reason === "expired" ? "pairing_expired" : reason;
 }
 
 function timingSafeStringEqual(left: string, right: string): boolean {

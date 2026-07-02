@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fingerprintPublicKey } from "@difftray/companion-protocol";
+import { encodeBase64Url, fingerprintPublicKey } from "@difftray/companion-protocol";
 import { openStorage } from "@difftray/storage";
 import { describe, expect, it } from "vitest";
 
 import {
+  createCompanionAuthManager,
   createCompanionPairingSessionManager,
   getOrCreateCompanionServerIdentity
 } from "./auth.js";
@@ -121,4 +122,137 @@ describe("companion auth", () => {
     });
     expect(manager.getActivePairingSession()).toBeNull();
   });
+
+  it("registers QR-paired devices and consumes the pairing secret once", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const devicePublicKey = testDevicePublicKey(1);
+    const replayPublicKey = testDevicePublicKey(2);
+
+    try {
+      const storage = openStorage(storagePath);
+      const manager = createCompanionAuthManager({
+        generateCode: () => "123456",
+        generateSecret: () => "pairing-secret",
+        now: () => new Date("2026-07-02T12:00:00.000Z"),
+        storage
+      });
+
+      manager.startPairing();
+
+      expect(
+        manager.pairDevice({
+          deviceId: "device-1",
+          deviceName: "Marco's iPhone",
+          devicePublicKey,
+          platform: "ios",
+          protocolVersion: 1,
+          secret: "pairing-secret"
+        })
+      ).toEqual({
+        deviceId: "device-1",
+        devicePublicKey,
+        status: "approved"
+      });
+      expect(storage.findCompanionDeviceByPublicKey(devicePublicKey)).toMatchObject({
+        id: "device-1",
+        name: "Marco's iPhone",
+        platform: "ios",
+        publicKey: devicePublicKey
+      });
+      expect(
+        manager.pairDevice({
+          deviceId: "device-2",
+          deviceName: "Replay",
+          devicePublicKey: replayPublicKey,
+          platform: "android",
+          protocolVersion: 1,
+          secret: "pairing-secret"
+        })
+      ).toEqual({ reason: "pairing_expired", status: "rejected" });
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("queues code pair requests for approval and expires pending requests", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const firstPublicKey = testDevicePublicKey(1);
+    const secondPublicKey = testDevicePublicKey(2);
+    let now = new Date("2026-07-02T12:00:00.000Z");
+    const requestIds = ["pair-request-1", "pair-request-2"];
+
+    try {
+      const storage = openStorage(storagePath);
+      const manager = createCompanionAuthManager({
+        generateCode: () => "123456",
+        generatePairRequestId: () => requestIds.shift() ?? "fallback-request",
+        generateSecret: () => "pairing-secret",
+        now: () => now,
+        storage
+      });
+
+      manager.startPairing();
+      expect(
+        manager.pairDevice({
+          code: "123456",
+          deviceId: "device-1",
+          deviceName: "Pixel",
+          devicePublicKey: firstPublicKey,
+          platform: "android",
+          protocolVersion: 1
+        })
+      ).toEqual({
+        pairRequestId: "pair-request-1",
+        status: "pending"
+      });
+      expect(manager.listPendingPairRequests()).toEqual([
+        {
+          deviceId: "device-1",
+          deviceName: "Pixel",
+          devicePublicKey: firstPublicKey,
+          devicePublicKeyFingerprint: expect.any(String) as string,
+          expiresAt: "2026-07-02T12:05:00.000Z",
+          id: "pair-request-1",
+          platform: "android"
+        }
+      ]);
+      expect(manager.denyPairRequest("pair-request-1")).toEqual({
+        status: "denied"
+      });
+      expect(storage.findCompanionDeviceByPublicKey(firstPublicKey)).toBeNull();
+
+      manager.startPairing();
+      expect(
+        manager.pairDevice({
+          code: "123456",
+          deviceId: "device-2",
+          deviceName: "iPad",
+          devicePublicKey: secondPublicKey,
+          platform: "ios",
+          protocolVersion: 1
+        })
+      ).toEqual({
+        pairRequestId: "pair-request-2",
+        status: "pending"
+      });
+
+      now = new Date("2026-07-02T12:05:00.001Z");
+      expect(manager.approvePairRequest("pair-request-2")).toEqual({
+        reason: "pairing_expired",
+        status: "rejected"
+      });
+      expect(storage.findCompanionDeviceByPublicKey(secondPublicKey)).toBeNull();
+      expect(manager.listPendingPairRequests()).toEqual([]);
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
 });
+
+function testDevicePublicKey(fill: number): string {
+  return encodeBase64Url(new Uint8Array(32).fill(fill));
+}
