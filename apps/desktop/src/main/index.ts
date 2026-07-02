@@ -353,6 +353,8 @@ handleTrusted(
   "settings:updateApp",
   (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
     const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
+    const companionEnabled = readBooleanProperty(input, "companionEnabled");
+    const companionPort = readNumberProperty(input, "companionPort");
     const defaultDiffMode = readEnumProperty(input, "defaultDiffMode", [
       "split",
       "unified"
@@ -376,6 +378,8 @@ handleTrusted(
     const wrapDiffLines = readBooleanProperty(input, "wrapDiffLines");
     const settings: AppSettingsRecord = {
       autoCollapseHunksOver,
+      companionEnabled,
+      companionPort,
       defaultDiffMode,
       ...(editorMode === "preset"
         ? {

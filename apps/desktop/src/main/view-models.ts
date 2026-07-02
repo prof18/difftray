@@ -79,6 +79,8 @@ export type ThemeMode = "dark" | "light" | "system";
 
 export type AppSettingsView = {
   readonly autoCollapseHunksOver: number;
+  readonly companionEnabled: boolean;
+  readonly companionPort: number;
   readonly defaultDiffMode: "split" | "unified";
   readonly editorArgs: string;
   readonly editorArgList: readonly string[];
@@ -105,6 +107,8 @@ export function appSettingsView(settings: AppSettingsRecord): AppSettingsView {
 
   return {
     autoCollapseHunksOver: settings.autoCollapseHunksOver,
+    companionEnabled: settings.companionEnabled,
+    companionPort: settings.companionPort,
     defaultDiffMode: settings.defaultDiffMode,
     editorArgs: editorLaunchConfig?.args.join(" ") ?? "",
     editorArgList: editorLaunchConfig?.args ?? [],

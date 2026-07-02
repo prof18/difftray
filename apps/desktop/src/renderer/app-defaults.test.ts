@@ -12,6 +12,8 @@ describe("app defaults", () => {
   it("keeps the initial review preferences aligned with product defaults", () => {
     expect(defaultAppSettings).toEqual({
       autoCollapseHunksOver: 120,
+      companionEnabled: false,
+      companionPort: 48620,
       defaultDiffMode: "split",
       editorArgs: "",
       editorArgList: [],

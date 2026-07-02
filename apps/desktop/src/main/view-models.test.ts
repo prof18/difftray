@@ -44,6 +44,8 @@ describe("settings views", () => {
     expect(
       appSettingsView({
         autoCollapseHunksOver: 80,
+        companionEnabled: true,
+        companionPort: 48627,
         defaultDiffMode: "split",
         editorLaunchConfig: {
           args: ["-b", "com.microsoft.VSCode", "{path}"],
@@ -57,6 +59,8 @@ describe("settings views", () => {
         wrapDiffLines: false
       })
     ).toMatchObject({
+      companionEnabled: true,
+      companionPort: 48627,
       editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
       editorArgs: "-b com.microsoft.VSCode {path}",
       editorCommand: "open",
@@ -66,6 +70,8 @@ describe("settings views", () => {
     expect(
       appSettingsView({
         autoCollapseHunksOver: 80,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "split",
         editorLaunchConfig: {
           args: ["-c", "touch /tmp/nope"],

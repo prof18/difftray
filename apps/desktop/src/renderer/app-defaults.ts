@@ -2,6 +2,8 @@ import type { WorkspaceLoadStatus } from "./workspace-load-status.js";
 
 export const defaultAppSettings: AppSettingsView = {
   autoCollapseHunksOver: 120,
+  companionEnabled: false,
+  companionPort: 48620,
   defaultDiffMode: "split",
   editorArgs: "",
   editorArgList: [],

@@ -5,6 +5,7 @@ import {
   appBooleanSetting,
   appNumberSetting,
   clampAutoCollapseHunks,
+  clampCompanionPort,
   clampFileListWidth,
   defaultAppSettings,
   diffModeFromValue,
@@ -75,6 +76,12 @@ export function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord)
     "auto_collapse_hunks_over",
     String(clampAutoCollapseHunks(settings.autoCollapseHunksOver))
   );
+  upsertAppSetting(db, "companion_enabled", settings.companionEnabled ? "1" : "0");
+  upsertAppSetting(
+    db,
+    "companion_port",
+    String(clampCompanionPort(settings.companionPort))
+  );
   upsertAppSetting(db, "default_diff_mode", settings.defaultDiffMode);
   upsertAppSetting(
     db,
@@ -96,6 +103,8 @@ export function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord)
 export function getAppSettings(db: DatabaseSync): AppSettingsRecord {
   const legacySettings = latestLegacyProjectAppSettings(db);
   const autoCollapseHunksOver = getAppSetting(db, "auto_collapse_hunks_over");
+  const companionEnabled = getAppSetting(db, "companion_enabled");
+  const companionPort = getAppSetting(db, "companion_port");
   const defaultDiffMode = getAppSetting(db, "default_diff_mode");
   const editorLaunchConfigJson = getAppSetting(db, "editor_launch_config_json");
   const hideWhitespaceOnlyChanges = getAppSetting(db, "hide_whitespace_only_changes");
@@ -117,6 +126,8 @@ export function getAppSettings(db: DatabaseSync): AppSettingsRecord {
       legacySettings.autoCollapseHunksOver,
       clampAutoCollapseHunks
     ),
+    companionEnabled: appBooleanSetting(companionEnabled, false),
+    companionPort: appNumberSetting(companionPort, 48620, clampCompanionPort),
     defaultDiffMode: diffModeFromValue(defaultDiffMode ?? legacySettings.defaultDiffMode),
     ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
     hideWhitespaceOnlyChanges: appBooleanSetting(
@@ -208,6 +219,8 @@ function latestLegacyProjectAppSettings(db: DatabaseSync): AppSettingsRecord {
 
   return {
     autoCollapseHunksOver: clampAutoCollapseHunks(row.auto_collapse_hunks_over),
+    companionEnabled: false,
+    companionPort: 48620,
     defaultDiffMode: diffModeFromValue(row.default_diff_mode),
     ...(editorLaunchConfig ? { editorLaunchConfig } : {}),
     hideWhitespaceOnlyChanges: row.hide_whitespace_only_changes === 1,

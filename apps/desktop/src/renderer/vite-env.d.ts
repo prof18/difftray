@@ -66,6 +66,8 @@ declare global {
 
   type AppSettingsView = {
     readonly autoCollapseHunksOver: number;
+    readonly companionEnabled: boolean;
+    readonly companionPort: number;
     readonly defaultDiffMode: "split" | "unified";
     readonly editorArgs: string;
     readonly editorArgList: readonly string[];
@@ -364,6 +366,8 @@ declare global {
 
   type UpdateAppSettingsInput = {
     readonly autoCollapseHunksOver: number;
+    readonly companionEnabled: boolean;
+    readonly companionPort: number;
     readonly defaultDiffMode: "split" | "unified";
     readonly editorArgList?: readonly string[];
     readonly editorArgs?: string;

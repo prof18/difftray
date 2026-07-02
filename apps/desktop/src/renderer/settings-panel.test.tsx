@@ -71,6 +71,8 @@ describe("SettingsPanel", () => {
 function appSettings(input: Partial<AppSettingsView>): AppSettingsView {
   return {
     autoCollapseHunksOver: 80,
+    companionEnabled: false,
+    companionPort: 48620,
     defaultDiffMode: "split",
     editorArgList: [],
     editorArgs: "",

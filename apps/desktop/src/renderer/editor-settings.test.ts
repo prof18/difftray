@@ -178,6 +178,8 @@ describe("updateAppSettingsInput", () => {
       updateAppSettingsInput(
         appSettings({
           autoCollapseHunksOver: 120,
+          companionEnabled: true,
+          companionPort: 48627,
           defaultDiffMode: "unified",
           editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
           editorArgs: "-b com.microsoft.VSCode {path}",
@@ -193,6 +195,8 @@ describe("updateAppSettingsInput", () => {
       )
     ).toEqual({
       autoCollapseHunksOver: 120,
+      companionEnabled: true,
+      companionPort: 48627,
       defaultDiffMode: "unified",
       editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
       editorArgs: "-b com.microsoft.VSCode {path}",
@@ -211,6 +215,8 @@ describe("updateAppSettingsInput", () => {
 function appSettings(input: Partial<AppSettingsView>): AppSettingsView {
   return {
     autoCollapseHunksOver: 80,
+    companionEnabled: false,
+    companionPort: 48620,
     defaultDiffMode: "split",
     editorArgList: [],
     editorArgs: "",

@@ -534,6 +534,8 @@ describe("storage", () => {
 
     expect(storage.getAppSettings()).toEqual({
       autoCollapseHunksOver: 120,
+      companionEnabled: false,
+      companionPort: 48620,
       defaultDiffMode: "split",
       hideWhitespaceOnlyChanges: false,
       notifyOnDrift: true,
@@ -550,6 +552,8 @@ describe("storage", () => {
 
     storage.upsertAppSettings({
       autoCollapseHunksOver: 200,
+      companionEnabled: true,
+      companionPort: 48627,
       defaultDiffMode: "unified",
       editorLaunchConfig: {
         args: ["--goto", "{path}:{line}"],
@@ -565,6 +569,8 @@ describe("storage", () => {
 
     expect(storage.getAppSettings()).toEqual({
       autoCollapseHunksOver: 200,
+      companionEnabled: true,
+      companionPort: 48627,
       defaultDiffMode: "unified",
       editorLaunchConfig: {
         args: ["--goto", "{path}:{line}"],
@@ -588,6 +594,8 @@ describe("storage", () => {
       const storage = openStorage(storagePath);
       storage.upsertAppSettings({
         autoCollapseHunksOver: 120,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "split",
         editorLaunchConfig: {
           args: ["{path}"],
@@ -613,6 +621,8 @@ describe("storage", () => {
 
       expect(reopenedStorage.getAppSettings()).toEqual({
         autoCollapseHunksOver: 120,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "split",
         hideWhitespaceOnlyChanges: false,
         notifyOnDrift: true,
@@ -709,6 +719,8 @@ describe("storage", () => {
 
       expect(reopenedStorage.getAppSettings()).toEqual({
         autoCollapseHunksOver: 300,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "unified",
         editorLaunchConfig: {
           args: ["--goto", "{path}:{line}"],
