@@ -3,8 +3,11 @@ import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 import {
   encodeBase64Url,
+  openEnvelope,
   fingerprintPublicKey,
   shortFingerprint,
+  type EncryptedEnvelope,
+  type EnvelopeRequestPlain,
   type PairRequestBody
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
@@ -12,6 +15,9 @@ import nacl from "tweetnacl";
 
 const pairingSessionTtlMs = 5 * 60 * 1000;
 const maxWrongCodeAttempts = 3;
+const envelopeMaxClockSkewMs = 5 * 60 * 1000;
+const replayRetentionMs = 10 * 60 * 1000;
+const replayCacheMaxEntries = 10_000;
 
 export type CompanionDeviceContext = {
   readonly deviceId: string;
@@ -94,6 +100,30 @@ export type CompanionAuthManager = {
   readonly startPairing: () => CompanionPairingSessionView;
 };
 
+export type CompanionEnvelopeVerifier = {
+  readonly verifyRequestEnvelope: (
+    input: CompanionEnvelopeVerificationInput
+  ) => CompanionEnvelopeVerificationResult;
+};
+
+export type CompanionEnvelopeVerificationInput = {
+  readonly envelope: EncryptedEnvelope;
+  readonly logicalMethod: string;
+  readonly path: string;
+};
+
+export type CompanionEnvelopeVerificationResult =
+  | {
+      readonly body: unknown;
+      readonly device: CompanionDeviceContext;
+      readonly ok: true;
+      readonly requestId: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: "clock_skew" | "unauthorized";
+    };
+
 export function getOrCreateCompanionServerIdentity(input: {
   readonly appVersion: string;
   readonly serverName?: string;
@@ -107,6 +137,73 @@ export function getOrCreateCompanionServerIdentity(input: {
     serverId: fingerprintPublicKey(serverPublicKey),
     serverName: cleanedServerName(input.serverName ?? os.hostname()),
     serverPublicKey
+  };
+}
+
+export function createCompanionEnvelopeVerifier(input: {
+  readonly now?: () => Date;
+  readonly storage: DifftrayStorage;
+}): CompanionEnvelopeVerifier {
+  const now = input.now ?? (() => new Date());
+  const replayCache = new Map<string, number>();
+
+  return {
+    verifyRequestEnvelope: ({ envelope, logicalMethod, path }) => {
+      const device = input.storage.findCompanionDeviceByPublicKey(envelope.devicePk);
+
+      if (!device || device.revokedAt) {
+        return { ok: false, reason: "unauthorized" };
+      }
+
+      const serverKeyPair = input.storage.getCompanionServerKeyPair();
+
+      if (!serverKeyPair) {
+        return { ok: false, reason: "unauthorized" };
+      }
+
+      const replayKey = `${envelope.devicePk}:${envelope.nonce}`;
+      pruneReplayCache(replayCache, now().getTime());
+
+      if (replayCache.has(replayKey)) {
+        return { ok: false, reason: "unauthorized" };
+      }
+
+      const opened = openEnvelope({
+        envelope,
+        expectedMethod: logicalMethod,
+        expectedPath: path,
+        maxClockSkewMs: envelopeMaxClockSkewMs,
+        now: now(),
+        recipientSecretKey: serverKeyPair.secretKey,
+        senderPublicKey: device.publicKey
+      });
+
+      if (!opened.ok) {
+        return {
+          ok: false,
+          reason: opened.error === "timestamp skew" ? "clock_skew" : "unauthorized"
+        };
+      }
+
+      const plaintext = opened.value as EnvelopeRequestPlain;
+
+      if (typeof plaintext.requestId !== "string") {
+        return { ok: false, reason: "unauthorized" };
+      }
+
+      replayCache.set(replayKey, now().getTime());
+      pruneReplayCache(replayCache, now().getTime());
+
+      return {
+        body: plaintext.body,
+        device: {
+          deviceId: device.id,
+          devicePublicKey: device.publicKey
+        },
+        ok: true,
+        requestId: plaintext.requestId
+      };
+    }
   };
 }
 
@@ -375,6 +472,24 @@ function randomPairingSecret(): string {
 
 function randomPairRequestId(): string {
   return encodeBase64Url(randomBytes(16));
+}
+
+function pruneReplayCache(replayCache: Map<string, number>, nowMs: number): void {
+  for (const [key, seenAt] of replayCache) {
+    if (nowMs - seenAt > replayRetentionMs) {
+      replayCache.delete(key);
+    }
+  }
+
+  while (replayCache.size > replayCacheMaxEntries) {
+    const oldest = replayCache.keys().next().value;
+
+    if (!oldest) {
+      return;
+    }
+
+    replayCache.delete(oldest);
+  }
 }
 
 function pendingPairRequestView(request: PendingPairRequest): PendingPairRequestView {

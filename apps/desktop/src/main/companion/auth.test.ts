@@ -2,15 +2,25 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { encodeBase64Url, fingerprintPublicKey } from "@difftray/companion-protocol";
+import {
+  encodeBase64Url,
+  fingerprintPublicKey,
+  sealEnvelope
+} from "@difftray/companion-protocol";
 import { openStorage } from "@difftray/storage";
 import { describe, expect, it } from "vitest";
 
 import {
   createCompanionAuthManager,
+  createCompanionEnvelopeVerifier,
   createCompanionPairingSessionManager,
   getOrCreateCompanionServerIdentity
 } from "./auth.js";
+
+const serverPublicKey = "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw";
+const serverSecretKey = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA";
+const devicePublicKey = "VxR2nRFr92Q2rnS8eT0sMK0ZA8WaxSc4BcfiaYtBDDY";
+const deviceSecretKey = "ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5_gIGCg4Q";
 
 describe("companion auth", () => {
   it("generates and reuses a persisted server identity", () => {
@@ -251,8 +261,147 @@ describe("companion auth", () => {
       rmSync(storageDir, { force: true, recursive: true });
     }
   });
+
+  it("verifies registered device envelopes and rejects replayed envelopes", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertCompanionServerKeyPair({
+        publicKey: serverPublicKey,
+        secretKey: serverSecretKey
+      });
+      storage.upsertCompanionDevice({
+        id: "device-1",
+        name: "Phone",
+        platform: "ios",
+        publicKey: devicePublicKey
+      });
+      const verifier = createCompanionEnvelopeVerifier({
+        now: () => new Date("2026-07-02T12:01:00.000Z"),
+        storage
+      });
+      const envelope = testEnvelope({
+        nonce: "ycrLzM3Oz9DR0tPU1dbX2Nna29zd3t_g",
+        ts: "2026-07-02T12:00:00.000Z"
+      });
+
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope,
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({
+        body: { value: true },
+        device: {
+          deviceId: "device-1",
+          devicePublicKey
+        },
+        ok: true,
+        requestId: "ycrLzM3Oz9DR0tPU1dbX2Nna29zd3t_g"
+      });
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope,
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "unauthorized" });
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects revoked, tampered, skewed, and route-swapped envelopes", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertCompanionServerKeyPair({
+        publicKey: serverPublicKey,
+        secretKey: serverSecretKey
+      });
+      storage.upsertCompanionDevice({
+        id: "device-1",
+        name: "Phone",
+        platform: "ios",
+        publicKey: devicePublicKey
+      });
+      const verifier = createCompanionEnvelopeVerifier({
+        now: () => new Date("2026-07-02T12:01:00.000Z"),
+        storage
+      });
+      const tampered = testEnvelope({
+        nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ts: "2026-07-02T12:00:00.000Z"
+      });
+
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope: { ...tampered, box: `${tampered.box.slice(0, -1)}A` },
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "unauthorized" });
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope: testEnvelope({
+            nonce: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+            ts: "2026-07-02T12:00:00.000Z"
+          }),
+          logicalMethod: "GET",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "unauthorized" });
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope: testEnvelope({
+            nonce: "AgICAgICAgICAgICAgICAgICAgICAgIC",
+            ts: "2026-07-02T11:50:00.000Z"
+          }),
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "clock_skew" });
+
+      storage.revokeCompanionDevice("device-1");
+      expect(
+        verifier.verifyRequestEnvelope({
+          envelope: testEnvelope({
+            nonce: "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD",
+            ts: "2026-07-02T12:00:00.000Z"
+          }),
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/reviews/mark"
+        })
+      ).toEqual({ ok: false, reason: "unauthorized" });
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
 });
 
 function testDevicePublicKey(fill: number): string {
   return encodeBase64Url(new Uint8Array(32).fill(fill));
+}
+
+function testEnvelope(input: { readonly nonce: string; readonly ts: string }) {
+  return sealEnvelope({
+    devicePublicKey,
+    nonce: input.nonce,
+    plaintext: {
+      body: { value: true },
+      method: "POST",
+      path: "/companion/v1/projects/project-1/reviews/mark",
+      requestId: input.nonce,
+      ts: input.ts
+    },
+    recipientPublicKey: serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
 }
