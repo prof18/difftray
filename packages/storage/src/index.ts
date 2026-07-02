@@ -31,6 +31,7 @@ import {
 import {
   createReviewComment,
   deleteReviewComment,
+  getReviewComment,
   isReviewed,
   listReviewComments,
   listReviewMarks,
@@ -134,6 +135,7 @@ export type DifftrayStorage = {
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
   readonly getProjectTabOrder: () => readonly string[];
+  readonly getReviewComment: (id: string) => ReviewCommentRecord | null;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
   readonly isReviewed: (
     reviewTargetId: string,
@@ -207,6 +209,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
     getProjectTabOrder: () => getProjectTabOrder(db),
+    getReviewComment: (id) => getReviewComment(db, id),
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),

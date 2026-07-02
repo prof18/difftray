@@ -24,8 +24,13 @@ export {
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
   readonly checkForUpdates: () => Promise<UpdatePhase>;
+  readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
   readonly getUpdatePhase: () => Promise<UpdatePhase>;
+  readonly getCompanionState: () => Promise<CompanionStateView>;
   readonly installAndRelaunch: () => Promise<void>;
+  readonly onCompanionStateChanged: (
+    listener: CompanionStateChangedListener
+  ) => () => void;
   readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly copyReviewCommentsReport: (
@@ -48,6 +53,12 @@ export type DifftrayApi = {
   ) => Promise<readonly RecentCommitView[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
+  readonly respondToCompanionPairRequest: (
+    input: RespondToCompanionPairRequestInput
+  ) => Promise<CompanionStateView>;
+  readonly revokeCompanionDevice: (id: string) => Promise<CompanionStateView>;
+  readonly setCompanionEnabled: (enabled: boolean) => Promise<CompanionStateView>;
+  readonly startCompanionPairing: () => Promise<CompanionPairingStateView>;
   readonly loadFileDiff: (
     input: LoadFileDiffInput
   ) => Promise<ReviewFileDiffContentView | null>;
@@ -79,6 +90,67 @@ export type DifftrayApi = {
 };
 
 export type ThemeMode = "dark" | "light" | "system";
+
+export type CompanionStateChangedListener = (state: CompanionStateView) => void;
+
+export type CompanionAddressView = {
+  readonly address: string;
+  readonly host: string;
+  readonly isTailscale: boolean;
+};
+
+export type CompanionDeviceView = {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly lastSeenAt?: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly publicKey: string;
+  readonly revokedAt?: string;
+};
+
+export type CompanionPairingQrPayload = {
+  readonly addresses: readonly string[];
+  readonly expiresAt: string;
+  readonly kind: "difftray-pairing";
+  readonly protocolVersion: number;
+  readonly secret: string;
+  readonly serverId: string;
+  readonly serverName: string;
+  readonly serverPublicKey: string;
+};
+
+export type CompanionPairingStateView = {
+  readonly code: string;
+  readonly expiresAt: string;
+  readonly qrPayload: CompanionPairingQrPayload;
+};
+
+export type CompanionPendingPairRequestView = {
+  readonly deviceId: string;
+  readonly deviceName: string;
+  readonly devicePublicKey: string;
+  readonly devicePublicKeyFingerprint: string;
+  readonly expiresAt: string;
+  readonly id: string;
+  readonly platform: "android" | "ios";
+};
+
+export type CompanionStateView = {
+  readonly activePairing: CompanionPairingStateView | null;
+  readonly addresses: readonly CompanionAddressView[];
+  readonly devices: readonly CompanionDeviceView[];
+  readonly enabled: boolean;
+  readonly errorMessage?: string;
+  readonly pendingPairRequests: readonly CompanionPendingPairRequestView[];
+  readonly port?: number;
+  readonly status: "error" | "running" | "stopped";
+};
+
+export type RespondToCompanionPairRequestInput = {
+  readonly approved: boolean;
+  readonly id: string;
+};
 
 export type AppSettingsView = {
   readonly autoCollapseHunksOver: number;
@@ -357,12 +429,27 @@ export type UpdateAppSettingsInput = {
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  cancelCompanionPairing: async () =>
+    ipcRenderer.invoke("companion:cancelPairing") as Promise<CompanionStateView>,
   checkForUpdates: async () =>
     ipcRenderer.invoke("updates:checkNow") as Promise<UpdatePhase>,
+  getCompanionState: async () =>
+    ipcRenderer.invoke("companion:getState") as Promise<CompanionStateView>,
   getUpdatePhase: async () =>
     ipcRenderer.invoke("updates:getPhase") as Promise<UpdatePhase>,
   installAndRelaunch: async () =>
     ipcRenderer.invoke("updates:installAndRelaunch") as Promise<void>,
+  onCompanionStateChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      listener(payload as CompanionStateView);
+    };
+
+    ipcRenderer.on("companion:stateChanged", handler);
+
+    return () => {
+      ipcRenderer.removeListener("companion:stateChanged", handler);
+    };
+  },
   onUpdatePhase: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
       const phase = parseUpdatePhase(payload);
@@ -409,9 +496,22 @@ const api: DifftrayApi = {
     }) as Promise<readonly RecentCommitView[]>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
+  respondToCompanionPairRequest: async (input) =>
+    ipcRenderer.invoke(
+      "companion:respondToPairRequest",
+      input
+    ) as Promise<CompanionStateView>,
+  revokeCompanionDevice: async (id) =>
+    ipcRenderer.invoke("companion:revokeDevice", { id }) as Promise<CompanionStateView>,
   saveProjectTabOrder: async (projectIds) => {
     await ipcRenderer.invoke("projects:saveTabOrder", { projectIds });
   },
+  setCompanionEnabled: async (enabled) =>
+    ipcRenderer.invoke("companion:setEnabled", {
+      enabled
+    }) as Promise<CompanionStateView>,
+  startCompanionPairing: async () =>
+    ipcRenderer.invoke("companion:startPairing") as Promise<CompanionPairingStateView>,
   loadFileDiff: async (input) =>
     ipcRenderer.invoke(
       "files:loadDiff",

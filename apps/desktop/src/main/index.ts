@@ -13,6 +13,7 @@ import {
 } from "electron";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -27,7 +28,9 @@ import {
   type ReviewProgress,
   type ReviewTarget
 } from "@difftray/core";
-import type {
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type PairingQrPayload,
   CreateCommentBody as CompanionCreateCommentBody,
   DiffTargetBody,
   FileDiffContentKind,
@@ -99,8 +102,16 @@ import { ApplicationMenuController } from "./application-menu.js";
 import {
   createCompanionAuthManager,
   createCompanionEnvelopeVerifier,
-  getOrCreateCompanionServerIdentity
+  getOrCreateCompanionServerIdentity,
+  type CompanionAuthManager,
+  type CompanionPairingSessionView,
+  type PendingPairRequestView
 } from "./companion/auth.js";
+import {
+  CompanionLifecycleController,
+  CompanionWorkspaceChangeBroadcaster
+} from "./companion/lifecycle.js";
+import { createCompanionServer } from "./companion/server.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
@@ -165,10 +176,46 @@ let didWireAutoUpdater = false;
 let applicationMenuController: ApplicationMenuController | undefined;
 let updateCheckScheduler: UpdateCheckScheduler | undefined;
 let updateCheckSchedulerPromise: Promise<UpdateCheckScheduler | undefined> | undefined;
+let companionLifecycleController: CompanionLifecycleController | undefined;
+let companionWorkspaceChangeBroadcaster: CompanionWorkspaceChangeBroadcaster | undefined;
+let companionAuthManager: CompanionAuthManager | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
+
+type CompanionAddressView = {
+  readonly address: string;
+  readonly host: string;
+  readonly isTailscale: boolean;
+};
+
+type CompanionPairingStateView = {
+  readonly code: string;
+  readonly expiresAt: string;
+  readonly qrPayload: PairingQrPayload;
+};
+
+type CompanionStateView = {
+  readonly activePairing: CompanionPairingStateView | null;
+  readonly addresses: readonly CompanionAddressView[];
+  readonly devices: readonly CompanionDeviceView[];
+  readonly enabled: boolean;
+  readonly errorMessage?: string;
+  readonly pendingPairRequests: readonly PendingPairRequestView[];
+  readonly port?: number;
+  readonly status: "error" | "running" | "stopped";
+};
+
+type CompanionDeviceView = {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly lastSeenAt?: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly publicKey: string;
+  readonly revokedAt?: string;
+};
 
 type MarkReviewedResult =
   | {
@@ -351,7 +398,7 @@ handleTrusted(
 );
 handleTrusted(
   "settings:updateApp",
-  (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<AppSettingsView> => {
     const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
     const companionEnabled = readBooleanProperty(input, "companionEnabled");
     const companionPort = readNumberProperty(input, "companionPort");
@@ -398,8 +445,74 @@ handleTrusted(
     };
 
     getStorage().upsertAppSettings(settings);
+    await syncCompanionLifecycleWithSettings();
 
     return appSettingsView(getStorage().getAppSettings());
+  }
+);
+handleTrusted("companion:getState", async (): Promise<CompanionStateView> => {
+  return companionStateView();
+});
+handleTrusted(
+  "companion:setEnabled",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const enabled = readBooleanProperty(input, "enabled");
+    const currentSettings = getStorage().getAppSettings();
+
+    getStorage().upsertAppSettings({
+      ...currentSettings,
+      companionEnabled: enabled
+    });
+    await syncCompanionLifecycleWithSettings();
+    emitCompanionStateChanged();
+
+    return companionStateView();
+  }
+);
+handleTrusted("companion:startPairing", async (): Promise<CompanionPairingStateView> => {
+  if (getCompanionLifecycleController().state.status !== "running") {
+    throw new Error("Companion server is not running.");
+  }
+
+  const session = getCompanionAuthManager().startPairing();
+  const pairing = await companionPairingStateView(session);
+
+  emitCompanionStateChanged();
+
+  return pairing;
+});
+handleTrusted("companion:cancelPairing", async (): Promise<CompanionStateView> => {
+  getCompanionAuthManager().cancelPairing();
+  emitCompanionStateChanged();
+
+  return companionStateView();
+});
+handleTrusted(
+  "companion:respondToPairRequest",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const id = readStringProperty(input, "id");
+    const approved = readBooleanProperty(input, "approved");
+
+    if (approved) {
+      getCompanionAuthManager().approvePairRequest(id);
+    } else {
+      getCompanionAuthManager().denyPairRequest(id);
+    }
+
+    emitCompanionStateChanged();
+
+    return companionStateView();
+  }
+);
+handleTrusted(
+  "companion:revokeDevice",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const id = readStringProperty(input, "id");
+
+    getStorage().revokeCompanionDevice(id);
+    emitCompanionStateChanged();
+
+    return companionStateView();
   }
 );
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
@@ -659,6 +772,10 @@ handleTrusted(
 app.on("before-quit", () => {
   isQuitting = true;
   pendingProjectWatcherSync = undefined;
+  void companionLifecycleController?.stop();
+  companionLifecycleController = undefined;
+  companionWorkspaceChangeBroadcaster?.dispose();
+  companionWorkspaceChangeBroadcaster = undefined;
   void projectWatchService?.close();
   projectWatchService = undefined;
   updateCheckScheduler?.stop();
@@ -685,6 +802,7 @@ app.on("activate", () => {
 void app.whenReady().then(async () => {
   configureAppRuntime();
   installApplicationMenu();
+  await syncCompanionLifecycleWithSettings();
   await createMainWindow();
   scheduleAutoUpdaterWiring();
 });
@@ -927,12 +1045,272 @@ function getProjectWatchService(): ProjectWatchService {
   return projectWatchService;
 }
 
+function getCompanionLifecycleController(): CompanionLifecycleController {
+  if (companionLifecycleController) {
+    return companionLifecycleController;
+  }
+
+  companionLifecycleController = new CompanionLifecycleController({
+    createServer: () => createCompanionServer(createDesktopCompanionDeps()),
+    serverIdentity: companionServerIdentity
+  });
+
+  return companionLifecycleController;
+}
+
+function getCompanionAuthManager(): CompanionAuthManager {
+  if (companionAuthManager) {
+    return companionAuthManager;
+  }
+
+  companionAuthManager = createCompanionAuthManager({
+    onStateChanged: emitCompanionStateChanged,
+    storage: getStorage()
+  });
+
+  return companionAuthManager;
+}
+
+function companionServerIdentity(): ReturnType<
+  typeof getOrCreateCompanionServerIdentity
+> {
+  return getOrCreateCompanionServerIdentity({
+    appVersion: app.getVersion(),
+    storage: getStorage()
+  });
+}
+
+async function syncCompanionLifecycleWithSettings(): Promise<void> {
+  try {
+    await getCompanionLifecycleController().applySettings(getStorage().getAppSettings());
+  } catch (caughtError) {
+    console.error("Companion server lifecycle sync failed", caughtError);
+  }
+}
+
+async function companionStateView(): Promise<CompanionStateView> {
+  const settings = getStorage().getAppSettings();
+  const lifecycleState =
+    companionLifecycleController?.state ??
+    ({
+      enabled: false,
+      status: "stopped"
+    } as const);
+  const port = lifecycleState.status === "running" ? lifecycleState.port : undefined;
+  const addresses = port ? await companionAddressViews(port) : [];
+  const activeSession =
+    port === undefined ? null : getCompanionAuthManager().getActivePairingSession();
+
+  return {
+    activePairing:
+      activeSession && port
+        ? await companionPairingStateView(activeSession, addresses)
+        : null,
+    addresses,
+    devices: getStorage().listCompanionDevices().map(companionDeviceView),
+    enabled: settings.companionEnabled,
+    ...(lifecycleState.status === "error"
+      ? { errorMessage: lifecycleState.errorMessage }
+      : {}),
+    pendingPairRequests: getCompanionAuthManager().listPendingPairRequests(),
+    ...(port ? { port } : {}),
+    status: lifecycleState.status
+  };
+}
+
+async function companionPairingStateView(
+  session: CompanionPairingSessionView,
+  existingAddresses?: readonly CompanionAddressView[]
+): Promise<CompanionPairingStateView> {
+  const lifecycleState = getCompanionLifecycleController().state;
+
+  if (lifecycleState.status !== "running") {
+    throw new Error("Companion server is not running.");
+  }
+
+  const identity = companionServerIdentity();
+  const addresses =
+    existingAddresses ?? (await companionAddressViews(lifecycleState.port));
+
+  return {
+    code: session.code,
+    expiresAt: session.expiresAt,
+    qrPayload: {
+      addresses: addresses.map((address) => address.address),
+      expiresAt: session.expiresAt,
+      kind: "difftray-pairing",
+      protocolVersion: COMPANION_PROTOCOL_VERSION,
+      secret: session.secret,
+      serverId: identity.serverId,
+      serverName: identity.serverName,
+      serverPublicKey: identity.serverPublicKey
+    }
+  };
+}
+
+function companionDeviceView(
+  device: ReturnType<DifftrayStorage["listCompanionDevices"]>[number]
+): CompanionDeviceView {
+  return {
+    createdAt: device.createdAt,
+    id: device.id,
+    ...(device.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
+    name: device.name,
+    platform: device.platform,
+    publicKey: device.publicKey,
+    ...(device.revokedAt ? { revokedAt: device.revokedAt } : {})
+  };
+}
+
+async function companionAddressViews(
+  port: number
+): Promise<readonly CompanionAddressView[]> {
+  const localAddresses = Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === "IPv4" && !entry.internal)
+    .map((entry) => companionAddressView(entry.address, port));
+  const magicDnsNames = await resolveTailscaleMagicDnsNames();
+
+  return uniqueCompanionAddresses([
+    ...localAddresses,
+    ...magicDnsNames.map((host) => companionAddressView(host, port, true))
+  ]);
+}
+
+function companionAddressView(
+  host: string,
+  port: number,
+  forceTailscale = false
+): CompanionAddressView {
+  return {
+    address: `${host}:${String(port)}`,
+    host,
+    isTailscale: forceTailscale || isTailscaleIpv4Address(host)
+  };
+}
+
+function uniqueCompanionAddresses(
+  addresses: readonly CompanionAddressView[]
+): readonly CompanionAddressView[] {
+  const seen = new Set<string>();
+
+  return addresses.filter((address) => {
+    if (seen.has(address.address)) {
+      return false;
+    }
+
+    seen.add(address.address);
+    return true;
+  });
+}
+
+function isTailscaleIpv4Address(address: string): boolean {
+  const parts = address.split(".").map((part) => Number(part));
+
+  return (
+    parts.length === 4 &&
+    parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255) &&
+    parts[0] === 100 &&
+    parts[1] !== undefined &&
+    parts[1] >= 64 &&
+    parts[1] <= 127
+  );
+}
+
+function resolveTailscaleMagicDnsNames(): Promise<readonly string[]> {
+  return new Promise((resolve) => {
+    const child = spawn("tailscale", ["status", "--json"], {
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    const chunks: Buffer[] = [];
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve([]);
+    }, 1_000);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+    child.once("error", () => {
+      clearTimeout(timer);
+      resolve([]);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+
+      if (code !== 0) {
+        resolve([]);
+        return;
+      }
+
+      resolve(parseTailscaleMagicDnsNames(Buffer.concat(chunks).toString("utf8")));
+    });
+  });
+}
+
+function parseTailscaleMagicDnsNames(rawJson: string): readonly string[] {
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "Self" in parsed &&
+      typeof parsed.Self === "object" &&
+      parsed.Self !== null &&
+      "DNSName" in parsed.Self &&
+      typeof parsed.Self.DNSName === "string"
+    ) {
+      return [parsed.Self.DNSName.replace(/\.$/, "")].filter((name) => name.length > 0);
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
+
+function emitCompanionStateChanged(): void {
+  void companionStateView()
+    .then((state) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send("companion:stateChanged", state);
+        }
+      }
+    })
+    .catch((caughtError: unknown) => {
+      console.error("Companion state emission failed", caughtError);
+    });
+}
+
+function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroadcaster {
+  if (companionWorkspaceChangeBroadcaster) {
+    return companionWorkspaceChangeBroadcaster;
+  }
+
+  companionWorkspaceChangeBroadcaster = new CompanionWorkspaceChangeBroadcaster({
+    broadcast: notifyCompanionWorkspaceChanged
+  });
+
+  return companionWorkspaceChangeBroadcaster;
+}
+
 function emitProjectChange(change: ProjectWatchChangeEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send("projects:changed", change);
     }
   }
+
+  getCompanionWorkspaceChangeBroadcaster().notify(change.projectId, "filesystem");
+}
+
+function notifyCompanionWorkspaceChanged(
+  projectId: string,
+  reason: "comments" | "diff_target" | "filesystem" | "review_state"
+): void {
+  companionLifecycleController?.broadcastWorkspaceChanged(projectId, reason);
 }
 
 let pendingProjectWatcherSync: readonly WatchedProject[] | undefined;
@@ -1088,7 +1466,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
   const storage = getStorage();
 
   return {
-    companionAuth: createCompanionAuthManager({ storage }),
+    companionAuth: getCompanionAuthManager(),
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
     commentsReport: async (projectId) =>
       formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
@@ -1099,10 +1477,22 @@ export function createDesktopCompanionDeps(): CompanionDeps {
         throw new Error(result.reason);
       }
 
+      notifyDesktopRenderer(input.projectId);
+      notifyCompanionWorkspaceChanged(input.projectId, "comments");
+
       return result.comment;
     },
-    deleteComment: (id) =>
-      Promise.resolve(deleteProjectReviewComment(id).status === "deleted"),
+    deleteComment: (id) => {
+      const comment = storage.getReviewComment(id);
+      const deleted = deleteProjectReviewComment(id).status === "deleted";
+
+      if (deleted && comment) {
+        notifyDesktopRenderer(comment.projectId);
+        notifyCompanionWorkspaceChanged(comment.projectId, "comments");
+      }
+
+      return Promise.resolve(deleted);
+    },
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
     listRecentProjects: listAvailableRecentProjectViews,
@@ -1116,8 +1506,16 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       return diff;
     },
     loadWorkspaceView: loadProjectWorkspace,
-    markReviewed: async (input) =>
-      companionMarkResult(await markProjectFileReviewed(input)),
+    markReviewed: async (input) => {
+      const result = await markProjectFileReviewed(input);
+
+      if (result.status === "marked") {
+        notifyDesktopRenderer(input.projectId);
+        notifyCompanionWorkspaceChanged(input.projectId, "review_state");
+      }
+
+      return companionMarkResult(result);
+    },
     notifyDesktopRenderer,
     serverIdentity: () =>
       getOrCreateCompanionServerIdentity({
@@ -1125,17 +1523,38 @@ export function createDesktopCompanionDeps(): CompanionDeps {
         storage
       }),
     storage,
-    unmarkReviewed: async (input) =>
-      companionUnmarkResult(await unmarkProjectFileReviewed(input)),
+    unmarkReviewed: async (input) => {
+      const result = await unmarkProjectFileReviewed(input);
+
+      if (result.status === "unmarked") {
+        notifyDesktopRenderer(input.projectId);
+        notifyCompanionWorkspaceChanged(input.projectId, "review_state");
+      }
+
+      return companionUnmarkResult(result);
+    },
     updateComment: (input) => {
+      const storedComment = storage.getReviewComment(input.commentId);
       const result = updateProjectReviewComment({
         body: input.body,
         id: input.commentId
       });
 
+      if (result.status === "updated" && storedComment) {
+        notifyDesktopRenderer(storedComment.projectId);
+        notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+      }
+
       return Promise.resolve(result.status === "updated" ? result.comment : null);
     },
-    updateDiffTarget: updateProjectDiffTarget
+    updateDiffTarget: async (projectId, target) => {
+      const workspace = await updateProjectDiffTarget(projectId, target);
+
+      notifyDesktopRenderer(projectId);
+      notifyCompanionWorkspaceChanged(projectId, "diff_target");
+
+      return workspace;
+    }
   };
 }
 

@@ -195,7 +195,10 @@ export function listReviewComments(
   return rows.map((row) => reviewCommentFromRow(row as ReviewCommentRow));
 }
 
-function getReviewComment(db: DatabaseSync, id: string): ReviewCommentRecord | null {
+export function getReviewComment(
+  db: DatabaseSync,
+  id: string
+): ReviewCommentRecord | null {
   const row = db.prepare("select * from review_comments where id = ?").get(id);
 
   return row ? reviewCommentFromRow(row as ReviewCommentRow) : null;

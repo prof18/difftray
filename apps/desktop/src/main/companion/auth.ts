@@ -465,6 +465,7 @@ export function createCompanionAuthManager(input: {
   readonly generatePairRequestId?: () => string;
   readonly generateSecret?: () => string;
   readonly now?: () => Date;
+  readonly onStateChanged?: () => void;
   readonly storage: DifftrayStorage;
 }): CompanionAuthManager {
   const now = input.now ?? (() => new Date());
@@ -517,16 +518,22 @@ export function createCompanionAuthManager(input: {
 
       if (isExpiredPendingRequest(request)) {
         pendingRequests.delete(id);
+        input.onStateChanged?.();
 
         return { reason: "pairing_expired", status: "rejected" };
       }
 
       pendingRequests.delete(id);
 
-      return registerDevice(request.requestBody);
+      const result = registerDevice(request.requestBody);
+
+      input.onStateChanged?.();
+
+      return result;
     },
     cancelPairing: () => {
       pairingSessions.cancelPairing();
+      input.onStateChanged?.();
     },
     denyPairRequest: (id) => {
       const request = pendingRequests.get(id);
@@ -536,6 +543,7 @@ export function createCompanionAuthManager(input: {
       }
 
       pendingRequests.delete(id);
+      input.onStateChanged?.();
 
       return { status: "denied" };
     },
@@ -549,9 +557,15 @@ export function createCompanionAuthManager(input: {
       if (request.secret !== undefined) {
         const consumed = pairingSessions.consumeQrSecret(request.secret);
 
-        return consumed.ok
-          ? registerDevice(request)
-          : { reason: "pairing_expired", status: "rejected" };
+        if (!consumed.ok) {
+          return { reason: "pairing_expired", status: "rejected" };
+        }
+
+        const result = registerDevice(request);
+
+        input.onStateChanged?.();
+
+        return result;
       }
 
       const activeSession = pairingSessions.getActivePairingSession();
@@ -576,10 +590,17 @@ export function createCompanionAuthManager(input: {
         id: pairRequestId,
         requestBody: request
       });
+      input.onStateChanged?.();
 
       return { pairRequestId, status: "pending" };
     },
-    startPairing: () => pairingSessions.startPairing()
+    startPairing: () => {
+      const session = pairingSessions.startPairing();
+
+      input.onStateChanged?.();
+
+      return session;
+    }
   };
 }
 

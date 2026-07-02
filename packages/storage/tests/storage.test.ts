@@ -295,6 +295,11 @@ describe("storage", () => {
       body: "Updated comment.",
       updatedAt: expect.any(String)
     });
+    expect(storage.getReviewComment(comment.id)).toMatchObject({
+      body: "Updated comment.",
+      id: comment.id,
+      projectId: project.id
+    });
     expect(storage.updateReviewComment("missing-comment", "No-op")).toBeNull();
 
     storage.deleteReviewComment(comment.id);
