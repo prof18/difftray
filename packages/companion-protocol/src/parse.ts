@@ -146,6 +146,9 @@ export function parseCompanionServerEvent(
     case "hello": {
       const protocolVersion = readNumber(input, "protocolVersion");
       if (!protocolVersion.ok) return protocolVersion;
+      if (!Number.isInteger(protocolVersion.value)) {
+        return { error: "missing protocolVersion", ok: false };
+      }
       const serverName = readString(input, "serverName");
       if (!serverName.ok) return serverName;
 

@@ -186,5 +186,9 @@ describe("parseCompanionServerEvent", () => {
       error: "missing protocolVersion",
       ok: false
     });
+    expect(parseCompanionServerEvent({ kind: "hello", protocolVersion: 1.5 })).toEqual({
+      error: "missing protocolVersion",
+      ok: false
+    });
   });
 });
