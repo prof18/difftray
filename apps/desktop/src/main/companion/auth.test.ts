@@ -273,6 +273,65 @@ describe("companion auth", () => {
     }
   });
 
+  it("notifies the renderer when wrong manual codes close the pairing session", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const stateChanges: string[] = [];
+
+    try {
+      const storage = openStorage(storagePath);
+      const manager = createCompanionAuthManager({
+        generateCode: () => "123456",
+        generateSecret: () => "pairing-secret",
+        now: () => new Date("2026-07-02T12:00:00.000Z"),
+        onStateChanged: () => {
+          stateChanges.push(manager.getActivePairingSession()?.code ?? "closed");
+        },
+        storage
+      });
+
+      manager.startPairing();
+      expect(stateChanges).toEqual(["123456"]);
+
+      for (const code of ["000000", "111111"]) {
+        expect(
+          manager.pairDevice({
+            code,
+            deviceId: `device-${code}`,
+            deviceName: "Pixel",
+            devicePublicKey: testDevicePublicKey(Number(code[0]) + 1),
+            platform: "android",
+            protocolVersion: 1
+          })
+        ).toEqual({
+          reason: "wrong_code",
+          status: "rejected"
+        });
+      }
+
+      expect(stateChanges).toEqual(["123456"]);
+      expect(
+        manager.pairDevice({
+          code: "222222",
+          deviceId: "device-locked",
+          deviceName: "Pixel",
+          devicePublicKey: testDevicePublicKey(9),
+          platform: "android",
+          protocolVersion: 1
+        })
+      ).toEqual({
+        reason: "locked",
+        status: "rejected"
+      });
+
+      expect(manager.getActivePairingSession()).toBeNull();
+      expect(stateChanges).toEqual(["123456", "closed"]);
+      storage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
   it("approves code pair requests and stores the device", () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-auth-"));
     const storagePath = path.join(storageDir, "difftray.sqlite");

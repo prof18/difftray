@@ -638,8 +638,14 @@ export function createCompanionAuthManager(input: {
       const verified = pairingSessions.verifyPairingCode(request.code ?? "");
 
       if (!verified.ok) {
+        const reason = codeFailureReason(verified.reason);
+
+        if (reason === "locked" || reason === "pairing_expired") {
+          input.onStateChanged?.();
+        }
+
         return {
-          reason: codeFailureReason(verified.reason),
+          reason,
           status: "rejected"
         };
       }
