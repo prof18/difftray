@@ -272,6 +272,7 @@ try {
   });
   await window.getByRole("button", { name: "Mark reviewed" }).click();
   await expectFileReviewState(window, "tracked.txt", "reviewed");
+  await expectProjectTabSummary(window, "visual-repo", "1/4");
   await window.waitForTimeout(250);
   await window.screenshot({
     fullPage: true,
