@@ -13,6 +13,7 @@ import {
   createSurfaceRenderModel,
   surfaceCommentAnnotations
 } from "./surface-render-model.js";
+import { diffSurfaceStyle } from "./surface-style.js";
 
 export type DiffSurfaceAppState = {
   readonly comments: readonly ReviewCommentView[];
@@ -59,7 +60,7 @@ export function DiffSurfaceApp({
       data-bridge-version={DIFF_SURFACE_BRIDGE_VERSION}
       data-diff-mode={state.diffMode}
       data-wrap-lines={String(state.wrapLines)}
-      style={surfaceStyle(state.theme)}
+      style={diffSurfaceStyle(state.theme)}
     >
       <header className="diff-surface__header">
         <div className="diff-surface__path">{state.path}</div>
@@ -90,32 +91,4 @@ export function DiffSurfaceApp({
       )}
     </main>
   );
-}
-
-function surfaceStyle(theme: DiffSurfaceThemeTokens): React.CSSProperties {
-  return {
-    "--diff-surface-accent": theme.accent,
-    "--diff-surface-bg": theme.background,
-    "--diff-surface-fg": theme.foreground,
-    "--diff-surface-muted": theme.foregroundMuted,
-    "--diff-add-bg": theme.addedBackground,
-    "--diff-add-bg-strong": theme.addedBackground,
-    "--diff-add-fg": theme.addedForeground,
-    "--diff-bg": theme.background,
-    "--diff-bg-buffer": theme.background,
-    "--diff-bg-context": theme.background,
-    "--diff-bg-gutter": theme.background,
-    "--diff-bg-separator": theme.foregroundMuted,
-    "--diff-del-bg": theme.removedBackground,
-    "--diff-del-bg-strong": theme.removedBackground,
-    "--diff-del-fg": theme.removedForeground,
-    "--diff-fg": theme.foreground,
-    "--diff-fg-muted": theme.foregroundMuted,
-    "--diff-gutter": theme.foregroundMuted,
-    "--diff-hover": theme.draftHighlight,
-    "--diff-selection": theme.draftHighlight,
-    color: theme.foreground,
-    backgroundColor: theme.background,
-    fontSize: theme.fontSizePx
-  } as React.CSSProperties;
 }

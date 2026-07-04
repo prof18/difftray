@@ -26,5 +26,6 @@ export {
   createRenderedMessage,
   serializeSurfaceMessage
 } from "./surface-outbound.js";
+export { diffSurfaceStyle } from "./surface-style.js";
 export { diffSurfaceThemeTokens } from "./surface-theme.js";
 export { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
