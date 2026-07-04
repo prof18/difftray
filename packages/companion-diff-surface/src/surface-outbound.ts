@@ -1,0 +1,62 @@
+import type { DiffSurfaceMessage, DiffSurfaceSide } from "./surface-bridge.js";
+import type { SurfaceDiffRow } from "./surface-render-model.js";
+
+export function serializeSurfaceMessage(message: DiffSurfaceMessage): string {
+  return JSON.stringify(message);
+}
+
+export function createRenderedMessage({
+  endMs,
+  path,
+  startMs
+}: {
+  readonly endMs: number;
+  readonly path: string;
+  readonly startMs: number;
+}): DiffSurfaceMessage {
+  return {
+    kind: "rendered",
+    path,
+    renderMs: Math.max(0, Math.round((endMs - startMs) * 10) / 10)
+  };
+}
+
+export function createCommentTappedMessage(commentId: string): DiffSurfaceMessage {
+  return {
+    commentId,
+    kind: "comment_tapped"
+  };
+}
+
+export function createLineSelectedMessage(
+  row: SurfaceDiffRow
+): DiffSurfaceMessage | null {
+  const selection = lineSelectionForRow(row);
+
+  if (!selection) {
+    return null;
+  }
+
+  return {
+    kind: "line_selected",
+    lineEnd: selection.lineNumber,
+    lineStart: selection.lineNumber,
+    side: selection.side,
+    snippet: [{ lineNumber: selection.lineNumber, text: row.text }]
+  };
+}
+
+function lineSelectionForRow(
+  row: SurfaceDiffRow
+): { readonly lineNumber: number; readonly side: DiffSurfaceSide } | null {
+  switch (row.kind) {
+    case "addition":
+      return { lineNumber: row.newLineNumber, side: "additions" };
+    case "context":
+      return { lineNumber: row.newLineNumber, side: "additions" };
+    case "deletion":
+      return { lineNumber: row.oldLineNumber, side: "deletions" };
+    case "hunk":
+      return null;
+  }
+}

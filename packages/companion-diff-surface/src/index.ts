@@ -20,4 +20,10 @@ export {
   type DiffSurfaceHostMessageFrameOptions,
   type DiffSurfaceHostMessageReceiveResult
 } from "./surface-host-message-receiver.js";
+export {
+  createCommentTappedMessage,
+  createLineSelectedMessage,
+  createRenderedMessage,
+  serializeSurfaceMessage
+} from "./surface-outbound.js";
 export { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";

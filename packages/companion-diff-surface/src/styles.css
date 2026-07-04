@@ -45,9 +45,16 @@ body {
 }
 
 .diff-surface__row {
+  appearance: none;
+  border: 0;
+  color: inherit;
   display: grid;
+  font: inherit;
   grid-template-columns: 34px 16px minmax(0, 1fr);
   min-height: 20px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .diff-surface__row code {

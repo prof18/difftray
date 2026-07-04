@@ -2,10 +2,15 @@ import type { ReviewCommentView } from "@difftray/companion-protocol";
 
 import {
   DIFF_SURFACE_BRIDGE_VERSION,
+  type DiffSurfaceMessage,
   type DiffSurfaceDraftRange,
   type DiffSurfaceMode,
   type DiffSurfaceThemeTokens
 } from "./surface-bridge.js";
+import {
+  createCommentTappedMessage,
+  createLineSelectedMessage
+} from "./surface-outbound.js";
 import {
   createSurfaceFileDiffOptions,
   createSurfaceRenderModel,
@@ -29,8 +34,10 @@ export type DiffSurfaceAppState = {
 };
 
 export function DiffSurfaceApp({
+  onSurfaceMessage,
   state
 }: {
+  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly state: DiffSurfaceAppState;
 }): React.JSX.Element {
   const model = createSurfaceRenderModel({
@@ -79,6 +86,7 @@ export function DiffSurfaceApp({
             <DiffRow
               annotations={annotationsForRow(row, annotations)}
               key={`${row.kind}:${String(index)}`}
+              {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
               row={row}
             />
           ))}
@@ -90,9 +98,11 @@ export function DiffSurfaceApp({
 
 function DiffRow({
   annotations,
+  onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
 }): React.JSX.Element {
   if (row.kind === "hunk") {
@@ -110,22 +120,39 @@ function DiffRow({
 
   return (
     <>
-      <div className="diff-surface__row" data-row-kind={row.kind}>
+      <button
+        className="diff-surface__row"
+        data-row-kind={row.kind}
+        onClick={() => {
+          const message = createLineSelectedMessage(row);
+
+          if (message) {
+            onSurfaceMessage?.(message);
+          }
+        }}
+        type="button"
+      >
         <span className="diff-surface__line-number">{lineNumber}</span>
         <span className="diff-surface__glyph">{glyph}</span>
         <code>{row.text}</code>
-      </div>
+      </button>
       {annotations.map((annotation) => (
-        <SurfaceAnnotation annotation={annotation} key={annotationKey(annotation)} />
+        <SurfaceAnnotation
+          annotation={annotation}
+          key={annotationKey(annotation)}
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+        />
       ))}
     </>
   );
 }
 
 function SurfaceAnnotation({
-  annotation
+  annotation,
+  onSurfaceMessage
 }: {
   readonly annotation: SurfaceLineAnnotation;
+  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
 }): React.JSX.Element {
   const { metadata } = annotation;
 
@@ -148,6 +175,9 @@ function SurfaceAnnotation({
     <button
       className="diff-surface__annotation"
       data-comment-id={metadata.comment.id}
+      onClick={() => {
+        onSurfaceMessage?.(createCommentTappedMessage(metadata.comment.id));
+      }}
       type="button"
     >
       <span>

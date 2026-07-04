@@ -1,8 +1,12 @@
 import { createRoot } from "react-dom/client";
 
 import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
-import { DIFF_SURFACE_BRIDGE_VERSION } from "./surface-bridge.js";
+import {
+  DIFF_SURFACE_BRIDGE_VERSION,
+  type DiffSurfaceMessage
+} from "./surface-bridge.js";
 import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
+import { createRenderedMessage, serializeSurfaceMessage } from "./surface-outbound.js";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -39,10 +43,11 @@ const root = createRoot(rootElement);
 const hostMessageReceiver = createDiffSurfaceHostMessageReceiver();
 
 function render(): void {
-  root.render(<DiffSurfaceApp state={state} />);
+  root.render(<DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />);
 }
 
 window.__difftrayReceive = (rawMessage) => {
+  const startMs = performance.now();
   const received = hostMessageReceiver.receive(rawMessage);
 
   if (received.kind === "pending") {
@@ -55,6 +60,8 @@ window.__difftrayReceive = (rawMessage) => {
   }
 
   const { message } = received;
+
+  let renderedPath: string | null = null;
 
   switch (message.kind) {
     case "init":
@@ -76,6 +83,7 @@ window.__difftrayReceive = (rawMessage) => {
         patch: message.patch,
         path: message.path
       };
+      renderedPath = message.path;
       break;
     case "set_comments":
       state = { ...state, comments: message.comments };
@@ -89,10 +97,20 @@ window.__difftrayReceive = (rawMessage) => {
   }
 
   render();
+
+  if (renderedPath) {
+    postMessage(
+      createRenderedMessage({
+        endMs: performance.now(),
+        path: renderedPath,
+        startMs
+      })
+    );
+  }
 };
 
-function postMessage(message: unknown): void {
-  window.ReactNativeWebView?.postMessage(JSON.stringify(message));
+function postMessage(message: DiffSurfaceMessage): void {
+  window.ReactNativeWebView?.postMessage(serializeSurfaceMessage(message));
 }
 
 render();
