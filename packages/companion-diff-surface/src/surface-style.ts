@@ -10,6 +10,14 @@ type DiffChromeTokens = {
   readonly backgroundSeparator: string;
   readonly deleteBackgroundStrong: string;
   readonly gutter: string;
+  readonly syntax: DiffSyntaxTokens;
+};
+
+type DiffSyntaxTokens = {
+  readonly comment: string;
+  readonly keyword: string;
+  readonly number: string;
+  readonly string: string;
 };
 
 export function diffSurfaceStyle(theme: DiffSurfaceThemeTokens): CSSProperties {
@@ -36,6 +44,10 @@ export function diffSurfaceStyle(theme: DiffSurfaceThemeTokens): CSSProperties {
     "--diff-gutter": chrome.gutter,
     "--diff-hover": theme.draftHighlight,
     "--diff-selection": theme.draftHighlight,
+    "--diff-token-comment": chrome.syntax.comment,
+    "--diff-token-keyword": chrome.syntax.keyword,
+    "--diff-token-number": chrome.syntax.number,
+    "--diff-token-string": chrome.syntax.string,
     backgroundColor: theme.background,
     color: theme.foreground,
     fontSize: theme.fontSizePx
@@ -53,7 +65,13 @@ const lightDiffChromeTokens: DiffChromeTokens = {
   backgroundGutter: "#f5f8fe",
   backgroundSeparator: "#e1eaff",
   deleteBackgroundStrong: "rgba(222, 27, 46, 0.18)",
-  gutter: "#aeb3c2"
+  gutter: "#aeb3c2",
+  syntax: {
+    comment: "#8C8C8C",
+    keyword: "#0033B3",
+    number: "#1750EB",
+    string: "#067D17"
+  }
 };
 
 const darkDiffChromeTokens: DiffChromeTokens = {
@@ -63,5 +81,11 @@ const darkDiffChromeTokens: DiffChromeTokens = {
   backgroundGutter: "#17181a",
   backgroundSeparator: "#24262a",
   deleteBackgroundStrong: "rgba(205, 49, 49, 0.24)",
-  gutter: "#4b5059"
+  gutter: "#4b5059",
+  syntax: {
+    comment: "#7A7E85",
+    keyword: "#CF8E6D",
+    number: "#2AACB8",
+    string: "#6AAB73"
+  }
 };

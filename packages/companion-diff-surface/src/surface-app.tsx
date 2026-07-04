@@ -96,6 +96,7 @@ export function DiffSurfaceApp({
             <SurfaceDiffRowView
               annotations={annotations}
               diffMode={state.diffMode}
+              filePath={state.path}
               key={`${row.kind}:${state.diffMode}:${String(index)}`}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
               row={row}

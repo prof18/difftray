@@ -20,6 +20,7 @@ import {
   rowHasDraftHighlight,
   rowSideHasDraftHighlight
 } from "./surface-row-annotations.js";
+import { CodeLine } from "./surface-syntax.js";
 
 type SurfaceLineRow = Exclude<
   SurfaceDiffRow,
@@ -29,11 +30,13 @@ type SurfaceLineRow = Exclude<
 export function SurfaceDiffRowView({
   annotations,
   diffMode,
+  filePath,
   onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
   readonly diffMode: DiffSurfaceMode;
+  readonly filePath: string;
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
 }): React.JSX.Element {
@@ -42,6 +45,7 @@ export function SurfaceDiffRowView({
   return diffMode === "split" ? (
     <SplitDiffRow
       annotations={rowAnnotations}
+      filePath={filePath}
       highlightAnnotations={annotations}
       {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
       row={row}
@@ -49,6 +53,7 @@ export function SurfaceDiffRowView({
   ) : (
     <DiffRow
       annotations={rowAnnotations}
+      filePath={filePath}
       highlightAnnotations={annotations}
       {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
       row={row}
@@ -58,11 +63,13 @@ export function SurfaceDiffRowView({
 
 function DiffRow({
   annotations,
+  filePath,
   highlightAnnotations,
   onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly filePath: string;
   readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
@@ -71,6 +78,7 @@ function DiffRow({
     return (
       <ContextExpander
         annotations={annotations}
+        filePath={filePath}
         highlightAnnotations={highlightAnnotations}
         {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
         row={row}
@@ -111,7 +119,7 @@ function DiffRow({
       >
         <span className="diff-surface__line-number">{lineNumber}</span>
         <span className="diff-surface__glyph">{glyph}</span>
-        <code>{row.text}</code>
+        <CodeLine path={filePath} text={row.text} />
       </button>
       {annotations.map((annotation) => (
         <SurfaceAnnotation
@@ -126,11 +134,13 @@ function DiffRow({
 
 function SplitDiffRow({
   annotations,
+  filePath,
   highlightAnnotations,
   onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly filePath: string;
   readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
@@ -139,6 +149,7 @@ function SplitDiffRow({
     return (
       <ContextExpander
         annotations={annotations}
+        filePath={filePath}
         highlightAnnotations={highlightAnnotations}
         {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
         row={row}
@@ -161,12 +172,14 @@ function SplitDiffRow({
     <>
       <div className="diff-surface__split-row" data-row-kind={row.kind}>
         <SplitCell
+          filePath={filePath}
           highlightAnnotations={highlightAnnotations}
           {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
           row={row}
           side="deletions"
         />
         <SplitCell
+          filePath={filePath}
           highlightAnnotations={highlightAnnotations}
           {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
           row={row}
@@ -185,11 +198,13 @@ function SplitDiffRow({
 }
 
 function SplitCell({
+  filePath,
   highlightAnnotations,
   onSurfaceMessage,
   row,
   side
 }: {
+  readonly filePath: string;
   readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceLineRow;
@@ -220,19 +235,21 @@ function SplitCell({
     >
       <span className="diff-surface__line-number">{cell.lineNumber}</span>
       <span className="diff-surface__glyph">{cell.glyph}</span>
-      <code>{row.text}</code>
+      <CodeLine path={filePath} text={row.text} />
     </button>
   );
 }
 
 function ContextExpander({
   annotations,
+  filePath,
   highlightAnnotations,
   onSurfaceMessage,
   row,
   variant
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly filePath: string;
   readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: Extract<SurfaceDiffRow, { readonly kind: "context_expander" }>;
@@ -250,6 +267,7 @@ function ContextExpander({
           variant === "split" ? (
             <SplitDiffRow
               annotations={annotationsForRow(contextRow, annotations)}
+              filePath={filePath}
               highlightAnnotations={highlightAnnotations}
               key={contextRowKey(contextRow)}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
@@ -258,6 +276,7 @@ function ContextExpander({
           ) : (
             <DiffRow
               annotations={annotationsForRow(contextRow, annotations)}
+              filePath={filePath}
               highlightAnnotations={highlightAnnotations}
               key={contextRowKey(contextRow)}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}

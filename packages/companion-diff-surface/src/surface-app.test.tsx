@@ -29,6 +29,55 @@ describe("diff surface app", () => {
     expect(html).not.toContain("<img src=x");
   });
 
+  it("renders syntax token spans for code files without changing diff text", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          path: "src/example.ts",
+          patch: [
+            "diff --git a/src/example.ts b/src/example.ts",
+            "--- a/src/example.ts",
+            "+++ b/src/example.ts",
+            "@@ -1 +1 @@",
+            "-const value = 41;",
+            "+const value = 'mobile'; // changed"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-token-kind="keyword"');
+    expect(html).toContain('data-token-kind="number"');
+    expect(html).toContain('data-token-kind="string"');
+    expect(html).toContain('data-token-kind="comment"');
+    expect(html).toContain("const");
+    expect(html).toContain("&#x27;mobile&#x27;");
+  });
+
+  it("keeps highlighted hostile code text inert", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          path: "src/evil.ts",
+          patch: [
+            "diff --git a/src/evil.ts b/src/evil.ts",
+            "--- a/src/evil.ts",
+            "+++ b/src/evil.ts",
+            "@@ -1 +1 @@",
+            "-const html = '<img src=x onerror=\"window.__xss = true\">';",
+            "+const script = '<script>window.__xss = true</script>'; // keep inert"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-token-kind="string"');
+    expect(html).toContain('data-token-kind="comment"');
+    expect(html).toContain("&lt;script&gt;window.__xss = true&lt;/script&gt;");
+    expect(html).not.toContain("<script>window.__xss");
+    expect(html).not.toContain("<img src=x");
+  });
+
   it("mounts the parsed diff renderer with comments and drafts", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp

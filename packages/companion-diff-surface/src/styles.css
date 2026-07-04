@@ -66,6 +66,23 @@ body {
   white-space: pre-wrap;
 }
 
+.diff-surface__syntax-token[data-token-kind="comment"] {
+  color: var(--diff-token-comment);
+  font-style: italic;
+}
+
+.diff-surface__syntax-token[data-token-kind="keyword"] {
+  color: var(--diff-token-keyword);
+}
+
+.diff-surface__syntax-token[data-token-kind="number"] {
+  color: var(--diff-token-number);
+}
+
+.diff-surface__syntax-token[data-token-kind="string"] {
+  color: var(--diff-token-string);
+}
+
 .diff-surface[data-wrap-lines="false"] .diff-surface__diff {
   min-width: max-content;
 }

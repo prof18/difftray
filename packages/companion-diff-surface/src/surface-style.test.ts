@@ -12,7 +12,11 @@ describe("diff surface style", () => {
       "--diff-bg-gutter": "#17181a",
       "--diff-bg-separator": "#24262a",
       "--diff-del-bg-strong": "rgba(205, 49, 49, 0.24)",
-      "--diff-gutter": "#4b5059"
+      "--diff-gutter": "#4b5059",
+      "--diff-token-comment": "#7A7E85",
+      "--diff-token-keyword": "#CF8E6D",
+      "--diff-token-number": "#2AACB8",
+      "--diff-token-string": "#6AAB73"
     });
   });
 
@@ -24,7 +28,11 @@ describe("diff surface style", () => {
       "--diff-bg-gutter": "#f5f8fe",
       "--diff-bg-separator": "#e1eaff",
       "--diff-del-bg-strong": "rgba(222, 27, 46, 0.18)",
-      "--diff-gutter": "#aeb3c2"
+      "--diff-gutter": "#aeb3c2",
+      "--diff-token-comment": "#8C8C8C",
+      "--diff-token-keyword": "#0033B3",
+      "--diff-token-number": "#1750EB",
+      "--diff-token-string": "#067D17"
     });
   });
 });
