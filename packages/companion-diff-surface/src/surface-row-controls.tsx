@@ -80,12 +80,14 @@ export function LineContentButton({
   glyph,
   message,
   onSurfaceMessage,
+  syntaxHighlight,
   text
 }: {
   readonly filePath: string;
   readonly glyph: string;
   readonly message: DiffSurfaceMessage | null;
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
+  readonly syntaxHighlight: boolean;
   readonly text: string;
 }): React.JSX.Element {
   return (
@@ -99,7 +101,7 @@ export function LineContentButton({
       type="button"
     >
       <span className="diff-surface__glyph">{glyph}</span>
-      <CodeLine path={filePath} text={text} />
+      <CodeLine highlight={syntaxHighlight} path={filePath} text={text} />
     </button>
   );
 }

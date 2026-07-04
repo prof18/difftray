@@ -6,13 +6,15 @@ type SyntaxToken = {
 };
 
 export function CodeLine({
+  highlight,
   path,
   text
 }: {
+  readonly highlight: boolean;
   readonly path: string;
   readonly text: string;
 }): React.JSX.Element {
-  const tokens = tokenizeCodeLine({ path, text });
+  const tokens = highlight ? tokenizeCodeLine({ path, text }) : [{ kind: "plain", text }];
 
   return (
     <code>

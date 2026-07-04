@@ -17,6 +17,8 @@ import {
 } from "./surface-render-model.js";
 import { diffSurfaceStyle } from "./surface-style.js";
 
+const SYNTAX_HIGHLIGHT_LINE_LIMIT = 3000;
+
 export type DiffSurfaceAppState = {
   readonly comments: readonly ReviewCommentView[];
   readonly diffHash: string;
@@ -57,6 +59,10 @@ export function DiffSurfaceApp({
     path: state.path
   });
   const scrollTo = state.scrollTo;
+  const syntaxHighlight =
+    model.kind === "diff" &&
+    Math.max(model.fileDiff.additionLines.length, model.fileDiff.deletionLines.length) <
+      SYNTAX_HIGHLIGHT_LINE_LIMIT;
 
   useEffect(() => {
     if (!scrollTo) {
@@ -100,6 +106,7 @@ export function DiffSurfaceApp({
               key={`${row.kind}:${state.diffMode}:${String(index)}`}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
               row={row}
+              syntaxHighlight={syntaxHighlight}
             />
           ))}
         </section>

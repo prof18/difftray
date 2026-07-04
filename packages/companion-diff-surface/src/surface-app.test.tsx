@@ -54,6 +54,21 @@ describe("diff surface app", () => {
     expect(html).toContain("&#x27;mobile&#x27;");
   });
 
+  it("skips syntax token spans for large code files", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          path: "src/large.ts",
+          patch: largeAddedFilePatch(3000)
+        })}
+      />
+    );
+
+    expect(html).toContain("const value2999 = 2999;");
+    expect(html).not.toContain('data-token-kind="keyword"');
+    expect(html).not.toContain('data-token-kind="number"');
+  });
+
   it("keeps highlighted hostile code text inert", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp
@@ -271,4 +286,18 @@ function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppStat
     wrapLines: true,
     ...overrides
   };
+}
+
+function largeAddedFilePatch(lineCount: number): string {
+  return [
+    "diff --git a/src/large.ts b/src/large.ts",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/src/large.ts",
+    `@@ -0,0 +1,${String(lineCount)} @@`,
+    ...Array.from(
+      { length: lineCount },
+      (_, index) => `+const value${String(index)} = ${String(index)};`
+    )
+  ].join("\n");
 }
