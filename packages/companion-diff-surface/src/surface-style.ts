@@ -42,6 +42,7 @@ export function diffSurfaceStyle(theme: DiffSurfaceThemeTokens): CSSProperties {
     "--diff-fg": theme.foreground,
     "--diff-fg-muted": theme.foregroundMuted,
     "--diff-gutter": chrome.gutter,
+    "--diff-hunk-bg": chrome.backgroundBuffer,
     "--diff-hover": theme.draftHighlight,
     "--diff-selection": theme.draftHighlight,
     "--diff-token-comment": chrome.syntax.comment,

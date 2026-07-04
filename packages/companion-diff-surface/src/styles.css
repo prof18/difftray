@@ -131,7 +131,7 @@ body {
 }
 
 .diff-surface__row[data-row-kind="hunk"] {
-  background: color-mix(in srgb, var(--diff-surface-muted), transparent 88%);
+  background: var(--diff-hunk-bg);
   color: var(--diff-surface-muted);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
@@ -230,7 +230,7 @@ body {
 }
 
 .diff-surface__split-hunk {
-  background: color-mix(in srgb, var(--diff-surface-muted), transparent 88%);
+  background: var(--diff-hunk-bg);
   color: var(--diff-surface-muted);
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
