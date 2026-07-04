@@ -156,6 +156,34 @@ body {
   margin: 0;
 }
 
+.diff-surface__context-expander {
+  color: var(--diff-surface-muted);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.diff-surface__context-expander summary {
+  background: color-mix(in srgb, var(--diff-surface-muted), transparent 92%);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 34px 16px minmax(0, 1fr);
+  line-height: 20px;
+  list-style: none;
+  min-height: 20px;
+}
+
+.diff-surface__context-expander summary::-webkit-details-marker {
+  display: none;
+}
+
+.diff-surface__context-expander[open] summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--diff-surface-muted), transparent 84%);
+}
+
+.diff-surface__context-expander-rows {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .diff-surface__diff[data-diff-layout="split"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

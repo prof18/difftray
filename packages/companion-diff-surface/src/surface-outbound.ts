@@ -1,6 +1,11 @@
 import type { DiffSurfaceMessage, DiffSurfaceSide } from "./surface-bridge.js";
 import type { SurfaceDiffRow } from "./surface-render-model.js";
 
+type SelectableSurfaceDiffRow = Exclude<
+  SurfaceDiffRow,
+  { readonly kind: "context_expander" }
+>;
+
 export function serializeSurfaceMessage(message: DiffSurfaceMessage): string {
   return JSON.stringify(message);
 }
@@ -29,7 +34,7 @@ export function createCommentTappedMessage(commentId: string): DiffSurfaceMessag
 }
 
 export function createLineSelectedMessage(
-  row: SurfaceDiffRow
+  row: SelectableSurfaceDiffRow
 ): DiffSurfaceMessage | null {
   const selection = lineSelectionForRow(row);
 
@@ -47,7 +52,7 @@ export function createLineSelectedMessage(
 }
 
 export function createLineSelectedMessageForSide(
-  row: SurfaceDiffRow,
+  row: SelectableSurfaceDiffRow,
   side: DiffSurfaceSide
 ): DiffSurfaceMessage | null {
   const selection = lineSelectionForRowSide(row, side);
@@ -66,7 +71,7 @@ export function createLineSelectedMessageForSide(
 }
 
 function lineSelectionForRow(
-  row: SurfaceDiffRow
+  row: SelectableSurfaceDiffRow
 ): { readonly lineNumber: number; readonly side: DiffSurfaceSide } | null {
   switch (row.kind) {
     case "addition":
@@ -81,7 +86,7 @@ function lineSelectionForRow(
 }
 
 function lineSelectionForRowSide(
-  row: SurfaceDiffRow,
+  row: SelectableSurfaceDiffRow,
   side: DiffSurfaceSide
 ): { readonly lineNumber: number; readonly side: DiffSurfaceSide } | null {
   switch (row.kind) {

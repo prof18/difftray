@@ -85,6 +85,29 @@ describe("diff surface app", () => {
     expect(html).toContain('data-split-side="additions"');
     expect(html).toContain("diff-surface__split-cell");
   });
+
+  it("renders omitted context as expandable rows", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          newText: ["one", "two", "new", "four", "five"].join("\n"),
+          oldText: ["one", "two", "old", "four", "five"].join("\n"),
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -3 +3 @@",
+            "-old",
+            "+new"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain("<details");
+    expect(html).toContain("Show 2 unchanged lines");
+    expect(html).toContain('data-row-kind="context_expander"');
+  });
 });
 
 function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppState {

@@ -3,9 +3,15 @@ import type {
   ReviewCommentSide,
   ReviewCommentView
 } from "@difftray/companion-protocol";
-import { parsePatch } from "diff";
 
 import type { DiffSurfaceDraftRange, DiffSurfaceMode } from "./surface-bridge.js";
+import {
+  parsePatchRows,
+  splitTextLines,
+  type SurfaceDiffRow
+} from "./surface-render-rows.js";
+
+export type { SurfaceContextRow, SurfaceDiffRow } from "./surface-render-rows.js";
 
 export type SurfaceRenderModelInput = {
   readonly diffHash: string;
@@ -14,28 +20,6 @@ export type SurfaceRenderModelInput = {
   readonly patch: string;
   readonly path: string;
 };
-
-export type SurfaceDiffRow =
-  | {
-      readonly kind: "addition";
-      readonly newLineNumber: number;
-      readonly text: string;
-    }
-  | {
-      readonly kind: "deletion";
-      readonly oldLineNumber: number;
-      readonly text: string;
-    }
-  | {
-      readonly kind: "context";
-      readonly newLineNumber: number;
-      readonly oldLineNumber: number;
-      readonly text: string;
-    }
-  | {
-      readonly kind: "hunk";
-      readonly text: string;
-    };
 
 export type SurfaceFileDiff = {
   readonly additionLines: readonly string[];
@@ -87,7 +71,11 @@ export function createSurfaceRenderModel(
     return fallbackModel(input.patch);
   }
 
-  const parsedRows = parsePatchRows(input.patch);
+  const parsedRows = parsePatchRows({
+    ...(input.newText === undefined ? {} : { newText: input.newText }),
+    ...(input.oldText === undefined ? {} : { oldText: input.oldText }),
+    patch: input.patch
+  });
 
   if (parsedRows.rows.length === 0) {
     return fallbackModel(input.patch);
@@ -184,86 +172,6 @@ export function surfaceAnnotationLocation({
     lineStart === lineEnd ? String(lineStart) : `${String(lineStart)}-${String(lineEnd)}`;
 
   return `${sideLabel} ${lineLabel} ${lineRange}`;
-}
-
-function parsePatchRows(patch: string): {
-  readonly additions: readonly string[];
-  readonly deletions: readonly string[];
-  readonly rows: readonly SurfaceDiffRow[];
-} {
-  const additions: string[] = [];
-  const deletions: string[] = [];
-  const rows: SurfaceDiffRow[] = [];
-
-  let filePatches: ReturnType<typeof parsePatch>;
-
-  try {
-    filePatches = parsePatch(patch);
-  } catch {
-    return { additions, deletions, rows };
-  }
-
-  for (const filePatch of filePatches) {
-    for (const hunk of filePatch.hunks) {
-      let oldLineNumber = hunk.oldStart;
-      let newLineNumber = hunk.newStart;
-
-      rows.push({ kind: "hunk", text: hunkHeaderText(hunk) });
-
-      for (const line of hunk.lines) {
-        if (line.startsWith("+")) {
-          rows.push({ kind: "addition", newLineNumber, text: line.slice(1) });
-          additions.push(`${line.slice(1)}\n`);
-          newLineNumber += 1;
-          continue;
-        }
-
-        if (line.startsWith("-")) {
-          rows.push({ kind: "deletion", oldLineNumber, text: line.slice(1) });
-          deletions.push(`${line.slice(1)}\n`);
-          oldLineNumber += 1;
-          continue;
-        }
-
-        if (line.startsWith(" ")) {
-          rows.push({
-            kind: "context",
-            newLineNumber,
-            oldLineNumber,
-            text: line.slice(1)
-          });
-          additions.push(`${line.slice(1)}\n`);
-          deletions.push(`${line.slice(1)}\n`);
-          oldLineNumber += 1;
-          newLineNumber += 1;
-        }
-      }
-    }
-  }
-
-  return { additions, deletions, rows };
-}
-
-function hunkHeaderText({
-  newLines,
-  newStart,
-  oldLines,
-  oldStart
-}: {
-  readonly newLines: number;
-  readonly newStart: number;
-  readonly oldLines: number;
-  readonly oldStart: number;
-}): string {
-  return `@@ -${hunkRange(oldStart, oldLines)} +${hunkRange(newStart, newLines)} @@`;
-}
-
-function hunkRange(start: number, lineCount: number): string {
-  return lineCount === 1 ? String(start) : `${String(start)},${String(lineCount)}`;
-}
-
-function splitTextLines(text: string): readonly string[] {
-  return text.length === 0 ? [] : (text.match(/[^\n]*\n|[^\n]+$/g) ?? []);
 }
 
 function statusFromPatch(patch: string): FileDiffStatus {

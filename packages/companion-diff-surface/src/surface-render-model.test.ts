@@ -70,6 +70,73 @@ describe("surface render model", () => {
     expect(deleted.kind === "diff" ? deleted.fileDiff.type : undefined).toBe("deleted");
   });
 
+  it("models omitted unchanged ranges from full file text as expandable context", () => {
+    const model = createSurfaceRenderModel({
+      diffHash: "hash-context",
+      newText: ["one", "two", "new", "four", "five"].join("\n"),
+      oldText: ["one", "two", "old", "four", "five"].join("\n"),
+      patch: [
+        "diff --git a/src/context.ts b/src/context.ts",
+        "--- a/src/context.ts",
+        "+++ b/src/context.ts",
+        "@@ -3 +3 @@",
+        "-old",
+        "+new"
+      ].join("\n"),
+      path: "src/context.ts"
+    });
+
+    expect(model.kind).toBe("diff");
+    if (model.kind !== "diff") {
+      return;
+    }
+
+    const expanders = model.fileDiff.rows.filter(
+      (row) => row.kind === "context_expander"
+    );
+
+    expect(expanders).toEqual([
+      {
+        key: "1:1:2",
+        kind: "context_expander",
+        lineCount: 2,
+        rows: [
+          {
+            kind: "context",
+            newLineNumber: 1,
+            oldLineNumber: 1,
+            text: "one"
+          },
+          {
+            kind: "context",
+            newLineNumber: 2,
+            oldLineNumber: 2,
+            text: "two"
+          }
+        ]
+      },
+      {
+        key: "4:4:2",
+        kind: "context_expander",
+        lineCount: 2,
+        rows: [
+          {
+            kind: "context",
+            newLineNumber: 4,
+            oldLineNumber: 4,
+            text: "four"
+          },
+          {
+            kind: "context",
+            newLineNumber: 5,
+            oldLineNumber: 5,
+            text: "five"
+          }
+        ]
+      }
+    ]);
+  });
+
   it("maps persisted comments and transient drafts to line annotations", () => {
     expect(
       surfaceCommentAnnotations({
