@@ -99,6 +99,7 @@ function DiffRow({
         className="diff-surface__row"
         data-draft-highlight={draftHighlighted ? "true" : undefined}
         data-row-kind={row.kind}
+        {...lineDataAttributesForRow(row)}
         onClick={() => {
           const message = createLineSelectedMessage(row);
 
@@ -206,6 +207,7 @@ function SplitCell({
       data-draft-highlight={
         rowSideHasDraftHighlight(row, side, highlightAnnotations) ? "true" : undefined
       }
+      {...lineDataAttributeForSide(side, cell.lineNumber)}
       data-split-side={side}
       onClick={() => {
         const message = createLineSelectedMessageForSide(row, side);
@@ -286,4 +288,33 @@ function splitCellForRow(
     case "deletion":
       return side === "deletions" ? { glyph: "-", lineNumber: row.oldLineNumber } : null;
   }
+}
+
+function lineDataAttributesForRow(row: SurfaceLineRow): {
+  readonly "data-diff-additions-line"?: number;
+  readonly "data-diff-deletions-line"?: number;
+} {
+  switch (row.kind) {
+    case "addition":
+      return { "data-diff-additions-line": row.newLineNumber };
+    case "context":
+      return {
+        "data-diff-additions-line": row.newLineNumber,
+        "data-diff-deletions-line": row.oldLineNumber
+      };
+    case "deletion":
+      return { "data-diff-deletions-line": row.oldLineNumber };
+  }
+}
+
+function lineDataAttributeForSide(
+  side: DiffSurfaceSide,
+  lineNumber: number
+): {
+  readonly "data-diff-additions-line"?: number;
+  readonly "data-diff-deletions-line"?: number;
+} {
+  return side === "additions"
+    ? { "data-diff-additions-line": lineNumber }
+    : { "data-diff-deletions-line": lineNumber };
 }

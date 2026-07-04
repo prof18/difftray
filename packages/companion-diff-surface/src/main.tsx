@@ -87,19 +87,24 @@ window.__difftrayReceive = (rawMessage) => {
         wrapLines: message.wrapLines
       };
       break;
-    case "show_file":
+    case "show_file": {
+      const stateWithoutScrollTarget = { ...state };
+      delete stateWithoutScrollTarget.scrollTo;
+
       state = {
-        ...state,
+        ...stateWithoutScrollTarget,
         comments: message.comments,
         diffHash: message.diffHash,
         draft: null,
         ...(message.newText === undefined ? {} : { newText: message.newText }),
         ...(message.oldText === undefined ? {} : { oldText: message.oldText }),
         patch: message.patch,
-        path: message.path
+        path: message.path,
+        ...(message.scrollTo === undefined ? {} : { scrollTo: message.scrollTo })
       };
       renderedPath = message.path;
       break;
+    }
     case "set_comments":
       state = { ...state, comments: message.comments };
       break;

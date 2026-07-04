@@ -86,6 +86,28 @@ describe("diff surface app", () => {
     expect(html).toContain("diff-surface__split-cell");
   });
 
+  it("marks rendered rows with per-side line targets for host scrolling", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -1,2 +1,2 @@",
+            " Shared",
+            "-Old",
+            "+New"
+          ].join("\n"),
+          scrollTo: { line: 2, side: "additions" }
+        })}
+      />
+    );
+
+    expect(html).toContain('data-diff-deletions-line="2"');
+    expect(html).toContain('data-diff-additions-line="2"');
+  });
+
   it("renders omitted context as expandable rows", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp

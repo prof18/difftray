@@ -111,7 +111,7 @@ try {
     timeout: 10_000
   });
 
-  await page.getByRole("button", { name: /Load 5k patch/ }).click();
+  await page.getByRole("button", { name: /Manual smooth-scroll/ }).click();
   await page
     .locator(".diff-surface__path")
     .filter({ hasText: "src/large-fixture.ts" })
@@ -129,6 +129,32 @@ try {
   assert(
     renderedRows >= 5_001,
     `Expected at least 5001 rendered rows, saw ${String(renderedRows)}`
+  );
+
+  await page.getByRole("button", { name: /Load 5k patch at line 4800/ }).click();
+  const scrollTarget = page.locator('[data-diff-additions-line="4800"]');
+  await scrollTarget.waitFor({ timeout: 10_000 });
+  const targetViewportPosition = await scrollTarget.evaluate((element) => {
+    const surfaceBounds = document
+      .querySelector(".diff-surface")
+      ?.getBoundingClientRect();
+    const targetBounds = element.getBoundingClientRect();
+
+    return surfaceBounds
+      ? {
+          bottom: targetBounds.bottom,
+          surfaceBottom: surfaceBounds.bottom,
+          surfaceTop: surfaceBounds.top,
+          top: targetBounds.top
+        }
+      : null;
+  });
+
+  assert(
+    targetViewportPosition &&
+      targetViewportPosition.top >= targetViewportPosition.surfaceTop &&
+      targetViewportPosition.bottom <= targetViewportPosition.surfaceBottom,
+    `Expected scrollTo target line 4800 to be visible, saw ${JSON.stringify(targetViewportPosition)}`
   );
 
   const scrollProbe = await page.locator(".diff-surface").evaluate(async (element) => {

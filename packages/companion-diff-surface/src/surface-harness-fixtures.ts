@@ -9,6 +9,11 @@ export type DiffSurfaceHarnessAction = {
   readonly message: DiffSurfaceHostMessage;
 };
 
+type DiffSurfaceShowFileMessage = Extract<
+  DiffSurfaceHostMessage,
+  { readonly kind: "show_file" }
+>;
+
 export const harnessXssFixtureText =
   '<img src=x onerror="window.__difftrayHarnessXss = true">';
 
@@ -40,6 +45,11 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       message: createFixtureShowFileMessage()
     },
     {
+      detail: "Load the large fixture and reveal additions line 4800.",
+      label: "Load 5k patch at line 4800",
+      message: createLargeFixtureShowFileAtLineMessage()
+    },
+    {
       detail: "Replace comments without changing the active file.",
       label: "Set comments",
       message: {
@@ -66,13 +76,21 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
   ];
 }
 
-export function createLargeFixtureShowFileMessage(): DiffSurfaceHostMessage {
+export function createLargeFixtureShowFileMessage(): DiffSurfaceShowFileMessage {
   return {
     comments: [],
     diffHash: "harness-large-5000",
     kind: "show_file",
     patch: createLargeFixturePatch({ changedLines: 5_000 }),
     path: "src/large-fixture.ts"
+  };
+}
+
+export function createLargeFixtureShowFileAtLineMessage(): DiffSurfaceShowFileMessage {
+  return {
+    ...createLargeFixtureShowFileMessage(),
+    diffHash: "harness-large-5000-scroll",
+    scrollTo: { line: 4_800, side: "additions" }
   };
 }
 

@@ -16,6 +16,7 @@ describe("diff surface browser harness fixtures", () => {
       "set_comments",
       "set_diff_mode",
       "set_draft",
+      "show_file",
       "show_file"
     ] satisfies readonly DiffSurfaceHostMessage["kind"][];
 
@@ -36,6 +37,18 @@ describe("diff surface browser harness fixtures", () => {
 
     expect(showFile.message.patch).toContain(harnessXssFixtureText);
     expect(showFile.message.newText).toContain(harnessXssFixtureText);
+  });
+
+  it("includes a large-fixture scroll target for browser proof", () => {
+    const actions = createDiffSurfaceHarnessActions();
+    const showAtLine = actions.find(
+      (action) => action.label === "Load 5k patch at line 4800"
+    );
+
+    expect(showAtLine?.message).toMatchObject({
+      kind: "show_file",
+      scrollTo: { line: 4_800, side: "additions" }
+    });
   });
 
   it("creates a 5000-line fixture patch for manual browser performance checks", () => {

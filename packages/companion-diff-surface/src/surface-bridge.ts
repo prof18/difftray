@@ -29,6 +29,11 @@ export type DiffSurfaceDraftRange = {
   readonly side: DiffSurfaceSide;
 };
 
+export type DiffSurfaceScrollTarget = {
+  readonly line: number;
+  readonly side: DiffSurfaceSide;
+};
+
 export type DiffSurfaceHostMessage =
   | {
       readonly diffMode: DiffSurfaceMode;
@@ -44,10 +49,7 @@ export type DiffSurfaceHostMessage =
       readonly oldText?: string;
       readonly patch: string;
       readonly path: string;
-      readonly scrollTo?: {
-        readonly line: number;
-        readonly side: DiffSurfaceSide;
-      };
+      readonly scrollTo?: DiffSurfaceScrollTarget;
     }
   | {
       readonly comments: readonly ReviewCommentView[];

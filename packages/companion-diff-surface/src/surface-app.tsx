@@ -1,10 +1,12 @@
 import type { ReviewCommentView } from "@difftray/companion-protocol";
+import { useEffect } from "react";
 
 import {
   DIFF_SURFACE_BRIDGE_VERSION,
   type DiffSurfaceMessage,
   type DiffSurfaceDraftRange,
   type DiffSurfaceMode,
+  type DiffSurfaceScrollTarget,
   type DiffSurfaceThemeTokens
 } from "./surface-bridge.js";
 import { SurfaceDiffRowView } from "./surface-rows.js";
@@ -24,6 +26,7 @@ export type DiffSurfaceAppState = {
   readonly oldText?: string;
   readonly patch: string;
   readonly path: string;
+  readonly scrollTo?: DiffSurfaceScrollTarget;
   readonly theme: DiffSurfaceThemeTokens;
   readonly wrapLines: boolean;
 };
@@ -53,6 +56,17 @@ export function DiffSurfaceApp({
     draft: state.draft,
     path: state.path
   });
+  const scrollTo = state.scrollTo;
+
+  useEffect(() => {
+    if (!scrollTo) {
+      return;
+    }
+
+    document
+      .querySelector<HTMLElement>(scrollTargetSelector(scrollTo))
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
+  }, [state.diffHash, state.diffMode, state.path, scrollTo?.line, scrollTo?.side]);
 
   return (
     <main
@@ -91,4 +105,11 @@ export function DiffSurfaceApp({
       )}
     </main>
   );
+}
+
+function scrollTargetSelector({ line, side }: DiffSurfaceScrollTarget): string {
+  const attribute =
+    side === "additions" ? "data-diff-additions-line" : "data-diff-deletions-line";
+
+  return `[${attribute}="${String(line)}"]`;
 }
