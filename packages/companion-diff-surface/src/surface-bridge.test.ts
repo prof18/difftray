@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { parseHostMessage } from "./surface-bridge.js";
-import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
+import {
+  createDiffSurfaceHostMessageFrames,
+  createDiffSurfaceHostMessageReceiver
+} from "./surface-host-message-receiver.js";
 
 describe("diff surface host messages", () => {
   it("accepts an exact init message", () => {
@@ -75,6 +78,51 @@ describe("diff surface host messages", () => {
         total: chunks.length
       })
     ).toEqual({
+      kind: "message",
+      message: expect.objectContaining({
+        diffHash: "hash-large",
+        kind: "show_file",
+        path: "src/large.ts"
+      })
+    });
+  });
+
+  it("splits oversized host messages into receiver-compatible chunk frames", () => {
+    const receiver = createDiffSurfaceHostMessageReceiver();
+    const smallMessage = {
+      diffMode: "unified" as const,
+      kind: "set_diff_mode" as const
+    };
+    const largeMessage = {
+      comments: [],
+      diffHash: "hash-large",
+      kind: "show_file" as const,
+      patch: largePatch(),
+      path: "src/large.ts"
+    };
+
+    expect(
+      createDiffSurfaceHostMessageFrames(smallMessage, { chunkId: "small" })
+    ).toEqual([smallMessage]);
+
+    const frames = createDiffSurfaceHostMessageFrames(largeMessage, {
+      chunkId: "large-message",
+      maxFrameDataLength: 64 * 1024
+    });
+
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames[0]).toMatchObject({
+      id: "large-message",
+      index: 0,
+      kind: "chunk",
+      total: frames.length
+    });
+
+    for (const frame of frames.slice(0, -1)) {
+      expect(receiver.receive(frame)).toEqual({ kind: "pending" });
+    }
+
+    expect(receiver.receive(frames[frames.length - 1])).toEqual({
       kind: "message",
       message: expect.objectContaining({
         diffHash: "hash-large",

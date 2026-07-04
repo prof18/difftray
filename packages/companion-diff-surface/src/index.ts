@@ -12,8 +12,12 @@ export {
   type ThemeTokens
 } from "./surface-bridge.js";
 export {
+  DIFF_SURFACE_DEFAULT_CHUNK_DATA_LENGTH,
+  createDiffSurfaceHostMessageFrames,
   createDiffSurfaceHostMessageReceiver,
   type DiffSurfaceChunkFrame,
+  type DiffSurfaceHostMessageFrame,
+  type DiffSurfaceHostMessageFrameOptions,
   type DiffSurfaceHostMessageReceiveResult
 } from "./surface-host-message-receiver.js";
 export { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";

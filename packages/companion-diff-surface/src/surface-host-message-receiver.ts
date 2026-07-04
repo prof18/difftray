@@ -1,5 +1,7 @@
 import { parseHostMessage, type DiffSurfaceHostMessage } from "./surface-bridge.js";
 
+export const DIFF_SURFACE_DEFAULT_CHUNK_DATA_LENGTH = 512 * 1024;
+
 export type DiffSurfaceChunkFrame = {
   readonly data: string;
   readonly id: string;
@@ -21,10 +23,48 @@ export type DiffSurfaceHostMessageReceiveResult =
       readonly kind: "pending";
     };
 
+export type DiffSurfaceHostMessageFrame = DiffSurfaceChunkFrame | DiffSurfaceHostMessage;
+
+export type DiffSurfaceHostMessageFrameOptions = {
+  readonly chunkId: string;
+  readonly maxFrameDataLength?: number;
+};
+
 type PendingChunkMessage = {
   readonly chunks: Map<number, string>;
   readonly total: number;
 };
+
+export function createDiffSurfaceHostMessageFrames(
+  message: DiffSurfaceHostMessage,
+  options: DiffSurfaceHostMessageFrameOptions
+): readonly DiffSurfaceHostMessageFrame[] {
+  const serialized = JSON.stringify(message);
+  const maxFrameDataLength =
+    options.maxFrameDataLength ?? DIFF_SURFACE_DEFAULT_CHUNK_DATA_LENGTH;
+
+  if (!isPositiveInteger(maxFrameDataLength)) {
+    throw new RangeError("maxFrameDataLength must be a positive integer");
+  }
+
+  if (options.chunkId.length === 0) {
+    throw new Error("chunkId must not be empty");
+  }
+
+  if (serialized.length <= maxFrameDataLength) {
+    return [message];
+  }
+
+  const total = Math.ceil(serialized.length / maxFrameDataLength);
+
+  return Array.from({ length: total }, (_, index) => ({
+    data: serialized.slice(index * maxFrameDataLength, (index + 1) * maxFrameDataLength),
+    id: options.chunkId,
+    index,
+    kind: "chunk" as const,
+    total
+  }));
+}
 
 export function createDiffSurfaceHostMessageReceiver(): {
   readonly receive: (input: unknown) => DiffSurfaceHostMessageReceiveResult;
