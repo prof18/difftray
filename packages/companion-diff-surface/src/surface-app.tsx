@@ -5,11 +5,13 @@ import {
   type DiffSurfaceMessage,
   type DiffSurfaceDraftRange,
   type DiffSurfaceMode,
+  type DiffSurfaceSide,
   type DiffSurfaceThemeTokens
 } from "./surface-bridge.js";
 import {
   createCommentTappedMessage,
-  createLineSelectedMessage
+  createLineSelectedMessage,
+  createLineSelectedMessageForSide
 } from "./surface-outbound.js";
 import {
   createSurfaceFileDiffOptions,
@@ -79,17 +81,27 @@ export function DiffSurfaceApp({
       ) : (
         <section
           className="diff-surface__diff"
+          data-diff-layout={state.diffMode}
           data-renderer="parsed"
           data-visual-theme={options.resolvedTheme}
         >
-          {model.fileDiff.rows.map((row, index) => (
-            <DiffRow
-              annotations={annotationsForRow(row, annotations)}
-              key={`${row.kind}:${String(index)}`}
-              {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
-              row={row}
-            />
-          ))}
+          {model.fileDiff.rows.map((row, index) =>
+            state.diffMode === "split" ? (
+              <SplitDiffRow
+                annotations={annotationsForRow(row, annotations)}
+                key={`${row.kind}:split:${String(index)}`}
+                {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+                row={row}
+              />
+            ) : (
+              <DiffRow
+                annotations={annotationsForRow(row, annotations)}
+                key={`${row.kind}:unified:${String(index)}`}
+                {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+                row={row}
+              />
+            )
+          )}
         </section>
       )}
     </main>
@@ -144,6 +156,85 @@ function DiffRow({
         />
       ))}
     </>
+  );
+}
+
+function SplitDiffRow({
+  annotations,
+  onSurfaceMessage,
+  row
+}: {
+  readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
+  readonly row: SurfaceDiffRow;
+}): React.JSX.Element {
+  if (row.kind === "hunk") {
+    return (
+      <div className="diff-surface__split-row" data-row-kind="hunk">
+        <div className="diff-surface__split-hunk">
+          <code>{row.text}</code>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="diff-surface__split-row" data-row-kind={row.kind}>
+        <SplitCell
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+          row={row}
+          side="deletions"
+        />
+        <SplitCell
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+          row={row}
+          side="additions"
+        />
+      </div>
+      {annotations.map((annotation) => (
+        <SurfaceAnnotation
+          annotation={annotation}
+          key={annotationKey(annotation)}
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+        />
+      ))}
+    </>
+  );
+}
+
+function SplitCell({
+  onSurfaceMessage,
+  row,
+  side
+}: {
+  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
+  readonly row: Exclude<SurfaceDiffRow, { readonly kind: "hunk" }>;
+  readonly side: DiffSurfaceSide;
+}): React.JSX.Element {
+  const cell = splitCellForRow(row, side);
+
+  if (!cell) {
+    return <div className="diff-surface__split-cell" data-split-side={side} />;
+  }
+
+  return (
+    <button
+      className="diff-surface__split-cell"
+      data-split-side={side}
+      onClick={() => {
+        const message = createLineSelectedMessageForSide(row, side);
+
+        if (message) {
+          onSurfaceMessage?.(message);
+        }
+      }}
+      type="button"
+    >
+      <span className="diff-surface__line-number">{cell.lineNumber}</span>
+      <span className="diff-surface__glyph">{cell.glyph}</span>
+      <code>{row.text}</code>
+    </button>
   );
 }
 
@@ -220,6 +311,22 @@ function annotationKey(annotation: SurfaceLineAnnotation): string {
       : `${String(annotation.metadata.draft.lineStart)}:${String(annotation.metadata.draft.lineEnd)}`;
 
   return `${annotation.metadata.kind}:${annotation.side}:${String(annotation.lineNumber)}:${id}`;
+}
+
+function splitCellForRow(
+  row: Exclude<SurfaceDiffRow, { readonly kind: "hunk" }>,
+  side: DiffSurfaceSide
+): { readonly glyph: string; readonly lineNumber: number } | null {
+  switch (row.kind) {
+    case "addition":
+      return side === "additions" ? { glyph: "+", lineNumber: row.newLineNumber } : null;
+    case "context":
+      return side === "additions"
+        ? { glyph: " ", lineNumber: row.newLineNumber }
+        : { glyph: " ", lineNumber: row.oldLineNumber };
+    case "deletion":
+      return side === "deletions" ? { glyph: "-", lineNumber: row.oldLineNumber } : null;
+  }
 }
 
 function surfaceStyle(theme: DiffSurfaceThemeTokens): React.CSSProperties {

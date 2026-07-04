@@ -61,6 +61,30 @@ describe("diff surface app", () => {
     expect(html).toContain("Draft comment");
     expect(html).not.toContain("diff-surface__patch");
   });
+
+  it("renders split mode with separate old and new cells", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          diffMode: "split",
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -1,2 +1,2 @@",
+            " Shared",
+            "-Old",
+            "+New"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-diff-layout="split"');
+    expect(html).toContain('data-split-side="deletions"');
+    expect(html).toContain('data-split-side="additions"');
+    expect(html).toContain("diff-surface__split-cell");
+  });
 });
 
 function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppState {

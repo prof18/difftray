@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createCommentTappedMessage,
   createLineSelectedMessage,
+  createLineSelectedMessageForSide,
   createRenderedMessage,
   serializeSurfaceMessage
 } from "./surface-outbound.js";
@@ -70,5 +71,29 @@ describe("diff surface outbound messages", () => {
         text: "@@ -1 +1 @@"
       })
     ).toBeNull();
+  });
+
+  it("builds side-specific selections for split context rows", () => {
+    const row = {
+      kind: "context" as const,
+      newLineNumber: 12,
+      oldLineNumber: 8,
+      text: "const shared = true;"
+    };
+
+    expect(createLineSelectedMessageForSide(row, "deletions")).toEqual({
+      kind: "line_selected",
+      lineEnd: 8,
+      lineStart: 8,
+      side: "deletions",
+      snippet: [{ lineNumber: 8, text: "const shared = true;" }]
+    });
+    expect(createLineSelectedMessageForSide(row, "additions")).toEqual({
+      kind: "line_selected",
+      lineEnd: 12,
+      lineStart: 12,
+      side: "additions",
+      snippet: [{ lineNumber: 12, text: "const shared = true;" }]
+    });
   });
 });

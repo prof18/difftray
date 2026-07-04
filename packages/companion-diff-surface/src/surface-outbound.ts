@@ -46,6 +46,25 @@ export function createLineSelectedMessage(
   };
 }
 
+export function createLineSelectedMessageForSide(
+  row: SurfaceDiffRow,
+  side: DiffSurfaceSide
+): DiffSurfaceMessage | null {
+  const selection = lineSelectionForRowSide(row, side);
+
+  if (!selection) {
+    return null;
+  }
+
+  return {
+    kind: "line_selected",
+    lineEnd: selection.lineNumber,
+    lineStart: selection.lineNumber,
+    side: selection.side,
+    snippet: [{ lineNumber: selection.lineNumber, text: row.text }]
+  };
+}
+
 function lineSelectionForRow(
   row: SurfaceDiffRow
 ): { readonly lineNumber: number; readonly side: DiffSurfaceSide } | null {
@@ -56,6 +75,28 @@ function lineSelectionForRow(
       return { lineNumber: row.newLineNumber, side: "additions" };
     case "deletion":
       return { lineNumber: row.oldLineNumber, side: "deletions" };
+    case "hunk":
+      return null;
+  }
+}
+
+function lineSelectionForRowSide(
+  row: SurfaceDiffRow,
+  side: DiffSurfaceSide
+): { readonly lineNumber: number; readonly side: DiffSurfaceSide } | null {
+  switch (row.kind) {
+    case "addition":
+      return side === "additions"
+        ? { lineNumber: row.newLineNumber, side: "additions" }
+        : null;
+    case "context":
+      return side === "additions"
+        ? { lineNumber: row.newLineNumber, side: "additions" }
+        : { lineNumber: row.oldLineNumber, side: "deletions" };
+    case "deletion":
+      return side === "deletions"
+        ? { lineNumber: row.oldLineNumber, side: "deletions" }
+        : null;
     case "hunk":
       return null;
   }

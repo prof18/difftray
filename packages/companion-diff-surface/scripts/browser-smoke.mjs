@@ -108,7 +108,9 @@ try {
     "large fixture rendered"
   );
 
-  const renderedRows = await page.locator(".diff-surface__row").count();
+  const renderedRows = await page
+    .locator(".diff-surface__row, .diff-surface__split-row")
+    .count();
 
   assert(
     renderedRows >= 5_001,
