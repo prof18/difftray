@@ -1,6 +1,7 @@
 import type { ReviewCommentView } from "@difftray/companion-protocol";
 
-import type { DiffSurfaceHostMessage, DiffSurfaceThemeTokens } from "./surface-bridge.js";
+import type { DiffSurfaceHostMessage } from "./surface-bridge.js";
+import { diffSurfaceThemeTokens } from "./surface-theme.js";
 
 export type DiffSurfaceHarnessAction = {
   readonly detail: string;
@@ -19,7 +20,7 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       message: {
         diffMode: "unified",
         kind: "init",
-        theme: harnessTheme(),
+        theme: diffSurfaceThemeTokens("light"),
         wrapLines: true
       }
     },
@@ -134,22 +135,5 @@ function fixtureComment({
     path: "src/harness-fixture.ts",
     side: "additions",
     updatedAt: "2026-07-03T00:00:00.000Z"
-  };
-}
-
-function harnessTheme(): DiffSurfaceThemeTokens {
-  return {
-    accent: "#9f4f2a",
-    addedBackground: "rgba(43, 128, 73, 0.17)",
-    addedForeground: "#2c7a45",
-    background: "#fbfaf7",
-    commentMarker: "#9f4f2a",
-    draftHighlight: "rgba(159, 79, 42, 0.2)",
-    fontSizePx: 13,
-    foreground: "#171514",
-    foregroundMuted: "#726c65",
-    removedBackground: "rgba(184, 48, 38, 0.14)",
-    removedForeground: "#a33025",
-    scheme: "light"
   };
 }

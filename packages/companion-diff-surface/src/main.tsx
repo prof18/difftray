@@ -13,6 +13,7 @@ import {
 } from "./surface-harness-fixtures.js";
 import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
 import { createRenderedMessage, serializeSurfaceMessage } from "./surface-outbound.js";
+import { diffSurfaceThemeTokens } from "./surface-theme.js";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -28,20 +29,7 @@ let state: DiffSurfaceAppState = {
   draft: null,
   patch: "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
   path: "README.md",
-  theme: {
-    accent: "#a34d2d",
-    addedBackground: "rgba(56, 142, 60, 0.16)",
-    addedForeground: "#2f7d32",
-    background: "#fbfaf7",
-    commentMarker: "#a34d2d",
-    draftHighlight: "rgba(163, 77, 45, 0.18)",
-    fontSizePx: 13,
-    foreground: "#151515",
-    foregroundMuted: "#68645f",
-    removedBackground: "rgba(198, 40, 40, 0.14)",
-    removedForeground: "#b3261e",
-    scheme: "light"
-  },
+  theme: diffSurfaceThemeTokens("light"),
   wrapLines: true
 };
 
