@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@difftray/companion-protocol": "workspace:*",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@pierre/diffs": "1.2.3",
     "diff": "8.0.3",
     "react": "^19.2.6",

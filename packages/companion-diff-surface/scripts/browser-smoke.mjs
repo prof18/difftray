@@ -47,6 +47,17 @@ try {
   await page.goto(url);
   await page.locator(".diff-harness").waitFor({ timeout: 10_000 });
   await waitForSurfaceMessage(page, (message) => message.kind === "ready", "ready");
+  const loadedFontFamilies = await page.evaluate(async () => {
+    await document.fonts.ready;
+
+    return Array.from(document.fonts, (fontFace) => fontFace.family).sort();
+  });
+
+  assert(
+    loadedFontFamilies.includes("IBM Plex Sans") &&
+      loadedFontFamilies.includes("JetBrains Mono"),
+    `Expected bundled IBM Plex Sans and JetBrains Mono font faces, saw ${loadedFontFamilies.join(", ")}`
+  );
 
   await page.getByRole("button", { name: /Init/ }).click();
   await page
