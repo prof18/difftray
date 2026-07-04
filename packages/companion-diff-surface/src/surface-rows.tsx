@@ -115,6 +115,7 @@ function DiffRow({
           lineNumber={lineNumber}
           message={message}
           {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+          {...lineSelectionTargetProps(message)}
         />
         <LineContentButton
           filePath={filePath}
@@ -235,6 +236,7 @@ function SplitCell({
         message={message}
         {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
         side={side}
+        {...lineSelectionTargetProps(message)}
       />
       <LineContentButton
         filePath={filePath}
@@ -298,6 +300,26 @@ function ContextExpander({
 
 function contextRowKey(row: SurfaceContextRow): string {
   return `context:${String(row.oldLineNumber)}:${String(row.newLineNumber)}`;
+}
+
+function lineSelectionTargetProps(message: DiffSurfaceMessage | null):
+  | {
+      readonly target: {
+        readonly lineNumber: number;
+        readonly side: DiffSurfaceSide;
+        readonly text: string;
+      };
+    }
+  | Record<string, never> {
+  return message?.kind === "line_selected"
+    ? {
+        target: {
+          lineNumber: message.lineStart,
+          side: message.side,
+          text: message.snippet[0]?.text ?? ""
+        }
+      }
+    : {};
 }
 
 function splitCellForRow(

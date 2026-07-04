@@ -1,16 +1,25 @@
 import { type DiffSurfaceMessage, type DiffSurfaceSide } from "./surface-bridge.js";
+import {
+  createLineRangeSelectedMessage,
+  type DiffSurfaceLineSelectionTarget
+} from "./surface-outbound.js";
 import { CodeLine } from "./surface-syntax.js";
+
+let activeGutterSelection: DiffSurfaceLineSelectionTarget | null = null;
+let suppressNextGutterClick = false;
 
 export function LineNumberButton({
   lineNumber,
   message,
   onSurfaceMessage,
-  side
+  side,
+  target
 }: {
   readonly lineNumber: number;
   readonly message: DiffSurfaceMessage | null;
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly side?: DiffSurfaceSide;
+  readonly target?: DiffSurfaceLineSelectionTarget;
 }): React.JSX.Element {
   const selectionSide =
     side ?? (message?.kind === "line_selected" ? message.side : undefined);
@@ -25,7 +34,36 @@ export function LineNumberButton({
       className="diff-surface__line-number"
       data-line-select-side={selectionSide}
       data-line-select-target="gutter"
+      onPointerDown={() => {
+        if (!target) {
+          return;
+        }
+
+        activeGutterSelection = target;
+        suppressNextGutterClick = false;
+      }}
+      onPointerUp={() => {
+        if (!target || !activeGutterSelection) {
+          return;
+        }
+
+        const rangeMessage = createLineRangeSelectedMessage(
+          activeGutterSelection,
+          target
+        );
+        activeGutterSelection = null;
+        suppressNextGutterClick = true;
+
+        if (rangeMessage) {
+          onSurfaceMessage?.(rangeMessage);
+        }
+      }}
       onClick={() => {
+        if (suppressNextGutterClick) {
+          suppressNextGutterClick = false;
+          return;
+        }
+
         if (message) {
           onSurfaceMessage?.(message);
         }

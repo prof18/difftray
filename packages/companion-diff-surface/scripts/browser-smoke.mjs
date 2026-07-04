@@ -110,6 +110,19 @@ try {
     (message) => message.kind === "line_selected" && message.side === "additions",
     "line selected"
   );
+  const additionGutters = page.locator(
+    '.diff-surface__row[data-row-kind="addition"] button[data-line-select-target="gutter"]'
+  );
+  await additionGutters.first().dragTo(additionGutters.nth(3));
+  await waitForSurfaceMessage(
+    page,
+    (message) =>
+      message.kind === "line_selected" &&
+      message.side === "additions" &&
+      message.lineStart === 1 &&
+      message.lineEnd === 4,
+    "line range selected"
+  );
 
   await page.getByRole("button", { name: /Set comments/ }).click();
   await page.getByText("Updated from browser harness").waitFor({ timeout: 10_000 });

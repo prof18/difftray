@@ -6,6 +6,12 @@ type SelectableSurfaceDiffRow = Exclude<
   { readonly kind: "context_expander" }
 >;
 
+export type DiffSurfaceLineSelectionTarget = {
+  readonly lineNumber: number;
+  readonly side: DiffSurfaceSide;
+  readonly text: string;
+};
+
 export function serializeSurfaceMessage(message: DiffSurfaceMessage): string {
   return JSON.stringify(message);
 }
@@ -67,6 +73,32 @@ export function createLineSelectedMessageForSide(
     lineStart: selection.lineNumber,
     side: selection.side,
     snippet: [{ lineNumber: selection.lineNumber, text: row.text }]
+  };
+}
+
+export function createLineRangeSelectedMessage(
+  start: DiffSurfaceLineSelectionTarget,
+  end: DiffSurfaceLineSelectionTarget
+): DiffSurfaceMessage | null {
+  if (start.side !== end.side) {
+    return null;
+  }
+
+  const lineStart = Math.min(start.lineNumber, end.lineNumber);
+  const lineEnd = Math.max(start.lineNumber, end.lineNumber);
+  const snippet =
+    start.lineNumber === end.lineNumber
+      ? [{ lineNumber: start.lineNumber, text: start.text }]
+      : [start, end]
+          .map(({ lineNumber, text }) => ({ lineNumber, text }))
+          .sort((left, right) => left.lineNumber - right.lineNumber);
+
+  return {
+    kind: "line_selected",
+    lineEnd,
+    lineStart,
+    side: start.side,
+    snippet
   };
 }
 

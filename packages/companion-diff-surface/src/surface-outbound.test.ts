@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createCommentTappedMessage,
+  createLineRangeSelectedMessage,
   createLineSelectedMessage,
   createLineSelectedMessageForSide,
   createRenderedMessage,
@@ -95,5 +96,48 @@ describe("diff surface outbound messages", () => {
       side: "additions",
       snippet: [{ lineNumber: 12, text: "const shared = true;" }]
     });
+  });
+
+  it("builds ordered range selections from matching gutter targets", () => {
+    expect(
+      createLineRangeSelectedMessage(
+        {
+          lineNumber: 4,
+          side: "additions",
+          text: "last"
+        },
+        {
+          lineNumber: 2,
+          side: "additions",
+          text: "first"
+        }
+      )
+    ).toEqual({
+      kind: "line_selected",
+      lineEnd: 4,
+      lineStart: 2,
+      side: "additions",
+      snippet: [
+        { lineNumber: 2, text: "first" },
+        { lineNumber: 4, text: "last" }
+      ]
+    });
+  });
+
+  it("rejects range selections across different sides", () => {
+    expect(
+      createLineRangeSelectedMessage(
+        {
+          lineNumber: 4,
+          side: "additions",
+          text: "new"
+        },
+        {
+          lineNumber: 4,
+          side: "deletions",
+          text: "old"
+        }
+      )
+    ).toBeNull();
   });
 });
