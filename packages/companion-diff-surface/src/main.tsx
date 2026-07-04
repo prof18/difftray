@@ -3,8 +3,14 @@ import { createRoot } from "react-dom/client";
 import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
 import {
   DIFF_SURFACE_BRIDGE_VERSION,
+  type DiffSurfaceHostMessage,
   type DiffSurfaceMessage
 } from "./surface-bridge.js";
+import { DiffSurfaceBrowserHarness } from "./surface-harness.js";
+import {
+  createDiffSurfaceHarnessActions,
+  createLargeFixtureShowFileMessage
+} from "./surface-harness-fixtures.js";
 import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
 import { createRenderedMessage, serializeSurfaceMessage } from "./surface-outbound.js";
 import "./styles.css";
@@ -41,9 +47,30 @@ let state: DiffSurfaceAppState = {
 
 const root = createRoot(rootElement);
 const hostMessageReceiver = createDiffSurfaceHostMessageReceiver();
+const harnessActions = createDiffSurfaceHarnessActions();
+const largeFixtureMessage = createLargeFixtureShowFileMessage();
+const isBrowserHarness = window.ReactNativeWebView === undefined;
+let hasRendered = false;
+let outboundMessages: readonly DiffSurfaceMessage[] = [];
 
 function render(): void {
-  root.render(<DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />);
+  const surface = <DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />;
+
+  root.render(
+    isBrowserHarness ? (
+      <DiffSurfaceBrowserHarness
+        actions={harnessActions}
+        largeFixtureMessage={largeFixtureMessage}
+        onClearMessages={clearHarnessMessages}
+        onSendHostMessage={sendHarnessMessage}
+        outboundMessages={outboundMessages}
+        surface={surface}
+      />
+    ) : (
+      surface
+    )
+  );
+  hasRendered = true;
 }
 
 window.__difftrayReceive = (rawMessage) => {
@@ -110,7 +137,27 @@ window.__difftrayReceive = (rawMessage) => {
 };
 
 function postMessage(message: DiffSurfaceMessage): void {
-  window.ReactNativeWebView?.postMessage(serializeSurfaceMessage(message));
+  const serializedMessage = serializeSurfaceMessage(message);
+
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(serializedMessage);
+    return;
+  }
+
+  outboundMessages = [...outboundMessages, message].slice(-30);
+
+  if (hasRendered) {
+    render();
+  }
+}
+
+function sendHarnessMessage(message: DiffSurfaceHostMessage): void {
+  window.__difftrayReceive?.(message);
+}
+
+function clearHarnessMessages(): void {
+  outboundMessages = [];
+  render();
 }
 
 render();

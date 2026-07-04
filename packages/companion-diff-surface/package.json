@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "vite build && node scripts/rename-build-output.mjs",
+    "dev": "vite dev --host 127.0.0.1",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
