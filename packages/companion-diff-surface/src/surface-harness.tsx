@@ -33,7 +33,7 @@ export function DiffSurfaceBrowserHarness({
           {actions.map((action) => (
             <button
               className="diff-harness__button"
-              key={action.message.kind}
+              key={`${action.message.kind}:${action.label}`}
               onClick={() => onSendHostMessage(action.message)}
               type="button"
             >

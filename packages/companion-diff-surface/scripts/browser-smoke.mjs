@@ -53,6 +53,20 @@ try {
     .locator('.diff-surface[data-diff-mode="unified"][data-wrap-lines="true"]')
     .waitFor({ timeout: 10_000 });
 
+  await page.getByRole("button", { name: /Disable wrapping/ }).click();
+  await page
+    .locator('.diff-surface[data-diff-mode="unified"][data-wrap-lines="false"]')
+    .waitFor({ timeout: 10_000 });
+  const noWrapWhiteSpace = await page
+    .locator(".diff-surface__row code")
+    .first()
+    .evaluate((element) => getComputedStyle(element).whiteSpace);
+
+  assert(
+    noWrapWhiteSpace === "pre",
+    `Expected wrapLines=false to preserve lines with white-space: pre, saw ${noWrapWhiteSpace}`
+  );
+
   await page.getByRole("button", { name: /Show file/ }).click();
   await page
     .locator(".diff-surface__path")

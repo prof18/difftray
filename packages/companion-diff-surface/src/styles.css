@@ -66,6 +66,16 @@ body {
   white-space: pre-wrap;
 }
 
+.diff-surface[data-wrap-lines="false"] .diff-surface__diff {
+  min-width: max-content;
+}
+
+.diff-surface[data-wrap-lines="false"] .diff-surface__row code,
+.diff-surface[data-wrap-lines="false"] .diff-surface__split-cell code {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
 .diff-surface__line-number {
   color: var(--diff-surface-muted);
   padding-right: 8px;

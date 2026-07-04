@@ -25,6 +25,16 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       }
     },
     {
+      detail: "Apply light theme, unified mode, and preserve long lines.",
+      label: "Disable wrapping",
+      message: {
+        diffMode: "unified",
+        kind: "init",
+        theme: diffSurfaceThemeTokens("light"),
+        wrapLines: false
+      }
+    },
+    {
       detail: "Load the HTML escaping fixture with one persisted comment.",
       label: "Show file",
       message: createFixtureShowFileMessage()

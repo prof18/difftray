@@ -12,6 +12,7 @@ describe("diff surface browser harness fixtures", () => {
     const actions = createDiffSurfaceHarnessActions();
     const expectedKinds = [
       "init",
+      "init",
       "set_comments",
       "set_diff_mode",
       "set_draft",
