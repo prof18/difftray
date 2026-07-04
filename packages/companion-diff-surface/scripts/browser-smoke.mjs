@@ -100,7 +100,9 @@ try {
   );
 
   await page
-    .locator('button.diff-surface__row[data-row-kind="addition"]')
+    .locator(
+      '.diff-surface__row[data-row-kind="addition"] button[data-line-select-target="gutter"]'
+    )
     .first()
     .click();
   await waitForSurfaceMessage(

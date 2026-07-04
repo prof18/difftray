@@ -17,4 +17,12 @@ describe("diff surface css", () => {
       ".diff-surface__split-hunk {\n  background: var(--diff-hunk-bg);"
     );
   });
+
+  it("keeps the gutter and code content as separate grid targets", () => {
+    expect(styles).toContain(
+      '.diff-surface__line-number[data-line-select-target="gutter"] {\n  cursor: pointer;'
+    );
+    expect(styles).toContain(".diff-surface__line-content {\n  appearance: none;");
+    expect(styles).toContain("grid-column: 2 / 4;");
+  });
 });

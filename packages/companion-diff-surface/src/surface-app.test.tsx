@@ -157,6 +157,44 @@ describe("diff surface app", () => {
     expect(html).toContain('data-diff-additions-line="2"');
   });
 
+  it("renders line-number gutter targets for unified and split line selection", () => {
+    const unified = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -1 +1 @@",
+            "-Old",
+            "+New"
+          ].join("\n")
+        })}
+      />
+    );
+    const split = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          diffMode: "split",
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -1 +1 @@",
+            "-Old",
+            "+New"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(unified).toContain('data-line-select-target="gutter"');
+    expect(unified).toContain('aria-label="Select deletions line 1"');
+    expect(unified).toContain('aria-label="Select additions line 1"');
+    expect(split).toContain('data-line-select-side="deletions"');
+    expect(split).toContain('data-line-select-side="additions"');
+  });
+
   it("renders omitted context as expandable rows", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp

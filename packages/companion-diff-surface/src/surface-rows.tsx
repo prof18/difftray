@@ -20,7 +20,7 @@ import {
   rowHasDraftHighlight,
   rowSideHasDraftHighlight
 } from "./surface-row-annotations.js";
-import { CodeLine } from "./surface-syntax.js";
+import { LineContentButton, LineNumberButton } from "./surface-row-controls.js";
 
 type SurfaceLineRow = Exclude<
   SurfaceDiffRow,
@@ -101,26 +101,29 @@ function DiffRow({
   const glyph = row.kind === "addition" ? "+" : row.kind === "deletion" ? "-" : " ";
   const draftHighlighted = rowHasDraftHighlight(row, highlightAnnotations);
 
+  const message = createLineSelectedMessage(row);
+
   return (
     <>
-      <button
+      <div
         className="diff-surface__row"
         data-draft-highlight={draftHighlighted ? "true" : undefined}
         data-row-kind={row.kind}
         {...lineDataAttributesForRow(row)}
-        onClick={() => {
-          const message = createLineSelectedMessage(row);
-
-          if (message) {
-            onSurfaceMessage?.(message);
-          }
-        }}
-        type="button"
       >
-        <span className="diff-surface__line-number">{lineNumber}</span>
-        <span className="diff-surface__glyph">{glyph}</span>
-        <CodeLine path={filePath} text={row.text} />
-      </button>
+        <LineNumberButton
+          lineNumber={lineNumber}
+          message={message}
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+        />
+        <LineContentButton
+          filePath={filePath}
+          glyph={glyph}
+          message={message}
+          {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+          text={row.text}
+        />
+      </div>
       {annotations.map((annotation) => (
         <SurfaceAnnotation
           annotation={annotation}
@@ -216,27 +219,31 @@ function SplitCell({
     return <div className="diff-surface__split-cell" data-split-side={side} />;
   }
 
+  const message = createLineSelectedMessageForSide(row, side);
+
   return (
-    <button
+    <div
       className="diff-surface__split-cell"
       data-draft-highlight={
         rowSideHasDraftHighlight(row, side, highlightAnnotations) ? "true" : undefined
       }
       {...lineDataAttributeForSide(side, cell.lineNumber)}
       data-split-side={side}
-      onClick={() => {
-        const message = createLineSelectedMessageForSide(row, side);
-
-        if (message) {
-          onSurfaceMessage?.(message);
-        }
-      }}
-      type="button"
     >
-      <span className="diff-surface__line-number">{cell.lineNumber}</span>
-      <span className="diff-surface__glyph">{cell.glyph}</span>
-      <CodeLine path={filePath} text={row.text} />
-    </button>
+      <LineNumberButton
+        lineNumber={cell.lineNumber}
+        message={message}
+        {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+        side={side}
+      />
+      <LineContentButton
+        filePath={filePath}
+        glyph={cell.glyph}
+        message={message}
+        {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
+        text={row.text}
+      />
+    </div>
   );
 }
 
