@@ -21,6 +21,8 @@ export type DiffSurfaceThemeTokens = {
   readonly scheme: "dark" | "light";
 };
 
+export type ThemeTokens = DiffSurfaceThemeTokens;
+
 export type DiffSurfaceDraftRange = {
   readonly lineEnd: number;
   readonly lineStart: number;
@@ -58,6 +60,37 @@ export type DiffSurfaceHostMessage =
   | {
       readonly draft: DiffSurfaceDraftRange | null;
       readonly kind: "set_draft";
+    };
+
+export type DiffSurfaceLineSnippet = {
+  readonly lineNumber: number;
+  readonly text: string;
+};
+
+export type DiffSurfaceMessage =
+  | {
+      readonly bridgeVersion: number;
+      readonly kind: "ready";
+    }
+  | {
+      readonly kind: "rendered";
+      readonly path: string;
+      readonly renderMs: number;
+    }
+  | {
+      readonly kind: "line_selected";
+      readonly lineEnd: number;
+      readonly lineStart: number;
+      readonly side: DiffSurfaceSide;
+      readonly snippet: readonly DiffSurfaceLineSnippet[];
+    }
+  | {
+      readonly commentId: string;
+      readonly kind: "comment_tapped";
+    }
+  | {
+      readonly kind: "error";
+      readonly message: string;
     };
 
 export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null {

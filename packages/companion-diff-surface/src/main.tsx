@@ -1,7 +1,8 @@
 import { createRoot } from "react-dom/client";
 
 import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
-import { DIFF_SURFACE_BRIDGE_VERSION, parseHostMessage } from "./surface-bridge.js";
+import { DIFF_SURFACE_BRIDGE_VERSION } from "./surface-bridge.js";
+import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -35,18 +36,25 @@ let state: DiffSurfaceAppState = {
 };
 
 const root = createRoot(rootElement);
+const hostMessageReceiver = createDiffSurfaceHostMessageReceiver();
 
 function render(): void {
   root.render(<DiffSurfaceApp state={state} />);
 }
 
 window.__difftrayReceive = (rawMessage) => {
-  const message = parseHostMessage(rawMessage);
+  const received = hostMessageReceiver.receive(rawMessage);
 
-  if (!message) {
-    postMessage({ kind: "error", message: "Invalid host message" });
+  if (received.kind === "pending") {
     return;
   }
+
+  if (received.kind === "invalid") {
+    postMessage({ kind: "error", message: received.message });
+    return;
+  }
+
+  const { message } = received;
 
   switch (message.kind) {
     case "init":
