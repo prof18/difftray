@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
 
 describe("diff surface app", () => {
-  it("renders diff text as inert text", () => {
+  it("does not inject hostile diff text into static markup", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp
         state={state({
           patch: [
             "diff --git a/evil.ts b/evil.ts",
-            "@@ -1 +1 @@",
+            "--- a/evil.ts",
+            "+++ b/evil.ts",
+            "@@ -1 +1,2 @@",
             "-<script>window.__xss = true</script>",
             '+<img src=x onerror="window.__xss = true">',
             "+javascript:alert(1)"
@@ -19,10 +21,45 @@ describe("diff surface app", () => {
       />
     );
 
+    expect(html).toContain('data-renderer="parsed"');
     expect(html).toContain("&lt;script&gt;window.__xss = true&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;window.__xss = true&quot;&gt;");
+    expect(html).toContain("javascript:alert(1)");
     expect(html).not.toContain("<script>window.__xss");
     expect(html).not.toContain("<img src=x");
+  });
+
+  it("mounts the parsed diff renderer with comments and drafts", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          comments: [
+            {
+              body: "Please revisit this line.",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              diffHash: "hash-1",
+              id: "comment-1",
+              lineEnd: 1,
+              lineStart: 1,
+              path: "README.md",
+              side: "additions",
+              updatedAt: "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          draft: {
+            lineEnd: 1,
+            lineStart: 1,
+            side: "deletions"
+          }
+        })}
+      />
+    );
+
+    expect(html).toContain('data-renderer="parsed"');
+    expect(html).toContain("Please revisit this line.");
+    expect(html).toContain("New line 1");
+    expect(html).toContain("Draft comment");
+    expect(html).not.toContain("diff-surface__patch");
   });
 });
 
@@ -32,7 +69,8 @@ function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppStat
     diffHash: "hash-1",
     diffMode: "unified",
     draft: null,
-    patch: "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
+    patch:
+      "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
     path: "README.md",
     theme: {
       accent: "#a34d2d",

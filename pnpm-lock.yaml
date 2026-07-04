@@ -132,6 +132,9 @@ importers:
       '@pierre/diffs':
         specifier: 1.2.3
         version: 1.2.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      diff:
+        specifier: 8.0.3
+        version: 8.0.3
       react:
         specifier: ^19.2.6
         version: 19.2.6

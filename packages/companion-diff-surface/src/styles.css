@@ -36,8 +36,84 @@ body {
   font-size: 11px;
 }
 
-.diff-surface__patch {
+.diff-surface__diff {
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: inherit;
+  line-height: 20px;
+  min-width: 100%;
+}
+
+.diff-surface__row {
+  display: grid;
+  grid-template-columns: 34px 16px minmax(0, 1fr);
+  min-height: 20px;
+}
+
+.diff-surface__row code {
+  color: var(--diff-surface-fg);
+  font-family: inherit;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0 10px 0 4px;
+  white-space: pre-wrap;
+}
+
+.diff-surface__line-number {
+  color: var(--diff-surface-muted);
+  padding-right: 8px;
+  text-align: right;
+  user-select: none;
+}
+
+.diff-surface__glyph {
+  color: var(--diff-surface-muted);
+  text-align: center;
+  user-select: none;
+}
+
+.diff-surface__row[data-row-kind="addition"] {
+  background: var(--diff-add-bg);
+}
+
+.diff-surface__row[data-row-kind="addition"] .diff-surface__glyph,
+.diff-surface__row[data-row-kind="addition"] code {
+  color: var(--diff-add-fg);
+}
+
+.diff-surface__row[data-row-kind="deletion"] {
+  background: var(--diff-del-bg);
+}
+
+.diff-surface__row[data-row-kind="deletion"] .diff-surface__glyph,
+.diff-surface__row[data-row-kind="deletion"] code {
+  color: var(--diff-del-fg);
+}
+
+.diff-surface__row[data-row-kind="hunk"] {
+  background: color-mix(in srgb, var(--diff-surface-muted), transparent 88%);
+  color: var(--diff-surface-muted);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.diff-surface__row[data-row-kind="hunk"] code {
+  color: var(--diff-surface-muted);
+  font-family: inherit;
+}
+
+.diff-surface__fallback {
+  color: var(--diff-surface-muted);
+  display: grid;
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  gap: 10px;
+  padding: 16px;
+}
+
+.diff-surface__fallback pre {
   box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--diff-surface-muted), transparent 70%);
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: inherit;
   line-height: 20px;
@@ -45,4 +121,30 @@ body {
   padding: 12px 16px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.diff-surface__annotation {
+  background: color-mix(in srgb, var(--diff-surface-accent), transparent 88%);
+  border: 1px solid color-mix(in srgb, var(--diff-surface-accent), transparent 60%);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--diff-surface-fg);
+  display: grid;
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  gap: 4px;
+  margin: 4px 8px;
+  padding: 8px 10px;
+  text-align: left;
+  width: calc(100% - 16px);
+}
+
+.diff-surface__annotation span {
+  color: var(--diff-surface-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.diff-surface__annotation p {
+  margin: 0;
 }
