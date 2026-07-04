@@ -12,7 +12,8 @@ body {
 .diff-surface {
   box-sizing: border-box;
   height: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 12px 0 32px;
 }
 
@@ -84,13 +85,19 @@ body {
 }
 
 .diff-surface[data-wrap-lines="false"] .diff-surface__diff {
-  min-width: max-content;
+  min-width: 100%;
 }
 
 .diff-surface[data-wrap-lines="false"] .diff-surface__row code,
 .diff-surface[data-wrap-lines="false"] .diff-surface__line-content code {
   overflow-wrap: normal;
   white-space: pre;
+}
+
+.diff-surface[data-wrap-lines="false"] .diff-surface__line-content code {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .diff-surface__line-number {

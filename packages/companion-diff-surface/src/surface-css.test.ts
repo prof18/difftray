@@ -25,4 +25,13 @@ describe("diff surface css", () => {
     expect(styles).toContain(".diff-surface__line-content {\n  appearance: none;");
     expect(styles).toContain("grid-column: 2 / 4;");
   });
+
+  it("contains horizontal panning to code lines when wrapping is disabled", () => {
+    expect(styles).toContain(
+      ".diff-surface {\n  box-sizing: border-box;\n  height: 100%;\n  overflow-x: hidden;\n  overflow-y: auto;"
+    );
+    expect(styles).toContain(
+      '.diff-surface[data-wrap-lines="false"] .diff-surface__line-content code {\n  overflow-x: auto;'
+    );
+  });
 });

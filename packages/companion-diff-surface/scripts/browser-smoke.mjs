@@ -77,6 +77,20 @@ try {
     noWrapWhiteSpace === "pre",
     `Expected wrapLines=false to preserve lines with white-space: pre, saw ${noWrapWhiteSpace}`
   );
+  const noWrapOverflow = await page.locator(".diff-surface").evaluate((surface) => {
+    const code = surface.querySelector(".diff-surface__line-content code");
+
+    return {
+      codeOverflowX: code ? getComputedStyle(code).overflowX : null,
+      surfaceOverflowX: getComputedStyle(surface).overflowX
+    };
+  });
+
+  assert(
+    noWrapOverflow.surfaceOverflowX === "hidden" &&
+      noWrapOverflow.codeOverflowX === "auto",
+    `Expected horizontal panning to stay inside code lines, saw ${JSON.stringify(noWrapOverflow)}`
+  );
 
   await page.getByRole("button", { name: /Show file/ }).click();
   await page
