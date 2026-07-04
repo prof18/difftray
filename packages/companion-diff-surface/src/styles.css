@@ -97,6 +97,12 @@ body {
   color: var(--diff-del-fg);
 }
 
+.diff-surface__row[data-draft-highlight="true"],
+.diff-surface__split-cell[data-draft-highlight="true"] {
+  background: color-mix(in srgb, var(--diff-selection), transparent 68%);
+  box-shadow: inset 3px 0 0 var(--diff-surface-accent);
+}
+
 .diff-surface__row[data-row-kind="hunk"] {
   background: color-mix(in srgb, var(--diff-surface-muted), transparent 88%);
   color: var(--diff-surface-muted);

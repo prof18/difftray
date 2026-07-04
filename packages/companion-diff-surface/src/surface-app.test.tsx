@@ -108,6 +108,32 @@ describe("diff surface app", () => {
     expect(html).toContain("Show 2 unchanged lines");
     expect(html).toContain('data-row-kind="context_expander"');
   });
+
+  it("highlights every row in the draft review range", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          draft: {
+            lineEnd: 2,
+            lineStart: 1,
+            side: "additions"
+          },
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -0,0 +1,2 @@",
+            "+First",
+            "+Second"
+          ].join("\n")
+        })}
+      />
+    );
+
+    const highlightedRows = html.match(/data-draft-highlight="true"/g) ?? [];
+
+    expect(highlightedRows).toHaveLength(2);
+  });
 });
 
 function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppState {

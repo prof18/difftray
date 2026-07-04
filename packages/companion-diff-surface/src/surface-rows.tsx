@@ -4,16 +4,22 @@ import {
   type DiffSurfaceSide
 } from "./surface-bridge.js";
 import {
-  createCommentTappedMessage,
   createLineSelectedMessage,
   createLineSelectedMessageForSide
 } from "./surface-outbound.js";
 import {
-  surfaceAnnotationLocation,
   type SurfaceContextRow,
   type SurfaceDiffRow,
   type SurfaceLineAnnotation
 } from "./surface-render-model.js";
+import {
+  SurfaceAnnotation,
+  annotationKey,
+  annotationsForDisplayRow,
+  annotationsForRow,
+  rowHasDraftHighlight,
+  rowSideHasDraftHighlight
+} from "./surface-row-annotations.js";
 
 type SurfaceLineRow = Exclude<
   SurfaceDiffRow,
@@ -36,12 +42,14 @@ export function SurfaceDiffRowView({
   return diffMode === "split" ? (
     <SplitDiffRow
       annotations={rowAnnotations}
+      highlightAnnotations={annotations}
       {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
       row={row}
     />
   ) : (
     <DiffRow
       annotations={rowAnnotations}
+      highlightAnnotations={annotations}
       {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
       row={row}
     />
@@ -50,10 +58,12 @@ export function SurfaceDiffRowView({
 
 function DiffRow({
   annotations,
+  highlightAnnotations,
   onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
 }): React.JSX.Element {
@@ -61,6 +71,7 @@ function DiffRow({
     return (
       <ContextExpander
         annotations={annotations}
+        highlightAnnotations={highlightAnnotations}
         {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
         row={row}
         variant="unified"
@@ -80,11 +91,13 @@ function DiffRow({
 
   const lineNumber = row.kind === "deletion" ? row.oldLineNumber : row.newLineNumber;
   const glyph = row.kind === "addition" ? "+" : row.kind === "deletion" ? "-" : " ";
+  const draftHighlighted = rowHasDraftHighlight(row, highlightAnnotations);
 
   return (
     <>
       <button
         className="diff-surface__row"
+        data-draft-highlight={draftHighlighted ? "true" : undefined}
         data-row-kind={row.kind}
         onClick={() => {
           const message = createLineSelectedMessage(row);
@@ -112,10 +125,12 @@ function DiffRow({
 
 function SplitDiffRow({
   annotations,
+  highlightAnnotations,
   onSurfaceMessage,
   row
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceDiffRow;
 }): React.JSX.Element {
@@ -123,6 +138,7 @@ function SplitDiffRow({
     return (
       <ContextExpander
         annotations={annotations}
+        highlightAnnotations={highlightAnnotations}
         {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
         row={row}
         variant="split"
@@ -144,11 +160,13 @@ function SplitDiffRow({
     <>
       <div className="diff-surface__split-row" data-row-kind={row.kind}>
         <SplitCell
+          highlightAnnotations={highlightAnnotations}
           {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
           row={row}
           side="deletions"
         />
         <SplitCell
+          highlightAnnotations={highlightAnnotations}
           {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
           row={row}
           side="additions"
@@ -166,10 +184,12 @@ function SplitDiffRow({
 }
 
 function SplitCell({
+  highlightAnnotations,
   onSurfaceMessage,
   row,
   side
 }: {
+  readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: SurfaceLineRow;
   readonly side: DiffSurfaceSide;
@@ -183,6 +203,9 @@ function SplitCell({
   return (
     <button
       className="diff-surface__split-cell"
+      data-draft-highlight={
+        rowSideHasDraftHighlight(row, side, highlightAnnotations) ? "true" : undefined
+      }
       data-split-side={side}
       onClick={() => {
         const message = createLineSelectedMessageForSide(row, side);
@@ -202,11 +225,13 @@ function SplitCell({
 
 function ContextExpander({
   annotations,
+  highlightAnnotations,
   onSurfaceMessage,
   row,
   variant
 }: {
   readonly annotations: readonly SurfaceLineAnnotation[];
+  readonly highlightAnnotations: readonly SurfaceLineAnnotation[];
   readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
   readonly row: Extract<SurfaceDiffRow, { readonly kind: "context_expander" }>;
   readonly variant: "split" | "unified";
@@ -223,6 +248,7 @@ function ContextExpander({
           variant === "split" ? (
             <SplitDiffRow
               annotations={annotationsForRow(contextRow, annotations)}
+              highlightAnnotations={highlightAnnotations}
               key={contextRowKey(contextRow)}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
               row={contextRow}
@@ -230,6 +256,7 @@ function ContextExpander({
           ) : (
             <DiffRow
               annotations={annotationsForRow(contextRow, annotations)}
+              highlightAnnotations={highlightAnnotations}
               key={contextRowKey(contextRow)}
               {...(onSurfaceMessage ? { onSurfaceMessage } : {})}
               row={contextRow}
@@ -241,92 +268,8 @@ function ContextExpander({
   );
 }
 
-function SurfaceAnnotation({
-  annotation,
-  onSurfaceMessage
-}: {
-  readonly annotation: SurfaceLineAnnotation;
-  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
-}): React.JSX.Element {
-  const { metadata } = annotation;
-
-  if (metadata.kind === "draft") {
-    return (
-      <div className="diff-surface__annotation" data-draft="true">
-        <span>
-          {surfaceAnnotationLocation({
-            lineEnd: metadata.draft.lineEnd,
-            lineStart: metadata.draft.lineStart,
-            side: metadata.draft.side
-          })}
-        </span>
-        <p>Draft comment</p>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      className="diff-surface__annotation"
-      data-comment-id={metadata.comment.id}
-      onClick={() => {
-        onSurfaceMessage?.(createCommentTappedMessage(metadata.comment.id));
-      }}
-      type="button"
-    >
-      <span>
-        {surfaceAnnotationLocation({
-          lineEnd: metadata.comment.lineEnd,
-          lineStart: metadata.comment.lineStart,
-          side: metadata.comment.side
-        })}
-      </span>
-      <p>{metadata.comment.body}</p>
-    </button>
-  );
-}
-
-function annotationsForDisplayRow(
-  row: SurfaceDiffRow,
-  annotations: readonly SurfaceLineAnnotation[]
-): readonly SurfaceLineAnnotation[] {
-  return row.kind === "context_expander"
-    ? annotations
-    : annotationsForRow(row, annotations);
-}
-
-function annotationsForRow(
-  row: SurfaceDiffRow,
-  annotations: readonly SurfaceLineAnnotation[]
-): readonly SurfaceLineAnnotation[] {
-  if (row.kind === "addition") {
-    return annotations.filter(
-      (annotation) =>
-        annotation.side === "additions" && annotation.lineNumber === row.newLineNumber
-    );
-  }
-
-  if (row.kind === "deletion") {
-    return annotations.filter(
-      (annotation) =>
-        annotation.side === "deletions" && annotation.lineNumber === row.oldLineNumber
-    );
-  }
-
-  return [];
-}
-
 function contextRowKey(row: SurfaceContextRow): string {
   return `context:${String(row.oldLineNumber)}:${String(row.newLineNumber)}`;
-}
-
-function annotationKey(annotation: SurfaceLineAnnotation): string {
-  const id =
-    annotation.metadata.kind === "comment"
-      ? annotation.metadata.comment.id
-      : `${String(annotation.metadata.draft.lineStart)}:${String(annotation.metadata.draft.lineEnd)}`;
-
-  return `${annotation.metadata.kind}:${annotation.side}:${String(annotation.lineNumber)}:${id}`;
 }
 
 function splitCellForRow(
