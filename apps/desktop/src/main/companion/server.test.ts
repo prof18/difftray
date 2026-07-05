@@ -1,7 +1,8 @@
 import { request, type Server } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  COMPANION_PROTOCOL_VERSION,
   openEnvelope,
   sealEnvelope,
   type EncryptedEnvelope,
@@ -139,6 +140,47 @@ describe("companion server core", () => {
         secret: "pairing-secret"
       }
     ]);
+  });
+
+  it("rejects pair requests from unsupported mobile protocol versions", async () => {
+    const pairDevice = vi.fn();
+    const { baseUrl } = await startServer({
+      companionAuth: {
+        approvePairRequest: () => ({ reason: "not_found", status: "rejected" }),
+        cancelPairing: () => undefined,
+        denyPairRequest: () => ({ status: "denied" }),
+        getActivePairingSession: () => null,
+        getPairRequestStatus: () => ({ reason: "not_found", status: "rejected" }),
+        listPendingPairRequests: () => [],
+        pairDevice,
+        startPairing: () => ({
+          code: "123456",
+          expiresAt: "2026-07-02T12:05:00.000Z",
+          secret: "pairing-secret"
+        })
+      }
+    });
+
+    const response = await boxedPairRequest({
+      baseUrl,
+      body: {
+        deviceId: "device-1",
+        deviceName: "Marco's iPhone",
+        devicePublicKey,
+        platform: "ios",
+        protocolVersion: COMPANION_PROTOCOL_VERSION + 1,
+        secret: "pairing-secret"
+      }
+    });
+
+    expect(response.wireStatus).toBe(400);
+    expect(response.body).toMatchObject({
+      error: {
+        code: "protocol_mismatch",
+        protocolVersion: COMPANION_PROTOCOL_VERSION
+      }
+    });
+    expect(pairDevice).not.toHaveBeenCalled();
   });
 
   it("returns pair request status for manual-code polling", async () => {
