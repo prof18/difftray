@@ -501,6 +501,29 @@ describe("companion server core", () => {
     expect(responses.map((response) => response.plain.status)).toEqual([200, 200]);
   });
 
+  it("returns sealed internal errors when authenticated route handlers fail", async () => {
+    const { baseUrl } = await startServer({
+      loadWorkspaceView: async () => {
+        throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(response.wireStatus).toBe(500);
+    expect(response.plain.status).toBe(500);
+    expect(response.plain.body).toMatchObject({
+      error: {
+        code: "internal",
+        protocolVersion: COMPANION_PROTOCOL_VERSION
+      }
+    });
+  });
+
   it("maps missing comments to not_found on delete", async () => {
     const { baseUrl } = await startServer({
       deleteComment: async () => false

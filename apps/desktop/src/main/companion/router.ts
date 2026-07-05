@@ -110,12 +110,17 @@ export function createCompanionRouter(
             continue;
           }
 
-          const result = await routeMatch.route.handler({
-            body: verified.body,
-            device: verified.device,
-            params: routeMatch.params,
-            query: new URLSearchParams()
-          });
+          const result = await Promise.resolve(
+            routeMatch.route.handler({
+              body: verified.body,
+              device: verified.device,
+              params: routeMatch.params,
+              query: new URLSearchParams()
+            })
+          ).catch(() => ({
+            body: companionError("internal", "Internal server error"),
+            status: 500
+          }));
           const responseEnvelope = envelopeVerifier.sealResponseEnvelope({
             body: result.body,
             devicePublicKey: verified.device.devicePublicKey,
