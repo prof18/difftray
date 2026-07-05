@@ -333,17 +333,34 @@ describe("companion server integration", () => {
 
       const routes = createCompanionApi(deps).filter((route) => route.requiresAuth);
       for (const route of routes) {
-        const response = await fetch(
-          `${baseUrl}${concreteRoutePath(route.path, project.id)}`,
-          {
-            body: JSON.stringify({}),
-            headers: { "content-type": "application/json" },
-            method: "POST"
-          }
-        );
+        const path = concreteRoutePath(route.path, project.id);
+        const response = await fetch(`${baseUrl}${path}`, {
+          body: JSON.stringify({}),
+          headers: { "content-type": "application/json" },
+          method: "POST"
+        });
         expect({
           path: route.path,
           status: response.status
+        }).toEqual({
+          path: route.path,
+          status: 401
+        });
+
+        const tampered = await fetch(`${baseUrl}${path}`, {
+          body: JSON.stringify(
+            tamperedRouteEnvelope({
+              logicalMethod: route.method,
+              path,
+              serverPublicKey: identity.serverPublicKey
+            })
+          ),
+          headers: { "content-type": "application/x-difftray-envelope" },
+          method: "POST"
+        });
+        expect({
+          path: route.path,
+          status: tampered.status
         }).toEqual({
           path: route.path,
           status: 401
@@ -793,6 +810,33 @@ function readPairRequestId(body: unknown): string {
 
 function concreteRoutePath(routePath: string, projectId: string): string {
   return routePath.replace(":projectId", projectId).replace(":commentId", "comment-1");
+}
+
+function tamperedRouteEnvelope(input: {
+  readonly logicalMethod: string;
+  readonly path: string;
+  readonly serverPublicKey: string;
+}): EncryptedEnvelope {
+  requestCounter += 1;
+  const envelope = sealEnvelope({
+    devicePublicKey,
+    plaintext: {
+      method: input.logicalMethod,
+      path: input.path,
+      requestId: `integration-tampered-${requestCounter}`,
+      ts: new Date().toISOString()
+    },
+    recipientPublicKey: input.serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
+
+  return { ...envelope, box: replaceFirstBase64UrlChar(envelope.box) };
+}
+
+function replaceFirstBase64UrlChar(value: string): string {
+  const replacement = value.startsWith("A") ? "B" : "A";
+
+  return `${replacement}${value.slice(1)}`;
 }
 
 function httpGetWithHost(
