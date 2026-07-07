@@ -369,6 +369,50 @@ describe("companion server core", () => {
     expect(calls).toEqual(["src/app.ts"]);
   });
 
+  it("includes project review summaries in the authenticated projects list", async () => {
+    const { baseUrl } = await startServer({
+      listRecentProjects: async () => [
+        {
+          id: "project-1",
+          name: "Difftray",
+          path: "/repo",
+          reviewSummary: {
+            attentionCount: 1,
+            progress: {
+              reviewedVisibleFiles: 3,
+              totalVisibleReviewableFiles: 7
+            }
+          }
+        }
+      ]
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+
+    expect(response.wireStatus).toBe(200);
+    expect(response.plain).toMatchObject({
+      body: {
+        projects: [
+          {
+            id: "project-1",
+            reviewSummary: {
+              attentionCount: 1,
+              progress: {
+                reviewedVisibleFiles: 3,
+                totalVisibleReviewableFiles: 7
+              }
+            }
+          }
+        ]
+      },
+      status: 200
+    });
+  });
+
   it("rejects plaintext access to authenticated routes", async () => {
     const { baseUrl } = await startServer();
 
@@ -571,7 +615,7 @@ async function startServer(
     deleteComment: async () => false,
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
-    listRecentProjects: () => [],
+    listRecentProjects: async () => [],
     loadFileDiff: async () => {
       throw new Error("unexpected loadFileDiff call");
     },

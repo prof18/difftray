@@ -87,7 +87,7 @@ export type CompanionDeps = {
     projectId: string,
     target: DiffTargetBody
   ) => Promise<ReviewWorkspaceView>;
-  readonly listRecentProjects: () => readonly RecentProjectView[];
+  readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
   readonly notifyDesktopRenderer: (projectId: string) => void;
   readonly serverIdentity: () => {
     readonly appVersion: string;
@@ -313,8 +313,8 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     },
     {
-      handler: () => ({
-        body: { projects: deps.listRecentProjects() },
+      handler: async () => ({
+        body: { projects: await deps.listRecentProjects() },
         status: 200
       }),
       method: "GET",

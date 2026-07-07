@@ -485,7 +485,7 @@ async function createIntegrationHarness(): Promise<{
     },
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
-    listRecentProjects: () =>
+    listRecentProjects: async () =>
       storage.listRecentProjects().map((record) => projectView(record)),
     loadFileDiff: async (projectId, pathName) =>
       loadFileDiff(storage, projectId, pathName),

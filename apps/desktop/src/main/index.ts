@@ -1394,6 +1394,25 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   return projects.map((project) => projectView(project));
 }
 
+async function listAvailableRecentProjectViewsWithSummaries(): Promise<
+  readonly RecentProjectView[]
+> {
+  const projects = listAvailableRecentProjects();
+  const summaries = await Promise.all(
+    projects.map(async (project) => {
+      try {
+        return await loadProjectReviewSummaryIfAvailable(project.id);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return projects.map((project, index) =>
+    projectView(project, summaries[index] ?? undefined)
+  );
+}
+
 function listBranchRefsForProject(projectId: string): Promise<readonly string[]> {
   const project = assertStoredProject(projectId);
 
@@ -1495,7 +1514,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     },
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
-    listRecentProjects: listAvailableRecentProjectViews,
+    listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
     loadFileDiff: async (projectId, pathName) => {
       const [diff, workspace] = await Promise.all([
         loadProjectFileDiffForCompanion(projectId, pathName),
