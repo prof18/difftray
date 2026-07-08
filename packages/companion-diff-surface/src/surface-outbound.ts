@@ -57,6 +57,20 @@ export function createLineSelectedMessage(
   };
 }
 
+export function createLineSelectedMessageFromTarget({
+  lineNumber,
+  side,
+  text
+}: DiffSurfaceLineSelectionTarget): DiffSurfaceMessage {
+  return {
+    kind: "line_selected",
+    lineEnd: lineNumber,
+    lineStart: lineNumber,
+    side,
+    snippet: [{ lineNumber, text }]
+  };
+}
+
 export function createLineSelectedMessageForSide(
   row: SelectableSurfaceDiffRow,
   side: DiffSurfaceSide

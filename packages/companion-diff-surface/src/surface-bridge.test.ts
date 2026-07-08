@@ -51,7 +51,8 @@ describe("diff surface host messages", () => {
       diffHash: "hash-large",
       kind: "show_file",
       patch: largePatch(),
-      path: "src/large.ts"
+      path: "src/large.ts",
+      status: "modified"
     });
     const chunkSize = 64 * 1024;
     const chunks = Array.from(
@@ -100,7 +101,8 @@ describe("diff surface host messages", () => {
       diffHash: "hash-large",
       kind: "show_file" as const,
       patch: largePatch(),
-      path: "src/large.ts"
+      path: "src/large.ts",
+      status: "modified" as const
     };
 
     expect(

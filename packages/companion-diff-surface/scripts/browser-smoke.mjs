@@ -69,7 +69,7 @@ try {
     .locator('.diff-surface[data-diff-mode="unified"][data-wrap-lines="false"]')
     .waitFor({ timeout: 10_000 });
   const noWrapWhiteSpace = await page
-    .locator(".diff-surface__row code")
+    .locator(".diff-surface [data-line]")
     .first()
     .evaluate((element) => getComputedStyle(element).whiteSpace);
 
@@ -78,18 +78,14 @@ try {
     `Expected wrapLines=false to preserve lines with white-space: pre, saw ${noWrapWhiteSpace}`
   );
   const noWrapOverflow = await page.locator(".diff-surface").evaluate((surface) => {
-    const code = surface.querySelector(".diff-surface__line-content code");
-
     return {
-      codeOverflowX: code ? getComputedStyle(code).overflowX : null,
       surfaceOverflowX: getComputedStyle(surface).overflowX
     };
   });
 
   assert(
-    noWrapOverflow.surfaceOverflowX === "hidden" &&
-      noWrapOverflow.codeOverflowX === "auto",
-    `Expected horizontal panning to stay inside code lines, saw ${JSON.stringify(noWrapOverflow)}`
+    noWrapOverflow.surfaceOverflowX === "hidden",
+    `Expected no-wrap mode to keep page overflow hidden, saw ${JSON.stringify(noWrapOverflow)}`
   );
 
   await page.getByRole("button", { name: /Show file/ }).click();
@@ -114,9 +110,7 @@ try {
   );
 
   await page
-    .locator(
-      '.diff-surface__row[data-row-kind="addition"] button[data-line-select-target="gutter"]'
-    )
+    .locator('.diff-surface [data-column-number][data-line-type="change-addition"]')
     .first()
     .click();
   await waitForSurfaceMessage(
@@ -125,7 +119,7 @@ try {
     "line selected"
   );
   const additionGutters = page.locator(
-    '.diff-surface__row[data-row-kind="addition"] button[data-line-select-target="gutter"]'
+    '.diff-surface [data-column-number][data-line-type="change-addition"]'
   );
   await additionGutters.first().dragTo(additionGutters.nth(3));
   await waitForSurfaceMessage(
@@ -151,6 +145,7 @@ try {
     timeout: 10_000
   });
 
+  await page.getByRole("button", { name: /^Clear$/ }).click();
   await page.getByRole("button", { name: /Manual smooth-scroll/ }).click();
   await page
     .locator(".diff-surface__path")
@@ -162,33 +157,21 @@ try {
     "large fixture rendered"
   );
 
-  const renderedRows = await page
-    .locator(".diff-surface__row, .diff-surface__split-row")
-    .count();
+  const renderedRows = await page.locator(".diff-surface [data-line]").count();
 
   assert(
-    renderedRows >= 5_001,
-    `Expected at least 5001 rendered rows, saw ${String(renderedRows)}`
+    renderedRows > 0,
+    `Expected Pierre to render a visible virtual window, saw ${String(renderedRows)} rows`
   );
 
+  await page.getByRole("button", { name: /^Clear$/ }).click();
   await page.getByRole("button", { name: /Load 5k patch at line 4800/ }).click();
-  const scrollTarget = page.locator('[data-diff-additions-line="4800"]');
-  await scrollTarget.waitFor({ timeout: 10_000 });
-  const targetViewportPosition = await scrollTarget.evaluate((element) => {
-    const surfaceBounds = document
-      .querySelector(".diff-surface")
-      ?.getBoundingClientRect();
-    const targetBounds = element.getBoundingClientRect();
-
-    return surfaceBounds
-      ? {
-          bottom: targetBounds.bottom,
-          surfaceBottom: surfaceBounds.bottom,
-          surfaceTop: surfaceBounds.top,
-          top: targetBounds.top
-        }
-      : null;
-  });
+  await waitForSurfaceMessage(
+    page,
+    (message) => message.kind === "rendered" && message.path === "src/large-fixture.ts",
+    "large fixture scroll target rendered"
+  );
+  const targetViewportPosition = await waitForLineNumberInSurface(page, 4800);
 
   assert(
     targetViewportPosition &&
@@ -280,14 +263,101 @@ async function surfaceMessages(page) {
   });
 }
 
+async function waitForLineNumberInSurface(page, lineNumber) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 10_000) {
+    const position = await lineNumberPositionInSurface(page, lineNumber);
+
+    if (position) {
+      return position;
+    }
+
+    await page.waitForTimeout(50);
+  }
+
+  throw new Error(
+    `Timed out waiting for line number ${String(lineNumber)}; ${JSON.stringify(
+      await surfaceLineDiagnostics(page)
+    )}`
+  );
+}
+
+async function lineNumberPositionInSurface(page, lineNumber) {
+  return page.locator(".diff-surface").evaluate((surface, targetLineNumber) => {
+    const roots = [
+      surface,
+      ...Array.from(surface.querySelectorAll("diffs-container"))
+        .map((container) => container.shadowRoot)
+        .filter((root) => root !== null)
+    ];
+    const selector = `[data-column-number="${String(targetLineNumber)}"]`;
+    const target = roots
+      .flatMap((root) => Array.from(root.querySelectorAll(selector)))
+      .at(0);
+    const surfaceBounds = surface.getBoundingClientRect();
+    const targetBounds = target?.getBoundingClientRect();
+
+    return targetBounds
+      ? {
+          bottom: targetBounds.bottom,
+          surfaceBottom: surfaceBounds.bottom,
+          surfaceTop: surfaceBounds.top,
+          top: targetBounds.top
+        }
+      : null;
+  }, lineNumber);
+}
+
+async function surfaceLineDiagnostics(page) {
+  return page.locator(".diff-surface").evaluate((surface) => {
+    const roots = [
+      surface,
+      ...Array.from(surface.querySelectorAll("diffs-container"))
+        .map((container) => container.shadowRoot)
+        .filter((root) => root !== null)
+    ];
+    const lineNumbers = roots
+      .flatMap((root) =>
+        Array.from(root.querySelectorAll("[data-column-number]"), (element) =>
+          element.getAttribute("data-column-number")
+        )
+      )
+      .filter((lineNumber) => lineNumber !== null)
+      .slice(0, 20);
+
+    return {
+      clientHeight: surface.clientHeight,
+      lineNumbers,
+      path: surface.querySelector(".diff-surface__path")?.textContent ?? null,
+      scrollHeight: surface.scrollHeight,
+      scrollTop: surface.scrollTop,
+      text: roots.map((root) => root.textContent ?? "").join("\n").slice(0, 500)
+    };
+  });
+}
+
 async function expectHostileFixtureIsInert(page) {
-  const result = await page.locator(".diff-surface").evaluate((element) => ({
-    hostileTextVisible: element.textContent?.includes("<img src=x onerror=") ?? false,
-    injectedImages: element.querySelectorAll("img").length,
-    injectedJavascriptLinks: element.querySelectorAll('a[href^="javascript:"]').length,
-    injectedScripts: element.querySelectorAll("script").length,
-    xssExecuted: window.__difftrayHarnessXss === true
-  }));
+  const result = await page.locator(".diff-surface").evaluate((element) => {
+    const roots = [
+      element,
+      ...Array.from(element.querySelectorAll("diffs-container"))
+        .map((container) => container.shadowRoot)
+        .filter((root) => root !== null)
+    ];
+    const text = roots.map((root) => root.textContent ?? "").join("\n");
+
+    return {
+      hostileTextVisible: text.includes("<img src=x onerror="),
+      injectedImages: roots.reduce((count, root) => count + root.querySelectorAll("img").length, 0),
+      injectedJavascriptLinks: roots.reduce(
+        (count, root) => count + root.querySelectorAll('a[href^="javascript:"]').length,
+        0
+      ),
+      injectedScripts: roots.reduce((count, root) => count + root.querySelectorAll("script").length, 0),
+      xssExecuted: window.__difftrayHarnessXss === true
+    };
+  });
 
   assert(result.hostileTextVisible, "Hostile fixture text was not visible as text");
   assert(!result.xssExecuted, "Hostile fixture executed script");

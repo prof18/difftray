@@ -1,4 +1,7 @@
-import type { ReviewCommentView } from "@difftray/companion-protocol";
+import type {
+  FileDiffStatus,
+  ReviewCommentView
+} from "@difftray/companion-protocol";
 
 export const DIFF_SURFACE_BRIDGE_VERSION = 1;
 
@@ -51,6 +54,7 @@ export type DiffSurfaceHostMessage =
       readonly patch: string;
       readonly path: string;
       readonly scrollTo?: DiffSurfaceScrollTarget;
+      readonly status: FileDiffStatus;
     }
   | {
       readonly comments: readonly ReviewCommentView[];
@@ -154,11 +158,13 @@ function parseShowFileMessage(
       "oldText",
       "patch",
       "path",
-      "scrollTo"
+      "scrollTo",
+      "status"
     ]) ||
     typeof input.diffHash !== "string" ||
     typeof input.patch !== "string" ||
     typeof input.path !== "string" ||
+    !isFileDiffStatus(input.status) ||
     !Array.isArray(input.comments) ||
     (input.newText !== undefined && typeof input.newText !== "string") ||
     (input.oldText !== undefined && typeof input.oldText !== "string")
@@ -180,6 +186,7 @@ function parseShowFileMessage(
     ...(input.oldText === undefined ? {} : { oldText: input.oldText }),
     patch: input.patch,
     path: input.path,
+    status: input.status,
     ...(scrollTo ? { scrollTo } : {})
   };
 }
@@ -331,6 +338,16 @@ function parseDraftRange(input: unknown): DiffSurfaceDraftRange | null {
 
 function isDiffMode(input: unknown): input is DiffSurfaceMode {
   return input === "split" || input === "unified";
+}
+
+function isFileDiffStatus(input: unknown): input is FileDiffStatus {
+  return (
+    input === "added" ||
+    input === "deleted" ||
+    input === "mode_changed" ||
+    input === "modified" ||
+    input === "renamed"
+  );
 }
 
 function isDiffSide(input: unknown): input is DiffSurfaceSide {

@@ -22,6 +22,7 @@ export {
 } from "./surface-host-message-receiver.js";
 export {
   createCommentTappedMessage,
+  createLineSelectedMessageFromTarget,
   createLineSelectedMessage,
   createRenderedMessage,
   serializeSurfaceMessage

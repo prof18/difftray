@@ -37,6 +37,7 @@ let state: DiffSurfaceAppState = {
   patch: "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
   path: "README.md",
   showFileHeader: true,
+  status: "modified",
   theme: diffSurfaceThemeTokens("light"),
   wrapLines: true
 };
@@ -99,6 +100,8 @@ window.__difftrayReceive = (rawMessage) => {
     case "show_file": {
       const stateWithoutScrollTarget = { ...state };
       delete stateWithoutScrollTarget.scrollTo;
+      delete stateWithoutScrollTarget.newText;
+      delete stateWithoutScrollTarget.oldText;
 
       state = {
         ...stateWithoutScrollTarget,
@@ -109,6 +112,7 @@ window.__difftrayReceive = (rawMessage) => {
         ...(message.oldText === undefined ? {} : { oldText: message.oldText }),
         patch: message.patch,
         path: message.path,
+        status: message.status,
         ...(message.scrollTo === undefined ? {} : { scrollTo: message.scrollTo })
       };
       renderedPath = message.path;

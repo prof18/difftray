@@ -60,7 +60,12 @@ export function surfaceDiffDisplayRows(
     const row = rows[index];
     const nextRow = rows[index + 1];
 
-    if (isPairedInlineChange(row, nextRow)) {
+    if (
+      row?.kind === "deletion" &&
+      nextRow?.kind === "addition" &&
+      isInlineChangeRow(row) &&
+      isInlineChangeRow(nextRow)
+    ) {
       displayRows.push({
         addition: nextRow,
         deletion: row,
@@ -437,18 +442,6 @@ function rowHasInlineChange(row: SurfaceLineRow): boolean {
   return row.kind === "addition" || row.kind === "deletion"
     ? row.inlineChange === true
     : false;
-}
-
-function isPairedInlineChange(
-  row: SurfaceDiffRow | undefined,
-  nextRow: SurfaceDiffRow | undefined
-): row is Extract<SurfaceDiffRow, { readonly kind: "deletion" }> {
-  return (
-    row?.kind === "deletion" &&
-    nextRow?.kind === "addition" &&
-    isInlineChangeRow(row) &&
-    isInlineChangeRow(nextRow)
-  );
 }
 
 function isInlineChangeRow(row: InlineChangeRow): boolean {

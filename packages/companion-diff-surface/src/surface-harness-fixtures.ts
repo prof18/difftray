@@ -84,7 +84,8 @@ export function createLargeFixtureShowFileMessage(): DiffSurfaceShowFileMessage 
     diffHash: "harness-large-5000",
     kind: "show_file",
     patch: createLargeFixturePatch({ changedLines: 5_000 }),
-    path: "src/large-fixture.ts"
+    path: "src/large-fixture.ts",
+    status: "added"
   };
 }
 
@@ -146,7 +147,8 @@ function createFixtureShowFileMessage(): DiffSurfaceHostMessage {
       "-export const reviewed = false;",
       "+export const reviewed = true;"
     ].join("\n"),
-    path: "src/harness-fixture.ts"
+    path: "src/harness-fixture.ts",
+    status: "modified"
   };
 }
 
