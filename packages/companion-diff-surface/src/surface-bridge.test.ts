@@ -35,6 +35,18 @@ describe("diff surface host messages", () => {
     ).toBeNull();
   });
 
+  it("accepts line wrapping updates", () => {
+    expect(
+      parseHostMessage({
+        kind: "set_wrap_lines",
+        wrapLines: false
+      })
+    ).toEqual({
+      kind: "set_wrap_lines",
+      wrapLines: false
+    });
+  });
+
   it("rejects invalid draft ranges", () => {
     expect(
       parseHostMessage({

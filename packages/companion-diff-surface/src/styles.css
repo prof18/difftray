@@ -3,6 +3,8 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -57,7 +59,9 @@ body {
 
 .diff-surface__line-content code {
   color: inherit;
+  display: block;
   font-family: inherit;
+  max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 0 10px 0 4px;
@@ -423,9 +427,7 @@ body {
   color: var(--diff-surface-fg);
 }
 
-.diff-surface__split-row[data-inline-change="true"]
-  .diff-surface__line-content
-  code {
+.diff-surface__split-row[data-inline-change="true"] .diff-surface__line-content code {
   overflow-wrap: normal;
   overflow-x: auto;
   overscroll-behavior-x: contain;

@@ -131,6 +131,9 @@ window.__difftrayReceive = (rawMessage) => {
     case "set_diff_mode":
       state = { ...state, diffMode: message.diffMode };
       break;
+    case "set_wrap_lines":
+      state = { ...state, wrapLines: message.wrapLines };
+      break;
     case "set_draft":
       state = { ...state, draft: message.draft };
       break;

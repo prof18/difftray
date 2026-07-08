@@ -1,7 +1,4 @@
-import type {
-  FileDiffStatus,
-  ReviewCommentView
-} from "@difftray/companion-protocol";
+import type { FileDiffStatus, ReviewCommentView } from "@difftray/companion-protocol";
 
 export const DIFF_SURFACE_BRIDGE_VERSION = 1;
 
@@ -65,6 +62,10 @@ export type DiffSurfaceHostMessage =
       readonly kind: "set_diff_mode";
     }
   | {
+      readonly kind: "set_wrap_lines";
+      readonly wrapLines: DiffSurfaceWrapLines;
+    }
+  | {
       readonly draft: DiffSurfaceDraftRange | null;
       readonly kind: "set_draft";
     };
@@ -114,6 +115,8 @@ export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null 
       return parseSetCommentsMessage(input);
     case "set_diff_mode":
       return parseSetDiffModeMessage(input);
+    case "set_wrap_lines":
+      return parseSetWrapLinesMessage(input);
     case "set_draft":
       return parseSetDraftMessage(input);
     default:
@@ -214,6 +217,22 @@ function parseSetDiffModeMessage(
   return {
     diffMode: input.diffMode,
     kind: "set_diff_mode"
+  };
+}
+
+function parseSetWrapLinesMessage(
+  input: Record<string, unknown>
+): DiffSurfaceHostMessage | null {
+  if (
+    !hasOnlyKeys(input, ["kind", "wrapLines"]) ||
+    typeof input.wrapLines !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    kind: "set_wrap_lines",
+    wrapLines: input.wrapLines
   };
 }
 

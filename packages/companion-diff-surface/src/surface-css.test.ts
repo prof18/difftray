@@ -31,6 +31,12 @@ describe("diff surface css", () => {
       ".diff-surface {\n  box-sizing: border-box;\n  height: 100%;\n  overflow-x: hidden;\n  overflow-y: auto;"
     );
     expect(styles).toContain(
+      "  -webkit-text-size-adjust: 100%;\n  text-size-adjust: 100%;"
+    );
+    expect(styles).toContain(
+      "  display: block;\n  font-family: inherit;\n  max-width: 100%;"
+    );
+    expect(styles).toContain(
       '.diff-surface[data-wrap-lines="false"] .diff-surface__line-content code {\n  overflow-x: auto;'
     );
   });
@@ -69,7 +75,7 @@ describe("diff surface css", () => {
       '.diff-surface__split-row[data-inline-change="true"]\n  .diff-surface__split-cell:not(:empty) {\n  background: var(--diff-bg-context);'
     );
     expect(styles).toContain(
-      '.diff-surface__split-row[data-inline-change="true"]\n  .diff-surface__line-content\n  code {\n  overflow-wrap: normal;'
+      '.diff-surface__split-row[data-inline-change="true"] .diff-surface__line-content code {\n  overflow-wrap: normal;'
     );
     expect(styles).toContain("  white-space: pre;");
   });
