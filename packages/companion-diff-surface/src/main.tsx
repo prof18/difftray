@@ -6,6 +6,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@fontsource/jetbrains-mono/600.css";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 
 import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
 import {
@@ -20,6 +21,7 @@ import {
 } from "./surface-harness-fixtures.js";
 import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-receiver.js";
 import { createRenderedMessage, serializeSurfaceMessage } from "./surface-outbound.js";
+import { waitForDiffSurfacePaint } from "./surface-render-signal.js";
 import { diffSurfaceThemeTokens } from "./surface-theme.js";
 import "./styles.css";
 
@@ -48,25 +50,28 @@ const harnessActions = createDiffSurfaceHarnessActions();
 const largeFixtureMessage = createLargeFixtureShowFileMessage();
 const isBrowserHarness = window.ReactNativeWebView === undefined;
 let hasRendered = false;
+let renderGeneration = 0;
 let outboundMessages: readonly DiffSurfaceMessage[] = [];
 
 function render(): void {
   const surface = <DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />;
 
-  root.render(
-    isBrowserHarness ? (
-      <DiffSurfaceBrowserHarness
-        actions={harnessActions}
-        largeFixtureMessage={largeFixtureMessage}
-        onClearMessages={clearHarnessMessages}
-        onSendHostMessage={sendHarnessMessage}
-        outboundMessages={outboundMessages}
-        surface={surface}
-      />
-    ) : (
-      surface
-    )
-  );
+  flushSync(() => {
+    root.render(
+      isBrowserHarness ? (
+        <DiffSurfaceBrowserHarness
+          actions={harnessActions}
+          largeFixtureMessage={largeFixtureMessage}
+          onClearMessages={clearHarnessMessages}
+          onSendHostMessage={sendHarnessMessage}
+          outboundMessages={outboundMessages}
+          surface={surface}
+        />
+      ) : (
+        surface
+      )
+    );
+  });
   hasRendered = true;
 }
 
@@ -85,7 +90,8 @@ window.__difftrayReceive = (rawMessage) => {
 
   const { message } = received;
 
-  let renderedPath: string | null = null;
+  let renderedResult: { readonly generation: number; readonly path: string } | null =
+    null;
 
   switch (message.kind) {
     case "init":
@@ -115,7 +121,8 @@ window.__difftrayReceive = (rawMessage) => {
         status: message.status,
         ...(message.scrollTo === undefined ? {} : { scrollTo: message.scrollTo })
       };
-      renderedPath = message.path;
+      renderGeneration += 1;
+      renderedResult = { generation: renderGeneration, path: message.path };
       break;
     }
     case "set_comments":
@@ -131,16 +138,38 @@ window.__difftrayReceive = (rawMessage) => {
 
   render();
 
-  if (renderedPath) {
-    postMessage(
-      createRenderedMessage({
-        endMs: performance.now(),
-        path: renderedPath,
-        startMs
-      })
-    );
+  if (renderedResult) {
+    void postRenderedAfterPaint({
+      generation: renderedResult.generation,
+      path: renderedResult.path,
+      startMs
+    });
   }
 };
+
+async function postRenderedAfterPaint({
+  generation,
+  path,
+  startMs
+}: {
+  readonly generation: number;
+  readonly path: string;
+  readonly startMs: number;
+}): Promise<void> {
+  await waitForDiffSurfacePaint(window);
+
+  if (generation !== renderGeneration) {
+    return;
+  }
+
+  postMessage(
+    createRenderedMessage({
+      endMs: performance.now(),
+      path,
+      startMs
+    })
+  );
+}
 
 function postMessage(message: DiffSurfaceMessage): void {
   const serializedMessage = serializeSurfaceMessage(message);
