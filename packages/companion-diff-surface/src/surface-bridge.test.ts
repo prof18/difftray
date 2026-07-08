@@ -12,12 +12,14 @@ describe("diff surface host messages", () => {
       parseHostMessage({
         diffMode: "unified",
         kind: "init",
+        showFileHeader: true,
         theme: themeTokens(),
         wrapLines: true
       })
     ).toEqual({
       diffMode: "unified",
       kind: "init",
+      showFileHeader: true,
       theme: themeTokens(),
       wrapLines: true
     });

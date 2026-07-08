@@ -5,32 +5,55 @@ type SyntaxToken = {
   readonly text: string;
 };
 
+type TextRange = {
+  readonly end: number;
+  readonly start: number;
+};
+
 export function CodeLine({
+  changedRanges = [],
   highlight,
   path,
   text
 }: {
+  readonly changedRanges?: readonly TextRange[] | undefined;
   readonly highlight: boolean;
   readonly path: string;
   readonly text: string;
 }): React.JSX.Element {
-  const tokens = highlight ? tokenizeCodeLine({ path, text }) : [{ kind: "plain", text }];
+  const segments = splitLineSegments(text, changedRanges);
 
   return (
     <code>
-      {tokens.map((token, index) =>
-        token.kind === "plain" ? (
-          token.text
-        ) : (
+      {segments.map((segment, segmentIndex) => {
+        const tokens = highlight
+          ? tokenizeCodeLine({ path, text: segment.text })
+          : [{ kind: "plain" as const, text: segment.text }];
+        const children = tokens.map((token, tokenIndex) =>
+          token.kind === "plain" ? (
+            token.text
+          ) : (
+            <span
+              className="diff-surface__syntax-token"
+              data-token-kind={token.kind}
+              key={`${segmentIndex.toString()}:${token.kind}:${tokenIndex.toString()}`}
+            >
+              {token.text}
+            </span>
+          )
+        );
+
+        return segment.changed ? (
           <span
-            className="diff-surface__syntax-token"
-            data-token-kind={token.kind}
-            key={`${token.kind}:${String(index)}`}
+            className="diff-surface__line-change"
+            key={`change:${segmentIndex.toString()}`}
           >
-            {token.text}
+            {children}
           </span>
-        )
-      )}
+        ) : (
+          <span key={`plain:${segmentIndex.toString()}`}>{children}</span>
+        );
+      })}
     </code>
   );
 }
@@ -176,6 +199,39 @@ function mergeAdjacentPlainTokens(
 
 function supportsSyntaxTokens(path: string): boolean {
   return /\.(?:cjs|cts|js|jsx|json|kts?|mjs|mts|ts|tsx)$/i.test(path);
+}
+
+function splitLineSegments(
+  text: string,
+  changedRanges: readonly TextRange[]
+): ReadonlyArray<{ readonly changed: boolean; readonly text: string }> {
+  if (changedRanges.length === 0) {
+    return [{ changed: false, text }];
+  }
+
+  const segments: Array<{ readonly changed: boolean; readonly text: string }> = [];
+  let cursor = 0;
+
+  for (const range of changedRanges) {
+    const start = Math.max(0, Math.min(text.length, range.start));
+    const end = Math.max(start, Math.min(text.length, range.end));
+
+    if (cursor < start) {
+      segments.push({ changed: false, text: text.slice(cursor, start) });
+    }
+
+    if (start < end) {
+      segments.push({ changed: true, text: text.slice(start, end) });
+    }
+
+    cursor = end;
+  }
+
+  if (cursor < text.length) {
+    segments.push({ changed: false, text: text.slice(cursor) });
+  }
+
+  return segments.length > 0 ? segments : [{ changed: false, text }];
 }
 
 function isDigit(char: string | undefined): boolean {

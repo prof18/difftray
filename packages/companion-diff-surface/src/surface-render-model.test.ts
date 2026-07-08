@@ -137,6 +137,38 @@ describe("surface render model", () => {
     ]);
   });
 
+  it("marks word-level changes inside paired modified lines", () => {
+    const oldLine = 'expect(getByText("Git changes · 67/300 reviewed")).toBeTruthy();';
+    const newLine = 'expect(getByText("Git changes")).toBeTruthy();';
+    const model = createSurfaceRenderModel({
+      diffHash: "hash-inline-change",
+      patch: [
+        "diff --git a/src/example.ts b/src/example.ts",
+        "--- a/src/example.ts",
+        "+++ b/src/example.ts",
+        "@@ -55 +55 @@",
+        `-${oldLine}`,
+        `+${newLine}`
+      ].join("\n"),
+      path: "src/example.ts"
+    });
+
+    expect(model.kind).toBe("diff");
+    if (model.kind !== "diff") {
+      return;
+    }
+
+    const deletion = model.fileDiff.rows.find((row) => row.kind === "deletion");
+    const addition = model.fileDiff.rows.find((row) => row.kind === "addition");
+
+    expect(
+      deletion?.changedRanges?.map((range) => oldLine.slice(range.start, range.end))
+    ).toEqual([" · 67/300 reviewed"]);
+    expect(deletion?.inlineChange).toBe(true);
+    expect(addition?.inlineChange).toBe(true);
+    expect(addition?.changedRanges).toBeUndefined();
+  });
+
   it("maps persisted comments and transient drafts to line annotations", () => {
     expect(
       surfaceCommentAnnotations({

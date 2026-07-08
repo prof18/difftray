@@ -61,10 +61,10 @@ function diffChromeTokens(scheme: DiffSurfaceThemeTokens["scheme"]): DiffChromeT
 
 const lightDiffChromeTokens: DiffChromeTokens = {
   addBackgroundStrong: "rgba(6, 125, 23, 0.2)",
-  backgroundBuffer: "#ebecf0",
-  backgroundContext: "#f5f8fe",
-  backgroundGutter: "#f5f8fe",
-  backgroundSeparator: "#e1eaff",
+  backgroundBuffer: "#f1f1f3",
+  backgroundContext: "#ffffff",
+  backgroundGutter: "#ffffff",
+  backgroundSeparator: "#e5e5e8",
   deleteBackgroundStrong: "rgba(222, 27, 46, 0.18)",
   gutter: "#aeb3c2",
   syntax: {

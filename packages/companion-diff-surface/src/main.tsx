@@ -36,6 +36,7 @@ let state: DiffSurfaceAppState = {
   draft: null,
   patch: "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
   path: "README.md",
+  showFileHeader: true,
   theme: diffSurfaceThemeTokens("light"),
   wrapLines: true
 };
@@ -90,6 +91,7 @@ window.__difftrayReceive = (rawMessage) => {
       state = {
         ...state,
         diffMode: message.diffMode,
+        showFileHeader: message.showFileHeader,
         theme: message.theme,
         wrapLines: message.wrapLines
       };

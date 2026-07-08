@@ -25,6 +25,7 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       message: {
         diffMode: "unified",
         kind: "init",
+        showFileHeader: true,
         theme: diffSurfaceThemeTokens("light"),
         wrapLines: true
       }
@@ -35,6 +36,7 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       message: {
         diffMode: "unified",
         kind: "init",
+        showFileHeader: true,
         theme: diffSurfaceThemeTokens("light"),
         wrapLines: false
       }

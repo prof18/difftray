@@ -24,13 +24,13 @@ describe("diff surface style", () => {
   it("derives desktop light diff chrome variables from the theme scheme", () => {
     expect(diffSurfaceStyle(diffSurfaceThemeTokens("light"))).toMatchObject({
       "--diff-add-bg-strong": "rgba(6, 125, 23, 0.2)",
-      "--diff-bg-buffer": "#ebecf0",
-      "--diff-bg-context": "#f5f8fe",
-      "--diff-bg-gutter": "#f5f8fe",
-      "--diff-bg-separator": "#e1eaff",
+      "--diff-bg-buffer": "#f1f1f3",
+      "--diff-bg-context": "#ffffff",
+      "--diff-bg-gutter": "#ffffff",
+      "--diff-bg-separator": "#e5e5e8",
       "--diff-del-bg-strong": "rgba(222, 27, 46, 0.18)",
       "--diff-gutter": "#aeb3c2",
-      "--diff-hunk-bg": "#ebecf0",
+      "--diff-hunk-bg": "#f1f1f3",
       "--diff-token-comment": "#8C8C8C",
       "--diff-token-keyword": "#0033B3",
       "--diff-token-number": "#1750EB",

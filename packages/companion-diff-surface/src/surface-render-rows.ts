@@ -1,4 +1,9 @@
-import { parsePatch } from "diff";
+import { diffWordsWithSpace, parsePatch } from "diff";
+
+export type SurfaceTextRange = {
+  readonly end: number;
+  readonly start: number;
+};
 
 export type SurfaceContextRow = {
   readonly kind: "context";
@@ -9,11 +14,15 @@ export type SurfaceContextRow = {
 
 export type SurfaceDiffRow =
   | {
+      readonly changedRanges?: readonly SurfaceTextRange[];
+      readonly inlineChange?: true;
       readonly kind: "addition";
       readonly newLineNumber: number;
       readonly text: string;
     }
   | {
+      readonly changedRanges?: readonly SurfaceTextRange[];
+      readonly inlineChange?: true;
       readonly kind: "deletion";
       readonly oldLineNumber: number;
       readonly text: string;
@@ -128,7 +137,7 @@ export function parsePatchRows({
     }
   }
 
-  return { additions, deletions, rows };
+  return { additions, deletions, rows: withInlineChangeRanges(rows) };
 }
 
 export function splitTextLines(text: string): readonly string[] {
@@ -197,4 +206,172 @@ function hunkRange(start: number, lineCount: number): string {
 
 function lineText(line: string): string {
   return line.endsWith("\n") ? line.slice(0, -1) : line;
+}
+
+function withInlineChangeRanges(
+  rows: readonly SurfaceDiffRow[]
+): readonly SurfaceDiffRow[] {
+  const annotatedRows: SurfaceDiffRow[] = [];
+  let index = 0;
+
+  while (index < rows.length) {
+    const row = rows[index];
+
+    if (!row || (row.kind !== "deletion" && row.kind !== "addition")) {
+      if (row) {
+        annotatedRows.push(row);
+      }
+      index += 1;
+      continue;
+    }
+
+    const block: Array<
+      Extract<SurfaceDiffRow, { readonly kind: "addition" | "deletion" }>
+    > = [];
+
+    while (index < rows.length) {
+      const candidate = rows[index];
+
+      if (
+        !candidate ||
+        (candidate.kind !== "deletion" && candidate.kind !== "addition")
+      ) {
+        break;
+      }
+
+      block.push(candidate);
+      index += 1;
+    }
+
+    annotatedRows.push(...annotateChangeBlock(block));
+  }
+
+  return annotatedRows;
+}
+
+function annotateChangeBlock(
+  rows: readonly Extract<SurfaceDiffRow, { readonly kind: "addition" | "deletion" }>[]
+): readonly SurfaceDiffRow[] {
+  const deletions = rows.filter((row) => row.kind === "deletion");
+  const additions = rows.filter((row) => row.kind === "addition");
+
+  if (deletions.length === 0 || additions.length === 0) {
+    return rows;
+  }
+
+  const deletionByLine = new Map<number, InlineChangeAnnotation>();
+  const additionByLine = new Map<number, InlineChangeAnnotation>();
+  const pairCount = Math.min(deletions.length, additions.length);
+
+  for (let index = 0; index < pairCount; index += 1) {
+    const deletion = deletions[index];
+    const addition = additions[index];
+
+    if (!deletion || !addition) {
+      continue;
+    }
+
+    const ranges = inlineChangeRanges(deletion.text, addition.text);
+
+    deletionByLine.set(deletion.oldLineNumber, {
+      changedRanges: ranges.deletionRanges,
+      inlineChange: true
+    });
+    additionByLine.set(addition.newLineNumber, {
+      changedRanges: ranges.additionRanges,
+      inlineChange: true
+    });
+  }
+
+  return rows.map((row) => {
+    if (row.kind === "deletion") {
+      const annotation = deletionByLine.get(row.oldLineNumber);
+      return annotation ? annotatedChangeRow(row, annotation) : row;
+    }
+
+    const annotation = additionByLine.get(row.newLineNumber);
+    return annotation ? annotatedChangeRow(row, annotation) : row;
+  });
+}
+
+type InlineChangeAnnotation = {
+  readonly changedRanges: readonly SurfaceTextRange[];
+  readonly inlineChange: true;
+};
+
+function annotatedChangeRow<
+  Row extends Extract<SurfaceDiffRow, { readonly kind: "addition" | "deletion" }>
+>(row: Row, annotation: InlineChangeAnnotation): Row {
+  return {
+    ...row,
+    ...(annotation.changedRanges.length > 0
+      ? { changedRanges: annotation.changedRanges }
+      : {}),
+    inlineChange: true
+  };
+}
+
+function inlineChangeRanges(
+  oldText: string,
+  newText: string
+): {
+  readonly additionRanges: readonly SurfaceTextRange[];
+  readonly deletionRanges: readonly SurfaceTextRange[];
+} {
+  if (oldText.length + newText.length > 20_000) {
+    return { additionRanges: [], deletionRanges: [] };
+  }
+
+  const additionRanges: SurfaceTextRange[] = [];
+  const deletionRanges: SurfaceTextRange[] = [];
+  let additionOffset = 0;
+  let deletionOffset = 0;
+
+  for (const part of diffWordsWithSpace(oldText, newText)) {
+    const length = part.value.length;
+
+    if (part.added === true) {
+      additionRanges.push({ end: additionOffset + length, start: additionOffset });
+      additionOffset += length;
+      continue;
+    }
+
+    if (part.removed === true) {
+      deletionRanges.push({ end: deletionOffset + length, start: deletionOffset });
+      deletionOffset += length;
+      continue;
+    }
+
+    additionOffset += length;
+    deletionOffset += length;
+  }
+
+  return {
+    additionRanges: mergeAdjacentRanges(additionRanges),
+    deletionRanges: mergeAdjacentRanges(deletionRanges)
+  };
+}
+
+function mergeAdjacentRanges(
+  ranges: readonly SurfaceTextRange[]
+): readonly SurfaceTextRange[] {
+  const merged: SurfaceTextRange[] = [];
+
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+
+    if (previous && previous.end >= range.start) {
+      merged[merged.length - 1] = {
+        end: Math.max(previous.end, range.end),
+        start: previous.start
+      };
+      continue;
+    }
+
+    if (range.start !== range.end) {
+      merged.push(range);
+    }
+  }
+
+  return merged;
 }

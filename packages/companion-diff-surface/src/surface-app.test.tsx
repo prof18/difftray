@@ -22,8 +22,10 @@ describe("diff surface app", () => {
     );
 
     expect(html).toContain('data-renderer="parsed"');
-    expect(html).toContain("&lt;script&gt;window.__xss = true&lt;/script&gt;");
-    expect(html).toContain("&lt;img src=x onerror=&quot;window.__xss = true&quot;&gt;");
+    expect(html).toContain("&lt;");
+    expect(html).toContain("script&gt;");
+    expect(html).toContain("img src=x onerror=&quot;");
+    expect(html).toContain("window.__xss = true");
     expect(html).toContain("javascript:alert(1)");
     expect(html).not.toContain("<script>window.__xss");
     expect(html).not.toContain("<img src=x");
@@ -88,7 +90,9 @@ describe("diff surface app", () => {
 
     expect(html).toContain('data-token-kind="string"');
     expect(html).toContain('data-token-kind="comment"');
-    expect(html).toContain("&lt;script&gt;window.__xss = true&lt;/script&gt;");
+    expect(html).toContain("&lt;");
+    expect(html).toContain("script&gt;");
+    expect(html).toContain("window.__xss = ");
     expect(html).not.toContain("<script>window.__xss");
     expect(html).not.toContain("<img src=x");
   });
@@ -126,6 +130,60 @@ describe("diff surface app", () => {
     expect(html).not.toContain("diff-surface__patch");
   });
 
+  it("renders comment cards on unchanged context lines", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          comments: [
+            {
+              body: "This context line needs a note.",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              diffHash: "hash-1",
+              id: "comment-context",
+              lineEnd: 2,
+              lineStart: 2,
+              path: "README.md",
+              side: "additions",
+              updatedAt: "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          patch: [
+            "diff --git a/README.md b/README.md",
+            "--- a/README.md",
+            "+++ b/README.md",
+            "@@ -1,3 +1,3 @@",
+            " Keep this",
+            " Add a note here",
+            "-Remove this",
+            "+Add this"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-comment-id="comment-context"');
+    expect(html).toContain("This context line needs a note.");
+    expect(html).toContain("New line 2");
+  });
+
+  it("shows the file path without exposing the internal diff hash", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          diffHash: "difftray-file-diff-v1:internal-cache-key",
+          path: "shared/src/commonMain/kotlin/com/prof18/feedflow/shared/FeedSyncIosWorker.kt"
+        })}
+      />
+    );
+
+    expect(html).toContain("diff-surface__path");
+    expect(html).toContain(
+      "shared/src/commonMain/kotlin/com/prof18/feedflow/shared/FeedSyncIosWorker.kt"
+    );
+    expect(html).not.toContain("diff-surface__meta");
+    expect(html).not.toContain("difftray-file-diff-v1:internal-cache-key");
+  });
+
   it("renders split mode with separate old and new cells", () => {
     const html = renderToStaticMarkup(
       <DiffSurfaceApp
@@ -148,6 +206,59 @@ describe("diff surface app", () => {
     expect(html).toContain('data-split-side="deletions"');
     expect(html).toContain('data-split-side="additions"');
     expect(html).toContain("diff-surface__split-cell");
+  });
+
+  it("renders paired modified lines with inline word highlights", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          diffMode: "split",
+          path: "src/example.ts",
+          patch: [
+            "diff --git a/src/example.ts b/src/example.ts",
+            "--- a/src/example.ts",
+            "+++ b/src/example.ts",
+            "@@ -55 +55 @@",
+            '-expect(getByText("Git changes · 67/300 reviewed")).toBeTruthy();',
+            '+expect(getByText("Git changes")).toBeTruthy();'
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-inline-change="true"');
+    expect(html).toContain('data-row-kind="paired_inline_change"');
+    expect(html.match(/data-row-kind="paired_inline_change"/g)).toHaveLength(1);
+    expect(html).not.toContain('data-row-kind="deletion"');
+    expect(html).not.toContain('data-row-kind="addition"');
+    expect(html).toContain('class="diff-surface__line-change"');
+    expect(html).toContain("reviewed");
+  });
+
+  it("keeps unpaired additions on their own split row with an empty deletion side", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={state({
+          diffMode: "split",
+          path: "src/example.ts",
+          patch: [
+            "diff --git a/src/example.ts b/src/example.ts",
+            "--- a/src/example.ts",
+            "+++ b/src/example.ts",
+            "@@ -1,2 +1,4 @@",
+            " keep",
+            "+const inserted = true;",
+            "+const secondInserted = true;",
+            " done"
+          ].join("\n")
+        })}
+      />
+    );
+
+    expect(html).toContain('data-row-kind="addition"');
+    expect(html).not.toContain('data-row-kind="paired_inline_change"');
+    expect(html).toContain('<div class="diff-surface__split-cell" data-split-side="deletions"></div>');
+    expect(html).toContain("inserted");
   });
 
   it("marks rendered rows with per-side line targets for host scrolling", () => {
@@ -258,6 +369,15 @@ describe("diff surface app", () => {
 
     expect(highlightedRows).toHaveLength(2);
   });
+
+  it("can omit the bundled file header for native chrome", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp state={state({ showFileHeader: false })} />
+    );
+
+    expect(html).not.toContain("diff-surface__header");
+    expect(html).toContain('data-renderer="parsed"');
+  });
 });
 
 function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppState {
@@ -269,6 +389,7 @@ function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppStat
     patch:
       "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
     path: "README.md",
+    showFileHeader: true,
     theme: {
       accent: "#a34d2d",
       addedBackground: "rgba(56, 142, 60, 0.16)",

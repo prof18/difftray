@@ -259,6 +259,7 @@ export type BranchRefsResponse = {
 
 export type RecentCommitsResponse = {
   readonly commits: readonly {
+    readonly authoredAt?: string;
     readonly sha: string;
     readonly shortSha: string;
     readonly subject: string;

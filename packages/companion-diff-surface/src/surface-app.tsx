@@ -9,7 +9,7 @@ import {
   type DiffSurfaceScrollTarget,
   type DiffSurfaceThemeTokens
 } from "./surface-bridge.js";
-import { SurfaceDiffRowView } from "./surface-rows.js";
+import { SurfaceDiffRowView, surfaceDiffDisplayRows } from "./surface-rows.js";
 import {
   createSurfaceFileDiffOptions,
   createSurfaceRenderModel,
@@ -29,6 +29,7 @@ export type DiffSurfaceAppState = {
   readonly patch: string;
   readonly path: string;
   readonly scrollTo?: DiffSurfaceScrollTarget;
+  readonly showFileHeader: boolean;
   readonly theme: DiffSurfaceThemeTokens;
   readonly wrapLines: boolean;
 };
@@ -63,6 +64,10 @@ export function DiffSurfaceApp({
     model.kind === "diff" &&
     Math.max(model.fileDiff.additionLines.length, model.fileDiff.deletionLines.length) <
       SYNTAX_HIGHLIGHT_LINE_LIMIT;
+  const displayRows =
+    model.kind === "diff"
+      ? surfaceDiffDisplayRows(model.fileDiff.rows, state.diffMode)
+      : [];
 
   useEffect(() => {
     if (!scrollTo) {
@@ -82,10 +87,11 @@ export function DiffSurfaceApp({
       data-wrap-lines={String(state.wrapLines)}
       style={diffSurfaceStyle(state.theme)}
     >
-      <header className="diff-surface__header">
-        <div className="diff-surface__path">{state.path}</div>
-        <div className="diff-surface__meta">{state.diffHash}</div>
-      </header>
+      {state.showFileHeader ? (
+        <header className="diff-surface__header">
+          <div className="diff-surface__path">{state.path}</div>
+        </header>
+      ) : null}
       {model.kind === "fallback" ? (
         <section className="diff-surface__fallback" role="status">
           <strong>{model.title}</strong>
@@ -98,7 +104,7 @@ export function DiffSurfaceApp({
           data-renderer="parsed"
           data-visual-theme={options.resolvedTheme}
         >
-          {model.fileDiff.rows.map((row, index) => (
+          {displayRows.map((row, index) => (
             <SurfaceDiffRowView
               annotations={annotations}
               diffMode={state.diffMode}

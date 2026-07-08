@@ -38,6 +38,7 @@ export type DiffSurfaceHostMessage =
   | {
       readonly diffMode: DiffSurfaceMode;
       readonly kind: "init";
+      readonly showFileHeader: boolean;
       readonly theme: DiffSurfaceThemeTokens;
       readonly wrapLines: DiffSurfaceWrapLines;
     }
@@ -117,19 +118,25 @@ export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null 
 }
 
 function parseInitMessage(input: Record<string, unknown>): DiffSurfaceHostMessage | null {
-  if (!hasOnlyKeys(input, ["diffMode", "kind", "theme", "wrapLines"])) {
+  if (!hasOnlyKeys(input, ["diffMode", "kind", "showFileHeader", "theme", "wrapLines"])) {
     return null;
   }
 
   const theme = parseThemeTokens(input.theme);
 
-  if (!isDiffMode(input.diffMode) || !theme || typeof input.wrapLines !== "boolean") {
+  if (
+    !isDiffMode(input.diffMode) ||
+    !theme ||
+    typeof input.showFileHeader !== "boolean" ||
+    typeof input.wrapLines !== "boolean"
+  ) {
     return null;
   }
 
   return {
     diffMode: input.diffMode,
     kind: "init",
+    showFileHeader: input.showFileHeader,
     theme,
     wrapLines: input.wrapLines
   };

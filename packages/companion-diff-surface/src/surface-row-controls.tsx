@@ -5,6 +5,11 @@ import {
 } from "./surface-outbound.js";
 import { CodeLine } from "./surface-syntax.js";
 
+type TextRange = {
+  readonly end: number;
+  readonly start: number;
+};
+
 let activeGutterSelection: DiffSurfaceLineSelectionTarget | null = null;
 let suppressNextGutterClick = false;
 
@@ -76,6 +81,7 @@ export function LineNumberButton({
 }
 
 export function LineContentButton({
+  changedRanges,
   filePath,
   glyph,
   message,
@@ -83,6 +89,7 @@ export function LineContentButton({
   syntaxHighlight,
   text
 }: {
+  readonly changedRanges?: readonly TextRange[] | undefined;
   readonly filePath: string;
   readonly glyph: string;
   readonly message: DiffSurfaceMessage | null;
@@ -101,7 +108,12 @@ export function LineContentButton({
       type="button"
     >
       <span className="diff-surface__glyph">{glyph}</span>
-      <CodeLine highlight={syntaxHighlight} path={filePath} text={text} />
+      <CodeLine
+        changedRanges={changedRanges}
+        highlight={syntaxHighlight}
+        path={filePath}
+        text={text}
+      />
     </button>
   );
 }

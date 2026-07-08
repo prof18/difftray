@@ -83,6 +83,15 @@ export function annotationsForRow(
     );
   }
 
+  if (row.kind === "context") {
+    return annotations.filter(
+      (annotation) =>
+        (annotation.side === "additions" &&
+          annotation.lineNumber === row.newLineNumber) ||
+        (annotation.side === "deletions" && annotation.lineNumber === row.oldLineNumber)
+    );
+  }
+
   return [];
 }
 
