@@ -1097,7 +1097,7 @@ async function companionStateView(): Promise<CompanionStateView> {
       status: "stopped"
     } as const);
   const port = lifecycleState.status === "running" ? lifecycleState.port : undefined;
-  const addresses = port ? await companionAddressViews(port) : [];
+  const addresses = port ? companionAddressViews(port) : [];
   const activeSession =
     port === undefined ? null : getCompanionAuthManager().getActivePairingSession();
 
@@ -1129,8 +1129,7 @@ async function companionPairingStateView(
   }
 
   const identity = companionServerIdentity();
-  const addresses =
-    existingAddresses ?? (await companionAddressViews(lifecycleState.port));
+  const addresses = existingAddresses ?? companionAddressViews(lifecycleState.port);
 
   return {
     code: session.code,
@@ -1162,19 +1161,13 @@ function companionDeviceView(
   };
 }
 
-async function companionAddressViews(
-  port: number
-): Promise<readonly CompanionAddressView[]> {
+function companionAddressViews(port: number): readonly CompanionAddressView[] {
   const localAddresses = Object.values(networkInterfaces())
     .flatMap((entries) => entries ?? [])
     .filter((entry) => entry.family === "IPv4" && !entry.internal)
     .map((entry) => companionAddressView(entry.address, port));
-  const magicDnsNames = await resolveTailscaleMagicDnsNames();
 
-  return uniqueCompanionAddresses([
-    ...localAddresses,
-    ...magicDnsNames.map((host) => companionAddressView(host, port, true))
-  ]);
+  return uniqueCompanionAddresses(localAddresses);
 }
 
 function companionAddressView(
@@ -1215,59 +1208,6 @@ function isTailscaleIpv4Address(address: string): boolean {
     parts[1] >= 64 &&
     parts[1] <= 127
   );
-}
-
-function resolveTailscaleMagicDnsNames(): Promise<readonly string[]> {
-  return new Promise((resolve) => {
-    const child = spawn("tailscale", ["status", "--json"], {
-      stdio: ["ignore", "pipe", "ignore"]
-    });
-    const chunks: Buffer[] = [];
-    const timer = setTimeout(() => {
-      child.kill();
-      resolve([]);
-    }, 1_000);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolve([]);
-    });
-    child.once("close", (code) => {
-      clearTimeout(timer);
-
-      if (code !== 0) {
-        resolve([]);
-        return;
-      }
-
-      resolve(parseTailscaleMagicDnsNames(Buffer.concat(chunks).toString("utf8")));
-    });
-  });
-}
-
-function parseTailscaleMagicDnsNames(rawJson: string): readonly string[] {
-  try {
-    const parsed = JSON.parse(rawJson) as unknown;
-
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "Self" in parsed &&
-      typeof parsed.Self === "object" &&
-      parsed.Self !== null &&
-      "DNSName" in parsed.Self &&
-      typeof parsed.Self.DNSName === "string"
-    ) {
-      return [parsed.Self.DNSName.replace(/\.$/, "")].filter((name) => name.length > 0);
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
 }
 
 function emitCompanionStateChanged(): void {

@@ -122,6 +122,7 @@ export function SettingsPanel({
 
           {activePairing ? (
             <CompanionPairingDialog
+              addresses={companionState.addresses}
               disabled={disabled}
               pairing={activePairing}
               onCancel={onCancelCompanionPairing}
@@ -218,6 +219,7 @@ function CompanionSettingsSection({
   readonly onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
   const enabled = companionState.enabled || appSettings.companionEnabled;
+  const companionAddresses = companionAddressLabels(companionState.addresses);
 
   return (
     <SettingsSection title="Phone companion">
@@ -234,6 +236,16 @@ function CompanionSettingsSection({
               <div className={styles.companionStatusLabel}>
                 {companionStatusLabel(companionState)}
               </div>
+              {companionAddresses.length > 0 ? (
+                <div className={styles.companionAddressList}>
+                  {companionAddresses.map((address) => (
+                    <div key={address.value}>
+                      <span>{address.label}</span>
+                      <code>{address.value}</code>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {companionState.errorMessage ? (
                 <div className={styles.companionError}>{companionState.errorMessage}</div>
               ) : null}
@@ -326,11 +338,13 @@ function CompanionSettingsSection({
 }
 
 function CompanionPairingDialog({
+  addresses,
   disabled,
   pairing,
   onCancel,
   onGenerateNewCode
 }: {
+  readonly addresses: readonly CompanionAddressView[];
   readonly disabled: boolean;
   readonly pairing: CompanionPairingStateView;
   readonly onCancel: () => void;
@@ -339,6 +353,7 @@ function CompanionPairingDialog({
   const [qrDataUrl, setQrDataUrl] = useState<string | undefined>();
   const [now, setNow] = useState(() => Date.now());
   const countdown = pairingCountdown(pairing.expiresAt, now);
+  const pairingAddresses = pairingAddressLabels(pairing, addresses);
 
   useEffect(() => {
     let cancelled = false;
@@ -397,6 +412,17 @@ function CompanionPairingDialog({
           <strong>{pairing.code}</strong>
           <small>{countdown}</small>
         </div>
+        {pairingAddresses.length > 0 ? (
+          <div className={styles.companionPairingAddresses}>
+            <span>Computer address</span>
+            {pairingAddresses.map((address) => (
+              <div key={address.value}>
+                <small>{address.label}</small>
+                <code>{address.value}</code>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className={styles.companionDialogActions}>
           <button
             className={styles.secondaryButton}
@@ -604,6 +630,44 @@ function companionStatusLabel(state: CompanionStateView): string {
   }
 
   return "Server stopped";
+}
+
+function companionAddressLabels(
+  addresses: readonly CompanionAddressView[]
+): readonly { readonly label: string; readonly value: string }[] {
+  return addresses.map((address) => ({
+    label: address.isTailscale ? "Tailscale" : "Local network",
+    value: address.address
+  }));
+}
+
+function pairingAddressLabels(
+  pairing: CompanionPairingStateView,
+  addresses: readonly CompanionAddressView[]
+): readonly { readonly label: string; readonly value: string }[] {
+  const knownAddresses = new Map(
+    addresses.map((address) => [normalizeCompanionAddress(address.address), address])
+  );
+
+  return pairing.qrPayload.addresses.map((rawAddress) => {
+    const value = normalizeCompanionAddress(rawAddress);
+    const knownAddress = knownAddresses.get(value);
+
+    return {
+      label: knownAddress?.isTailscale ? "Tailscale" : "Local network",
+      value
+    };
+  });
+}
+
+function normalizeCompanionAddress(address: string): string {
+  try {
+    const parsed = new URL(address);
+
+    return parsed.host;
+  } catch {
+    return address;
+  }
 }
 
 function pairingCountdown(expiresAt: string, now: number): string {

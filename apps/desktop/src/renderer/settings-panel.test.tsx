@@ -22,6 +22,13 @@ describe("SettingsPanel", () => {
         })}
         companionPairing={null}
         companionState={companionState({
+          addresses: [
+            {
+              address: "192.168.1.24:48620",
+              host: "192.168.1.24",
+              isTailscale: false
+            }
+          ],
           devices: [
             {
               createdAt: "2026-07-02T10:00:00.000Z",
@@ -63,6 +70,8 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Review");
     expect(html).toContain("Phone companion");
     expect(html).toContain("Port 48620");
+    expect(html).toContain("Local network");
+    expect(html).toContain("192.168.1.24:48620");
     expect(html).toContain("Marco iPhone");
     expect(html).toContain("Last seen");
     expect(html).toContain("Revoke");
@@ -180,7 +189,7 @@ describe("SettingsPanel", () => {
           code: "123456",
           expiresAt: "2099-07-02T12:05:00.000Z",
           qrPayload: {
-            addresses: ["http://127.0.0.1:48620"],
+            addresses: ["http://192.168.1.24:48620", "100.69.19.43:48620"],
             expiresAt: "2099-07-02T12:05:00.000Z",
             kind: "difftray-pairing",
             protocolVersion: 1,
@@ -191,6 +200,18 @@ describe("SettingsPanel", () => {
           }
         }}
         companionState={companionState({
+          addresses: [
+            {
+              address: "192.168.1.24:48620",
+              host: "192.168.1.24",
+              isTailscale: false
+            },
+            {
+              address: "100.69.19.43:48620",
+              host: "100.69.19.43",
+              isTailscale: true
+            }
+          ],
           enabled: true,
           port: 48620,
           status: "running"
@@ -211,6 +232,11 @@ describe("SettingsPanel", () => {
     expect(html).toContain('aria-label="Pair new phone"');
     expect(html).toContain("123456");
     expect(html).toContain("Expires in");
+    expect(html).toContain("Computer address");
+    expect(html).toContain("192.168.1.24:48620");
+    expect(html).toContain("100.69.19.43:48620");
+    expect(html).toContain("Tailscale");
+    expect(html).not.toContain("difftray.tailnet.ts.net");
     expect(html).toContain("Generate new code");
     expect(html).toContain("Pairing QR code");
   });

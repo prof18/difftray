@@ -148,7 +148,8 @@
 
 .settingsContent {
   min-height: 0;
-  overflow: auto;
+  max-height: min(720px, calc(100vh - 64px));
+  overflow-y: auto;
   padding: 24px 32px;
 }
 
@@ -240,6 +241,14 @@
   padding: 12px 14px;
 }
 
+.companionStatusRow > div {
+  min-width: 0;
+}
+
+.companionStatusRow .secondaryButton {
+  flex: 0 0 auto;
+}
+
 .companionStatusLabel,
 .companionDeviceTitle {
   color: var(--text-2);
@@ -251,6 +260,37 @@
   margin-top: 4px;
   color: var(--danger, var(--warn));
   font-size: 12px;
+}
+
+.companionAddressList {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.companionAddressList div,
+.companionPairingAddresses div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.companionAddressList span,
+.companionPairingAddresses span,
+.companionPairingAddresses small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.companionAddressList code,
+.companionPairingAddresses code {
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .companionPairRequest {
@@ -413,6 +453,19 @@
   font-size: 32px;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.companionPairingAddresses {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 12px;
+}
+
+.companionPairingAddresses > span {
+  font-weight: 600;
 }
 
 .companionDialogActions {
