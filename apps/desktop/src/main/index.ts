@@ -450,7 +450,7 @@ handleTrusted(
     return appSettingsView(getStorage().getAppSettings());
   }
 );
-handleTrusted("companion:getState", async (): Promise<CompanionStateView> => {
+handleTrusted("companion:getState", (): CompanionStateView => {
   return companionStateView();
 });
 handleTrusted(
@@ -469,19 +469,19 @@ handleTrusted(
     return companionStateView();
   }
 );
-handleTrusted("companion:startPairing", async (): Promise<CompanionPairingStateView> => {
+handleTrusted("companion:startPairing", (): CompanionPairingStateView => {
   if (getCompanionLifecycleController().state.status !== "running") {
     throw new Error("Companion server is not running.");
   }
 
   const session = getCompanionAuthManager().startPairing();
-  const pairing = await companionPairingStateView(session);
+  const pairing = companionPairingStateView(session);
 
   emitCompanionStateChanged();
 
   return pairing;
 });
-handleTrusted("companion:cancelPairing", async (): Promise<CompanionStateView> => {
+handleTrusted("companion:cancelPairing", (): CompanionStateView => {
   getCompanionAuthManager().cancelPairing();
   emitCompanionStateChanged();
 
@@ -489,7 +489,7 @@ handleTrusted("companion:cancelPairing", async (): Promise<CompanionStateView> =
 });
 handleTrusted(
   "companion:respondToPairRequest",
-  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+  (_event: IpcMainInvokeEvent, input: unknown): CompanionStateView => {
     const id = readStringProperty(input, "id");
     const approved = readBooleanProperty(input, "approved");
 
@@ -506,7 +506,7 @@ handleTrusted(
 );
 handleTrusted(
   "companion:revokeDevice",
-  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+  (_event: IpcMainInvokeEvent, input: unknown): CompanionStateView => {
     const id = readStringProperty(input, "id");
 
     getStorage().revokeCompanionDevice(id);
@@ -1088,7 +1088,7 @@ async function syncCompanionLifecycleWithSettings(): Promise<void> {
   }
 }
 
-async function companionStateView(): Promise<CompanionStateView> {
+function companionStateView(): CompanionStateView {
   const settings = getStorage().getAppSettings();
   const lifecycleState =
     companionLifecycleController?.state ??
@@ -1103,9 +1103,7 @@ async function companionStateView(): Promise<CompanionStateView> {
 
   return {
     activePairing:
-      activeSession && port
-        ? await companionPairingStateView(activeSession, addresses)
-        : null,
+      activeSession && port ? companionPairingStateView(activeSession, addresses) : null,
     addresses,
     devices: getStorage().listCompanionDevices().map(companionDeviceView),
     enabled: settings.companionEnabled,
@@ -1118,10 +1116,10 @@ async function companionStateView(): Promise<CompanionStateView> {
   };
 }
 
-async function companionPairingStateView(
+function companionPairingStateView(
   session: CompanionPairingSessionView,
   existingAddresses?: readonly CompanionAddressView[]
-): Promise<CompanionPairingStateView> {
+): CompanionPairingStateView {
   const lifecycleState = getCompanionLifecycleController().state;
 
   if (lifecycleState.status !== "running") {
@@ -1211,17 +1209,17 @@ function isTailscaleIpv4Address(address: string): boolean {
 }
 
 function emitCompanionStateChanged(): void {
-  void companionStateView()
-    .then((state) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) {
-          window.webContents.send("companion:stateChanged", state);
-        }
+  try {
+    const state = companionStateView();
+
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send("companion:stateChanged", state);
       }
-    })
-    .catch((caughtError: unknown) => {
-      console.error("Companion state emission failed", caughtError);
-    });
+    }
+  } catch (caughtError) {
+    console.error("Companion state emission failed", caughtError);
+  }
 }
 
 function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroadcaster {

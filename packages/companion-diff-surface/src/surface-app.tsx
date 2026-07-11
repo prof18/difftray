@@ -1,8 +1,5 @@
 import type { ReviewCommentView } from "@difftray/companion-protocol";
-import {
-  FileDiff,
-  VirtualizerContext
-} from "@pierre/diffs/react";
+import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import {
   Virtualizer as DiffsVirtualizer,
   type DiffLineAnnotation,
@@ -110,7 +107,7 @@ export function DiffSurfaceApp({
           );
         },
         onLineSelected: (range: SelectedLineRange | null) => {
-          if (!range || !range.side || (range.endSide && range.endSide !== range.side)) {
+          if (!range?.side || (range.endSide && range.endSide !== range.side)) {
             return;
           }
 
@@ -163,10 +160,7 @@ export function DiffSurfaceApp({
       if (surface && surface.scrollHeight > surface.clientHeight) {
         surface.scrollTo({
           behavior: "instant",
-          top: Math.max(
-            0,
-            (targetScroll.line - 1) * surfaceVirtualFileMetrics.lineHeight
-          )
+          top: Math.max(0, (targetScroll.line - 1) * surfaceVirtualFileMetrics.lineHeight)
         });
       }
 
@@ -243,7 +237,7 @@ function scrollTargetSelector({ line, side }: DiffSurfaceScrollTarget): string {
 }
 
 function lineTextFromElement(element: HTMLElement): string {
-  return element.textContent?.replace(/\n+/g, "\n").trimEnd() ?? "";
+  return element.textContent.replace(/\n+/g, "\n").trimEnd();
 }
 
 function lineTextFromFileDiff(
@@ -256,9 +250,7 @@ function lineTextFromFileDiff(
   }
 
   const lines =
-    side === "additions"
-      ? model.fileDiff.additionLines
-      : model.fileDiff.deletionLines;
+    side === "additions" ? model.fileDiff.additionLines : model.fileDiff.deletionLines;
 
   return lines[lineNumber - 1] ?? "";
 }

@@ -9,10 +9,7 @@ import {
   type VirtualFileMetrics
 } from "@pierre/diffs";
 
-import type {
-  DiffSurfaceDraftRange,
-  DiffSurfaceMode
-} from "./surface-bridge.js";
+import type { DiffSurfaceDraftRange, DiffSurfaceMode } from "./surface-bridge.js";
 import {
   intellijIslandsDiffTheme,
   registerIntellijIslandsDiffThemes

@@ -225,9 +225,8 @@ function withInlineChangeRanges(
       continue;
     }
 
-    const block: Array<
-      Extract<SurfaceDiffRow, { readonly kind: "addition" | "deletion" }>
-    > = [];
+    const block: Extract<SurfaceDiffRow, { readonly kind: "addition" | "deletion" }>[] =
+      [];
 
     while (index < rows.length) {
       const candidate = rows[index];
@@ -330,13 +329,13 @@ function inlineChangeRanges(
   for (const part of diffWordsWithSpace(oldText, newText)) {
     const length = part.value.length;
 
-    if (part.added === true) {
+    if (part.added) {
       additionRanges.push({ end: additionOffset + length, start: additionOffset });
       additionOffset += length;
       continue;
     }
 
-    if (part.removed === true) {
+    if (part.removed) {
       deletionRanges.push({ end: deletionOffset + length, start: deletionOffset });
       deletionOffset += length;
       continue;

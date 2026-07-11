@@ -204,12 +204,12 @@ function supportsSyntaxTokens(path: string): boolean {
 function splitLineSegments(
   text: string,
   changedRanges: readonly TextRange[]
-): ReadonlyArray<{ readonly changed: boolean; readonly text: string }> {
+): readonly { readonly changed: boolean; readonly text: string }[] {
   if (changedRanges.length === 0) {
     return [{ changed: false, text }];
   }
 
-  const segments: Array<{ readonly changed: boolean; readonly text: string }> = [];
+  const segments: { readonly changed: boolean; readonly text: string }[] = [];
   let cursor = 0;
 
   for (const range of changedRanges) {

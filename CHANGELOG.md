@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.7 - 2026-07-11
+
+### Improved
+
+- Improved review-workflow reliability and internal foundations.
+
 ## 0.0.6 - 2026-06-27
 
 ### Added

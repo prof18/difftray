@@ -332,7 +332,10 @@ async function surfaceLineDiagnostics(page) {
       path: surface.querySelector(".diff-surface__path")?.textContent ?? null,
       scrollHeight: surface.scrollHeight,
       scrollTop: surface.scrollTop,
-      text: roots.map((root) => root.textContent ?? "").join("\n").slice(0, 500)
+      text: roots
+        .map((root) => root.textContent ?? "")
+        .join("\n")
+        .slice(0, 500)
     };
   });
 }
@@ -349,12 +352,18 @@ async function expectHostileFixtureIsInert(page) {
 
     return {
       hostileTextVisible: text.includes("<img src=x onerror="),
-      injectedImages: roots.reduce((count, root) => count + root.querySelectorAll("img").length, 0),
+      injectedImages: roots.reduce(
+        (count, root) => count + root.querySelectorAll("img").length,
+        0
+      ),
       injectedJavascriptLinks: roots.reduce(
         (count, root) => count + root.querySelectorAll('a[href^="javascript:"]').length,
         0
       ),
-      injectedScripts: roots.reduce((count, root) => count + root.querySelectorAll("script").length, 0),
+      injectedScripts: roots.reduce(
+        (count, root) => count + root.querySelectorAll("script").length,
+        0
+      ),
       xssExecuted: window.__difftrayHarnessXss === true
     };
   });
