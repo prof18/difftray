@@ -1,0 +1,32 @@
+{
+  "name": "@difftray/companion-diff-surface",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "vite build && node scripts/rename-build-output.mjs",
+    "dev": "vite dev --host 127.0.0.1",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@difftray/companion-protocol": "workspace:*",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@pierre/diffs": "1.2.3",
+    "diff": "8.0.3",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.2",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^3.2.4"
+  }
+}

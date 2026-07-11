@@ -36,11 +36,39 @@ A few things came out of that:
 - Mark files reviewed and Difftray will flag them if they change later.
 - Leave line-level review notes and copy a ready-made prompt to paste back into your favorite agent or AI tool.
 - Drive review from the keyboard, command palette, or dense file list controls.
+- Pair Difftray Companion on a phone to review the same local projects from your
+  couch, tablet stand, or another machine on your private network.
 - Open the selected file in the system default editor or an installed common
   editor preset.
 - Configure app appearance, default diff mode, line wrapping, generated-file
-  visibility, drift notifications, and editor launch behavior.
+  visibility, drift notifications, phone companion access, and editor launch
+  behavior.
 - Stay local by design: no fetching, pushing, staging, editing, or repository metadata writes.
+
+## Phone Companion
+
+The phone companion server is off by default. Enable it from Settings ->
+Phone companion, then pair a device with the QR code or six-digit manual code.
+
+When enabled, Difftray starts a local HTTP/WebSocket server on the preferred
+companion port, falling back within `48620-48629` if the preferred port is busy,
+and advertises `_difftray._tcp` with Bonjour/mDNS. macOS may show a local-network
+or firewall prompt the first time the server binds; allow it if you want phones
+on the same trusted network to find the Mac.
+
+Paired devices can see the projects already known to Difftray, their local
+repository paths, review targets, file paths, diff text or binary markers,
+review state, review comments, and generated comment reports. They can mark or
+unmark files as reviewed, create/edit/delete comments, change the active diff
+target, and receive encrypted workspace-change events. The companion never gets
+Git credentials, shell access, staging/push/fetch controls, or arbitrary file
+system access.
+
+Use the companion on networks you trust. Same-LAN discovery is automatic when
+mDNS works; Tailscale MagicDNS addresses are also included when available, which
+is the recommended path for private cross-network use. See
+[`docs/companion-protocol.md`](docs/companion-protocol.md) for the protocol and
+security model.
 
 ## Screenshots
 

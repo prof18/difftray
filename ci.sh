@@ -7,4 +7,5 @@ pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm --filter @difftray/companion-diff-surface test:browser
 pnpm test:visual

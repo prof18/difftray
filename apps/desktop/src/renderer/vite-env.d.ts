@@ -5,9 +5,14 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
     readonly checkForUpdates: () => Promise<UpdatePhase>;
+    readonly getCompanionState: () => Promise<CompanionStateView>;
     readonly getUpdatePhase: () => Promise<UpdatePhase>;
     readonly installAndRelaunch: () => Promise<void>;
+    readonly onCompanionStateChanged: (
+      listener: CompanionStateChangedListener
+    ) => () => void;
     readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly copyReviewCommentsReport: (
@@ -29,7 +34,13 @@ declare global {
       projectId: string
     ) => Promise<readonly RecentCommitView[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+    readonly respondToCompanionPairRequest: (
+      input: RespondToCompanionPairRequestInput
+    ) => Promise<CompanionStateView>;
+    readonly revokeCompanionDevice: (id: string) => Promise<CompanionStateView>;
     readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
+    readonly setCompanionEnabled: (enabled: boolean) => Promise<CompanionStateView>;
+    readonly startCompanionPairing: () => Promise<CompanionPairingStateView>;
     readonly loadFileDiff: (
       input: LoadFileDiffInput
     ) => Promise<ReviewFileDiffContentView | null>;
@@ -64,8 +75,71 @@ declare global {
 
   type ThemeMode = "dark" | "light" | "system";
 
+  type CompanionStateChangedListener = (state: CompanionStateView) => void;
+
+  type CompanionAddressView = {
+    readonly address: string;
+    readonly host: string;
+    readonly isTailscale: boolean;
+  };
+
+  type CompanionDeviceView = {
+    readonly createdAt: string;
+    readonly id: string;
+    readonly lastSeenAt?: string;
+    readonly name: string;
+    readonly platform: string;
+    readonly publicKey: string;
+    readonly revokedAt?: string;
+  };
+
+  type CompanionPairingQrPayload = {
+    readonly addresses: readonly string[];
+    readonly expiresAt: string;
+    readonly kind: "difftray-pairing";
+    readonly protocolVersion: number;
+    readonly secret: string;
+    readonly serverId: string;
+    readonly serverName: string;
+    readonly serverPublicKey: string;
+  };
+
+  type CompanionPairingStateView = {
+    readonly code: string;
+    readonly expiresAt: string;
+    readonly qrPayload: CompanionPairingQrPayload;
+  };
+
+  type CompanionPendingPairRequestView = {
+    readonly deviceId: string;
+    readonly deviceName: string;
+    readonly devicePublicKey: string;
+    readonly devicePublicKeyFingerprint: string;
+    readonly expiresAt: string;
+    readonly id: string;
+    readonly platform: "android" | "ios";
+  };
+
+  type CompanionStateView = {
+    readonly activePairing: CompanionPairingStateView | null;
+    readonly addresses: readonly CompanionAddressView[];
+    readonly devices: readonly CompanionDeviceView[];
+    readonly enabled: boolean;
+    readonly errorMessage?: string;
+    readonly pendingPairRequests: readonly CompanionPendingPairRequestView[];
+    readonly port?: number;
+    readonly status: "error" | "running" | "stopped";
+  };
+
+  type RespondToCompanionPairRequestInput = {
+    readonly approved: boolean;
+    readonly id: string;
+  };
+
   type AppSettingsView = {
     readonly autoCollapseHunksOver: number;
+    readonly companionEnabled: boolean;
+    readonly companionPort: number;
     readonly defaultDiffMode: "split" | "unified";
     readonly editorArgs: string;
     readonly editorArgList: readonly string[];
@@ -364,6 +438,8 @@ declare global {
 
   type UpdateAppSettingsInput = {
     readonly autoCollapseHunksOver: number;
+    readonly companionEnabled: boolean;
+    readonly companionPort: number;
     readonly defaultDiffMode: "split" | "unified";
     readonly editorArgList?: readonly string[];
     readonly editorArgs?: string;

@@ -11,6 +11,7 @@ import { X } from "lucide-react";
 import styles from "./App.module.css";
 import {
   defaultAppSettings,
+  defaultCompanionState,
   defaultProjectSettings,
   defaultWorkspaceLoadStatus,
   delayedCommentSaveIndicatorMs,
@@ -119,6 +120,10 @@ export function App(): React.JSX.Element {
   >();
   const [commentReportCopyPending, setCommentReportCopyPending] = useState(false);
   const [commentToast, setCommentToast] = useState<string | undefined>();
+  const [companionPairing, setCompanionPairing] =
+    useState<CompanionPairingStateView | null>(null);
+  const [companionState, setCompanionState] =
+    useState<CompanionStateView>(defaultCompanionState);
   const [diffMode, setDiffMode] = useState<DiffMode>("split");
   const [diffSideFocus, setDiffSideFocus] = useState<DiffSideFocus>("both");
   const [error, setError] = useState<string | undefined>();
@@ -236,6 +241,32 @@ export function App(): React.JSX.Element {
       selectedPathByProjectRef.current.set(workspace.project.id, selectedPath);
     }
   }, [selectedPath, workspace]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.difftray
+      .getCompanionState()
+      .then((state) => {
+        if (!cancelled) {
+          setCompanionState(state);
+          setCompanionPairing(state.activePairing);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        console.error("Failed to read companion state", caughtError);
+      });
+
+    const unsubscribeCompanion = window.difftray.onCompanionStateChanged((state) => {
+      setCompanionState(state);
+      setCompanionPairing(state.activePairing);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribeCompanion();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -741,16 +772,20 @@ export function App(): React.JSX.Element {
     await nextPaint();
 
     try {
-      const [projects, settings, installedEditors] = await Promise.all([
-        window.difftray.listRecentProjects(),
-        window.difftray.getAppSettings(),
-        window.difftray.listInstalledEditors()
-      ]);
+      const [projects, settings, installedEditors, nextCompanionState] =
+        await Promise.all([
+          window.difftray.listRecentProjects(),
+          window.difftray.getAppSettings(),
+          window.difftray.listInstalledEditors(),
+          window.difftray.getCompanionState()
+        ]);
 
       setRecentProjects(projects);
       setAppSettings(settings);
       setAppSettingsDraft(settings);
       setEditorOptions(installedEditors);
+      setCompanionState(nextCompanionState);
+      setCompanionPairing(nextCompanionState.activePairing);
       setDiffMode(settings.defaultDiffMode);
 
       for (const project of projects) {
@@ -1218,14 +1253,18 @@ export function App(): React.JSX.Element {
     await nextPaint();
 
     try {
-      const [nextAppSettings, nextProjectSettings] = await Promise.all([
-        window.difftray.getAppSettings(),
-        window.difftray.getProjectSettings(workspace.project.id)
-      ]);
+      const [nextAppSettings, nextProjectSettings, nextCompanionState] =
+        await Promise.all([
+          window.difftray.getAppSettings(),
+          window.difftray.getProjectSettings(workspace.project.id),
+          window.difftray.getCompanionState()
+        ]);
 
       setAppSettings(nextAppSettings);
       setAppSettingsDraft(nextAppSettings);
       setProjectSettings(nextProjectSettings);
+      setCompanionState(nextCompanionState);
+      setCompanionPairing(nextCompanionState.activePairing);
       setSettingsOpen(true);
     } catch (caughtError) {
       setError(errorMessage(caughtError));
@@ -1253,6 +1292,82 @@ export function App(): React.JSX.Element {
 
   function updateAppSettingsDraft(patch: Partial<AppSettingsView>): void {
     setAppSettingsDraft((draft) => ({ ...draft, ...patch }));
+  }
+
+  async function toggleCompanion(enabled: boolean): Promise<void> {
+    const nextSettings = {
+      ...appSettings,
+      companionEnabled: enabled
+    };
+    setAppSettings(nextSettings);
+    setAppSettingsDraft((draft) => ({ ...draft, companionEnabled: enabled }));
+
+    try {
+      const nextState = await window.difftray.setCompanionEnabled(enabled);
+      setCompanionState(nextState);
+      setCompanionPairing(nextState.activePairing);
+      setAppSettings((settings) => ({
+        ...settings,
+        companionEnabled: nextState.enabled
+      }));
+      setAppSettingsDraft((draft) => ({
+        ...draft,
+        companionEnabled: nextState.enabled
+      }));
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+      const restoredState = await window.difftray.getCompanionState();
+      setCompanionState(restoredState);
+      setCompanionPairing(restoredState.activePairing);
+      setAppSettings(appSettings);
+      setAppSettingsDraft((draft) => ({
+        ...draft,
+        companionEnabled: appSettings.companionEnabled
+      }));
+    }
+  }
+
+  async function startCompanionPairing(): Promise<void> {
+    try {
+      const pairing = await window.difftray.startCompanionPairing();
+      setCompanionPairing(pairing);
+      const nextState = await window.difftray.getCompanionState();
+      setCompanionState(nextState);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function cancelCompanionPairing(): Promise<void> {
+    try {
+      const nextState = await window.difftray.cancelCompanionPairing();
+      setCompanionState(nextState);
+      setCompanionPairing(nextState.activePairing);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function respondToCompanionPairRequest(
+    input: RespondToCompanionPairRequestInput
+  ): Promise<void> {
+    try {
+      const nextState = await window.difftray.respondToCompanionPairRequest(input);
+      setCompanionState(nextState);
+      setCompanionPairing(nextState.activePairing);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  async function revokeCompanionDevice(id: string): Promise<void> {
+    try {
+      const nextState = await window.difftray.revokeCompanionDevice(id);
+      setCompanionState(nextState);
+      setCompanionPairing(nextState.activePairing);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
   }
 
   async function saveSettings(): Promise<void> {
@@ -2316,12 +2431,29 @@ export function App(): React.JSX.Element {
       {settingsOpen ? (
         <SettingsPanel
           appSettings={appSettingsDraft}
+          companionPairing={companionPairing}
+          companionState={companionState}
           disabled={loadState === "loading"}
           editorOptions={editorOptions}
           onCancel={closeSettings}
+          onCancelCompanionPairing={() => {
+            void cancelCompanionPairing();
+          }}
           onChangeAppSettings={updateAppSettingsDraft}
+          onRespondToCompanionPairRequest={(input) => {
+            void respondToCompanionPairRequest(input);
+          }}
+          onRevokeCompanionDevice={(id) => {
+            void revokeCompanionDevice(id);
+          }}
           onSave={() => {
             void saveSettings();
+          }}
+          onStartCompanionPairing={() => {
+            void startCompanionPairing();
+          }}
+          onToggleCompanion={(enabled) => {
+            void toggleCompanion(enabled);
           }}
         />
       ) : null}

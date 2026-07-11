@@ -265,6 +265,29 @@ describe("working tree diff loading", () => {
     );
   });
 
+  it("keeps rename metadata when loading selected working tree file details", async () => {
+    const repo = await createRepo();
+    await git(repo, "mv", "tracked.txt", "renamed.txt");
+
+    const summary = await loadWorkingTreeFileDiffSummary(repo, "renamed.txt");
+    const detail = await loadWorkingTreeFileDiff(repo, "renamed.txt");
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        newPath: "renamed.txt",
+        oldPath: "tracked.txt",
+        status: "renamed"
+      })
+    );
+    expect(detail).toEqual(
+      expect.objectContaining({
+        newPath: "renamed.txt",
+        oldPath: "tracked.txt",
+        status: "renamed"
+      })
+    );
+  });
+
   it("loads modified, deleted, and untracked text files", async () => {
     const repo = await createRepo();
     await writeFile(path.join(repo, "modified.txt"), "before\n");

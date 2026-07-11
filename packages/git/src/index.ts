@@ -472,16 +472,14 @@ export async function loadWorkingTreeFileDiff(
   filePath: string
 ): Promise<GitLoadedFileDiff | null> {
   const { diffBaseRef } = await loadWorkingTreeReviewTarget(repoPath);
-  const trackedDiffs = await loadTrackedDiffs(
+  const trackedDiff = await loadSingleTrackedDiff(
     repoPath,
     [diffBaseRef],
     {
       oldRef: diffBaseRef
     },
-    {},
-    [filePath]
+    filePath
   );
-  const trackedDiff = trackedDiffs.find((diff) => diff.newPath === filePath);
 
   if (trackedDiff) {
     return trackedDiff;
@@ -500,16 +498,14 @@ export async function loadWorkingTreeFileDiffSummary(
   filePath: string
 ): Promise<GitFileDiffSummary | null> {
   const { diffBaseRef } = await loadWorkingTreeReviewTarget(repoPath);
-  const trackedSummaries = await loadTrackedDiffSummaries(
+  const trackedSummary = await loadSingleTrackedDiffSummary(
     repoPath,
     [diffBaseRef],
     {
       oldRef: diffBaseRef
     },
-    {},
-    [filePath]
+    filePath
   );
-  const trackedSummary = trackedSummaries.find((diff) => diff.newPath === filePath);
 
   if (trackedSummary) {
     return trackedSummary;
@@ -621,18 +617,15 @@ export async function loadBranchFileDiff(
   filePath: string
 ): Promise<GitLoadedFileDiff | null> {
   const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
-  const diffs = await loadTrackedDiffs(
+  return loadSingleTrackedDiff(
     repoPath,
     [reviewTarget.mergeBaseSha, "HEAD"],
     {
       newRef: reviewTarget.headSha,
       oldRef: reviewTarget.mergeBaseSha
     },
-    {},
-    [filePath]
+    filePath
   );
-
-  return diffs.find((diff) => diff.newPath === filePath) ?? null;
 }
 
 export async function loadBranchFileDiffSummary(
@@ -641,18 +634,15 @@ export async function loadBranchFileDiffSummary(
   filePath: string
 ): Promise<GitFileDiffSummary | null> {
   const reviewTarget = await loadBranchReviewTarget(repoPath, baseRefName);
-  const summaries = await loadTrackedDiffSummaries(
+  return loadSingleTrackedDiffSummary(
     repoPath,
     [reviewTarget.mergeBaseSha, "HEAD"],
     {
       newRef: reviewTarget.headSha,
       oldRef: reviewTarget.mergeBaseSha
     },
-    {},
-    [filePath]
+    filePath
   );
-
-  return summaries.find((diff) => diff.newPath === filePath) ?? null;
 }
 
 export async function loadCommitFileDiff(
@@ -661,18 +651,15 @@ export async function loadCommitFileDiff(
   filePath: string
 ): Promise<GitLoadedFileDiff | null> {
   const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
-  const diffs = await loadTrackedDiffs(
+  return loadSingleTrackedDiff(
     repoPath,
     [reviewTarget.parentSha, reviewTarget.commitSha],
     {
       newRef: reviewTarget.commitSha,
       oldRef: reviewTarget.parentSha
     },
-    {},
-    [filePath]
+    filePath
   );
-
-  return diffs.find((diff) => diff.newPath === filePath) ?? null;
 }
 
 export async function loadCommitFileDiffSummary(
@@ -681,18 +668,63 @@ export async function loadCommitFileDiffSummary(
   filePath: string
 ): Promise<GitFileDiffSummary | null> {
   const reviewTarget = await loadCommitReviewTarget(repoPath, commitRef);
-  const summaries = await loadTrackedDiffSummaries(
+  return loadSingleTrackedDiffSummary(
     repoPath,
     [reviewTarget.parentSha, reviewTarget.commitSha],
     {
       newRef: reviewTarget.commitSha,
       oldRef: reviewTarget.parentSha
     },
+    filePath
+  );
+}
+
+async function loadSingleTrackedDiff(
+  repoPath: string,
+  diffArgs: readonly string[],
+  snapshotSource: TrackedDiffSnapshotSource,
+  filePath: string
+): Promise<GitLoadedFileDiff | null> {
+  const narrowed = await loadTrackedDiffs(repoPath, diffArgs, snapshotSource, {}, [
+    filePath
+  ]);
+  const narrowedMatch = narrowed.find((diff) => diff.newPath === filePath);
+
+  if (narrowedMatch?.status !== "added") {
+    return narrowedMatch ?? null;
+  }
+
+  const renamedMatch = (await loadTrackedDiffs(repoPath, diffArgs, snapshotSource)).find(
+    (diff) => diff.newPath === filePath && diff.status === "renamed"
+  );
+
+  return renamedMatch ?? narrowedMatch;
+}
+
+async function loadSingleTrackedDiffSummary(
+  repoPath: string,
+  diffArgs: readonly string[],
+  snapshotSource: TrackedDiffSnapshotSource,
+  filePath: string
+): Promise<GitFileDiffSummary | null> {
+  const narrowed = await loadTrackedDiffSummaries(
+    repoPath,
+    diffArgs,
+    snapshotSource,
     {},
     [filePath]
   );
+  const narrowedMatch = narrowed.find((diff) => diff.newPath === filePath);
 
-  return summaries.find((diff) => diff.newPath === filePath) ?? null;
+  if (narrowedMatch?.status !== "added") {
+    return narrowedMatch ?? null;
+  }
+
+  const renamedMatch = (
+    await loadTrackedDiffSummaries(repoPath, diffArgs, snapshotSource)
+  ).find((diff) => diff.newPath === filePath && diff.status === "renamed");
+
+  return renamedMatch ?? narrowedMatch;
 }
 
 async function loadTrackedDiffs(

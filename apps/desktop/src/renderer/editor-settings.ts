@@ -77,6 +77,8 @@ export function updateAppSettingsInput(
 ): UpdateAppSettingsInput {
   return {
     autoCollapseHunksOver: appSettings.autoCollapseHunksOver,
+    companionEnabled: appSettings.companionEnabled,
+    companionPort: appSettings.companionPort,
     defaultDiffMode: appSettings.defaultDiffMode,
     editorArgList: appSettings.editorArgList,
     editorArgs: appSettings.editorArgs,

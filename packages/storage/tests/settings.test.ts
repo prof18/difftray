@@ -46,6 +46,8 @@ describe("storage settings normalization", () => {
   it("returns stable default app settings", () => {
     expect(defaultAppSettings()).toEqual({
       autoCollapseHunksOver: 120,
+      companionEnabled: false,
+      companionPort: 48620,
       defaultDiffMode: "split",
       hideWhitespaceOnlyChanges: false,
       notifyOnDrift: true,

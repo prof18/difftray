@@ -2,6 +2,8 @@ import type { WorkspaceLoadStatus } from "./workspace-load-status.js";
 
 export const defaultAppSettings: AppSettingsView = {
   autoCollapseHunksOver: 120,
+  companionEnabled: false,
+  companionPort: 48620,
   defaultDiffMode: "split",
   editorArgs: "",
   editorArgList: [],
@@ -19,6 +21,15 @@ export const defaultProjectSettings: ProjectSettingsView = {
   fileListCollapsed: false,
   fileListWidth: 340,
   projectId: ""
+};
+
+export const defaultCompanionState: CompanionStateView = {
+  activePairing: null,
+  addresses: [],
+  devices: [],
+  enabled: false,
+  pendingPairRequests: [],
+  status: "stopped"
 };
 
 export const defaultWorkspaceLoadStatus: WorkspaceLoadStatus = {

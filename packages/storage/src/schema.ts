@@ -93,6 +93,16 @@ export function runMigrations(db: DatabaseSync): void {
       value text not null,
       updated_at text not null
     );
+
+    create table if not exists companion_devices (
+      id text primary key,
+      name text not null,
+      platform text not null,
+      public_key text not null unique,
+      created_at text not null,
+      last_seen_at text,
+      revoked_at text
+    );
   `);
   ensureProjectColumn(db, "default_commit_ref", "text");
   ensureProjectColumn(

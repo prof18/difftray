@@ -14,14 +14,24 @@ import {
   type ReviewTargetRecord,
   type StoredProjectRecord,
   type StoredReviewTargetRecord,
+  type CompanionDeviceInput,
+  type CompanionDeviceRecord,
   type CreateReviewCommentInput,
   type ReviewCommentRecord,
   type ReviewMarkInput,
   type ReviewMarkRecord
 } from "./records.js";
 import {
+  findCompanionDeviceByPublicKey,
+  listCompanionDevices,
+  revokeCompanionDevice,
+  touchCompanionDeviceLastSeen,
+  upsertCompanionDevice
+} from "./companion-device-store.js";
+import {
   createReviewComment,
   deleteReviewComment,
+  getReviewComment,
   isReviewed,
   listReviewComments,
   listReviewMarks,
@@ -39,8 +49,11 @@ import {
 } from "./project-tab-order.js";
 import {
   getAppSettings,
+  getCompanionServerKeyPair,
   getProjectSettings,
+  type CompanionServerKeyPairRecord,
   upsertAppSettings,
+  upsertCompanionServerKeyPair,
   upsertProjectSettings
 } from "./settings-store.js";
 
@@ -51,6 +64,8 @@ export {
 } from "./project-tab-order.js";
 
 export {
+  type CompanionDeviceInput,
+  type CompanionDeviceRecord,
   type CreateReviewCommentInput,
   type ProjectRecord,
   type ReviewCommentRecord,
@@ -70,6 +85,7 @@ export {
   type ReviewResetTrigger,
   type ThemeMode
 } from "./settings.js";
+export { type CompanionServerKeyPairRecord } from "./settings-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
@@ -110,17 +126,23 @@ export type DifftrayStorage = {
   readonly createReviewComment: (input: CreateReviewCommentInput) => ReviewCommentRecord;
   readonly deleteProject: (id: string) => void;
   readonly deleteReviewComment: (id: string) => boolean;
+  readonly findCompanionDeviceByPublicKey: (
+    publicKey: string
+  ) => CompanionDeviceRecord | null;
   readonly getAppSettings: () => AppSettingsRecord;
+  readonly getCompanionServerKeyPair: () => CompanionServerKeyPairRecord | null;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
   readonly getProjectTabOrder: () => readonly string[];
+  readonly getReviewComment: (id: string) => ReviewCommentRecord | null;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
   readonly isReviewed: (
     reviewTargetId: string,
     path: string,
     currentDiffHash: string
   ) => boolean;
+  readonly listCompanionDevices: () => readonly CompanionDeviceRecord[];
   readonly listReviewComments: (reviewTargetId: string) => readonly ReviewCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
@@ -148,8 +170,12 @@ export type DifftrayStorage = {
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
   readonly appendProjectToTabOrder: (projectId: string) => void;
   readonly removeProjectFromTabOrder: (projectId: string) => void;
+  readonly revokeCompanionDevice: (id: string) => void;
+  readonly touchCompanionDeviceLastSeen: (id: string) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
+  readonly upsertCompanionDevice: (device: CompanionDeviceInput) => void;
+  readonly upsertCompanionServerKeyPair: (keyPair: CompanionServerKeyPairRecord) => void;
   readonly upsertProjectTabOrder: (projectIds: readonly string[]) => void;
   readonly upsertProjectSettings: (settings: ProjectSettingsRecord) => void;
   readonly upsertReviewTarget: (target: ReviewTargetRecord) => void;
@@ -175,14 +201,19 @@ export function openStorage(filename: string): DifftrayStorage {
       deleteProject(db, id);
     },
     deleteReviewComment: (id) => deleteReviewComment(db, id),
+    findCompanionDeviceByPublicKey: (publicKey) =>
+      findCompanionDeviceByPublicKey(db, publicKey),
     getAppSettings: () => getAppSettings(db),
+    getCompanionServerKeyPair: () => getCompanionServerKeyPair(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
     getProjectTabOrder: () => getProjectTabOrder(db),
+    getReviewComment: (id) => getReviewComment(db, id),
     getReviewTarget: (id) => getReviewTarget(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
+    listCompanionDevices: () => listCompanionDevices(db),
     listReviewComments: (reviewTargetId) => listReviewComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
@@ -202,11 +233,23 @@ export function openStorage(filename: string): DifftrayStorage {
     removeProjectFromTabOrder: (projectId) => {
       removeProjectFromTabOrder(db, projectId);
     },
+    revokeCompanionDevice: (id) => {
+      revokeCompanionDevice(db, id);
+    },
+    touchCompanionDeviceLastSeen: (id) => {
+      touchCompanionDeviceLastSeen(db, id);
+    },
     upsertProject: (project) => {
       upsertProject(db, project);
     },
     upsertAppSettings: (settings) => {
       upsertAppSettings(db, settings);
+    },
+    upsertCompanionDevice: (device) => {
+      upsertCompanionDevice(db, device);
+    },
+    upsertCompanionServerKeyPair: (keyPair) => {
+      upsertCompanionServerKeyPair(db, keyPair);
     },
     upsertProjectTabOrder: (projectIds) => {
       upsertProjectTabOrder(db, projectIds);

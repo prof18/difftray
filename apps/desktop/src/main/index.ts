@@ -13,6 +13,7 @@ import {
 } from "electron";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -27,6 +28,16 @@ import {
   type ReviewProgress,
   type ReviewTarget
 } from "@difftray/core";
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type PairingQrPayload,
+  CreateCommentBody as CompanionCreateCommentBody,
+  DiffTargetBody,
+  FileDiffContentKind,
+  MarkReviewedBody as CompanionMarkReviewedBody,
+  UpdateCommentBody as CompanionUpdateCommentBody,
+  WorkspaceSummary
+} from "@difftray/companion-protocol";
 import {
   findGitRepository,
   loadBranchReviewTarget,
@@ -88,6 +99,19 @@ import {
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
+import {
+  createCompanionAuthManager,
+  createCompanionEnvelopeVerifier,
+  getOrCreateCompanionServerIdentity,
+  type CompanionAuthManager,
+  type CompanionPairingSessionView,
+  type PendingPairRequestView
+} from "./companion/auth.js";
+import {
+  CompanionLifecycleController,
+  CompanionWorkspaceChangeBroadcaster
+} from "./companion/lifecycle.js";
+import { createCompanionServer } from "./companion/server.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
@@ -128,6 +152,11 @@ import {
 } from "./editor-preset-views.js";
 import { elapsedSince, logMainPerformance } from "./main-performance.js";
 import { reviewWorkspaceView } from "./project-workspace-view.js";
+import type {
+  CompanionDeps,
+  MarkResult as CompanionMarkResult,
+  UnmarkResult as CompanionUnmarkResult
+} from "./companion/api.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
@@ -147,10 +176,46 @@ let didWireAutoUpdater = false;
 let applicationMenuController: ApplicationMenuController | undefined;
 let updateCheckScheduler: UpdateCheckScheduler | undefined;
 let updateCheckSchedulerPromise: Promise<UpdateCheckScheduler | undefined> | undefined;
+let companionLifecycleController: CompanionLifecycleController | undefined;
+let companionWorkspaceChangeBroadcaster: CompanionWorkspaceChangeBroadcaster | undefined;
+let companionAuthManager: CompanionAuthManager | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
+
+type CompanionAddressView = {
+  readonly address: string;
+  readonly host: string;
+  readonly isTailscale: boolean;
+};
+
+type CompanionPairingStateView = {
+  readonly code: string;
+  readonly expiresAt: string;
+  readonly qrPayload: PairingQrPayload;
+};
+
+type CompanionStateView = {
+  readonly activePairing: CompanionPairingStateView | null;
+  readonly addresses: readonly CompanionAddressView[];
+  readonly devices: readonly CompanionDeviceView[];
+  readonly enabled: boolean;
+  readonly errorMessage?: string;
+  readonly pendingPairRequests: readonly PendingPairRequestView[];
+  readonly port?: number;
+  readonly status: "error" | "running" | "stopped";
+};
+
+type CompanionDeviceView = {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly lastSeenAt?: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly publicKey: string;
+  readonly revokedAt?: string;
+};
 
 type MarkReviewedResult =
   | {
@@ -333,8 +398,10 @@ handleTrusted(
 );
 handleTrusted(
   "settings:updateApp",
-  (_event: IpcMainInvokeEvent, input: unknown): AppSettingsView => {
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<AppSettingsView> => {
     const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
+    const companionEnabled = readBooleanProperty(input, "companionEnabled");
+    const companionPort = readNumberProperty(input, "companionPort");
     const defaultDiffMode = readEnumProperty(input, "defaultDiffMode", [
       "split",
       "unified"
@@ -358,6 +425,8 @@ handleTrusted(
     const wrapDiffLines = readBooleanProperty(input, "wrapDiffLines");
     const settings: AppSettingsRecord = {
       autoCollapseHunksOver,
+      companionEnabled,
+      companionPort,
       defaultDiffMode,
       ...(editorMode === "preset"
         ? {
@@ -376,8 +445,74 @@ handleTrusted(
     };
 
     getStorage().upsertAppSettings(settings);
+    await syncCompanionLifecycleWithSettings();
 
     return appSettingsView(getStorage().getAppSettings());
+  }
+);
+handleTrusted("companion:getState", async (): Promise<CompanionStateView> => {
+  return companionStateView();
+});
+handleTrusted(
+  "companion:setEnabled",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const enabled = readBooleanProperty(input, "enabled");
+    const currentSettings = getStorage().getAppSettings();
+
+    getStorage().upsertAppSettings({
+      ...currentSettings,
+      companionEnabled: enabled
+    });
+    await syncCompanionLifecycleWithSettings();
+    emitCompanionStateChanged();
+
+    return companionStateView();
+  }
+);
+handleTrusted("companion:startPairing", async (): Promise<CompanionPairingStateView> => {
+  if (getCompanionLifecycleController().state.status !== "running") {
+    throw new Error("Companion server is not running.");
+  }
+
+  const session = getCompanionAuthManager().startPairing();
+  const pairing = await companionPairingStateView(session);
+
+  emitCompanionStateChanged();
+
+  return pairing;
+});
+handleTrusted("companion:cancelPairing", async (): Promise<CompanionStateView> => {
+  getCompanionAuthManager().cancelPairing();
+  emitCompanionStateChanged();
+
+  return companionStateView();
+});
+handleTrusted(
+  "companion:respondToPairRequest",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const id = readStringProperty(input, "id");
+    const approved = readBooleanProperty(input, "approved");
+
+    if (approved) {
+      getCompanionAuthManager().approvePairRequest(id);
+    } else {
+      getCompanionAuthManager().denyPairRequest(id);
+    }
+
+    emitCompanionStateChanged();
+
+    return companionStateView();
+  }
+);
+handleTrusted(
+  "companion:revokeDevice",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<CompanionStateView> => {
+    const id = readStringProperty(input, "id");
+
+    getStorage().revokeCompanionDevice(id);
+    emitCompanionStateChanged();
+
+    return companionStateView();
   }
 );
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
@@ -407,9 +542,8 @@ handleTrusted(
   "projects:listBranchRefs",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<readonly string[]> => {
     const projectId = readStringProperty(input, "projectId");
-    const project = assertStoredProject(projectId);
 
-    return listBranchRefs(project.path);
+    return listBranchRefsForProject(projectId);
   }
 );
 handleTrusted(
@@ -419,9 +553,8 @@ handleTrusted(
     input: unknown
   ): Promise<Awaited<ReturnType<typeof listRecentCommits>>> => {
     const projectId = readStringProperty(input, "projectId");
-    const project = assertStoredProject(projectId);
 
-    return listRecentCommits(project.path);
+    return listRecentCommitsForProject(projectId);
   }
 );
 handleTrusted(
@@ -461,54 +594,21 @@ handleTrusted(
   async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
     const projectId = readStringProperty(input, "projectId");
     const mode = readEnumProperty(input, "mode", ["branch", "commit", "working_tree"]);
-    const project = assertStoredProject(projectId);
     const reportProgress = projectLoadProgressReporter(event.sender, projectId);
-    const previousTarget = {
-      defaultBaseRef: project.defaultBaseRef,
-      defaultCommitRef: project.defaultCommitRef,
-      defaultDiffTargetMode: project.defaultDiffTargetMode
-    };
+    const target =
+      mode === "branch"
+        ? ({
+            mode,
+            ref: readStringProperty(input, "baseRefName")
+          } satisfies DiffTargetBody)
+        : mode === "commit"
+          ? ({
+              mode,
+              ref: readStringProperty(input, "commitRef")
+            } satisfies DiffTargetBody)
+          : ({ mode } satisfies DiffTargetBody);
 
-    if (mode === "branch") {
-      const baseRefName = readStringProperty(input, "baseRefName").trim();
-
-      if (baseRefName.length === 0) {
-        throw new Error("Base branch is required.");
-      }
-
-      getStorage().updateProjectDefaultDiffTarget(projectId, {
-        mode: "branch",
-        ref: baseRefName
-      });
-    } else if (mode === "commit") {
-      const commitRef = readStringProperty(input, "commitRef").trim();
-
-      if (commitRef.length === 0) {
-        throw new Error("Commit is required.");
-      }
-
-      getStorage().updateProjectDefaultDiffTarget(projectId, {
-        mode: "commit",
-        ref: commitRef
-      });
-    } else {
-      getStorage().updateProjectDefaultDiffTarget(projectId, { mode: "working_tree" });
-    }
-
-    try {
-      return await loadProjectWorkspace(projectId, reportProgress);
-    } catch (caughtError) {
-      getStorage().updateProjectDefaultDiffTarget(
-        projectId,
-        previousTarget.defaultDiffTargetMode === "branch" && previousTarget.defaultBaseRef
-          ? { mode: "branch", ref: previousTarget.defaultBaseRef }
-          : previousTarget.defaultDiffTargetMode === "commit" &&
-              previousTarget.defaultCommitRef
-            ? { mode: "commit", ref: previousTarget.defaultCommitRef }
-            : { mode: "working_tree" }
-      );
-      throw caughtError;
-    }
+    return updateProjectDiffTarget(projectId, target, reportProgress);
   }
 );
 handleTrusted(
@@ -544,94 +644,17 @@ handleTrusted(
 handleTrusted(
   "reviews:markFileReviewed",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<MarkReviewedResult> => {
-    const totalStartedAt = performance.now();
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
-    const project = assertStoredProject(projectId);
-    const storedReviewTarget = getStorage().getReviewTarget(reviewTargetId);
-    const reviewTarget =
-      storedReviewTarget?.projectId === projectId
-        ? reviewTargetFromRecord(storedReviewTarget)
-        : undefined;
-    const fileLoadStartedAt = performance.now();
-    const file =
-      reviewTarget !== undefined
-        ? await loadCurrentReviewFile(project, reviewTarget, pathName)
-        : null;
-    const fileLoadMs = elapsedSince(fileLoadStartedAt);
 
-    if (!file) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: "file_missing",
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: "file_missing",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    if (file.diffHash !== displayedDiffHash) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: "stale_diff",
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: "stale_diff",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const result = getStorage().verifyAndMarkReviewed({
-      currentDiffHash: file.diffHash,
+    return markProjectFileReviewed({
       displayedDiffHash,
-      path: pathName,
-      ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      path,
       projectId,
       reviewTargetId
     });
-
-    if (!result.marked) {
-      const workspace = await loadProjectWorkspace(projectId);
-      logMainPerformance("reviews.markFileReviewed", {
-        fileLoadMs,
-        reason: result.reason,
-        status: "rejected",
-        totalMs: elapsedSince(totalStartedAt)
-      });
-      return {
-        reason: result.reason,
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const workspaceLoadStartedAt = performance.now();
-    const workspace = await loadProjectWorkspace(projectId);
-    const workspaceLoadMs = elapsedSince(workspaceLoadStartedAt);
-    logMainPerformance("reviews.markFileReviewed", {
-      fileLoadMs,
-      fileCount: workspace.files.length,
-      path: pathName,
-      status: "marked",
-      totalMs: elapsedSince(totalStartedAt),
-      workspaceLoadMs
-    });
-
-    return {
-      status: "marked",
-      workspace
-    };
   }
 );
 handleTrusted(
@@ -639,58 +662,15 @@ handleTrusted(
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<UnmarkReviewedResult> => {
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
-    const workspace = await loadProjectWorkspace(projectId);
-    const file = workspace.files.find((candidate) => candidate.path === pathName);
 
-    if (!file) {
-      return {
-        reason: "file_missing",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    if (
-      workspace.reviewTarget.id !== reviewTargetId ||
-      file.diffHash !== displayedDiffHash
-    ) {
-      return {
-        reason: "stale_diff",
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const result = getStorage().verifyAndUnmarkReviewed({
-      currentDiffHash: file.diffHash,
+    return unmarkProjectFileReviewed({
       displayedDiffHash,
-      path: file.path,
+      path,
+      projectId,
       reviewTargetId
     });
-
-    if (!result.unmarked) {
-      return {
-        reason: result.reason,
-        status: "rejected",
-        workspace
-      };
-    }
-
-    const remainingPathMarks = getStorage()
-      .listReviewMarks(reviewTargetId)
-      .filter((mark) => mark.path === file.path);
-
-    return {
-      status: "unmarked",
-      workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
-        invalidated: remainingPathMarks.some(
-          (mark) => mark.reviewedDiffHash !== file.diffHash
-        ),
-        reviewed: false
-      })
-    };
   }
 );
 handleTrusted(
@@ -701,99 +681,38 @@ handleTrusted(
   ): Promise<CreateReviewCommentResult> => {
     const projectId = readStringProperty(input, "projectId");
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
-    const pathName = readStringProperty(input, "path");
+    const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
     const side = readEnumProperty(input, "side", ["additions", "deletions"]);
     const lineStart = readNumberProperty(input, "lineStart");
     const lineEnd = readNumberProperty(input, "lineEnd");
-    const body = readStringProperty(input, "body").trim();
-    const project = assertStoredProject(projectId);
-    const reviewTarget = await loadCurrentProjectReviewTarget(project);
-    const currentReviewTargetId = createReviewTargetId(reviewTarget);
+    const body = readStringProperty(input, "body");
 
-    if (currentReviewTargetId !== reviewTargetId) {
-      return {
-        reason: "stale_diff",
-        status: "rejected"
-      };
-    }
-
-    const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
-
-    if (!file) {
-      return {
-        reason: "file_missing",
-        status: "rejected"
-      };
-    }
-
-    if (file.diffHash !== displayedDiffHash) {
-      return {
-        reason: "stale_diff",
-        status: "rejected"
-      };
-    }
-
-    if (body.length === 0) {
-      throw new Error("Review comment body is required.");
-    }
-
-    const comment = getStorage().createReviewComment({
+    return createProjectReviewComment({
       body,
-      diffHash: file.diffHash,
+      diffHash: displayedDiffHash,
       lineEnd,
       lineStart,
-      path: pathName,
-      ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      path,
       projectId,
       reviewTargetId,
       side
     });
-
-    return {
-      comment: reviewCommentView(comment),
-      status: "created"
-    };
   }
 );
 handleTrusted(
   "comments:update",
   (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewCommentResult => {
-    const commentId = readStringProperty(input, "id");
-    const body = readStringProperty(input, "body").trim();
-
-    if (body.length === 0) {
-      throw new Error("Review comment body is required.");
-    }
-
-    const comment = getStorage().updateReviewComment(commentId, body);
-
-    if (!comment) {
-      return {
-        reason: "comment_missing",
-        status: "rejected"
-      };
-    }
-
-    return {
-      comment: reviewCommentView(comment),
-      status: "updated"
-    };
+    return updateProjectReviewComment({
+      body: readStringProperty(input, "body"),
+      id: readStringProperty(input, "id")
+    });
   }
 );
 handleTrusted(
   "comments:delete",
   (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewCommentResult => {
-    const commentId = readStringProperty(input, "id");
-
-    if (!getStorage().deleteReviewComment(commentId)) {
-      return {
-        reason: "comment_missing",
-        status: "rejected"
-      };
-    }
-
-    return { status: "deleted" };
+    return deleteProjectReviewComment(readStringProperty(input, "id"));
   }
 );
 handleTrusted(
@@ -818,15 +737,7 @@ handleTrusted(
       };
     }
 
-    const comments = await reviewCommentReportItems(projectId, workspace.comments);
-
-    clipboard.writeText(
-      formatReviewCommentsReport({
-        comments,
-        projectName: workspace.project.name,
-        targetLabel: reviewTargetLabel(workspace.reviewTarget)
-      })
-    );
+    clipboard.writeText(await formatProjectCommentsReport(projectId, workspace));
 
     return {
       commentCount: workspace.comments.length,
@@ -852,13 +763,19 @@ handleTrusted(
     const projectId = readStringProperty(input, "projectId");
     const pathName = readStringProperty(input, "path");
 
-    return loadProjectFileDiff(projectId, pathName);
+    const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+
+    return diff?.content ?? null;
   }
 );
 
 app.on("before-quit", () => {
   isQuitting = true;
   pendingProjectWatcherSync = undefined;
+  void companionLifecycleController?.stop();
+  companionLifecycleController = undefined;
+  companionWorkspaceChangeBroadcaster?.dispose();
+  companionWorkspaceChangeBroadcaster = undefined;
   void projectWatchService?.close();
   projectWatchService = undefined;
   updateCheckScheduler?.stop();
@@ -885,6 +802,7 @@ app.on("activate", () => {
 void app.whenReady().then(async () => {
   configureAppRuntime();
   installApplicationMenu();
+  await syncCompanionLifecycleWithSettings();
   await createMainWindow();
   scheduleAutoUpdaterWiring();
 });
@@ -1127,12 +1045,212 @@ function getProjectWatchService(): ProjectWatchService {
   return projectWatchService;
 }
 
+function getCompanionLifecycleController(): CompanionLifecycleController {
+  if (companionLifecycleController) {
+    return companionLifecycleController;
+  }
+
+  companionLifecycleController = new CompanionLifecycleController({
+    createServer: () => createCompanionServer(createDesktopCompanionDeps()),
+    serverIdentity: companionServerIdentity
+  });
+
+  return companionLifecycleController;
+}
+
+function getCompanionAuthManager(): CompanionAuthManager {
+  if (companionAuthManager) {
+    return companionAuthManager;
+  }
+
+  companionAuthManager = createCompanionAuthManager({
+    onStateChanged: emitCompanionStateChanged,
+    storage: getStorage()
+  });
+
+  return companionAuthManager;
+}
+
+function companionServerIdentity(): ReturnType<
+  typeof getOrCreateCompanionServerIdentity
+> {
+  return getOrCreateCompanionServerIdentity({
+    appVersion: app.getVersion(),
+    storage: getStorage()
+  });
+}
+
+async function syncCompanionLifecycleWithSettings(): Promise<void> {
+  try {
+    await getCompanionLifecycleController().applySettings(getStorage().getAppSettings());
+  } catch (caughtError) {
+    console.error("Companion server lifecycle sync failed", caughtError);
+  }
+}
+
+async function companionStateView(): Promise<CompanionStateView> {
+  const settings = getStorage().getAppSettings();
+  const lifecycleState =
+    companionLifecycleController?.state ??
+    ({
+      enabled: false,
+      status: "stopped"
+    } as const);
+  const port = lifecycleState.status === "running" ? lifecycleState.port : undefined;
+  const addresses = port ? companionAddressViews(port) : [];
+  const activeSession =
+    port === undefined ? null : getCompanionAuthManager().getActivePairingSession();
+
+  return {
+    activePairing:
+      activeSession && port
+        ? await companionPairingStateView(activeSession, addresses)
+        : null,
+    addresses,
+    devices: getStorage().listCompanionDevices().map(companionDeviceView),
+    enabled: settings.companionEnabled,
+    ...(lifecycleState.status === "error"
+      ? { errorMessage: lifecycleState.errorMessage }
+      : {}),
+    pendingPairRequests: getCompanionAuthManager().listPendingPairRequests(),
+    ...(port ? { port } : {}),
+    status: lifecycleState.status
+  };
+}
+
+async function companionPairingStateView(
+  session: CompanionPairingSessionView,
+  existingAddresses?: readonly CompanionAddressView[]
+): Promise<CompanionPairingStateView> {
+  const lifecycleState = getCompanionLifecycleController().state;
+
+  if (lifecycleState.status !== "running") {
+    throw new Error("Companion server is not running.");
+  }
+
+  const identity = companionServerIdentity();
+  const addresses = existingAddresses ?? companionAddressViews(lifecycleState.port);
+
+  return {
+    code: session.code,
+    expiresAt: session.expiresAt,
+    qrPayload: {
+      addresses: addresses.map((address) => address.address),
+      expiresAt: session.expiresAt,
+      kind: "difftray-pairing",
+      protocolVersion: COMPANION_PROTOCOL_VERSION,
+      secret: session.secret,
+      serverId: identity.serverId,
+      serverName: identity.serverName,
+      serverPublicKey: identity.serverPublicKey
+    }
+  };
+}
+
+function companionDeviceView(
+  device: ReturnType<DifftrayStorage["listCompanionDevices"]>[number]
+): CompanionDeviceView {
+  return {
+    createdAt: device.createdAt,
+    id: device.id,
+    ...(device.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
+    name: device.name,
+    platform: device.platform,
+    publicKey: device.publicKey,
+    ...(device.revokedAt ? { revokedAt: device.revokedAt } : {})
+  };
+}
+
+function companionAddressViews(port: number): readonly CompanionAddressView[] {
+  const localAddresses = Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === "IPv4" && !entry.internal)
+    .map((entry) => companionAddressView(entry.address, port));
+
+  return uniqueCompanionAddresses(localAddresses);
+}
+
+function companionAddressView(
+  host: string,
+  port: number,
+  forceTailscale = false
+): CompanionAddressView {
+  return {
+    address: `${host}:${String(port)}`,
+    host,
+    isTailscale: forceTailscale || isTailscaleIpv4Address(host)
+  };
+}
+
+function uniqueCompanionAddresses(
+  addresses: readonly CompanionAddressView[]
+): readonly CompanionAddressView[] {
+  const seen = new Set<string>();
+
+  return addresses.filter((address) => {
+    if (seen.has(address.address)) {
+      return false;
+    }
+
+    seen.add(address.address);
+    return true;
+  });
+}
+
+function isTailscaleIpv4Address(address: string): boolean {
+  const parts = address.split(".").map((part) => Number(part));
+
+  return (
+    parts.length === 4 &&
+    parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255) &&
+    parts[0] === 100 &&
+    parts[1] !== undefined &&
+    parts[1] >= 64 &&
+    parts[1] <= 127
+  );
+}
+
+function emitCompanionStateChanged(): void {
+  void companionStateView()
+    .then((state) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send("companion:stateChanged", state);
+        }
+      }
+    })
+    .catch((caughtError: unknown) => {
+      console.error("Companion state emission failed", caughtError);
+    });
+}
+
+function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroadcaster {
+  if (companionWorkspaceChangeBroadcaster) {
+    return companionWorkspaceChangeBroadcaster;
+  }
+
+  companionWorkspaceChangeBroadcaster = new CompanionWorkspaceChangeBroadcaster({
+    broadcast: notifyCompanionWorkspaceChanged
+  });
+
+  return companionWorkspaceChangeBroadcaster;
+}
+
 function emitProjectChange(change: ProjectWatchChangeEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send("projects:changed", change);
     }
   }
+
+  getCompanionWorkspaceChangeBroadcaster().notify(change.projectId, "filesystem");
+}
+
+function notifyCompanionWorkspaceChanged(
+  projectId: string,
+  reason: "comments" | "diff_target" | "filesystem" | "review_state"
+): void {
+  companionLifecycleController?.broadcastWorkspaceChanged(projectId, reason);
 }
 
 let pendingProjectWatcherSync: readonly WatchedProject[] | undefined;
@@ -1214,6 +1332,200 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   const projects = listAvailableRecentProjects();
 
   return projects.map((project) => projectView(project));
+}
+
+async function listAvailableRecentProjectViewsWithSummaries(): Promise<
+  readonly RecentProjectView[]
+> {
+  const projects = listAvailableRecentProjects();
+  const summaries = await Promise.all(
+    projects.map(async (project) => {
+      try {
+        return await loadProjectReviewSummaryIfAvailable(project.id);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return projects.map((project, index) =>
+    projectView(project, summaries[index] ?? undefined)
+  );
+}
+
+function listBranchRefsForProject(projectId: string): Promise<readonly string[]> {
+  const project = assertStoredProject(projectId);
+
+  return listBranchRefs(project.path);
+}
+
+function listRecentCommitsForProject(
+  projectId: string
+): Promise<Awaited<ReturnType<typeof listRecentCommits>>> {
+  const project = assertStoredProject(projectId);
+
+  return listRecentCommits(project.path);
+}
+
+async function updateProjectDiffTarget(
+  projectId: string,
+  target: DiffTargetBody,
+  reportProgress?: ProjectLoadProgressReporter
+): Promise<ReviewWorkspaceView> {
+  const project = assertStoredProject(projectId);
+  const previousTarget = {
+    defaultBaseRef: project.defaultBaseRef,
+    defaultCommitRef: project.defaultCommitRef,
+    defaultDiffTargetMode: project.defaultDiffTargetMode
+  };
+
+  if (target.mode === "branch") {
+    const baseRefName = target.ref.trim();
+
+    if (baseRefName.length === 0) {
+      throw new Error("Base branch is required.");
+    }
+
+    getStorage().updateProjectDefaultDiffTarget(projectId, {
+      mode: "branch",
+      ref: baseRefName
+    });
+  } else if (target.mode === "commit") {
+    const commitRef = target.ref.trim();
+
+    if (commitRef.length === 0) {
+      throw new Error("Commit is required.");
+    }
+
+    getStorage().updateProjectDefaultDiffTarget(projectId, {
+      mode: "commit",
+      ref: commitRef
+    });
+  } else {
+    getStorage().updateProjectDefaultDiffTarget(projectId, { mode: "working_tree" });
+  }
+
+  try {
+    return await loadProjectWorkspace(projectId, reportProgress);
+  } catch (caughtError) {
+    getStorage().updateProjectDefaultDiffTarget(
+      projectId,
+      previousTarget.defaultDiffTargetMode === "branch" && previousTarget.defaultBaseRef
+        ? { mode: "branch", ref: previousTarget.defaultBaseRef }
+        : previousTarget.defaultDiffTargetMode === "commit" &&
+            previousTarget.defaultCommitRef
+          ? { mode: "commit", ref: previousTarget.defaultCommitRef }
+          : { mode: "working_tree" }
+    );
+    throw caughtError;
+  }
+}
+
+export function createDesktopCompanionDeps(): CompanionDeps {
+  const storage = getStorage();
+
+  return {
+    companionAuth: getCompanionAuthManager(),
+    companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
+    commentsReport: async (projectId) =>
+      formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
+    createComment: async (input) => {
+      const result = await createProjectReviewComment(input);
+
+      if (result.status === "rejected") {
+        throw new Error(result.reason);
+      }
+
+      notifyDesktopRenderer(input.projectId);
+      notifyCompanionWorkspaceChanged(input.projectId, "comments");
+
+      return result.comment;
+    },
+    deleteComment: (id) => {
+      const comment = storage.getReviewComment(id);
+      const deleted = deleteProjectReviewComment(id).status === "deleted";
+
+      if (deleted && comment) {
+        notifyDesktopRenderer(comment.projectId);
+        notifyCompanionWorkspaceChanged(comment.projectId, "comments");
+      }
+
+      return Promise.resolve(deleted);
+    },
+    listBranchRefs: listBranchRefsForProject,
+    listRecentCommits: listRecentCommitsForProject,
+    listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
+    loadFileDiff: async (projectId, pathName) => {
+      const [diff, workspace] = await Promise.all([
+        loadProjectFileDiffForCompanion(projectId, pathName),
+        loadProjectWorkspace(projectId)
+      ]);
+
+      if (!diff) {
+        throw new Error(`File diff is not available: ${pathName}`);
+      }
+      const workspaceFile = workspace.files.find((file) => file.path === pathName);
+
+      if (!workspaceFile) {
+        throw new Error(`File diff is not in the current workspace: ${pathName}`);
+      }
+
+      return {
+        ...diff,
+        diffHash: workspaceFile.diffHash
+      };
+    },
+    loadWorkspaceView: loadProjectWorkspace,
+    markReviewed: async (input) => {
+      const result = await markProjectFileReviewed(input);
+
+      if (result.status === "marked") {
+        notifyDesktopRenderer(input.projectId);
+        notifyCompanionWorkspaceChanged(input.projectId, "review_state");
+      }
+
+      return companionMarkResult(result);
+    },
+    notifyDesktopRenderer,
+    serverIdentity: () =>
+      getOrCreateCompanionServerIdentity({
+        appVersion: app.getVersion(),
+        storage
+      }),
+    storage,
+    unmarkReviewed: async (input) => {
+      const result = await unmarkProjectFileReviewed(input);
+
+      if (result.status === "unmarked") {
+        notifyDesktopRenderer(input.projectId);
+        notifyCompanionWorkspaceChanged(input.projectId, "review_state");
+      }
+
+      return companionUnmarkResult(result);
+    },
+    updateComment: (input) => {
+      const storedComment = storage.getReviewComment(input.commentId);
+      const result = updateProjectReviewComment({
+        body: input.body,
+        id: input.commentId
+      });
+
+      if (result.status === "updated" && storedComment) {
+        notifyDesktopRenderer(storedComment.projectId);
+        notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+      }
+
+      return Promise.resolve(result.status === "updated" ? result.comment : null);
+    },
+    updateDiffTarget: async (projectId, target) => {
+      const workspace = await updateProjectDiffTarget(projectId, target);
+
+      notifyDesktopRenderer(projectId);
+      notifyCompanionWorkspaceChanged(projectId, "diff_target");
+
+      return workspace;
+    }
+  };
 }
 
 function projectLoadProgressReporter(
@@ -1418,6 +1730,313 @@ async function loadProjectWorkspaceIfAvailable(
   return loadProjectWorkspace(projectId, reportProgress);
 }
 
+async function markProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<MarkReviewedResult> {
+  const totalStartedAt = performance.now();
+  const { displayedDiffHash, path: pathName, projectId, reviewTargetId } = input;
+  const project = assertStoredProject(projectId);
+  const storedReviewTarget = getStorage().getReviewTarget(reviewTargetId);
+  const reviewTarget =
+    storedReviewTarget?.projectId === projectId
+      ? reviewTargetFromRecord(storedReviewTarget)
+      : undefined;
+  const fileLoadStartedAt = performance.now();
+  const file =
+    reviewTarget !== undefined
+      ? await loadCurrentReviewFile(project, reviewTarget, pathName)
+      : null;
+  const fileLoadMs = elapsedSince(fileLoadStartedAt);
+
+  if (!file) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: "file_missing",
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: "file_missing",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  if (file.diffHash !== displayedDiffHash) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: "stale_diff",
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: "stale_diff",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const result = getStorage().verifyAndMarkReviewed({
+    currentDiffHash: file.diffHash,
+    displayedDiffHash,
+    path: pathName,
+    ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+    projectId,
+    reviewTargetId
+  });
+
+  if (!result.marked) {
+    const workspace = await loadProjectWorkspace(projectId);
+    logMainPerformance("reviews.markFileReviewed", {
+      fileLoadMs,
+      reason: result.reason,
+      status: "rejected",
+      totalMs: elapsedSince(totalStartedAt)
+    });
+    return {
+      reason: result.reason,
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const workspaceLoadStartedAt = performance.now();
+  const workspace = await loadProjectWorkspace(projectId);
+  const workspaceLoadMs = elapsedSince(workspaceLoadStartedAt);
+  logMainPerformance("reviews.markFileReviewed", {
+    fileLoadMs,
+    fileCount: workspace.files.length,
+    path: pathName,
+    status: "marked",
+    totalMs: elapsedSince(totalStartedAt),
+    workspaceLoadMs
+  });
+
+  return {
+    status: "marked",
+    workspace
+  };
+}
+
+async function unmarkProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<UnmarkReviewedResult> {
+  const { displayedDiffHash, path: pathName, projectId, reviewTargetId } = input;
+  const workspace = await loadProjectWorkspace(projectId);
+  const file = workspace.files.find((candidate) => candidate.path === pathName);
+
+  if (!file) {
+    return {
+      reason: "file_missing",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  if (
+    workspace.reviewTarget.id !== reviewTargetId ||
+    file.diffHash !== displayedDiffHash
+  ) {
+    return {
+      reason: "stale_diff",
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const result = getStorage().verifyAndUnmarkReviewed({
+    currentDiffHash: file.diffHash,
+    displayedDiffHash,
+    path: file.path,
+    reviewTargetId
+  });
+
+  if (!result.unmarked) {
+    return {
+      reason: result.reason,
+      status: "rejected",
+      workspace
+    };
+  }
+
+  const remainingPathMarks = getStorage()
+    .listReviewMarks(reviewTargetId)
+    .filter((mark) => mark.path === file.path);
+
+  return {
+    status: "unmarked",
+    workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
+      invalidated: remainingPathMarks.some(
+        (mark) => mark.reviewedDiffHash !== file.diffHash
+      ),
+      reviewed: false
+    })
+  };
+}
+
+async function createProjectReviewComment(
+  input: CompanionCreateCommentBody & { readonly projectId: string }
+): Promise<CreateReviewCommentResult> {
+  const {
+    body: rawBody,
+    diffHash,
+    lineEnd,
+    lineStart,
+    path: pathName,
+    projectId,
+    reviewTargetId,
+    side
+  } = input;
+  const body = rawBody.trim();
+  const project = assertStoredProject(projectId);
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+  const currentReviewTargetId = createReviewTargetId(reviewTarget);
+
+  if (currentReviewTargetId !== reviewTargetId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
+
+  if (!file) {
+    return {
+      reason: "file_missing",
+      status: "rejected"
+    };
+  }
+
+  if (file.diffHash !== diffHash) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  if (body.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  const comment = getStorage().createReviewComment({
+    body,
+    diffHash: file.diffHash,
+    lineEnd,
+    lineStart,
+    path: pathName,
+    ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+    projectId,
+    reviewTargetId,
+    side
+  });
+
+  return {
+    comment: reviewCommentView(comment),
+    status: "created"
+  };
+}
+
+function updateProjectReviewComment(
+  input: CompanionUpdateCommentBody & { readonly id: string }
+): UpdateReviewCommentResult {
+  const body = input.body.trim();
+
+  if (body.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  const comment = getStorage().updateReviewComment(input.id, body);
+
+  if (!comment) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return {
+    comment: reviewCommentView(comment),
+    status: "updated"
+  };
+}
+
+function deleteProjectReviewComment(commentId: string): DeleteReviewCommentResult {
+  if (!getStorage().deleteReviewComment(commentId)) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return { status: "deleted" };
+}
+
+async function formatProjectCommentsReport(
+  projectId: string,
+  workspace: ReviewWorkspaceView
+): Promise<string> {
+  const comments = await reviewCommentReportItems(projectId, workspace.comments);
+
+  return formatReviewCommentsReport({
+    comments,
+    projectName: workspace.project.name,
+    targetLabel: reviewTargetLabel(workspace.reviewTarget)
+  });
+}
+
+function companionMarkResult(result: MarkReviewedResult): CompanionMarkResult {
+  return result.status === "marked"
+    ? {
+        marked: true,
+        workspaceSummary: workspaceSummaryFromWorkspace(result.workspace)
+      }
+    : {
+        stale: true,
+        workspace: result.workspace
+      };
+}
+
+function companionUnmarkResult(result: UnmarkReviewedResult): CompanionUnmarkResult {
+  return result.status === "unmarked"
+    ? {
+        unmarked: true,
+        workspaceSummary: workspaceSummaryFromWorkspace(result.workspace)
+      }
+    : {
+        stale: true,
+        workspace: result.workspace
+      };
+}
+
+function workspaceSummaryFromWorkspace(workspace: ReviewWorkspaceView): WorkspaceSummary {
+  return {
+    files: workspace.files.map((file) => ({
+      invalidated: file.invalidated,
+      path: file.path,
+      reviewed: file.reviewed
+    })),
+    progress: workspace.progress
+  };
+}
+
+function notifyDesktopRenderer(projectId: string): void {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    return;
+  }
+
+  emitProjectChange({
+    projectId,
+    projectPath: project.path,
+    reasons: ["worktree"],
+    sequence: Date.now()
+  });
+}
+
 async function openFileInEditor(
   projectId: string,
   pathName: string
@@ -1484,17 +2103,31 @@ async function loadProjectFileDiff(
   projectId: string,
   pathName: string
 ): Promise<ReviewFileDiffContentView | null> {
+  const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
+
+  return diff?.content ?? null;
+}
+
+async function loadProjectFileDiffForCompanion(
+  projectId: string,
+  pathName: string
+): Promise<{
+  readonly content: ReviewFileDiffContentView;
+  readonly contentKind: FileDiffContentKind;
+  readonly diffHash: string;
+} | null> {
   const project = getStorage().getProject(projectId);
 
   if (!project) {
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
   const gitDiff =
-    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
-      ? await loadBranchFileDiff(project.path, project.defaultBaseRef, pathName)
-      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
-        ? await loadCommitFileDiff(project.path, project.defaultCommitRef, pathName)
+    reviewTarget.kind === "branch"
+      ? await loadBranchFileDiff(project.path, reviewTarget.baseRefName, pathName)
+      : reviewTarget.kind === "commit"
+        ? await loadCommitFileDiff(project.path, reviewTarget.commitSha, pathName)
         : await loadWorkingTreeFileDiff(project.path, pathName);
 
   if (!gitDiff) {
@@ -1507,13 +2140,17 @@ async function loadProjectFileDiff(
   const textContent = diff.content.kind === "text" ? diff.content : undefined;
 
   return {
-    additions: summary.additions,
-    deletions: summary.deletions,
-    ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
-    ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
-    patch,
-    path: diff.newPath,
-    status: diff.status
+    content: {
+      additions: summary.additions,
+      deletions: summary.deletions,
+      ...(textContent?.newText !== undefined ? { newText: textContent.newText } : {}),
+      ...(textContent?.oldText !== undefined ? { oldText: textContent.oldText } : {}),
+      patch,
+      path: diff.newPath,
+      status: diff.status
+    },
+    contentKind: diff.content.kind,
+    diffHash: createDiffHash(reviewTarget, diff)
   };
 }
 

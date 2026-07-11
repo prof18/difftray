@@ -295,6 +295,11 @@ describe("storage", () => {
       body: "Updated comment.",
       updatedAt: expect.any(String)
     });
+    expect(storage.getReviewComment(comment.id)).toMatchObject({
+      body: "Updated comment.",
+      id: comment.id,
+      projectId: project.id
+    });
     expect(storage.updateReviewComment("missing-comment", "No-op")).toBeNull();
 
     storage.deleteReviewComment(comment.id);
@@ -534,6 +539,8 @@ describe("storage", () => {
 
     expect(storage.getAppSettings()).toEqual({
       autoCollapseHunksOver: 120,
+      companionEnabled: false,
+      companionPort: 48620,
       defaultDiffMode: "split",
       hideWhitespaceOnlyChanges: false,
       notifyOnDrift: true,
@@ -550,6 +557,8 @@ describe("storage", () => {
 
     storage.upsertAppSettings({
       autoCollapseHunksOver: 200,
+      companionEnabled: true,
+      companionPort: 48627,
       defaultDiffMode: "unified",
       editorLaunchConfig: {
         args: ["--goto", "{path}:{line}"],
@@ -565,6 +574,8 @@ describe("storage", () => {
 
     expect(storage.getAppSettings()).toEqual({
       autoCollapseHunksOver: 200,
+      companionEnabled: true,
+      companionPort: 48627,
       defaultDiffMode: "unified",
       editorLaunchConfig: {
         args: ["--goto", "{path}:{line}"],
@@ -588,6 +599,8 @@ describe("storage", () => {
       const storage = openStorage(storagePath);
       storage.upsertAppSettings({
         autoCollapseHunksOver: 120,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "split",
         editorLaunchConfig: {
           args: ["{path}"],
@@ -613,6 +626,8 @@ describe("storage", () => {
 
       expect(reopenedStorage.getAppSettings()).toEqual({
         autoCollapseHunksOver: 120,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "split",
         hideWhitespaceOnlyChanges: false,
         notifyOnDrift: true,
@@ -709,6 +724,8 @@ describe("storage", () => {
 
       expect(reopenedStorage.getAppSettings()).toEqual({
         autoCollapseHunksOver: 300,
+        companionEnabled: false,
+        companionPort: 48620,
         defaultDiffMode: "unified",
         editorLaunchConfig: {
           args: ["--goto", "{path}:{line}"],
@@ -720,6 +737,105 @@ describe("storage", () => {
         showGeneratedFiles: true,
         themeMode: "system",
         wrapDiffLines: true
+      });
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("persists companion devices and looks them up by public key", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      storage.upsertCompanionDevice({
+        id: "device-1",
+        name: "Marco's iPhone",
+        platform: "ios",
+        publicKey: "device-public-key-1"
+      });
+      storage.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.listCompanionDevices()).toEqual([
+        expect.objectContaining({
+          id: "device-1",
+          name: "Marco's iPhone",
+          platform: "ios",
+          publicKey: "device-public-key-1"
+        })
+      ]);
+      expect(
+        reopenedStorage.findCompanionDeviceByPublicKey("device-public-key-1")
+      ).toEqual(
+        expect.objectContaining({
+          id: "device-1",
+          name: "Marco's iPhone"
+        })
+      );
+      expect(reopenedStorage.findCompanionDeviceByPublicKey("missing")).toBeNull();
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
+  it("updates companion device metadata, last-seen timestamps, and revocation", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertCompanionDevice({
+      id: "device-1",
+      name: "Marco's iPhone",
+      platform: "ios",
+      publicKey: "device-public-key-1"
+    });
+    storage.upsertCompanionDevice({
+      id: "device-1",
+      name: "Marco's iPhone 17",
+      platform: "ios",
+      publicKey: "device-public-key-1"
+    });
+    storage.touchCompanionDeviceLastSeen("device-1");
+    storage.revokeCompanionDevice("device-1");
+
+    const device = storage.findCompanionDeviceByPublicKey("device-public-key-1");
+
+    expect(device).toEqual(
+      expect.objectContaining({
+        id: "device-1",
+        lastSeenAt: expect.any(String) as string,
+        name: "Marco's iPhone 17",
+        platform: "ios",
+        publicKey: "device-public-key-1",
+        revokedAt: expect.any(String) as string
+      })
+    );
+    expect(storage.listCompanionDevices()).toEqual([device]);
+    storage.close();
+  });
+
+  it("persists the companion server keypair in app settings", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      expect(storage.getCompanionServerKeyPair()).toBeNull();
+
+      storage.upsertCompanionServerKeyPair({
+        publicKey: "server-public-key",
+        secretKey: "server-secret-key"
+      });
+      storage.close();
+
+      const reopenedStorage = openStorage(storagePath);
+
+      expect(reopenedStorage.getCompanionServerKeyPair()).toEqual({
+        publicKey: "server-public-key",
+        secretKey: "server-secret-key"
       });
       reopenedStorage.close();
     } finally {

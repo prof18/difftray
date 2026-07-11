@@ -15,6 +15,8 @@ export type ProjectSettingsRecord = {
 
 export type AppSettingsRecord = {
   readonly autoCollapseHunksOver: number;
+  readonly companionEnabled: boolean;
+  readonly companionPort: number;
   readonly defaultDiffMode: DiffMode;
   readonly editorLaunchConfig?: EditorLaunchConfig;
   readonly hideWhitespaceOnlyChanges: boolean;
@@ -31,6 +33,10 @@ export function clampFileListWidth(value: number): number {
 
 export function clampAutoCollapseHunks(value: number): number {
   return Math.min(999, Math.max(20, Math.round(value)));
+}
+
+export function clampCompanionPort(value: number): number {
+  return Math.min(65535, Math.max(1, Math.round(value)));
 }
 
 export function reviewResetTriggerFromValue(value: string): ReviewResetTrigger {
@@ -66,6 +72,8 @@ export function appNumberSetting(
 export function defaultAppSettings(): AppSettingsRecord {
   return {
     autoCollapseHunksOver: 120,
+    companionEnabled: false,
+    companionPort: 48620,
     defaultDiffMode: "split",
     hideWhitespaceOnlyChanges: false,
     notifyOnDrift: true,

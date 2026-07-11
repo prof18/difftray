@@ -1,0 +1,634 @@
+import { posix as posixPath } from "node:path";
+
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type CompanionServerEvent,
+  type CreateCommentBody,
+  type DiffTargetBody,
+  type FileDiffContentKind,
+  type MarkReviewedBody,
+  type RecentProjectView,
+  type ReviewCommentView,
+  type ReviewFileDiffContentView,
+  type ReviewWorkspaceView,
+  type UpdateCommentBody,
+  type WorkspaceSummary,
+  parseCreateCommentBody,
+  parseDiffTargetBody,
+  parseMarkReviewedBody,
+  parsePairRequestBody,
+  parseUpdateCommentBody
+} from "@difftray/companion-protocol";
+import type { DifftrayStorage } from "@difftray/storage";
+
+import type {
+  CompanionAuthManager,
+  CompanionDeviceContext,
+  CompanionEnvelopeVerifier
+} from "./auth.js";
+import type { RouteDefinition } from "./router.js";
+
+export type MarkResult =
+  | {
+      readonly marked: true;
+      readonly workspaceSummary: WorkspaceSummary;
+    }
+  | {
+      readonly stale: true;
+      readonly workspace: ReviewWorkspaceView;
+    };
+
+export type UnmarkResult =
+  | {
+      readonly unmarked: true;
+      readonly workspaceSummary: WorkspaceSummary;
+    }
+  | {
+      readonly stale: true;
+      readonly workspace: ReviewWorkspaceView;
+    };
+
+export type CommitInfo = {
+  readonly sha: string;
+  readonly shortSha: string;
+  readonly subject: string;
+};
+
+export type CompanionDeps = {
+  readonly companionAuth: CompanionAuthManager;
+  readonly companionEnvelope: CompanionEnvelopeVerifier;
+  readonly storage: DifftrayStorage;
+  readonly loadWorkspaceView: (projectId: string) => Promise<ReviewWorkspaceView>;
+  readonly loadFileDiff: (
+    projectId: string,
+    path: string
+  ) => Promise<{
+    readonly content: ReviewFileDiffContentView;
+    readonly contentKind: FileDiffContentKind;
+    readonly diffHash: string;
+  }>;
+  readonly markReviewed: (
+    input: MarkReviewedBody & { readonly projectId: string }
+  ) => Promise<MarkResult>;
+  readonly unmarkReviewed: (
+    input: MarkReviewedBody & { readonly projectId: string }
+  ) => Promise<UnmarkResult>;
+  readonly createComment: (
+    input: CreateCommentBody & { readonly projectId: string }
+  ) => Promise<ReviewCommentView>;
+  readonly updateComment: (
+    input: UpdateCommentBody & { readonly commentId: string }
+  ) => Promise<ReviewCommentView | null>;
+  readonly deleteComment: (id: string) => Promise<boolean>;
+  readonly commentsReport: (projectId: string) => Promise<string>;
+  readonly listBranchRefs: (projectId: string) => Promise<readonly string[]>;
+  readonly listRecentCommits: (projectId: string) => Promise<readonly CommitInfo[]>;
+  readonly updateDiffTarget: (
+    projectId: string,
+    target: DiffTargetBody
+  ) => Promise<ReviewWorkspaceView>;
+  readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+  readonly notifyDesktopRenderer: (projectId: string) => void;
+  readonly serverIdentity: () => {
+    readonly appVersion: string;
+    readonly serverId: string;
+    readonly serverName: string;
+    readonly serverPublicKey: string;
+  };
+};
+
+export type CompanionResponse = {
+  readonly body: unknown;
+  readonly status: number;
+};
+
+export type CompanionHandlerInput = {
+  readonly body: unknown;
+  readonly device: CompanionDeviceContext | null;
+  readonly params: ReadonlyMap<string, string>;
+  readonly query: URLSearchParams;
+};
+
+export type CompanionHandler = (
+  input: CompanionHandlerInput
+) => Promise<CompanionResponse> | CompanionResponse;
+
+export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinition[] {
+  const workspaceLoads = new Map<string, Promise<ReviewWorkspaceView>>();
+
+  async function loadWorkspaceSingleFlight(
+    projectId: string
+  ): Promise<ReviewWorkspaceView> {
+    const existing = workspaceLoads.get(projectId);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = deps.loadWorkspaceView(projectId);
+    workspaceLoads.set(projectId, promise);
+
+    try {
+      return await promise;
+    } finally {
+      workspaceLoads.delete(projectId);
+    }
+  }
+
+  return [
+    {
+      handler: () => {
+        const identity = deps.serverIdentity();
+
+        return {
+          body: {
+            appVersion: identity.appVersion,
+            pairingOpen: false,
+            protocolVersion: COMPANION_PROTOCOL_VERSION,
+            serverId: identity.serverId,
+            serverName: identity.serverName,
+            serverPublicKey: identity.serverPublicKey
+          },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/handshake"
+    },
+    {
+      handler: ({ body }) => {
+        const openedPairEnvelope = deps.companionEnvelope.openPairRequestEnvelope(body);
+
+        if (!openedPairEnvelope.ok) {
+          return {
+            body: companionError("unauthorized", "Unauthorized"),
+            status: 401
+          };
+        }
+
+        const parsed = parsePairRequestBody(openedPairEnvelope.body);
+
+        if (!parsed.ok) {
+          return sealPairResponse(
+            deps,
+            openedPairEnvelope.devicePublicKey,
+            badRequest(parsed.error)
+          );
+        }
+
+        if (parsed.value.devicePublicKey !== openedPairEnvelope.devicePublicKey) {
+          return sealPairResponse(
+            deps,
+            openedPairEnvelope.devicePublicKey,
+            badRequest("devicePublicKey must match envelope sender")
+          );
+        }
+
+        if (parsed.value.protocolVersion !== COMPANION_PROTOCOL_VERSION) {
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
+            body: companionError("protocol_mismatch", "Unsupported protocol version"),
+            status: 400
+          });
+        }
+
+        const result = deps.companionAuth.pairDevice(parsed.value);
+
+        if (result.status === "approved") {
+          const identity = deps.serverIdentity();
+
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
+            body: {
+              serverId: identity.serverId,
+              serverName: identity.serverName,
+              status: "approved"
+            },
+            status: 200
+          });
+        }
+
+        if (result.status === "pending") {
+          return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
+            body: {
+              pairRequestId: result.pairRequestId,
+              status: "pending"
+            },
+            status: 202
+          });
+        }
+
+        return sealPairResponse(deps, openedPairEnvelope.devicePublicKey, {
+          body: companionError(
+            result.reason === "pairing_expired" ? "pairing_expired" : "unauthorized",
+            pairingFailureMessage(result.reason)
+          ),
+          status: 401
+        });
+      },
+      method: "POST",
+      path: "/companion/v1/pair"
+    },
+    {
+      handler: ({ params }) => {
+        const pairRequestId = params.get("pairRequestId");
+
+        if (!pairRequestId) {
+          return {
+            body: companionError("not_found", "Pair request not found"),
+            status: 404
+          };
+        }
+
+        const result = deps.companionAuth.getPairRequestStatus(pairRequestId);
+
+        if (result.status === "pending") {
+          return sealPairResponse(deps, result.devicePublicKey, {
+            body: { status: "pending" },
+            status: 200
+          });
+        }
+
+        if (result.status === "approved") {
+          const identity = deps.serverIdentity();
+
+          return sealPairResponse(deps, result.devicePublicKey, {
+            body: {
+              serverId: identity.serverId,
+              serverName: identity.serverName,
+              status: "approved"
+            },
+            status: 200
+          });
+        }
+
+        if (result.status === "denied") {
+          return {
+            body: companionError("forbidden", "Pair request was denied"),
+            status: 403
+          };
+        }
+
+        return result.reason === "pairing_expired"
+          ? {
+              body: companionError("pairing_expired", "Pairing has expired"),
+              status: 410
+            }
+          : {
+              body: companionError("not_found", "Pair request not found"),
+              status: 404
+            };
+      },
+      method: "GET",
+      path: "/companion/v1/pair/:pairRequestId"
+    },
+    {
+      handler: async ({ body, params, query }) => {
+        const projectId = params.get("projectId");
+        const requestedPath = query.get("path") ?? readFileDiffPath(body);
+
+        if (!projectId || !requestedPath || !isSafeRelativePath(requestedPath)) {
+          return {
+            body: companionError("not_found", "File diff not found"),
+            status: 404
+          };
+        }
+
+        const workspace = await loadWorkspaceSingleFlight(projectId);
+        const file = workspace.files.find(
+          (candidate) => candidate.path === requestedPath
+        );
+
+        if (!file) {
+          return {
+            body: companionError("not_found", "File diff not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: await deps.loadFileDiff(projectId, requestedPath),
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/files/diff",
+      requiresAuth: true
+    },
+    {
+      handler: async () => ({
+        body: { projects: await deps.listRecentProjects() },
+        status: 200
+      }),
+      method: "GET",
+      path: "/companion/v1/projects",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Workspace not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { workspace: await loadWorkspaceSingleFlight(projectId) },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/workspace",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseMarkReviewedBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        const result = await deps.markReviewed({ ...parsed.value, projectId });
+
+        return "stale" in result
+          ? { body: companionError("stale_diff", "Displayed diff is stale"), status: 409 }
+          : { body: result, status: 200 };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/reviews/mark",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseMarkReviewedBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        const result = await deps.unmarkReviewed({ ...parsed.value, projectId });
+
+        return "stale" in result
+          ? { body: companionError("stale_diff", "Displayed diff is stale"), status: 409 }
+          : { body: result, status: 200 };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/reviews/unmark",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Comments not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { comments: (await loadWorkspaceSingleFlight(projectId)).comments },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/comments",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseCreateCommentBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+        if (parsed.value.body.length > 20_000) {
+          return badRequest("Comment body is too long");
+        }
+
+        return {
+          body: { comment: await deps.createComment({ ...parsed.value, projectId }) },
+          status: 200
+        };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/comments",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const commentId = params.get("commentId");
+        const parsed = parseUpdateCommentBody(body);
+
+        if (!commentId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing commentId" : parsed.error);
+        }
+        if (parsed.value.body.length > 20_000) {
+          return badRequest("Comment body is too long");
+        }
+
+        const comment = await deps.updateComment({ ...parsed.value, commentId });
+
+        return comment
+          ? { body: { comment }, status: 200 }
+          : { body: companionError("not_found", "Comment not found"), status: 404 };
+      },
+      method: "PATCH",
+      path: "/companion/v1/comments/:commentId",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const commentId = params.get("commentId");
+
+        if (!commentId) {
+          return {
+            body: companionError("not_found", "Comment not found"),
+            status: 404
+          };
+        }
+
+        return (await deps.deleteComment(commentId))
+          ? {
+              body: { deleted: true },
+              status: 200
+            }
+          : {
+              body: companionError("not_found", "Comment not found"),
+              status: 404
+            };
+      },
+      method: "DELETE",
+      path: "/companion/v1/comments/:commentId",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Comment report not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { report: await deps.commentsReport(projectId) },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/comments/report",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Branches not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { refs: await deps.listBranchRefs(projectId) },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/branches",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Commits not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { commits: await deps.listRecentCommits(projectId) },
+          status: 200
+        };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/commits",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseDiffTargetBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        return {
+          body: { workspace: await deps.updateDiffTarget(projectId, parsed.value) },
+          status: 200
+        };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/diff-target",
+      requiresAuth: true
+    }
+  ];
+}
+
+function badRequest(message: string): CompanionResponse {
+  return {
+    body: companionError("bad_request", message),
+    status: 400
+  };
+}
+
+function sealPairResponse(
+  deps: CompanionDeps,
+  devicePublicKey: string,
+  response: CompanionResponse
+): CompanionResponse {
+  return {
+    body: deps.companionEnvelope.sealPairResponseEnvelope({
+      body: response.body,
+      devicePublicKey
+    }),
+    status: response.status
+  };
+}
+
+function pairingFailureMessage(
+  reason: "locked" | "not_found" | "pairing_expired" | "wrong_code"
+): string {
+  switch (reason) {
+    case "locked":
+      return "Pairing is locked after too many incorrect codes";
+    case "not_found":
+    case "pairing_expired":
+      return "Pairing has expired";
+    case "wrong_code":
+      return "Pairing code is incorrect";
+  }
+}
+
+function readFileDiffPath(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+
+  const path = (body as { readonly path?: unknown }).path;
+
+  return typeof path === "string" ? path : null;
+}
+
+export function companionError(
+  code:
+    | "bad_request"
+    | "forbidden"
+    | "internal"
+    | "not_found"
+    | "pairing_expired"
+    | "protocol_mismatch"
+    | "stale_diff"
+    | "unauthorized",
+  message: string
+): {
+  readonly error: {
+    readonly code: typeof code;
+    readonly message: string;
+    readonly protocolVersion: number;
+  };
+} {
+  return {
+    error: {
+      code,
+      message,
+      protocolVersion: COMPANION_PROTOCOL_VERSION
+    }
+  };
+}
+
+export function isSafeRelativePath(input: string): boolean {
+  if (input.length === 0 || posixPath.isAbsolute(input) || input.includes("\\")) {
+    return false;
+  }
+
+  return !input.split("/").some((part) => part === "" || part === "." || part === "..");
+}
+
+export type ConnectedDevice = {
+  readonly devicePk: string;
+  readonly send: (event: CompanionServerEvent) => void;
+};
