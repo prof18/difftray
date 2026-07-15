@@ -369,6 +369,54 @@ describe("companion server core", () => {
     expect(calls).toEqual(["src/app.ts"]);
   });
 
+  it("loads one validated image side at a time", async () => {
+    const calls: { readonly path: string; readonly side: "new" | "old" }[] = [];
+    const { baseUrl } = await startServer({
+      loadFileImage: async (_projectId, path, side) => {
+        calls.push({ path, side });
+        return {
+          diffHash: "diff-hash",
+          image: {
+            dataBase64: "iVBORw0KGgo=",
+            height: 180,
+            mimeType: "image/png",
+            width: 320
+          },
+          side
+        };
+      }
+    });
+
+    const valid = await encryptedRequest({
+      baseUrl,
+      body: { path: "src/app.ts", side: "new" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/image"
+    });
+    const unsupportedSide = await encryptedRequest({
+      baseUrl,
+      body: { path: "src/app.ts", side: "both" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/image"
+    });
+    const outsideDiff = await encryptedRequest({
+      baseUrl,
+      body: { path: "README.md", side: "new" },
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/files/image"
+    });
+
+    expect(valid.plain.status).toBe(200);
+    expect(valid.plain.body).toMatchObject({
+      diffHash: "diff-hash",
+      image: { mimeType: "image/png", width: 320 },
+      side: "new"
+    });
+    expect(unsupportedSide.plain.status).toBe(400);
+    expect(outsideDiff.plain.status).toBe(404);
+    expect(calls).toEqual([{ path: "src/app.ts", side: "new" }]);
+  });
+
   it("includes project review summaries in the authenticated projects list", async () => {
     const { baseUrl } = await startServer({
       listRecentProjects: async () => [
@@ -618,6 +666,9 @@ async function startServer(
     listRecentProjects: async () => [],
     loadFileDiff: async () => {
       throw new Error("unexpected loadFileDiff call");
+    },
+    loadFileImage: async () => {
+      throw new Error("unexpected loadFileImage call");
     },
     loadWorkspaceView: async (projectId) => testWorkspace(projectId),
     markReviewed: async () => ({

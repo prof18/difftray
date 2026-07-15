@@ -17,6 +17,7 @@ export {
   parseCompanionServerEvent,
   parseCreateCommentBody,
   parseDiffTargetBody,
+  parseFileImageBody,
   parseMarkReviewedBody,
   parsePairRequestBody,
   parseUpdateCommentBody,
@@ -56,6 +57,8 @@ export type FileDiffContentKind =
   | "text";
 
 export type ReviewCommentSide = "additions" | "deletions";
+export type FileImageSide = "new" | "old";
+export type RasterImageMimeType = "image/jpeg" | "image/png" | "image/webp";
 
 export type RecentProjectView = {
   readonly defaultBaseRef?: string;
@@ -199,6 +202,11 @@ export type UpdateCommentBody = {
   readonly body: string;
 };
 
+export type FileImageBody = {
+  readonly path: string;
+  readonly side: FileImageSide;
+};
+
 export type DiffTargetBody =
   | { readonly mode: "working_tree" }
   | { readonly mode: "branch"; readonly ref: string }
@@ -225,6 +233,17 @@ export type FileDiffResponse = {
   readonly content: ReviewFileDiffContentView;
   readonly contentKind: FileDiffContentKind;
   readonly diffHash: string;
+};
+
+export type FileImageResponse = {
+  readonly diffHash: string;
+  readonly image: {
+    readonly dataBase64: string;
+    readonly height: number;
+    readonly mimeType: RasterImageMimeType;
+    readonly width: number;
+  };
+  readonly side: FileImageSide;
 };
 
 export type MarkReviewedResponse =

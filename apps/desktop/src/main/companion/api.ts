@@ -6,6 +6,7 @@ import {
   type CreateCommentBody,
   type DiffTargetBody,
   type FileDiffContentKind,
+  type FileImageResponse,
   type MarkReviewedBody,
   type RecentProjectView,
   type ReviewCommentView,
@@ -15,6 +16,7 @@ import {
   type WorkspaceSummary,
   parseCreateCommentBody,
   parseDiffTargetBody,
+  parseFileImageBody,
   parseMarkReviewedBody,
   parsePairRequestBody,
   parseUpdateCommentBody
@@ -67,6 +69,11 @@ export type CompanionDeps = {
     readonly contentKind: FileDiffContentKind;
     readonly diffHash: string;
   }>;
+  readonly loadFileImage: (
+    projectId: string,
+    path: string,
+    side: "new" | "old"
+  ) => Promise<FileImageResponse | null>;
   readonly markReviewed: (
     input: MarkReviewedBody & { readonly projectId: string }
   ) => Promise<MarkResult>;
@@ -310,6 +317,51 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       },
       method: "GET",
       path: "/companion/v1/projects/:projectId/files/diff",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseFileImageBody(body);
+
+        if (!parsed.ok) {
+          return badRequest(parsed.error);
+        }
+
+        if (!projectId || !isSafeRelativePath(parsed.value.path)) {
+          return {
+            body: companionError("not_found", "File image not found"),
+            status: 404
+          };
+        }
+
+        const workspace = await loadWorkspaceSingleFlight(projectId);
+        const file = workspace.files.find(
+          (candidate) => candidate.path === parsed.value.path
+        );
+
+        if (!file) {
+          return {
+            body: companionError("not_found", "File image not found"),
+            status: 404
+          };
+        }
+
+        const image = await deps.loadFileImage(
+          projectId,
+          parsed.value.path,
+          parsed.value.side
+        );
+
+        return image
+          ? { body: image, status: 200 }
+          : {
+              body: companionError("not_found", "File image not found"),
+              status: 404
+            };
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/files/image",
       requiresAuth: true
     },
     {

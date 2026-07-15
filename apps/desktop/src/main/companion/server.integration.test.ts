@@ -489,6 +489,7 @@ async function createIntegrationHarness(): Promise<{
       storage.listRecentProjects().map((record) => projectView(record)),
     loadFileDiff: async (projectId, pathName) =>
       loadFileDiff(storage, projectId, pathName),
+    loadFileImage: async () => null,
     loadWorkspaceView: async (projectId) => loadWorkspaceView(storage, projectId),
     markReviewed: async (input) => {
       const workspace = await loadWorkspaceView(storage, input.projectId);

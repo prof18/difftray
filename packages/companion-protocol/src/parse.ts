@@ -2,6 +2,7 @@ import type {
   CompanionServerEvent,
   CreateCommentBody,
   DiffTargetBody,
+  FileImageBody,
   MarkReviewedBody,
   PairRequestBody,
   UpdateCommentBody
@@ -13,6 +14,7 @@ export type ParseResult<T> =
 
 const platforms = ["android", "ios"] as const;
 const commentSides = ["additions", "deletions"] as const;
+const fileImageSides = ["new", "old"] as const;
 const workspaceChangedReasons = [
   "comments",
   "diff_target",
@@ -77,6 +79,15 @@ export function parseMarkReviewedBody(input: unknown): ParseResult<MarkReviewedB
       reviewTargetId: reviewTargetId.value
     }
   };
+}
+
+export function parseFileImageBody(input: unknown): ParseResult<FileImageBody> {
+  const path = readString(input, "path");
+  if (!path.ok) return path;
+  const side = readEnum(input, "side", fileImageSides);
+  if (!side.ok) return side;
+
+  return { ok: true, value: { path: path.value, side: side.value } };
 }
 
 export function parseCreateCommentBody(input: unknown): ParseResult<CreateCommentBody> {

@@ -4,6 +4,7 @@ import {
   parseCompanionServerEvent,
   parseCreateCommentBody,
   parseDiffTargetBody,
+  parseFileImageBody,
   parseMarkReviewedBody,
   parsePairRequestBody,
   parseUpdateCommentBody
@@ -78,6 +79,17 @@ describe("parsePairRequestBody", () => {
 });
 
 describe("review request parsers", () => {
+  it("parses image side requests and rejects unsupported sides", () => {
+    expect(parseFileImageBody({ path: "screens/home.png", side: "new" })).toEqual({
+      ok: true,
+      value: { path: "screens/home.png", side: "new" }
+    });
+    expect(parseFileImageBody({ path: "screens/home.png", side: "both" })).toEqual({
+      error: "unsupported side",
+      ok: false
+    });
+  });
+
   it("parses mark reviewed bodies with optional previous paths", () => {
     expect(
       parseMarkReviewedBody({

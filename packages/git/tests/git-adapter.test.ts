@@ -29,6 +29,7 @@ import {
   loadCommitDiffSummaries,
   loadCommitFileDiff,
   loadCommitFileDiffSummary,
+  loadRasterImageSnapshot,
   loadWorkingTreeDiffs,
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiff,
@@ -63,6 +64,78 @@ describe("Git repository detection", () => {
       gitDir: path.join(repo, ".git"),
       root: repo
     });
+  });
+});
+
+describe("Raster image snapshots", () => {
+  it("loads bounded PNG snapshots from the worktree", async () => {
+    const repo = await createRepo();
+    const bytes = pngFixture(320, 180);
+    await writeFile(path.join(repo, "preview.png"), bytes);
+
+    await expect(
+      loadRasterImageSnapshot(repo, {
+        kind: "worktree",
+        path: "preview.png"
+      })
+    ).resolves.toEqual({
+      bytes,
+      height: 180,
+      mimeType: "image/png",
+      width: 320
+    });
+  });
+
+  it("rejects non-images and oversized raster payloads", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "not-image.bin"), Buffer.from([0, 1, 2, 3]));
+    await writeFile(path.join(repo, "huge.png"), Buffer.alloc(4 * 1024 * 1024 + 1));
+
+    await expect(
+      loadRasterImageSnapshot(repo, {
+        kind: "worktree",
+        path: "not-image.bin"
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      loadRasterImageSnapshot(repo, {
+        kind: "worktree",
+        path: "huge.png"
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it("recognizes static JPEG and WebP dimensions", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "preview.jpg"), jpegFixture(320, 180));
+    await writeFile(path.join(repo, "preview.webp"), webpFixture(640, 360));
+
+    await expect(
+      loadRasterImageSnapshot(repo, { kind: "worktree", path: "preview.jpg" })
+    ).resolves.toMatchObject({ height: 180, mimeType: "image/jpeg", width: 320 });
+    await expect(
+      loadRasterImageSnapshot(repo, { kind: "worktree", path: "preview.webp" })
+    ).resolves.toMatchObject({ height: 360, mimeType: "image/webp", width: 640 });
+  });
+
+  it("rejects animated and excessive-pixel images", async () => {
+    const repo = await createRepo();
+    const animatedWebp = webpFixture(320, 180);
+    animatedWebp[20] = 0x02;
+    const animatedPng = Buffer.concat([pngFixture(320, 180), pngChunk("acTL")]);
+    await writeFile(path.join(repo, "animated.webp"), animatedWebp);
+    await writeFile(path.join(repo, "animated.png"), animatedPng);
+    await writeFile(path.join(repo, "huge-pixels.png"), pngFixture(4000, 3000));
+
+    await expect(
+      loadRasterImageSnapshot(repo, { kind: "worktree", path: "animated.webp" })
+    ).resolves.toBeUndefined();
+    await expect(
+      loadRasterImageSnapshot(repo, { kind: "worktree", path: "animated.png" })
+    ).resolves.toBeUndefined();
+    await expect(
+      loadRasterImageSnapshot(repo, { kind: "worktree", path: "huge-pixels.png" })
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -995,4 +1068,48 @@ async function gitOutput(cwd: string, ...args: string[]): Promise<string> {
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function pngFixture(width: number, height: number): Buffer {
+  const bytes = Buffer.alloc(33);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(bytes);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "ascii");
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes;
+}
+
+function pngChunk(type: string): Buffer {
+  const bytes = Buffer.alloc(12);
+  bytes.writeUInt32BE(0, 0);
+  bytes.write(type, 4, "ascii");
+  return bytes;
+}
+
+function jpegFixture(width: number, height: number): Buffer {
+  const bytes = Buffer.from([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x08,
+    0x08,
+    height >> 8,
+    height & 0xff,
+    width >> 8,
+    width & 0xff
+  ]);
+  return bytes;
+}
+
+function webpFixture(width: number, height: number): Buffer {
+  const bytes = Buffer.alloc(30);
+  bytes.write("RIFF", 0, "ascii");
+  bytes.write("WEBP", 8, "ascii");
+  bytes.write("VP8X", 12, "ascii");
+  bytes.writeUIntLE(width - 1, 24, 3);
+  bytes.writeUIntLE(height - 1, 27, 3);
+  return bytes;
 }

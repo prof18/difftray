@@ -34,6 +34,8 @@ import {
   CreateCommentBody as CompanionCreateCommentBody,
   DiffTargetBody,
   FileDiffContentKind,
+  FileImageResponse,
+  FileImageSide,
   MarkReviewedBody as CompanionMarkReviewedBody,
   UpdateCommentBody as CompanionUpdateCommentBody,
   WorkspaceSummary
@@ -54,7 +56,9 @@ import {
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiffSummary,
   loadWorkingTreeFileDiff,
-  type DiffLoadProgress
+  loadRasterImageSnapshot,
+  type DiffLoadProgress,
+  type GitLoadedFileDiff
 } from "@difftray/git";
 import {
   applyProjectTabOrder,
@@ -1473,6 +1477,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
         diffHash: workspaceFile.diffHash
       };
     },
+    loadFileImage: loadProjectFileImage,
     loadWorkspaceView: loadProjectWorkspace,
     markReviewed: async (input) => {
       const result = await markProjectFileReviewed(input);
@@ -2114,24 +2119,13 @@ async function loadProjectFileDiffForCompanion(
   readonly contentKind: FileDiffContentKind;
   readonly diffHash: string;
 } | null> {
-  const project = getStorage().getProject(projectId);
+  const loaded = await loadProjectGitFileDiff(projectId, pathName);
 
-  if (!project) {
-    throw new Error(`Project is not stored: ${projectId}`);
-  }
-
-  const reviewTarget = await loadCurrentProjectReviewTarget(project);
-  const gitDiff =
-    reviewTarget.kind === "branch"
-      ? await loadBranchFileDiff(project.path, reviewTarget.baseRefName, pathName)
-      : reviewTarget.kind === "commit"
-        ? await loadCommitFileDiff(project.path, reviewTarget.commitSha, pathName)
-        : await loadWorkingTreeFileDiff(project.path, pathName);
-
-  if (!gitDiff) {
+  if (!loaded) {
     return null;
   }
 
+  const { gitDiff, reviewTarget } = loaded;
   const diff = fileDiffFromGit(gitDiff);
   const patch = patchForDiff(diff);
   const summary = summarizePatch(patch);
@@ -2150,6 +2144,98 @@ async function loadProjectFileDiffForCompanion(
     contentKind: diff.content.kind,
     diffHash: createDiffHash(reviewTarget, diff)
   };
+}
+
+async function loadProjectGitFileDiff(
+  projectId: string,
+  pathName: string
+): Promise<{
+  readonly gitDiff: GitLoadedFileDiff;
+  readonly project: StoredProjectRecord;
+  readonly reviewTarget: ReviewTarget;
+} | null> {
+  const project = getStorage().getProject(projectId);
+
+  if (!project) {
+    throw new Error(`Project is not stored: ${projectId}`);
+  }
+
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+  const gitDiff =
+    reviewTarget.kind === "branch"
+      ? await loadBranchFileDiff(project.path, reviewTarget.baseRefName, pathName)
+      : reviewTarget.kind === "commit"
+        ? await loadCommitFileDiff(project.path, reviewTarget.commitSha, pathName)
+        : await loadWorkingTreeFileDiff(project.path, pathName);
+
+  if (!gitDiff) {
+    return null;
+  }
+
+  return { gitDiff, project, reviewTarget };
+}
+
+async function loadProjectFileImage(
+  projectId: string,
+  pathName: string,
+  side: FileImageSide
+): Promise<FileImageResponse | null> {
+  const loaded = await loadProjectGitFileDiff(projectId, pathName);
+
+  if (!loaded) {
+    return null;
+  }
+
+  const { gitDiff, project, reviewTarget } = loaded;
+
+  if (gitDiff.content.kind !== "binary") {
+    return null;
+  }
+
+  if (
+    (side === "old" && gitDiff.status === "added") ||
+    (side === "new" && gitDiff.status === "deleted")
+  ) {
+    return null;
+  }
+
+  const imagePath =
+    side === "old" ? (gitDiff.oldPath ?? gitDiff.newPath) : gitDiff.newPath;
+  const source =
+    side === "new" && reviewTarget.kind === "working_tree"
+      ? ({ kind: "worktree", path: imagePath } as const)
+      : ({
+          kind: "git",
+          path: imagePath,
+          ref: imageSnapshotRef(reviewTarget, side)
+        } as const);
+  const image = await loadRasterImageSnapshot(project.path, source);
+
+  if (!image) {
+    return null;
+  }
+
+  return {
+    diffHash: createDiffHash(reviewTarget, fileDiffFromGit(gitDiff)),
+    image: {
+      dataBase64: image.bytes.toString("base64"),
+      height: image.height,
+      mimeType: image.mimeType,
+      width: image.width
+    },
+    side
+  };
+}
+
+function imageSnapshotRef(reviewTarget: ReviewTarget, side: FileImageSide): string {
+  switch (reviewTarget.kind) {
+    case "branch":
+      return side === "old" ? reviewTarget.mergeBaseSha : reviewTarget.headSha;
+    case "commit":
+      return side === "old" ? reviewTarget.parentSha : reviewTarget.commitSha;
+    case "working_tree":
+      return reviewTarget.headSha;
+  }
 }
 
 async function reviewCommentReportItems(

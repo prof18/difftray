@@ -17,6 +17,15 @@ import {
   synthesizeUntrackedDiff,
   type TrackedDiffSnapshotSource
 } from "./git-diff-content.js";
+
+export {
+  loadRasterImageSnapshot,
+  maxRasterImageBytes,
+  maxRasterImagePixels,
+  type RasterImageMimeType,
+  type RasterImageSnapshot,
+  type RasterImageSnapshotSource
+} from "./raster-image-snapshot.js";
 import {
   parseStatusPorcelainV2,
   shortBranchRefFromFullRef,
