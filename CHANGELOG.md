@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.8 - 2026-07-16
+
+### Improved
+
+- Improved compatibility with Difftray mobile.
+
 ## 0.0.7 - 2026-07-11
 
 ### Improved
