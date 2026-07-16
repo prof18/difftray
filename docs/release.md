@@ -31,10 +31,18 @@ pnpm release:dev:mac
 macOS release builds require:
 
 ```sh
-export APPLE_ID="<apple-id@example>"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-export APPLE_TEAM_ID="Q7CUB3RNAK"
+export APPLE_KEYCHAIN_PROFILE="difftray-notarization"
 export CSC_NAME="Marco Gomiero (Q7CUB3RNAK)"
+```
+
+Create the notarization profile once. Omitting `--password` makes `notarytool`
+prompt securely instead of placing the app-specific password in shell history or
+the process arguments:
+
+```sh
+xcrun notarytool store-credentials difftray-notarization \
+  --apple-id "<apple-id@example>" \
+  --team-id "Q7CUB3RNAK"
 ```
 
 `CSC_NAME` is the common-name portion only. Do not include the

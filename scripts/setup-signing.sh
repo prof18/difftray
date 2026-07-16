@@ -161,9 +161,10 @@ cmd_install() {
 
   stage "release env"
   cat <<EOF
-export APPLE_ID="<your-apple-id@example>"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-export APPLE_TEAM_ID="$team"
+xcrun notarytool store-credentials difftray-notarization \\
+  --apple-id "<your-apple-id@example>" \\
+  --team-id "$team"
+export APPLE_KEYCHAIN_PROFILE="difftray-notarization"
 export CSC_NAME="$csc"
 ./scripts/release.sh mac
 EOF

@@ -8,9 +8,7 @@
 #   SKIP_CI=1 ./scripts/release.sh mac
 #
 # Required env for signed mac builds:
-#   APPLE_ID
-#   APPLE_APP_SPECIFIC_PASSWORD
-#   APPLE_TEAM_ID
+#   APPLE_KEYCHAIN_PROFILE
 #   CSC_NAME
 
 set -euo pipefail
@@ -64,7 +62,7 @@ ok "vite bundles built"
 build_mac() {
   stage "preflight mac"
 
-  for var in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID CSC_NAME; do
+  for var in APPLE_KEYCHAIN_PROFILE CSC_NAME; do
     if [[ -z "${!var:-}" ]]; then
       fail "$var is not set"
     fi
@@ -79,6 +77,10 @@ build_mac() {
   fi
 
   ok "signing identity present"
+  # Force electron-builder to use notarytool's Keychain profile. Its Apple ID
+  # credential mode forwards the app-specific password as a process argument,
+  # where process inspection can expose it.
+  unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
   stage "electron-builder mac arm64+x64 ($CHANNEL)"
   pnpm exec electron-builder --config electron-builder.config.cjs --mac --publish never
   ok "electron-builder finished"
