@@ -370,10 +370,16 @@ describe("companion server core", () => {
   });
 
   it("loads one validated image side at a time", async () => {
-    const calls: { readonly path: string; readonly side: "new" | "old" }[] = [];
+    const calls: {
+      readonly diffHash: string;
+      readonly path: string;
+      readonly previousPath: string | undefined;
+      readonly side: "new" | "old";
+      readonly status: string;
+    }[] = [];
     const { baseUrl } = await startServer({
-      loadFileImage: async (_projectId, path, side) => {
-        calls.push({ path, side });
+      loadFileImage: async (_projectId, path, side, diffHash, previousPath, status) => {
+        calls.push({ diffHash, path, previousPath, side, status });
         return {
           diffHash: "diff-hash",
           image: {
@@ -383,6 +389,18 @@ describe("companion server core", () => {
             width: 320
           },
           side
+        };
+      },
+      loadWorkspaceView: async (projectId) => {
+        const workspace = testWorkspace(projectId);
+
+        return {
+          ...workspace,
+          files: workspace.files.map((file) => ({
+            ...file,
+            previousPath: "src/old-app.ts",
+            status: "renamed" as const
+          }))
         };
       }
     });
@@ -414,7 +432,15 @@ describe("companion server core", () => {
     });
     expect(unsupportedSide.plain.status).toBe(400);
     expect(outsideDiff.plain.status).toBe(404);
-    expect(calls).toEqual([{ path: "src/app.ts", side: "new" }]);
+    expect(calls).toEqual([
+      {
+        diffHash: "diff-hash",
+        path: "src/app.ts",
+        previousPath: "src/old-app.ts",
+        side: "new",
+        status: "renamed"
+      }
+    ]);
   });
 
   it("includes project review summaries in the authenticated projects list", async () => {

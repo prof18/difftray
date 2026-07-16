@@ -118,6 +118,23 @@ try {
   await window.getByRole("button", { name: "Show both diff sides" }).click();
   await window.locator('[data-diff-layout="split"]').waitFor({ timeout: 10_000 });
   await expectRenderedSplitDiff(window);
+  await window.getByRole("button", { name: /preview\.png modified/ }).click();
+  await window.getByRole("region", { name: "Image diff" }).waitFor({
+    timeout: 10_000
+  });
+  await expectDecodedImage(window, "Before image, 1 by 1 pixels");
+  await expectDecodedImage(window, "After image, 1 by 1 pixels");
+  await expectDistinctImageSources(window);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-image-diff.png")
+  });
+  await window.getByRole("button", { name: "Show new version" }).click();
+  await window
+    .getByAltText("Before image, 1 by 1 pixels")
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await expectDecodedImage(window, "After image, 1 by 1 pixels");
+  await window.getByRole("button", { name: "Show both diff sides" }).click();
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectSettingsDiffModeSelector(window, "split");
   await window.getByLabel("Show generated files", { exact: true }).check();
@@ -272,7 +289,7 @@ try {
   });
   await window.getByRole("button", { name: "Mark reviewed" }).click();
   await expectFileReviewState(window, "tracked.txt", "reviewed");
-  await expectProjectTabSummary(window, "visual-repo", "1/4");
+  await expectProjectTabSummary(window, "visual-repo", "1/5");
   await window.waitForTimeout(250);
   await window.screenshot({
     fullPage: true,
@@ -325,6 +342,7 @@ async function createChangedRepository(name = "visual-repo") {
   git(repo, ["config", "user.name", "Visual Smoke"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf8");
   if (includeContextFile) {
+    await writeFile(path.join(repo, "preview.png"), pngFixture("before"));
     await writeFile(path.join(repo, "context.txt"), `${contextLines.join("\n")}\n`);
     await writeFile(
       path.join(repo, "long-context.txt"),
@@ -338,6 +356,7 @@ async function createChangedRepository(name = "visual-repo") {
   git(repo, ["commit", "-am", "Branch change"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\nafter\n", "utf8");
   if (includeContextFile) {
+    await writeFile(path.join(repo, "preview.png"), pngFixture("after"));
     const changedContextLines = [...contextLines];
     for (let index = 0; index < 90; index += 1) {
       changedContextLines[index] = `changed context line ${index + 1}`;
@@ -387,6 +406,38 @@ function git(cwd, args) {
   execFileSync("git", args, {
     cwd,
     stdio: "ignore"
+  });
+}
+
+function pngFixture(side) {
+  return Buffer.from(
+    side === "before"
+      ? "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZgL8AAAAASUVORK5CYII="
+      : "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+  );
+}
+
+async function expectDecodedImage(window, accessibleName) {
+  await window.waitForFunction((name) => {
+    const image = [...document.querySelectorAll("img")].find(
+      (candidate) => candidate.alt === name
+    );
+
+    return image?.complete === true && image.naturalWidth > 0;
+  }, accessibleName);
+}
+
+async function expectDistinctImageSources(window) {
+  await window.waitForFunction(() => {
+    const before = document.querySelector('img[alt^="Before image"]');
+    const after = document.querySelector('img[alt^="After image"]');
+
+    return (
+      before instanceof HTMLImageElement &&
+      after instanceof HTMLImageElement &&
+      before.src !== after.src
+    );
   });
 }
 

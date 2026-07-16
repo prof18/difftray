@@ -6,6 +6,7 @@ import {
   type CreateCommentBody,
   type DiffTargetBody,
   type FileDiffContentKind,
+  type FileDiffStatus,
   type FileImageResponse,
   type MarkReviewedBody,
   type RecentProjectView,
@@ -72,7 +73,10 @@ export type CompanionDeps = {
   readonly loadFileImage: (
     projectId: string,
     path: string,
-    side: "new" | "old"
+    side: "new" | "old",
+    diffHash: string,
+    previousPath: string | undefined,
+    status: FileDiffStatus
   ) => Promise<FileImageResponse | null>;
   readonly markReviewed: (
     input: MarkReviewedBody & { readonly projectId: string }
@@ -350,7 +354,10 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         const image = await deps.loadFileImage(
           projectId,
           parsed.value.path,
-          parsed.value.side
+          parsed.value.side,
+          file.diffHash,
+          file.previousPath,
+          file.status
         );
 
         return image

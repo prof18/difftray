@@ -34,6 +34,7 @@ import {
   loadWorkingTreeDiffSummaries,
   loadWorkingTreeFileDiff,
   loadWorkingTreeFileDiffSummary,
+  rasterImageSnapshotWithinSizeLimit,
   parseStatusPorcelainV2
 } from "../src/index.js";
 
@@ -86,6 +87,27 @@ describe("Raster image snapshots", () => {
     });
   });
 
+  it("loads committed PNG snapshots without UTF-8 corruption", async () => {
+    const repo = await createRepo();
+    const bytes = pngFixture(320, 180);
+    await writeFile(path.join(repo, "preview.png"), bytes);
+    await git(repo, "add", "preview.png");
+    await git(repo, "commit", "-m", "add image preview");
+
+    await expect(
+      loadRasterImageSnapshot(repo, {
+        kind: "git",
+        path: "preview.png",
+        ref: "HEAD"
+      })
+    ).resolves.toEqual({
+      bytes,
+      height: 180,
+      mimeType: "image/png",
+      width: 320
+    });
+  });
+
   it("rejects non-images and oversized raster payloads", async () => {
     const repo = await createRepo();
     await writeFile(path.join(repo, "not-image.bin"), Buffer.from([0, 1, 2, 3]));
@@ -97,6 +119,12 @@ describe("Raster image snapshots", () => {
         path: "not-image.bin"
       })
     ).resolves.toBeUndefined();
+    await expect(
+      rasterImageSnapshotWithinSizeLimit(repo, {
+        kind: "worktree",
+        path: "huge.png"
+      })
+    ).resolves.toBe(false);
     await expect(
       loadRasterImageSnapshot(repo, {
         kind: "worktree",
@@ -342,8 +370,12 @@ describe("working tree diff loading", () => {
     const repo = await createRepo();
     await git(repo, "mv", "tracked.txt", "renamed.txt");
 
-    const summary = await loadWorkingTreeFileDiffSummary(repo, "renamed.txt");
-    const detail = await loadWorkingTreeFileDiff(repo, "renamed.txt");
+    const summary = await loadWorkingTreeFileDiffSummary(
+      repo,
+      "renamed.txt",
+      "tracked.txt"
+    );
+    const detail = await loadWorkingTreeFileDiff(repo, "renamed.txt", "tracked.txt");
 
     expect(summary).toEqual(
       expect.objectContaining({

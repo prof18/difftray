@@ -33,6 +33,7 @@ import {
   type DiffSideFocus
 } from "./diffs-renderer.js";
 import { ReviewCommentAnnotation } from "./review-comment-annotation.js";
+import { ImageDiff } from "./image-diff.js";
 import {
   commentSavePendingMatchesAnnotation,
   reviewCommentAnnotations,
@@ -51,6 +52,7 @@ export function DiffSurface({
   filePath,
   newText,
   oldText,
+  loadImage,
   onCancelComment,
   onCommentDraftBodyChange,
   onDeleteComment,
@@ -78,6 +80,7 @@ export function DiffSurface({
   readonly filePath: string;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
+  readonly loadImage?: (side: FileImageSide) => Promise<FileImageView | null>;
   readonly onCancelComment: () => void;
   readonly onCommentDraftBodyChange: (body: string) => void;
   readonly onDeleteComment: (commentId: string) => void;
@@ -206,7 +209,17 @@ export function DiffSurface({
         </div>
       ) : null}
       {model?.kind === "fallback" ? (
-        <DiffFallback title={model.title} detail={model.detail} />
+        loadImage && binaryPatch(patch) ? (
+          <ImageDiff
+            diffHash={diffHash}
+            diffSideFocus={diffSideFocus}
+            fallback={<DiffFallback title={model.title} detail={model.detail} />}
+            loadImage={loadImage}
+            status={status}
+          />
+        ) : (
+          <DiffFallback title={model.title} detail={model.detail} />
+        )
       ) : null}
       {focusedFileDiff ? (
         <WorkerPoolContextProvider
@@ -490,4 +503,8 @@ function DiffFallback({
       {detail.length > 0 ? <pre>{detail}</pre> : null}
     </section>
   );
+}
+
+function binaryPatch(patch: string): boolean {
+  return /^Binary file changed /m.test(patch);
 }

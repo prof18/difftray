@@ -72,6 +72,7 @@ export async function gitOutput(cwd: string, args: readonly string[]): Promise<s
 
 export async function gitBuffer(cwd: string, args: readonly string[]): Promise<Buffer> {
   const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
+    encoding: null,
     maxBuffer: maxGitOutputBuffer
   });
 

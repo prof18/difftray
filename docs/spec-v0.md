@@ -63,6 +63,8 @@ Lockfiles must not be treated as generated files.
 Lockfiles are visible and reviewable by default.
 
 Binary files should appear in the file list with a graceful non-text preview state.
+Supported static PNG, JPEG, and WebP changes render as bounded, lazy image previews;
+other binary files keep the non-text fallback.
 
 ## Review State
 

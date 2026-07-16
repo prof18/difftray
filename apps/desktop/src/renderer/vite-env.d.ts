@@ -44,6 +44,7 @@ declare global {
     readonly loadFileDiff: (
       input: LoadFileDiffInput
     ) => Promise<ReviewFileDiffContentView | null>;
+    readonly loadFileImage: (input: LoadFileImageInput) => Promise<FileImageView | null>;
     readonly loadProject: (
       projectId: string,
       options?: LoadProjectOptions
@@ -271,6 +272,29 @@ declare global {
   type LoadFileDiffInput = {
     readonly path: string;
     readonly projectId: string;
+  };
+
+  type FileImageSide = "new" | "old";
+  type FileImageStatus = "added" | "deleted" | "mode_changed" | "modified" | "renamed";
+
+  type LoadFileImageInput = {
+    readonly diffHash: string;
+    readonly path: string;
+    readonly previousPath?: string;
+    readonly projectId: string;
+    readonly side: FileImageSide;
+    readonly status: FileImageStatus;
+  };
+
+  type FileImageView = {
+    readonly diffHash: string;
+    readonly image: {
+      readonly dataBase64: string;
+      readonly height: number;
+      readonly mimeType: "image/jpeg" | "image/png" | "image/webp";
+      readonly width: number;
+    };
+    readonly side: FileImageSide;
   };
 
   type ReviewFileDiffContentView = {

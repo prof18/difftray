@@ -450,6 +450,32 @@ export function App(): React.JSX.Element {
   const selectedDiffSideFocus = selectedFile
     ? diffSideFocusForFile(selectedFile, diffMode, diffSideFocus)
     : diffSideFocus;
+  const loadSelectedFileImage = useMemo(() => {
+    const projectId = workspace?.project.id;
+    const path = selectedFile?.path;
+    const diffHash = selectedFile?.diffHash;
+    const previousPath = selectedFile?.previousPath;
+
+    if (!projectId || !path || !diffHash) {
+      return undefined;
+    }
+
+    return (side: FileImageSide): Promise<FileImageView | null> =>
+      window.difftray.loadFileImage({
+        diffHash,
+        path,
+        ...(previousPath ? { previousPath } : {}),
+        projectId,
+        side,
+        status: selectedFile.status
+      });
+  }, [
+    selectedFile?.diffHash,
+    selectedFile?.path,
+    selectedFile?.previousPath,
+    selectedFile?.status,
+    workspace?.project.id
+  ]);
 
   useEffect(() => {
     setCommentDraft((draft) =>
@@ -2327,6 +2353,9 @@ export function App(): React.JSX.Element {
                       diffSideFocus={selectedDiffSideFocus}
                       filePath={selectedFile.path}
                       key={selectedDiffScrollKey ?? selectedFile.diffHash}
+                      {...(loadSelectedFileImage
+                        ? { loadImage: loadSelectedFileImage }
+                        : {})}
                       newText={selectedFile.newText}
                       oldText={selectedFile.oldText}
                       patch={selectedFile.patch}

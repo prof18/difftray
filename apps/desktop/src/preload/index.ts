@@ -62,6 +62,7 @@ export type DifftrayApi = {
   readonly loadFileDiff: (
     input: LoadFileDiffInput
   ) => Promise<ReviewFileDiffContentView | null>;
+  readonly loadFileImage: (input: LoadFileImageInput) => Promise<FileImageView | null>;
   readonly loadProject: (
     projectId: string,
     options?: LoadProjectOptions
@@ -245,6 +246,34 @@ export type ReviewCommentView = {
 export type LoadFileDiffInput = {
   readonly path: string;
   readonly projectId: string;
+};
+
+export type FileImageSide = "new" | "old";
+export type FileImageStatus =
+  | "added"
+  | "deleted"
+  | "mode_changed"
+  | "modified"
+  | "renamed";
+
+export type LoadFileImageInput = {
+  readonly diffHash: string;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly projectId: string;
+  readonly side: FileImageSide;
+  readonly status: FileImageStatus;
+};
+
+export type FileImageView = {
+  readonly diffHash: string;
+  readonly image: {
+    readonly dataBase64: string;
+    readonly height: number;
+    readonly mimeType: "image/jpeg" | "image/png" | "image/webp";
+    readonly width: number;
+  };
+  readonly side: FileImageSide;
 };
 
 export type ReviewFileDiffContentView = {
@@ -517,6 +546,8 @@ const api: DifftrayApi = {
       "files:loadDiff",
       input
     ) as Promise<ReviewFileDiffContentView | null>,
+  loadFileImage: async (input) =>
+    ipcRenderer.invoke("files:loadImage", input) as Promise<FileImageView | null>,
   loadProject: async (projectId, options = {}) =>
     ipcRenderer.invoke("projects:load", {
       projectId,

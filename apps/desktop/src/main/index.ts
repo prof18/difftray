@@ -33,6 +33,7 @@ import {
   type PairingQrPayload,
   CreateCommentBody as CompanionCreateCommentBody,
   DiffTargetBody,
+  FileDiffStatus,
   FileDiffContentKind,
   FileImageResponse,
   FileImageSide,
@@ -57,6 +58,7 @@ import {
   loadWorkingTreeFileDiffSummary,
   loadWorkingTreeFileDiff,
   loadRasterImageSnapshot,
+  rasterImageSnapshotWithinSizeLimit,
   type DiffLoadProgress,
   type GitLoadedFileDiff
 } from "@difftray/git";
@@ -156,6 +158,10 @@ import {
 } from "./editor-preset-views.js";
 import { elapsedSince, logMainPerformance } from "./main-performance.js";
 import { reviewWorkspaceView } from "./project-workspace-view.js";
+import {
+  loadValidatedFileImage,
+  requiredFileImagePreflightSides
+} from "./file-image-loader.js";
 import type {
   CompanionDeps,
   MarkResult as CompanionMarkResult,
@@ -770,6 +776,39 @@ handleTrusted(
     const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
 
     return diff?.content ?? null;
+  }
+);
+handleTrusted(
+  "files:loadImage",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<FileImageResponse | null> => {
+    const projectId = readStringProperty(input, "projectId");
+    const pathName = readStringProperty(input, "path");
+    const diffHash = readStringProperty(input, "diffHash");
+    const previousPath = readOptionalStringProperty(input, "previousPath");
+    const side = readStringProperty(input, "side");
+    const status = readEnumProperty(input, "status", [
+      "added",
+      "deleted",
+      "mode_changed",
+      "modified",
+      "renamed"
+    ]);
+
+    if (side !== "new" && side !== "old") {
+      throw new Error("Invalid image side");
+    }
+
+    return loadProjectFileImage(
+      projectId,
+      pathName,
+      side,
+      diffHash,
+      previousPath,
+      status
+    );
   }
 );
 
@@ -1477,7 +1516,8 @@ export function createDesktopCompanionDeps(): CompanionDeps {
         diffHash: workspaceFile.diffHash
       };
     },
-    loadFileImage: loadProjectFileImage,
+    loadFileImage: (projectId, pathName, side, diffHash, previousPath, status) =>
+      loadProjectFileImage(projectId, pathName, side, diffHash, previousPath, status),
     loadWorkspaceView: loadProjectWorkspace,
     markReviewed: async (input) => {
       const result = await markProjectFileReviewed(input);
@@ -2148,7 +2188,8 @@ async function loadProjectFileDiffForCompanion(
 
 async function loadProjectGitFileDiff(
   projectId: string,
-  pathName: string
+  pathName: string,
+  previousPath?: string
 ): Promise<{
   readonly gitDiff: GitLoadedFileDiff;
   readonly project: StoredProjectRecord;
@@ -2163,10 +2204,20 @@ async function loadProjectGitFileDiff(
   const reviewTarget = await loadCurrentProjectReviewTarget(project);
   const gitDiff =
     reviewTarget.kind === "branch"
-      ? await loadBranchFileDiff(project.path, reviewTarget.baseRefName, pathName)
+      ? await loadBranchFileDiff(
+          project.path,
+          reviewTarget.baseRefName,
+          pathName,
+          previousPath
+        )
       : reviewTarget.kind === "commit"
-        ? await loadCommitFileDiff(project.path, reviewTarget.commitSha, pathName)
-        : await loadWorkingTreeFileDiff(project.path, pathName);
+        ? await loadCommitFileDiff(
+            project.path,
+            reviewTarget.commitSha,
+            pathName,
+            previousPath
+          )
+        : await loadWorkingTreeFileDiff(project.path, pathName, previousPath);
 
   if (!gitDiff) {
     return null;
@@ -2178,53 +2229,97 @@ async function loadProjectGitFileDiff(
 async function loadProjectFileImage(
   projectId: string,
   pathName: string,
-  side: FileImageSide
+  side: FileImageSide,
+  diffHash: string,
+  previousPath: string | undefined,
+  status: FileDiffStatus
 ): Promise<FileImageResponse | null> {
-  const loaded = await loadProjectGitFileDiff(projectId, pathName);
+  const project = getStorage().getProject(projectId);
 
-  if (!loaded) {
-    return null;
+  if (!project) {
+    throw new Error(`Project is not stored: ${projectId}`);
   }
 
-  const { gitDiff, project, reviewTarget } = loaded;
+  return loadValidatedFileImage({
+    expectedDiffHash: diffHash,
+    loadImage: async () => {
+      const loaded = await loadProjectGitFileDiff(projectId, pathName, previousPath);
 
-  if (gitDiff.content.kind !== "binary") {
-    return null;
-  }
+      if (!loaded) {
+        return null;
+      }
 
-  if (
-    (side === "old" && gitDiff.status === "added") ||
-    (side === "new" && gitDiff.status === "deleted")
-  ) {
-    return null;
-  }
+      const { gitDiff, project: loadedProject, reviewTarget } = loaded;
 
-  const imagePath =
-    side === "old" ? (gitDiff.oldPath ?? gitDiff.newPath) : gitDiff.newPath;
-  const source =
-    side === "new" && reviewTarget.kind === "working_tree"
-      ? ({ kind: "worktree", path: imagePath } as const)
-      : ({
-          kind: "git",
-          path: imagePath,
-          ref: imageSnapshotRef(reviewTarget, side)
-        } as const);
-  const image = await loadRasterImageSnapshot(project.path, source);
+      if (gitDiff.content.kind !== "binary") {
+        return null;
+      }
 
-  if (!image) {
-    return null;
-  }
+      if (
+        (side === "old" && gitDiff.status === "added") ||
+        (side === "new" && gitDiff.status === "deleted")
+      ) {
+        return null;
+      }
 
-  return {
-    diffHash: createDiffHash(reviewTarget, fileDiffFromGit(gitDiff)),
-    image: {
-      dataBase64: image.bytes.toString("base64"),
-      height: image.height,
-      mimeType: image.mimeType,
-      width: image.width
+      const imagePath =
+        side === "old" ? (gitDiff.oldPath ?? gitDiff.newPath) : gitDiff.newPath;
+      const source =
+        side === "new" && reviewTarget.kind === "working_tree"
+          ? ({ kind: "worktree", path: imagePath } as const)
+          : ({
+              kind: "git",
+              path: imagePath,
+              ref: imageSnapshotRef(reviewTarget, side)
+            } as const);
+      const image = await loadRasterImageSnapshot(loadedProject.path, source);
+
+      return image
+        ? {
+            response: {
+              image: {
+                dataBase64: image.bytes.toString("base64"),
+                height: image.height,
+                mimeType: image.mimeType,
+                width: image.width
+              },
+              side
+            },
+            reviewTargetId: createReviewTargetId(reviewTarget)
+          }
+        : null;
     },
-    side
-  };
+    loadValidationSnapshot: async () => {
+      const reviewTarget = await loadCurrentProjectReviewTarget(project);
+      const reviewTargetId = createReviewTargetId(reviewTarget);
+      const file = await loadCurrentReviewFile(
+        project,
+        reviewTarget,
+        pathName,
+        previousPath
+      );
+      const currentReviewTargetId = createReviewTargetId(
+        await loadCurrentProjectReviewTarget(project)
+      );
+
+      return file && currentReviewTargetId === reviewTargetId
+        ? { diffHash: file.diffHash, reviewTargetId }
+        : null;
+    },
+    preflight: async () => {
+      const reviewTarget = await loadCurrentProjectReviewTarget(project);
+      const checks = await Promise.all(
+        requiredFileImagePreflightSides(side, status).map((candidateSide) =>
+          rasterImageSnapshotWithinSizeLimit(
+            project.path,
+            imageSnapshotSource(reviewTarget, candidateSide, pathName, previousPath)
+          )
+        )
+      );
+
+      return checks.every(Boolean);
+    }
+  });
 }
 
 function imageSnapshotRef(reviewTarget: ReviewTarget, side: FileImageSide): string {
@@ -2236,6 +2331,23 @@ function imageSnapshotRef(reviewTarget: ReviewTarget, side: FileImageSide): stri
     case "working_tree":
       return reviewTarget.headSha;
   }
+}
+
+function imageSnapshotSource(
+  reviewTarget: ReviewTarget,
+  side: FileImageSide,
+  pathName: string,
+  previousPath: string | undefined
+) {
+  const imagePath = side === "old" ? (previousPath ?? pathName) : pathName;
+
+  return side === "new" && reviewTarget.kind === "working_tree"
+    ? ({ kind: "worktree", path: imagePath } as const)
+    : ({
+        kind: "git",
+        path: imagePath,
+        ref: imageSnapshotRef(reviewTarget, side)
+      } as const);
 }
 
 async function reviewCommentReportItems(
@@ -2356,14 +2468,25 @@ async function nativeImageWithTimeout(
 async function loadCurrentReviewFile(
   project: StoredProjectRecord,
   reviewTarget: ReviewTarget,
-  pathName: string
+  pathName: string,
+  previousPath?: string
 ): Promise<{ readonly diffHash: string; readonly previousPath?: string } | null> {
   const summary =
     reviewTarget.kind === "branch"
-      ? await loadBranchFileDiffSummary(project.path, reviewTarget.baseRefName, pathName)
+      ? await loadBranchFileDiffSummary(
+          project.path,
+          reviewTarget.baseRefName,
+          pathName,
+          previousPath
+        )
       : reviewTarget.kind === "commit"
-        ? await loadCommitFileDiffSummary(project.path, reviewTarget.commitSha, pathName)
-        : await loadWorkingTreeFileDiffSummary(project.path, pathName);
+        ? await loadCommitFileDiffSummary(
+            project.path,
+            reviewTarget.commitSha,
+            pathName,
+            previousPath
+          )
+        : await loadWorkingTreeFileDiffSummary(project.path, pathName, previousPath);
 
   if (!summary) {
     return null;

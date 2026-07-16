@@ -26,6 +26,40 @@ export type RasterImageSnapshotSource =
       readonly path: string;
     };
 
+export async function rasterImageSnapshotWithinSizeLimit(
+  repoPath: string,
+  source: RasterImageSnapshotSource
+): Promise<boolean> {
+  try {
+    if (source.kind === "git") {
+      if (!isSafeRelativePath(source.path)) {
+        return false;
+      }
+
+      const sizeText = await gitOutputOrNull(repoPath, [
+        "cat-file",
+        "-s",
+        `${source.ref}:${source.path}`
+      ]);
+      const size = sizeText ? Number(sizeText) : Number.NaN;
+
+      return Number.isSafeInteger(size) && size >= 0 && size <= maxRasterImageBytes;
+    }
+
+    const absolutePath = safeWorktreePath(repoPath, source.path);
+
+    if (!absolutePath) {
+      return false;
+    }
+
+    const fileStat = await lstat(absolutePath);
+
+    return fileStat.isFile() && fileStat.size <= maxRasterImageBytes;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadRasterImageSnapshot(
   repoPath: string,
   source: RasterImageSnapshotSource
@@ -69,7 +103,9 @@ async function readGitSnapshot(
     return undefined;
   }
 
-  return gitBuffer(repoPath, ["show", object]);
+  const bytes = await gitBuffer(repoPath, ["show", object]);
+
+  return bytes.length <= maxRasterImageBytes ? bytes : undefined;
 }
 
 async function readWorktreeSnapshot(
@@ -102,7 +138,9 @@ async function readWorktreeSnapshot(
     return undefined;
   }
 
-  return readFile(absolutePath);
+  const bytes = await readFile(absolutePath);
+
+  return bytes.length <= maxRasterImageBytes ? bytes : undefined;
 }
 
 function safeWorktreePath(repoPath: string, relativePath: string): string | undefined {
