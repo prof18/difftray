@@ -1,5 +1,26 @@
 # AGENTS.md
 
+## Repository Relationship
+
+- This is the public, Apache-2.0 Difftray repository. It contains the desktop app,
+  companion server, companion protocol, and shared companion diff surface.
+- For cross-platform development, this repository is checked out as the Git
+  submodule `vendor/difftray` inside the private `difftray-mobile` repository. The
+  private repository root is the preferred single workspace for agents working on
+  desktop and mobile together; a separate public checkout is not required.
+- This remains an independent Git repository even when it is nested. Run status,
+  branch, diff, commit, and push commands for public changes from this repository's
+  root. The outer private repository records only this repository's commit SHA.
+- Push public commits before updating or pushing the private repository's submodule
+  pointer so every recorded SHA is fetchable by collaborators and CI.
+- Never add private mobile source, store configuration, signing material, release
+  credentials, or private-repository implementation details here.
+- Keep shared wire types, validation, cryptography, and the reusable diff surface in
+  this public repository. Do not create private copies of shared protocol code.
+- Avoid maintaining multiple active local checkouts of this repository. If another
+  checkout exists, reconcile its branches and uncommitted changes before choosing
+  one canonical checkout.
+
 ## Project Rules
 
 - Keep Difftray focused on local diff review. Do not turn it into an IDE, agent runner, PR platform, or merge tool without an explicit product decision.
