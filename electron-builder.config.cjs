@@ -1,5 +1,7 @@
 const packageJson = require("./package.json");
 const desktopPackageJson = require("./apps/desktop/package.json");
+const { execFileSync } = require("node:child_process");
+const { join } = require("node:path");
 
 const isDevChannel = process.env.DIFFTRAY_RELEASE_CHANNEL === "dev";
 const electronVersion = desktopPackageJson.devDependencies.electron.replace(
@@ -24,6 +26,31 @@ module.exports = {
   },
   executableName,
   electronVersion,
+  afterPack: async (context) => {
+    if (context.electronPlatformName !== "darwin") {
+      return;
+    }
+
+    const frameworkInfoPlist = join(
+      context.appOutDir,
+      `${productName}.app`,
+      "Contents",
+      "Frameworks",
+      "Electron Framework.framework",
+      "Resources",
+      "Info.plist"
+    );
+
+    for (const key of ["CFBundleDisplayName", "CFBundleName"]) {
+      execFileSync("plutil", [
+        "-replace",
+        key,
+        "-string",
+        productName,
+        frameworkInfoPlist
+      ]);
+    }
+  },
   extraMetadata: {
     main: "dist/main/index.cjs",
     name: "difftray",
@@ -54,7 +81,10 @@ module.exports = {
     extendInfo: {
       CFBundleDisplayName: productName,
       CFBundleName: productName,
-      LSApplicationCategoryType: "public.app-category.developer-tools"
+      LSApplicationCategoryType: "public.app-category.developer-tools",
+      NSBonjourServices: ["_difftray._tcp"],
+      NSLocalNetworkUsageDescription:
+        "Difftray uses your local network to connect to your review workspace."
     }
   },
   dmg: {
