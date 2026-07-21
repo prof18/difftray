@@ -1,6 +1,6 @@
 {
   "name": "difftray",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "description": "Local diff review tool",
   "author": "Marco Gomiero",

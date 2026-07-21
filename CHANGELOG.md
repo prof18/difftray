@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.9 - 2026-07-21
+
+### Improved
+
+- Improved app reliability and compatibility.
+
 ## 0.0.8 - 2026-07-16
 
 ### Improved
