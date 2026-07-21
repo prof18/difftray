@@ -62,7 +62,7 @@ module.exports = {
   npmRebuild: false,
   mac: {
     category: "public.app-category.developer-tools",
-    icon: "resources/icon.icns",
+    icon: isDevChannel ? "resources/icon-dev.icns" : "resources/icon.icns",
     target: [
       {
         target: "dmg",

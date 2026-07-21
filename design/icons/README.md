@@ -9,6 +9,7 @@ repo root; this folder is the regeneration source.
 ```
 design/icons/
 ├── icon.svg          ← master source (1024×1024, baked squircle)
+├── icon-dev.svg      ← dev-channel variant with a visible DEV badge
 ├── icon.iconset/     ← Apple iconset (10 PNGs) consumed by iconutil
 └── build-icns.sh     ← turns icon.iconset/ into icon.icns
 ```
@@ -31,6 +32,10 @@ its bundle).
 If `icon.svg` itself needs to change, the iconset PNGs must be re-rasterized
 out of band (this folder does not include an SVG-to-PNG pipeline). After
 re-rasterizing into `icon.iconset/`, re-run `build-icns.sh`.
+
+The packaged dev channel uses `resources/icon-dev.icns`. Regenerate it from
+`icon-dev.svg` at the same standard macOS iconset sizes whenever the dev source
+changes.
 
 ## Color reference
 

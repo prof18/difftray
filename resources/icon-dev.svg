@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0%" stop-color="#3e4a92"/>
+      <stop offset="100%" stop-color="#2c3672"/>
+    </linearGradient>
+    <linearGradient id="addGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3ad373"/>
+      <stop offset="100%" stop-color="#28a456"/>
+    </linearGradient>
+    <linearGradient id="delGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6f73"/>
+      <stop offset="100%" stop-color="#e34a4f"/>
+    </linearGradient>
+    <linearGradient id="neutralGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8e6dc"/>
+      <stop offset="100%" stop-color="#cfccbe"/>
+    </linearGradient>
+    <linearGradient id="devBadge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffcb47"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#tile)"/>
+    <rect width="1024" height="2" fill="rgba(255,255,255,0.10)"/>
+
+    <rect x="190" y="612" width="560" height="130" rx="40" fill="url(#neutralGrad)"/>
+    <rect x="260" y="447" width="640" height="130" rx="40" fill="url(#delGrad)"/>
+    <rect x="170" y="282" width="700" height="130" rx="40" fill="url(#addGrad)"/>
+    <circle cx="240" cy="347" r="22" fill="rgba(255,255,255,0.95)"/>
+
+    <rect x="555" y="730" width="370" height="165" rx="60" fill="#17204f" opacity="0.38"/>
+    <rect x="545" y="720" width="370" height="165" rx="60" fill="url(#devBadge)"
+      stroke="rgba(255,255,255,0.92)" stroke-width="12"/>
+    <text x="730" y="834" text-anchor="middle" fill="#2c3672"
+      font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="100"
+      font-weight="900" letter-spacing="4">DEV</text>
+  </g>
+</svg>

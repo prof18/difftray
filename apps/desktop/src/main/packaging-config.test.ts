@@ -13,6 +13,7 @@ type MacPackagingConfig = {
   }) => Promise<void>;
   readonly mac: {
     readonly extendInfo: Record<string, unknown>;
+    readonly icon: string;
   };
   readonly productName: string;
 };
@@ -35,6 +36,21 @@ describe("macOS packaging configuration", () => {
       NSLocalNetworkUsageDescription:
         "Difftray uses your local network to connect to your review workspace."
     });
+  });
+
+  it("uses a visually distinct icon for dev-channel builds", () => {
+    const devIcon = execFileSync(
+      process.execPath,
+      ["-e", "process.stdout.write(require('./electron-builder.config.cjs').mac.icon)"],
+      {
+        cwd: path.resolve(import.meta.dirname, "../../../.."),
+        encoding: "utf8",
+        env: { ...process.env, DIFFTRAY_RELEASE_CHANNEL: "dev" }
+      }
+    );
+
+    expect(packagingConfig.mac.icon).toBe("resources/icon.icns");
+    expect(devIcon).toBe("resources/icon-dev.icns");
   });
 
   it.skipIf(process.platform !== "darwin")(
