@@ -12,11 +12,13 @@ import { createCompanionRouter } from "./router.js";
 
 export type CompanionServer = {
   readonly broadcast: (event: CompanionServerEvent) => void;
+  readonly revokeDevice: (deviceId: string) => void;
   readonly start: (preferredPort: number) => Promise<{ readonly port: number }>;
   readonly stop: () => Promise<void>;
 };
 
 type ConnectedSocket = {
+  readonly deviceId: string;
   readonly devicePublicKey: string;
   readonly socket: WebSocket;
 };
@@ -69,6 +71,7 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
 
         clearTimeout(authTimeout);
         connected = {
+          deviceId: verified.device.deviceId,
           devicePublicKey: verified.device.devicePublicKey,
           socket: webSocket
         };
@@ -94,6 +97,19 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
     broadcast: (event) => {
       for (const { devicePublicKey, socket } of sockets) {
         sendWebSocketBody(deps, socket, devicePublicKey, event);
+      }
+    },
+    revokeDevice: (deviceId) => {
+      for (const connected of sockets) {
+        if (connected.deviceId !== deviceId) {
+          continue;
+        }
+
+        sendWebSocketBody(deps, connected.socket, connected.devicePublicKey, {
+          kind: "device_revoked"
+        });
+        sockets.delete(connected);
+        connected.socket.close(1008, "Device revoked");
       }
     },
     start: (preferredPort) =>

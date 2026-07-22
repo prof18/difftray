@@ -121,6 +121,7 @@ import { createCompanionServer } from "./companion/server.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import {
+  activeCompanionDeviceRecords,
   appSettingsView,
   commentReportContext,
   fileDiffFromGit,
@@ -520,6 +521,7 @@ handleTrusted(
     const id = readStringProperty(input, "id");
 
     getStorage().revokeCompanionDevice(id);
+    getCompanionLifecycleController().revokeDevice(id);
     emitCompanionStateChanged();
 
     return companionStateView();
@@ -898,6 +900,7 @@ function installApplicationMenu(): void {
   applicationMenuController = new ApplicationMenuController({
     appName: resolvedAppRuntimeConfig.name,
     checkForUpdates: checkForUpdatesNow,
+    developerToolsEnabled: resolvedAppRuntimeConfig.variant === "dev",
     getUpdatePhase: () => updateState.phase,
     onUpdatePhaseChange: (listener) => updateState.subscribe(listener),
     updatesEnabled: resolvedAppRuntimeConfig.variant === "production"
@@ -1148,7 +1151,9 @@ function companionStateView(): CompanionStateView {
     activePairing:
       activeSession && port ? companionPairingStateView(activeSession, addresses) : null,
     addresses,
-    devices: getStorage().listCompanionDevices().map(companionDeviceView),
+    devices: activeCompanionDeviceRecords(getStorage().listCompanionDevices()).map(
+      companionDeviceView
+    ),
     enabled: settings.companionEnabled,
     ...(lifecycleState.status === "error"
       ? { errorMessage: lifecycleState.errorMessage }

@@ -5,10 +5,12 @@ import {
   type UpdateMenuItemState
 } from "./update-menu-item.js";
 import type { UpdatePhase } from "./update-state.js";
+import { viewMenuItemOptions } from "./application-menu-options.js";
 
 export type ApplicationMenuDependencies = {
   readonly appName: string;
   readonly checkForUpdates: () => Promise<void>;
+  readonly developerToolsEnabled: boolean;
   readonly getUpdatePhase: () => UpdatePhase;
   readonly onUpdatePhaseChange: (listener: (phase: UpdatePhase) => void) => () => void;
   readonly updatesEnabled: boolean;
@@ -174,7 +176,11 @@ function buildApplicationMenu(
   menu.append(new MenuItem({ label: "Edit", submenu: editMenu }));
 
   const viewMenu = new Menu();
-  viewMenu.append(new MenuItem({ role: "togglefullscreen" }));
+  for (const options of viewMenuItemOptions({
+    developerToolsEnabled: dependencies.developerToolsEnabled
+  })) {
+    viewMenu.append(new MenuItem(options));
+  }
   menu.append(new MenuItem({ label: "View", submenu: viewMenu }));
 
   if (process.platform === "darwin") {

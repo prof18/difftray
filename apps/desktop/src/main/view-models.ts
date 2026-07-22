@@ -24,6 +24,7 @@ import type {
 } from "@difftray/git";
 import type {
   AppSettingsRecord,
+  CompanionDeviceRecord,
   ProjectRecord,
   ProjectSettingsRecord,
   ReviewCommentRecord,
@@ -93,6 +94,12 @@ export type AppSettingsView = {
   readonly themeMode: ThemeMode;
   readonly wrapDiffLines: boolean;
 };
+
+export function activeCompanionDeviceRecords(
+  devices: readonly CompanionDeviceRecord[]
+): readonly CompanionDeviceRecord[] {
+  return devices.filter((device) => !device.revokedAt);
+}
 
 export function settingsView(settings: ProjectSettingsRecord): ProjectSettingsView {
   return {

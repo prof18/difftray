@@ -575,6 +575,49 @@ describe("companion server core", () => {
     socket.close();
   });
 
+  it("notifies and disconnects an authenticated websocket when its device is revoked", async () => {
+    const { baseUrl, server } = await startServer();
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    const helloMessage = waitForSocketMessage(socket);
+    socket.send(
+      JSON.stringify(
+        sealEnvelope({
+          devicePublicKey,
+          plaintext: { kind: "auth", ts: "2026-07-02T12:00:00.000Z" },
+          recipientPublicKey: serverPublicKey,
+          senderSecretKey: deviceSecretKey
+        })
+      )
+    );
+    await helloMessage;
+
+    const stillConnectedMessage = waitForSocketMessage(socket);
+    server.revokeDevice("other-device");
+    server.broadcast({
+      kind: "workspace_changed",
+      projectId: "project-1",
+      reason: "filesystem"
+    });
+    expect(openServerEventEnvelope(await stillConnectedMessage)).toEqual({
+      kind: "workspace_changed",
+      projectId: "project-1",
+      reason: "filesystem"
+    });
+
+    const revokedMessage = waitForSocketMessage(socket);
+    const closeCode = waitForSocketClose(socket);
+    server.revokeDevice("device-1");
+
+    expect(openServerEventEnvelope(await revokedMessage)).toEqual({
+      kind: "device_revoked"
+    });
+    await expect(closeCode).resolves.toBe(1008);
+  });
+
   it("coalesces concurrent workspace loads per project", async () => {
     let loadCount = 0;
     let resolveWorkspace:

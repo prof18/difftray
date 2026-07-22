@@ -108,6 +108,23 @@ describe("CompanionLifecycleController", () => {
     });
   });
 
+  it("disconnects a revoked device from the active server", async () => {
+    const server = fakeServer({ port: 48620 });
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => fakeAdvertiser([]),
+      createServer: () => server,
+      serverIdentity: () => serverIdentity
+    });
+
+    controller.revokeDevice("device-1");
+    expect(server.revokeDevice).not.toHaveBeenCalled();
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    controller.revokeDevice("device-1");
+
+    expect(server.revokeDevice).toHaveBeenCalledWith("device-1");
+  });
+
   it("reports startup errors when no allowed companion port is available", async () => {
     const servers = Array.from({ length: 10 }, () =>
       fakeServer({
@@ -228,11 +245,13 @@ function fakeServer(
   input: { readonly error?: Error; readonly port?: number } = {}
 ): CompanionServer & {
   readonly broadcast: ReturnType<typeof vi.fn>;
+  readonly revokeDevice: ReturnType<typeof vi.fn>;
   readonly start: ReturnType<typeof vi.fn>;
   readonly stop: ReturnType<typeof vi.fn>;
 } {
   return {
     broadcast: vi.fn(),
+    revokeDevice: vi.fn(),
     start: vi.fn(async (port: number) => {
       if (input.error) {
         throw input.error;

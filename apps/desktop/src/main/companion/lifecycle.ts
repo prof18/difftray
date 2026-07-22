@@ -153,6 +153,10 @@ export class CompanionLifecycleController {
     this.active?.server.broadcast(event);
   }
 
+  revokeDevice(deviceId: string): void {
+    this.active?.server.revokeDevice(deviceId);
+  }
+
   private async startOnAvailablePort(
     preferredPort: number
   ): Promise<ActiveCompanionServer | null> {

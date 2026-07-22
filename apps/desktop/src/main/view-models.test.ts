@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeCompanionDeviceRecords,
   appSettingsView,
   commentReportContext,
   fileDiffFromGit,
@@ -24,6 +25,20 @@ import {
   type ReviewFileView,
   type ReviewWorkspaceView
 } from "./view-models.js";
+
+describe("companion device views", () => {
+  it("excludes revoked devices from the active paired-device list", () => {
+    const activeDevice = companionDeviceRecord({ id: "active-device" });
+    const revokedDevice = companionDeviceRecord({
+      id: "revoked-device",
+      revokedAt: "2026-07-22T13:00:00.000Z"
+    });
+
+    expect(activeCompanionDeviceRecords([activeDevice, revokedDevice])).toEqual([
+      activeDevice
+    ]);
+  });
+});
 
 describe("settings views", () => {
   it("maps project settings directly", () => {
@@ -92,6 +107,22 @@ describe("settings views", () => {
     });
   });
 });
+
+function companionDeviceRecord(
+  input: Partial<import("@difftray/storage").CompanionDeviceRecord>
+): import("@difftray/storage").CompanionDeviceRecord {
+  const { revokedAt, ...activeInput } = input;
+
+  return {
+    createdAt: "2026-07-22T12:00:00.000Z",
+    id: "device-1",
+    name: "Test phone",
+    platform: "ios",
+    publicKey: "device-public-key",
+    ...activeInput,
+    ...(revokedAt ? { revokedAt } : {})
+  };
+}
 
 describe("project and review target views", () => {
   it("omits optional project fields when they are absent", () => {
