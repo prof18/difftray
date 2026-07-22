@@ -80,120 +80,127 @@ export function SettingsPanel({
             </button>
           </div>
 
-          <SettingsSection title="General">
-            <label className={styles.settingRow}>
-              <span>Appearance</span>
-              <select
-                onChange={(event) => {
-                  onChangeAppSettings({
-                    themeMode: themeModeFromValue(event.target.value)
-                  });
-                }}
-                value={appSettings.themeMode}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-          </SettingsSection>
-
-          <SettingsSection allowOverflow title="Editor">
-            <div className={styles.settingRow}>
-              <span>Editor</span>
-              <EditorPicker
-                appSettings={appSettings}
-                disabled={disabled}
-                editorOptions={editorOptions}
-                onChangeAppSettings={onChangeAppSettings}
-              />
-            </div>
-          </SettingsSection>
-
-          <CompanionSettingsSection
-            appSettings={appSettings}
-            companionState={companionState}
-            disabled={disabled}
-            onRespondToPairRequest={onRespondToCompanionPairRequest}
-            onRevokeDevice={onRevokeCompanionDevice}
-            onStartPairing={onStartCompanionPairing}
-            onToggle={onToggleCompanion}
-          />
-
-          {activePairing ? (
-            <CompanionPairingDialog
-              addresses={companionState.addresses}
-              disabled={disabled}
-              pairing={activePairing}
-              onCancel={onCancelCompanionPairing}
-              onGenerateNewCode={onStartCompanionPairing}
-            />
-          ) : null}
-
-          <SettingsSection title="Review">
-            <div className={styles.settingRow}>
-              <span>Default diff view</span>
-              <div
-                className={styles.settingsSegmented}
-                role="group"
-                aria-label="Default diff view"
-              >
-                <button
-                  data-active={appSettings.defaultDiffMode === "split"}
-                  onClick={() => {
-                    onChangeAppSettings({ defaultDiffMode: "split" });
+          <div
+            aria-label="Settings options"
+            className={styles.settingsScrollRegion}
+            role="region"
+            tabIndex={0}
+          >
+            <SettingsSection title="General">
+              <label className={styles.settingRow}>
+                <span>Appearance</span>
+                <select
+                  onChange={(event) => {
+                    onChangeAppSettings({
+                      themeMode: themeModeFromValue(event.target.value)
+                    });
                   }}
-                  type="button"
+                  value={appSettings.themeMode}
                 >
-                  Split
-                </button>
-                <button
-                  data-active={appSettings.defaultDiffMode === "unified"}
-                  onClick={() => {
-                    onChangeAppSettings({ defaultDiffMode: "unified" });
-                  }}
-                  type="button"
-                >
-                  Unified
-                </button>
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+            </SettingsSection>
+
+            <SettingsSection allowOverflow title="Editor">
+              <div className={styles.settingRow}>
+                <span>Editor</span>
+                <EditorPicker
+                  appSettings={appSettings}
+                  disabled={disabled}
+                  editorOptions={editorOptions}
+                  onChangeAppSettings={onChangeAppSettings}
+                />
               </div>
-            </div>
-            <ToggleRow
-              checked={appSettings.wrapDiffLines}
-              label="Wrap long lines"
-              onChange={(checked) => {
-                onChangeAppSettings({ wrapDiffLines: checked });
-              }}
-            />
-            <ToggleRow
-              checked={appSettings.showGeneratedFiles}
-              label="Show generated files"
-              onChange={(checked) => {
-                onChangeAppSettings({ showGeneratedFiles: checked });
-              }}
-            />
-            <ToggleRow
-              checked={appSettings.notifyOnDrift}
-              label="Notify when reviewed file drifts"
-              onChange={(checked) => {
-                onChangeAppSettings({ notifyOnDrift: checked });
-              }}
-            />
-          </SettingsSection>
+            </SettingsSection>
 
-          <div className={styles.settingsActions}>
-            <button
-              className={styles.secondaryButton}
+            <CompanionSettingsSection
+              appSettings={appSettings}
+              companionState={companionState}
               disabled={disabled}
-              onClick={onCancel}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button className={styles.primaryButton} disabled={disabled} type="submit">
-              <Save size={14} strokeWidth={1.4} aria-hidden />
-              Save
-            </button>
+              onRespondToPairRequest={onRespondToCompanionPairRequest}
+              onRevokeDevice={onRevokeCompanionDevice}
+              onStartPairing={onStartCompanionPairing}
+              onToggle={onToggleCompanion}
+            />
+
+            {activePairing ? (
+              <CompanionPairingDialog
+                addresses={companionState.addresses}
+                disabled={disabled}
+                pairing={activePairing}
+                onCancel={onCancelCompanionPairing}
+                onGenerateNewCode={onStartCompanionPairing}
+              />
+            ) : null}
+
+            <SettingsSection title="Review">
+              <div className={styles.settingRow}>
+                <span>Default diff view</span>
+                <div
+                  className={styles.settingsSegmented}
+                  role="group"
+                  aria-label="Default diff view"
+                >
+                  <button
+                    data-active={appSettings.defaultDiffMode === "split"}
+                    onClick={() => {
+                      onChangeAppSettings({ defaultDiffMode: "split" });
+                    }}
+                    type="button"
+                  >
+                    Split
+                  </button>
+                  <button
+                    data-active={appSettings.defaultDiffMode === "unified"}
+                    onClick={() => {
+                      onChangeAppSettings({ defaultDiffMode: "unified" });
+                    }}
+                    type="button"
+                  >
+                    Unified
+                  </button>
+                </div>
+              </div>
+              <ToggleRow
+                checked={appSettings.wrapDiffLines}
+                label="Wrap long lines"
+                onChange={(checked) => {
+                  onChangeAppSettings({ wrapDiffLines: checked });
+                }}
+              />
+              <ToggleRow
+                checked={appSettings.showGeneratedFiles}
+                label="Show generated files"
+                onChange={(checked) => {
+                  onChangeAppSettings({ showGeneratedFiles: checked });
+                }}
+              />
+              <ToggleRow
+                checked={appSettings.notifyOnDrift}
+                label="Notify when reviewed file drifts"
+                onChange={(checked) => {
+                  onChangeAppSettings({ notifyOnDrift: checked });
+                }}
+              />
+            </SettingsSection>
+
+            <div className={styles.settingsActions}>
+              <button
+                className={styles.secondaryButton}
+                disabled={disabled}
+                onClick={onCancel}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button className={styles.primaryButton} disabled={disabled} type="submit">
+                <Save size={14} strokeWidth={1.4} aria-hidden />
+                Save
+              </button>
+            </div>
           </div>
         </form>
       </section>

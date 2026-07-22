@@ -147,18 +147,28 @@
 }
 
 .settingsContent {
+  display: flex;
   min-height: 0;
   max-height: min(720px, calc(100vh - 64px));
-  overflow-y: auto;
-  padding: 24px 32px;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .settingsTopline {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+  padding: 24px 32px 0;
+}
+
+.settingsScrollRegion {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 32px 24px;
 }
 
 .settingsTopline h2 {

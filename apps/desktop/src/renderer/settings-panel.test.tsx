@@ -64,6 +64,9 @@ describe("SettingsPanel", () => {
     );
 
     expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-label="Settings options"');
+    expect(html).toContain('role="region"');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain("Settings");
     expect(html).toContain("General");
     expect(html).toContain("Editor");
