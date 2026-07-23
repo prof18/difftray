@@ -81,6 +81,7 @@ import {
   type WatchedProject
 } from "./project-watch-service.js";
 import {
+  externalStoreUrl,
   isTrustedRendererUrl,
   resolveRendererDevUrl,
   resolveSafeProjectFilePath,
@@ -380,6 +381,24 @@ app.on("web-contents-created", (_event, contents) => {
 });
 
 handleTrusted("app:version", () => app.getVersion());
+handleTrusted("external:openStore", async (_event, store): Promise<void> => {
+  const url = externalStoreUrl(store);
+
+  if (!url) {
+    throw new Error("Unknown external store.");
+  }
+
+  await shell.openExternal(url);
+});
+handleTrusted("external:copyStoreLink", (_event, store): void => {
+  const url = externalStoreUrl(store);
+
+  if (!url) {
+    throw new Error("Unknown external store.");
+  }
+
+  clipboard.writeText(url);
+});
 handleTrusted("updates:getPhase", (): UpdatePhase => updateState.phase);
 handleTrusted("updates:checkNow", async (): Promise<UpdatePhase> => {
   await checkForUpdatesNow();

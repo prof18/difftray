@@ -6,6 +6,11 @@ import { findEditorPresetByLaunchConfig } from "@difftray/core";
 import type { EditorLaunchConfig } from "@difftray/storage";
 
 const loopbackHostnames = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
+const externalStoreUrls = {
+  "app-store": "https://apps.apple.com/pl/app/difftray-code-review-diff/id6789255782",
+  "google-play":
+    "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion"
+} as const;
 
 export type TrustedRendererLocation =
   | {
@@ -90,6 +95,14 @@ export function isTrustedRendererUrl(
   } catch {
     return false;
   }
+}
+
+export function externalStoreUrl(store: unknown): string | undefined {
+  if (store !== "app-store" && store !== "google-play") {
+    return undefined;
+  }
+
+  return externalStoreUrls[store];
 }
 
 export function trustedEditorLaunchConfig(

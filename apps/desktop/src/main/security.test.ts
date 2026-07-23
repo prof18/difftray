@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  externalStoreUrl,
   isTrustedRendererUrl,
   resolveRendererDevUrl,
   resolveSafeProjectFilePath,
@@ -67,6 +68,19 @@ describe("trusted renderer URL validation", () => {
     expect(isTrustedRendererUrl(`file://${rendererFilePath}`, location)).toBe(true);
     expect(isTrustedRendererUrl("file:///tmp/index.html", location)).toBe(false);
     expect(isTrustedRendererUrl("https://example.com", location)).toBe(false);
+  });
+});
+
+describe("external store URL resolution", () => {
+  it("maps only known store identifiers to the Difftray listings", () => {
+    expect(externalStoreUrl("app-store")).toBe(
+      "https://apps.apple.com/pl/app/difftray-code-review-diff/id6789255782"
+    );
+    expect(externalStoreUrl("google-play")).toBe(
+      "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion"
+    );
+    expect(externalStoreUrl("https://example.com")).toBeUndefined();
+    expect(externalStoreUrl(undefined)).toBeUndefined();
   });
 });
 

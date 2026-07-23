@@ -72,7 +72,7 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Editor");
     expect(html).toContain("Review");
     expect(html).toContain("Phone companion");
-    expect(html).toContain("Port 48620");
+    expect(html).toContain("port 48620");
     expect(html).toContain("Local network");
     expect(html).toContain("192.168.1.24:48620");
     expect(html).toContain("Marco iPhone");
@@ -138,9 +138,99 @@ describe("SettingsPanel", () => {
     );
 
     expect(html).toContain("Phone companion");
-    expect(html).toContain("Enable companion server");
+    expect(html).toContain("Companion mode");
     expect(html).not.toContain("Pair new device");
     expect(html).not.toContain("Paired devices");
+  });
+
+  it("teaches first-time users how to install and pair the companion app", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        appSettings={appSettings({ companionEnabled: true })}
+        companionPairing={null}
+        companionState={companionState({
+          addresses: [
+            {
+              address: "192.168.1.24:48620",
+              host: "192.168.1.24",
+              isTailscale: false
+            },
+            {
+              address: "100.69.19.43:48620",
+              host: "100.69.19.43",
+              isTailscale: true
+            }
+          ],
+          enabled: true,
+          port: 48620,
+          status: "running"
+        })}
+        disabled={false}
+        editorOptions={[]}
+        onCancel={vi.fn()}
+        onCancelCompanionPairing={vi.fn()}
+        onChangeAppSettings={vi.fn()}
+        onRespondToCompanionPairRequest={vi.fn()}
+        onRevokeCompanionDevice={vi.fn()}
+        onSave={vi.fn()}
+        onStartCompanionPairing={vi.fn()}
+        onToggleCompanion={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("Review your changes from your phone");
+    expect(html).toContain("No paired devices yet — install the app and pair below.");
+    expect(html).toContain("Get the app");
+    expect(html).toContain(">App Store<");
+    expect(html).toContain(">Google Play<");
+    expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2);
+    expect(html).not.toContain("download-on-the-app-store.svg");
+    expect(html).not.toContain("get-it-on-google-play.png");
+    expect(html).toContain("How to connect your phone");
+    expect(html).toContain("same Wi-Fi network");
+    expect(html).toContain("private networking service");
+    expect(html).toContain("such as Tailscale");
+    expect(html).toContain("Pair a computer");
+    expect(html).not.toContain("<details");
+  });
+
+  it("keeps paired-device help compact in a closed accordion", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        appSettings={appSettings({ companionEnabled: true })}
+        companionPairing={null}
+        companionState={companionState({
+          devices: [
+            {
+              createdAt: "2026-07-02T10:00:00.000Z",
+              id: "device-1",
+              name: "Marco iPhone",
+              platform: "ios",
+              publicKey: "device-public-key"
+            }
+          ],
+          enabled: true,
+          port: 48620,
+          status: "running"
+        })}
+        disabled={false}
+        editorOptions={[]}
+        onCancel={vi.fn()}
+        onCancelCompanionPairing={vi.fn()}
+        onChangeAppSettings={vi.fn()}
+        onRespondToCompanionPairRequest={vi.fn()}
+        onRevokeCompanionDevice={vi.fn()}
+        onSave={vi.fn()}
+        onStartCompanionPairing={vi.fn()}
+        onToggleCompanion={vi.fn()}
+      />
+    );
+
+    expect(html).not.toContain("Review your changes from your phone");
+    expect(html).toContain("iOS · Last seen never");
+    expect(html).toContain("<details");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("How to connect a phone");
   });
 
   it("renders companion startup errors and pending pair requests", () => {

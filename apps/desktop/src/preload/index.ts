@@ -36,6 +36,7 @@ export type DifftrayApi = {
   readonly copyReviewCommentsReport: (
     input: CopyReviewCommentsReportInput
   ) => Promise<CopyReviewCommentsReportResult>;
+  readonly copyCompanionStoreLink: (store: CompanionStore) => Promise<void>;
   readonly createReviewComment: (
     input: CreateReviewCommentInput
   ) => Promise<CreateReviewCommentResult>;
@@ -73,6 +74,7 @@ export type DifftrayApi = {
     input: MarkFileReviewedInput
   ) => Promise<MarkReviewedResult>;
   readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
+  readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
   readonly openProject: () => Promise<ReviewWorkspaceView | null>;
   readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
   readonly updateProjectSettings: (
@@ -456,6 +458,8 @@ export type UpdateAppSettingsInput = {
   readonly wrapDiffLines: boolean;
 };
 
+export type CompanionStore = "app-store" | "google-play";
+
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
   cancelCompanionPairing: async () =>
@@ -503,6 +507,8 @@ const api: DifftrayApi = {
       "comments:copyReport",
       input
     ) as Promise<CopyReviewCommentsReportResult>,
+  copyCompanionStoreLink: async (store) =>
+    ipcRenderer.invoke("external:copyStoreLink", store) as Promise<void>,
   createReviewComment: async (input) =>
     ipcRenderer.invoke("comments:create", input) as Promise<CreateReviewCommentResult>,
   deleteReviewComment: async (input) =>
@@ -587,6 +593,8 @@ const api: DifftrayApi = {
   },
   openFileInEditor: async (input) =>
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
+  openCompanionStore: async (store) =>
+    ipcRenderer.invoke("external:openStore", store) as Promise<void>,
   openProject: async () =>
     ipcRenderer.invoke("projects:open") as Promise<ReviewWorkspaceView | null>,
   getProjectSettings: async (projectId) =>

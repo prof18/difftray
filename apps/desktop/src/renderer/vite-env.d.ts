@@ -18,6 +18,7 @@ declare global {
     readonly copyReviewCommentsReport: (
       input: CopyReviewCommentsReportInput
     ) => Promise<CopyReviewCommentsReportResult>;
+    readonly copyCompanionStoreLink: (store: CompanionStore) => Promise<void>;
     readonly createReviewComment: (
       input: CreateReviewCommentInput
     ) => Promise<CreateReviewCommentResult>;
@@ -55,6 +56,7 @@ declare global {
       input: MarkFileReviewedInput
     ) => Promise<MarkReviewedResult>;
     readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
+    readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
     readonly openProject: () => Promise<ReviewWorkspaceView | null>;
     readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
     readonly updateProjectSettings: (
@@ -476,6 +478,8 @@ declare global {
     readonly themeMode: ThemeMode;
     readonly wrapDiffLines: boolean;
   };
+
+  type CompanionStore = "app-store" | "google-play";
 
   interface Window {
     readonly difftray: DifftrayApi;

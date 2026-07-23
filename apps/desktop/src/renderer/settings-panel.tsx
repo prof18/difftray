@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  ChevronRight,
+  CircleHelp,
   Code2,
+  Copy,
+  ExternalLink,
   QrCode,
   Save,
   Smartphone,
@@ -227,20 +231,41 @@ function CompanionSettingsSection({
 }): React.JSX.Element {
   const enabled = companionState.enabled || appSettings.companionEnabled;
   const companionAddresses = companionAddressLabels(companionState.addresses);
+  const hasPairedDevices = companionState.devices.length > 0;
 
   return (
     <SettingsSection title="Phone companion">
-      <ToggleRow
-        checked={enabled}
-        disabled={disabled}
-        label="Enable companion server"
-        onChange={onToggle}
-      />
+      <div className={styles.companionIntro}>
+        <div>
+          <div className={styles.companionTitle}>Companion mode</div>
+          {!hasPairedDevices ? (
+            <p className={styles.companionDescription}>
+              Review your changes from your phone. Browse projects, read diffs, and mark
+              files reviewed while you&apos;re away from your desk — everything stays on
+              your own devices.
+            </p>
+          ) : null}
+        </div>
+        <label className={styles.companionToggle} title="Enable companion mode">
+          <span className={styles.srOnly}>Enable companion mode</span>
+          <input
+            checked={enabled}
+            disabled={disabled}
+            onChange={(event) => {
+              onToggle(event.target.checked);
+            }}
+            type="checkbox"
+          />
+        </label>
+      </div>
       {enabled ? (
         <>
           <div className={styles.companionStatusRow}>
             <div>
               <div className={styles.companionStatusLabel}>
+                {companionState.status === "running" ? (
+                  <span className={styles.companionStatusDot} aria-hidden />
+                ) : null}
                 {companionStatusLabel(companionState)}
               </div>
               {companionAddresses.length > 0 ? (
@@ -307,7 +332,7 @@ function CompanionSettingsSection({
           ) : null}
           <div className={styles.companionDevices}>
             <div className={styles.companionDevicesHeader}>Paired devices</div>
-            {companionState.devices.length > 0 ? (
+            {hasPairedDevices ? (
               companionState.devices.map((device) => (
                 <div className={styles.companionDeviceRow} key={device.id}>
                   <span className={styles.companionDeviceIcon}>
@@ -316,12 +341,12 @@ function CompanionSettingsSection({
                   <div>
                     <div className={styles.companionDeviceTitle}>{device.name}</div>
                     <div className={styles.companionDeviceMeta}>
-                      {device.platform} - {lastSeenLabel(device)}
+                      {companionPlatformLabel(device.platform)} · {lastSeenLabel(device)}
                     </div>
                   </div>
                   <button
                     aria-label={`Revoke ${device.name}`}
-                    className={styles.iconButton}
+                    className={styles.companionRevokeButton}
                     disabled={disabled}
                     onClick={() => {
                       onRevokeDevice(device.id);
@@ -330,17 +355,219 @@ function CompanionSettingsSection({
                     type="button"
                   >
                     <Trash2 size={13} strokeWidth={1.5} aria-hidden />
+                    Revoke
                   </button>
-                  <span className={styles.companionRevokeLabel}>Revoke</span>
                 </div>
               ))
             ) : (
-              <div className={styles.companionEmpty}>No paired devices</div>
+              <div className={styles.companionEmpty}>
+                No paired devices yet — install the app and pair below.
+              </div>
             )}
           </div>
+          {hasPairedDevices ? (
+            <details className={styles.companionHelp}>
+              <summary>
+                <CircleHelp size={16} strokeWidth={1.6} aria-hidden />
+                <span>How to connect a phone</span>
+                <ChevronRight
+                  className={styles.companionHelpChevron}
+                  size={16}
+                  strokeWidth={1.6}
+                  aria-hidden
+                />
+              </summary>
+              <div className={styles.companionHelpBody}>
+                <CompanionOnboarding />
+              </div>
+            </details>
+          ) : (
+            <CompanionOnboarding />
+          )}
         </>
       ) : null}
     </SettingsSection>
+  );
+}
+
+function CompanionOnboarding(): React.JSX.Element {
+  const [selectedStore, setSelectedStore] = useState<CompanionStore | null>(null);
+
+  return (
+    <div className={styles.companionOnboarding}>
+      <div className={styles.companionGetApp}>
+        <div className={styles.companionOnboardingLabel}>Get the app</div>
+        <div className={styles.companionStores}>
+          <button
+            aria-haspopup="dialog"
+            className={styles.secondaryButton}
+            onClick={() => {
+              setSelectedStore("app-store");
+            }}
+            type="button"
+          >
+            App Store
+          </button>
+          <button
+            aria-haspopup="dialog"
+            className={styles.secondaryButton}
+            onClick={() => {
+              setSelectedStore("google-play");
+            }}
+            type="button"
+          >
+            Google Play
+          </button>
+        </div>
+      </div>
+      <div className={styles.companionSteps}>
+        <div className={styles.companionOnboardingLabel}>How to connect your phone</div>
+        <ol>
+          <li>
+            <span>1</span>
+            <p>
+              Install <strong>Difftray Companion</strong> on your phone from the App Store
+              or Google Play.
+            </p>
+          </li>
+          <li>
+            <span>2</span>
+            <p>
+              Keep this Mac and your phone on the <strong>same Wi-Fi network</strong> — or
+              use a <strong>private networking service</strong>, such as Tailscale, when
+              you&apos;re away.
+            </p>
+          </li>
+          <li>
+            <span>3</span>
+            <p>
+              In the app, tap <strong>Pair a computer</strong> and scan the QR code shown
+              by <code>Pair new device</code> above.
+            </p>
+          </li>
+        </ol>
+      </div>
+      {selectedStore ? (
+        <CompanionStoreDialog
+          onClose={() => {
+            setSelectedStore(null);
+          }}
+          store={selectedStore}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const companionStoreDetails: Record<
+  CompanionStore,
+  { readonly label: string; readonly url: string }
+> = {
+  "app-store": {
+    label: "App Store",
+    url: "https://apps.apple.com/pl/app/difftray-code-review-diff/id6789255782"
+  },
+  "google-play": {
+    label: "Google Play",
+    url: "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion"
+  }
+};
+
+function CompanionStoreDialog({
+  onClose,
+  store
+}: {
+  readonly onClose: () => void;
+  readonly store: CompanionStore;
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | undefined>();
+  const details = companionStoreDetails[store];
+
+  useEffect(() => {
+    let cancelled = false;
+    setCopied(false);
+    setQrDataUrl(undefined);
+
+    void QRCode.toDataURL(details.url, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 208
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setQrDataUrl(dataUrl);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        console.error("Failed to render store QR code", caughtError);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [details.url]);
+
+  return (
+    <section
+      aria-label={`Get Difftray on ${details.label}`}
+      aria-modal="true"
+      className={styles.companionStoreDialog}
+      role="dialog"
+    >
+      <div className={styles.companionStorePanel}>
+        <div className={styles.companionStoreHeader}>
+          <div>
+            <div className={styles.companionEyebrow}>Get the app</div>
+            <h3>Scan with your phone</h3>
+          </div>
+          <button
+            aria-label="Close store QR code"
+            className={styles.iconButton}
+            onClick={onClose}
+            type="button"
+          >
+            <X size={14} strokeWidth={1.5} aria-hidden />
+          </button>
+        </div>
+        <div className={styles.companionStoreQrFrame}>
+          {qrDataUrl ? (
+            <img alt={`${details.label} download QR code`} src={qrDataUrl} />
+          ) : (
+            <div aria-label={`${details.label} download QR code`} />
+          )}
+        </div>
+        <p>Scan to open Difftray on {details.label}.</p>
+        <div className={styles.companionStoreActions}>
+          <a
+            href={details.url}
+            onClick={(event) => {
+              event.preventDefault();
+              void window.difftray.openCompanionStore(store);
+            }}
+          >
+            Open in {details.label}
+            <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+          </a>
+          <button
+            className={styles.secondaryButton}
+            onClick={() => {
+              void window.difftray.copyCompanionStoreLink(store).then(() => {
+                setCopied(true);
+              });
+            }}
+            type="button"
+          >
+            {copied ? (
+              <Check size={13} strokeWidth={1.6} aria-hidden />
+            ) : (
+              <Copy size={13} strokeWidth={1.5} aria-hidden />
+            )}
+            {copied ? "Copied" : "Copy link"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -629,7 +856,7 @@ function ToggleRow({
 
 function companionStatusLabel(state: CompanionStateView): string {
   if (state.status === "running" && state.port) {
-    return `Running - Port ${String(state.port)}`;
+    return `Server running · port ${String(state.port)}`;
   }
 
   if (state.status === "error") {
@@ -637,6 +864,14 @@ function companionStatusLabel(state: CompanionStateView): string {
   }
 
   return "Server stopped";
+}
+
+function companionPlatformLabel(platform: string): string {
+  if (platform.toLowerCase() === "ios") {
+    return "iOS";
+  }
+
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 function companionAddressLabels(
