@@ -65,6 +65,11 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
         );
 
         if (!verified.ok) {
+          if (verified.reason === "revoked") {
+            sendWebSocketBody(deps, webSocket, verified.device.devicePublicKey, {
+              kind: "device_revoked"
+            });
+          }
           closeUnauthorized(webSocket);
           return;
         }

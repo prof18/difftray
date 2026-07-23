@@ -114,6 +114,7 @@ import {
   type CompanionPairingSessionView,
   type PendingPairRequestView
 } from "./companion/auth.js";
+import { resolveCompanionServerName } from "./companion/server-name.js";
 import {
   CompanionLifecycleController,
   CompanionWorkspaceChangeBroadcaster
@@ -1141,6 +1142,7 @@ function companionServerIdentity(): ReturnType<
 > {
   return getOrCreateCompanionServerIdentity({
     appVersion: app.getVersion(),
+    serverName: resolveCompanionServerName(),
     storage: getStorage()
   });
 }
@@ -1554,11 +1556,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       return companionMarkResult(result);
     },
     notifyDesktopRenderer,
-    serverIdentity: () =>
-      getOrCreateCompanionServerIdentity({
-        appVersion: app.getVersion(),
-        storage
-      }),
+    serverIdentity: companionServerIdentity,
     storage,
     unmarkReviewed: async (input) => {
       const result = await unmarkProjectFileReviewed(input);

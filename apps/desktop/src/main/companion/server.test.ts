@@ -618,6 +618,37 @@ describe("companion server core", () => {
     await expect(closeCode).resolves.toBe(1008);
   });
 
+  it("notifies a previously revoked device when it authenticates again", async () => {
+    const { baseUrl } = await startServer({
+      companionEnvelope: createCompanionEnvelopeVerifier({
+        now: () => new Date("2026-07-02T12:00:00.000Z"),
+        storage: testCompanionStorage({ revoked: true })
+      })
+    });
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    const revokedMessage = waitForSocketMessage(socket);
+    const closeCode = waitForSocketClose(socket);
+    socket.send(
+      JSON.stringify(
+        sealEnvelope({
+          devicePublicKey,
+          plaintext: { kind: "auth", ts: "2026-07-02T12:00:00.000Z" },
+          recipientPublicKey: serverPublicKey,
+          senderSecretKey: deviceSecretKey
+        })
+      )
+    );
+
+    expect(openServerEventEnvelope(await revokedMessage)).toEqual({
+      kind: "device_revoked"
+    });
+    await expect(closeCode).resolves.toBe(1008);
+  });
+
   it("coalesces concurrent workspace loads per project", async () => {
     let loadCount = 0;
     let resolveWorkspace:

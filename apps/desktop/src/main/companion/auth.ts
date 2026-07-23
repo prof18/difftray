@@ -188,7 +188,12 @@ export type CompanionWebSocketAuthResult =
       readonly device: CompanionDeviceContext;
       readonly ok: true;
     }
-  | { readonly ok: false };
+  | {
+      readonly device: CompanionDeviceContext;
+      readonly ok: false;
+      readonly reason: "revoked";
+    }
+  | { readonly ok: false; readonly reason: "unauthorized" };
 
 export type CompanionWebSocketClientEnvelopeInput = {
   readonly devicePublicKey: string;
@@ -344,7 +349,9 @@ export function createCompanionEnvelopeVerifier(input: {
       };
     },
     verifyWebSocketAuthEnvelope: (envelope) => {
+      const registeredDevice = storage.findCompanionDeviceByPublicKey(envelope.devicePk);
       const opened = openRegisteredDeviceEnvelope({
+        allowRevoked: true,
         envelope,
         maxClockSkewMs: envelopeMaxClockSkewMs,
         now: now(),
@@ -352,7 +359,15 @@ export function createCompanionEnvelopeVerifier(input: {
       });
 
       if (!opened.ok || !isWebSocketAuthPlain(opened.body)) {
-        return { ok: false };
+        return { ok: false, reason: "unauthorized" };
+      }
+
+      if (registeredDevice?.revokedAt) {
+        return {
+          device: opened.device,
+          ok: false,
+          reason: "revoked"
+        };
       }
 
       storage.touchCompanionDeviceLastSeen(opened.device.deviceId);
@@ -416,6 +431,7 @@ function readEncryptedEnvelope(
 }
 
 function openRegisteredDeviceEnvelope(input: {
+  readonly allowRevoked?: boolean;
   readonly envelope: EncryptedEnvelope;
   readonly maxClockSkewMs?: number;
   readonly now?: Date;
@@ -429,7 +445,7 @@ function openRegisteredDeviceEnvelope(input: {
   | { readonly ok: false } {
   const device = input.storage.findCompanionDeviceByPublicKey(input.envelope.devicePk);
 
-  if (!device || device.revokedAt) {
+  if (!device || (device.revokedAt && !input.allowRevoked)) {
     return { ok: false };
   }
 
