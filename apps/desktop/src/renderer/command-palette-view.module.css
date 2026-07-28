@@ -7,6 +7,9 @@
 }
 
 .paletteOverlay {
+  /* Cancel drag regions underneath (e.g. .noFileState); native scroll/clicks
+     are otherwise swallowed by window dragging on macOS. */
+  -webkit-app-region: no-drag;
   position: fixed;
   z-index: 10;
   top: 38px;

@@ -137,6 +137,10 @@ try {
   await window.getByRole("button", { name: "Show both diff sides" }).click();
   await window.getByRole("button", { name: "Project settings" }).click();
   await expectSettingsDiffModeSelector(window, "split");
+  const companionToggle = window.getByLabel("Enable companion mode");
+  await companionToggle.check();
+  await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
+  await expectSettingsScrollable(window);
   await window.getByLabel("Show generated files", { exact: true }).check();
   await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
   await window.getByRole("button", { name: /Editor:/ }).click();
@@ -910,6 +914,42 @@ async function expectSettingsDiffModeSelector(window, expectedMode) {
       })
     );
   }, expectedMode);
+}
+
+async function expectSettingsScrollable(window) {
+  const dialog = window.getByRole("dialog");
+  const form = dialog.locator("form");
+  const before = await form.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop
+  }));
+
+  await window.getByRole("heading", { name: "Settings" }).hover();
+  await window.mouse.wheel(0, 500);
+  await window.waitForTimeout(100);
+
+  const after = await form.evaluate((element) => element.scrollTop);
+
+  if (before.scrollHeight <= before.clientHeight || after <= before.scrollTop) {
+    throw new Error(
+      `Expected settings to scroll, got ${JSON.stringify({ after, before })}`
+    );
+  }
+
+  // Synthetic wheel events bypass macOS drag-region hit testing, so also assert
+  // the overlay cancels drag regions underneath it (e.g. the no-file empty
+  // state). Without no-drag, real trackpad/wheel input never reaches the panel.
+  const appRegion = await dialog.evaluate(
+    (element) =>
+      getComputedStyle(element.parentElement).getPropertyValue("-webkit-app-region") ||
+      getComputedStyle(element.parentElement).webkitAppRegion
+  );
+  if (appRegion !== "no-drag") {
+    throw new Error(
+      `Expected settings overlay to be -webkit-app-region: no-drag, got "${appRegion}"`
+    );
+  }
 }
 
 async function expectEditorChoice(window, expectedValue) {

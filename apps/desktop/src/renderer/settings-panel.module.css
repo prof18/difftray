@@ -127,6 +127,9 @@
 }
 
 .settingsOverlay {
+  /* Cancel drag regions underneath (e.g. .noFileState); native scroll/clicks
+     are otherwise swallowed by window dragging on macOS. */
+  -webkit-app-region: no-drag;
   position: fixed;
   z-index: 9;
   inset: 0;
@@ -151,23 +154,26 @@
   min-height: 0;
   max-height: min(720px, calc(100vh - 64px));
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settingsTopline {
+  position: sticky;
+  z-index: 4;
+  top: 0;
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
-  padding: 24px 32px 0;
+  background: var(--panel);
+  padding: 24px 32px 20px;
 }
 
 .settingsScrollRegion {
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  flex: 0 0 auto;
   padding: 0 32px 24px;
 }
 
