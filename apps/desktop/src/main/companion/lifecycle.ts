@@ -230,7 +230,7 @@ export class CompanionWorkspaceChangeBroadcaster {
 }
 
 export function createBonjourCompanionAdvertiser(): CompanionAdvertiser {
-  const bonjour = new Bonjour();
+  const bonjour = new Bonjour({}, handleBonjourAdvertisementError);
 
   return {
     destroy: () =>
@@ -245,6 +245,32 @@ export function createBonjourCompanionAdvertiser(): CompanionAdvertiser {
       return serviceAdvertisement(service);
     }
   };
+}
+
+function handleBonjourAdvertisementError(error: unknown): void {
+  if (isTransientBonjourNetworkError(error)) {
+    console.warn(
+      "Bonjour/mDNS advertisement encountered a transient network error",
+      error
+    );
+    return;
+  }
+
+  console.error("Bonjour/mDNS advertisement failed", error);
+}
+
+function isTransientBonjourNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+
+  return [
+    "EADDRNOTAVAIL",
+    "EHOSTDOWN",
+    "EHOSTUNREACH",
+    "ENETDOWN",
+    "ENETUNREACH"
+  ].includes(String(error.code));
 }
 
 export function companionAdvertisementServiceConfig(
