@@ -25,7 +25,7 @@ const productionConfig: AppRuntimeConfig = {
 const devConfig: AppRuntimeConfig = {
   appId: "com.prof18.difftray.dev",
   name: "Difftray Dev",
-  userDataDirectoryName: "Difftray",
+  userDataDirectoryName: "Difftray Dev",
   variant: "dev"
 };
 

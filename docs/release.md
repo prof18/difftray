@@ -3,8 +3,12 @@
 Difftray uses `electron-builder` for local release builds. Production builds use
 `com.prof18.difftray`; dev/debug builds use `com.prof18.difftray.dev` and the
 `Difftray Dev` product name so a debug app installs side by side instead of
-replacing the production build. Both variants intentionally use the same
-`Difftray` user-data directory.
+replacing the production build. Production uses the `Difftray` user-data
+directory; dev/debug uses the distinct `Difftray Dev` directory. On first
+packaged Dev launch, Difftray imports a sanitized copy of the production
+database: review data and preferences are retained, while companion devices and
+companion credentials are removed. Use the explicit import option to replace an
+existing Dev database; Difftray preserves the previous Dev database as a backup.
 
 The App Store Connect bundle IDs have been created under team `Q7CUB3RNAK`:
 

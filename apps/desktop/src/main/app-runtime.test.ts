@@ -20,7 +20,7 @@ describe("resolveAppRuntimeConfig", () => {
     ).toMatchObject({
       appId: "com.prof18.difftray.dev",
       name: "Difftray Dev",
-      userDataDirectoryName: "Difftray",
+      userDataDirectoryName: "Difftray Dev",
       variant: "dev"
     });
   });
@@ -30,6 +30,7 @@ describe("resolveAppRuntimeConfig", () => {
       resolveAppRuntimeConfig({ isPackaged: true, productName: "Difftray Dev" })
     ).toMatchObject({
       appId: "com.prof18.difftray.dev",
+      userDataDirectoryName: "Difftray Dev",
       variant: "dev"
     });
   });

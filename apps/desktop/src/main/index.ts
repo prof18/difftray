@@ -64,6 +64,8 @@ import {
 } from "@difftray/git";
 import {
   applyProjectTabOrder,
+  bootstrapStorageFromExistingProfile,
+  replaceStorageFromExistingProfile,
   sanitizeProjectTabOrder,
   type AppSettingsRecord,
   openStorage,
@@ -175,6 +177,7 @@ const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
 const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
 const projectWatchersEnabled = process.env.DIFFTRAY_ENABLE_PROJECT_WATCHERS === "1";
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
+const importProductionStorage = process.argv.includes("--import-production-storage");
 const windowPresentationMode = resolveWindowPresentationMode(
   process.env.DIFFTRAY_WINDOW_PRESENTATION
 );
@@ -834,6 +837,10 @@ handleTrusted(
   }
 );
 
+// Configure paths before Electron becomes ready so Chromium and renderer processes
+// inherit the same user-data directory from the beginning of app startup.
+configureAppRuntime();
+
 app.on("before-quit", () => {
   isQuitting = true;
   pendingProjectWatcherSync = undefined;
@@ -859,14 +866,13 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    configureAppRuntime();
     void createMainWindow();
   }
 });
 
 void app.whenReady().then(async () => {
-  configureAppRuntime();
   installApplicationMenu();
+  await bootstrapDevStorageFromProduction();
   await syncCompanionLifecycleWithSettings();
   await createMainWindow();
   scheduleAutoUpdaterWiring();
@@ -926,6 +932,44 @@ function installApplicationMenu(): void {
     updatesEnabled: resolvedAppRuntimeConfig.variant === "production"
   });
   applicationMenuController.install();
+}
+
+async function bootstrapDevStorageFromProduction(): Promise<void> {
+  if (!app.isPackaged || resolvedAppRuntimeConfig?.variant !== "dev" || userDataPath) {
+    return;
+  }
+
+  const destinationDirectory = path.join(app.getPath("userData"), "data");
+  const destinationFilename = path.join(destinationDirectory, "difftray.sqlite");
+  const sourceFilename = path.join(
+    app.getPath("appData"),
+    "Difftray",
+    "data",
+    "difftray.sqlite"
+  );
+
+  mkdirSync(destinationDirectory, { recursive: true });
+
+  try {
+    const backupFilename = importProductionStorage
+      ? await replaceStorageFromExistingProfile(sourceFilename, destinationFilename)
+      : undefined;
+    const didBootstrap = importProductionStorage
+      ? true
+      : await bootstrapStorageFromExistingProfile(sourceFilename, destinationFilename);
+
+    if (didBootstrap) {
+      console.info(
+        "Initialized Difftray Dev storage from production without companion credentials",
+        backupFilename ? { previousDevStorageBackup: backupFilename } : undefined
+      );
+    }
+  } catch (caughtError) {
+    console.error(
+      "Unable to initialize Difftray Dev storage from production; continuing with an empty Dev profile",
+      caughtError
+    );
+  }
 }
 
 function handleTrusted(

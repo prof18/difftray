@@ -58,6 +58,11 @@ import {
 } from "./settings-store.js";
 
 export {
+  bootstrapStorageFromExistingProfile,
+  replaceStorageFromExistingProfile
+} from "./profile-bootstrap.js";
+
+export {
   applyProjectTabOrder,
   parseStoredProjectTabOrder,
   sanitizeProjectTabOrder
