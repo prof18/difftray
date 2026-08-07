@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.10 - 2026-08-07
+
+### Added
+
+- **Difftray Companion, the mobile companion app.** Pair your phone with
+  Difftray and take the review with you: browse changed files, read diffs, mark
+  them reviewed, leave line-level comments, and copy a ready-made prompt back to
+  your agent. Available on Google Play; iOS is coming soon.
+- Turn it on in `Settings → Companion`, then use **Pair new device** to show a
+  QR code. Pairing confirms a key fingerprint on both screens, and each paired
+  phone can be revoked individually. Companion stays off until you enable it.
+- Phones connect over your local network out of the box, or from anywhere with
+  both devices signed into Tailscale. Nothing leaves your machine.
+
+### Improved
+
+- Revoking a device now disconnects the phone immediately instead of on its next
+  request.
+- Companion discovery survives transient Bonjour network errors.
+- Difftray Dev keeps its own storage, so debug builds no longer share companion
+  devices and credentials with the production app.
+- Fixed scrolling in the settings panel and the review overlay.
+
 ## 0.0.9 - 2026-07-21
 
 ### Improved
