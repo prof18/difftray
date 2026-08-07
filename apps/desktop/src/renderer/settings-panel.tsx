@@ -16,6 +16,7 @@ import {
 import QRCode from "qrcode";
 
 import styles from "./settings-panel.module.css";
+import { featureFlags } from "./feature-flags.js";
 import {
   editorChoices,
   editorPatchForSelection,
@@ -398,16 +399,18 @@ function CompanionOnboarding(): React.JSX.Element {
       <div className={styles.companionGetApp}>
         <div className={styles.companionOnboardingLabel}>Get the app</div>
         <div className={styles.companionStores}>
-          <button
-            aria-haspopup="dialog"
-            className={styles.secondaryButton}
-            onClick={() => {
-              setSelectedStore("app-store");
-            }}
-            type="button"
-          >
-            App Store
-          </button>
+          {featureFlags.iosCompanionStoreEnabled ? (
+            <button
+              aria-haspopup="dialog"
+              className={styles.secondaryButton}
+              onClick={() => {
+                setSelectedStore("app-store");
+              }}
+              type="button"
+            >
+              App Store
+            </button>
+          ) : null}
           <button
             aria-haspopup="dialog"
             className={styles.secondaryButton}
@@ -426,8 +429,11 @@ function CompanionOnboarding(): React.JSX.Element {
           <li>
             <span>1</span>
             <p>
-              Install <strong>Difftray Companion</strong> on your phone from the App Store
-              or Google Play.
+              Install <strong>Difftray Companion</strong> on your phone from{" "}
+              {featureFlags.iosCompanionStoreEnabled
+                ? "the App Store or Google Play"
+                : "Google Play"}
+              .
             </p>
           </li>
           <li>
