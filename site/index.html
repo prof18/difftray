@@ -1,10 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- =============================================================================
+     FEATURE FLAG · iOS companion store
+     -----------------------------------------------------------------------------
+     data-ios-companion-store="off" hides every App Store reference on this page:
+     the App Store badge, the "iOS &" wording in the hero pill and section meta,
+     and the store names in pairing step 1. The Google Play path is untouched.
+
+     It also swaps in the "off"-only pieces: a dimmed "Coming soon to the App
+     Store" badge and the .comp-soon line with its mailto notify-me link. Both
+     carry data-ios-alt, so flipping the flag removes them automatically.
+
+     Mirrors `iosCompanionStoreEnabled` in
+     apps/desktop/src/renderer/feature-flags.ts — keep the two in sync.
+
+     To re-enable once the iOS listing is available again:
+       1. set the attribute below to "on"
+       2. set "operatingSystem" to "Android, iOS" on the MobileApplication entity
+          in the JSON-LD block (CSS cannot reach <head>, so it is hand-edited)
+     Nothing else changes — the meta/og/twitter copy is deliberately written
+     platform-neutral ("mobile companion", "from your phone") so it stays
+     accurate in both states.
+     ============================================================================= -->
+<html lang="en" data-ios-companion-store="off">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Difftray — Local-first Git review for macOS</title>
-<meta name="description" content="Local-first macOS app for reviewing Git changes across projects. Track what you reviewed, get re-flagged on drift, and export notes as prompts.">
+<meta name="description" content="Local-first macOS app for reviewing Git changes. Track what you reviewed, get re-flagged on drift, and carry the review to your phone with the companion app.">
 <link rel="canonical" href="https://difftray.app/">
 
 <!-- Favicons (relative paths — work on github.io/<repo>/ project pages and custom domains alike) -->
@@ -20,7 +42,7 @@
 <meta property="og:site_name" content="Difftray">
 <meta property="og:locale" content="en_US">
 <meta property="og:title" content="Difftray — Local-first Git review for macOS">
-<meta property="og:description" content="Know what you reviewed. Get re-flagged when a diff drifts. A focused review desk for local Git changes.">
+<meta property="og:description" content="Know what you reviewed. Get re-flagged when a diff drifts. A focused review desk for local Git changes — with a mobile companion for your phone.">
 <meta property="og:url" content="https://difftray.app/">
 <meta property="og:image" content="https://difftray.app/assets/social-card.png">
 <meta property="og:image:width" content="1200">
@@ -28,31 +50,57 @@
 <meta property="og:image:alt" content="Difftray: review local Git changes and catch drift fast.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Difftray — Local-first Git review for macOS">
-<meta name="twitter:description" content="Know what you reviewed. Get re-flagged when a diff drifts.">
+<meta name="twitter:description" content="Know what you reviewed. Get re-flagged when a diff drifts. Now with a mobile companion for your phone.">
 <meta name="twitter:image" content="https://difftray.app/assets/social-card.png">
 <meta name="twitter:image:alt" content="Difftray: review local Git changes and catch drift fast.">
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Difftray",
-  "applicationCategory": "DeveloperApplication",
-  "operatingSystem": "macOS",
-  "description": "Local-first macOS app for reviewing Git changes across projects. Track what you reviewed, get re-flagged on drift, and export notes as prompts.",
-  "url": "https://difftray.app/",
-  "downloadUrl": "https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg",
-  "image": "https://difftray.app/assets/social-card.png",
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "Marco Gomiero",
-    "url": "https://www.marcogomiero.com"
-  }
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://difftray.app/#app",
+      "name": "Difftray",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS",
+      "description": "Local-first macOS app for reviewing Git changes across projects. Track what you reviewed, get re-flagged on drift, and export notes as prompts.",
+      "url": "https://difftray.app/",
+      "downloadUrl": "https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg",
+      "image": "https://difftray.app/assets/social-card.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Marco Gomiero",
+        "url": "https://www.marcogomiero.com"
+      }
+    },
+    {
+      "@type": "MobileApplication",
+      "@id": "https://difftray.app/#companion-app",
+      "name": "Difftray Companion",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Android",
+      "description": "Mobile companion for Difftray. Pairs with the macOS app over Wi-Fi or Tailscale to browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent.",
+      "url": "https://difftray.app/#companion",
+      "downloadUrl": "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion",
+      "isPartOf": { "@id": "https://difftray.app/#app" },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Marco Gomiero",
+        "url": "https://www.marcogomiero.com"
+      }
+    }
+  ]
 }
 </script>
 
@@ -129,7 +177,6 @@ img{display:block;max-width:100%}
 .nav-menu{display:flex;align-items:center;gap:8px}
 .nav-link{padding:8px 12px;color:var(--text-2);font-size:14px;font-weight:500;border-radius:7px;transition:color .15s,background .15s;white-space:nowrap}
 .nav-link:hover{color:var(--text);background:var(--panel)}
-.nav-ghost{display:inline-flex;align-items:center;gap:7px}
 .nav-toggle{
   display:none;align-items:center;justify-content:center;
   width:40px;height:40px;border:1px solid var(--border);border-radius:8px;
@@ -195,6 +242,12 @@ h1 .em{
   background:linear-gradient(110deg,var(--accent) 10%,#b8c1ff 60%,var(--accent));
   -webkit-background-clip:text;background-clip:text;color:transparent;
 }
+.hero-companion{display:inline-flex;align-items:center;gap:10px;margin-top:24px;padding:8px 15px;background:var(--panel);border:1px solid var(--border);border-radius:999px;font-size:13.5px;color:var(--text-2);font-weight:500;transition:border-color .15s,background .15s,transform .12s}
+.hero-companion:hover{border-color:var(--accent-line);background:var(--panel-2);transform:translateY(-1px)}
+.hero-companion b{color:var(--text);font-weight:600}
+.hero-companion svg:first-child{color:var(--accent)}
+.hero-companion svg:last-child{color:var(--muted);transition:transform .15s}
+.hero-companion:hover svg:last-child{transform:translateX(2px);color:var(--accent)}
 .sub{
   font-size:clamp(16.5px,2.1vw,20px);color:var(--muted);max-width:60ch;margin:26px auto 0;
   line-height:1.55;text-wrap:pretty;
@@ -361,18 +414,73 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
 }
 .foot-donate:hover{color:var(--text);border-color:var(--border-strong);background:var(--panel-2)}
 
+/* feature flag: iOS companion store (see the comment above <html>) */
+html[data-ios-companion-store="off"] [data-ios-only]{display:none}
+html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
+
+/* ---------- COMPANION ---------- */
+.companion{background:linear-gradient(180deg,var(--bg-2),var(--bg));border-top:1px solid var(--border-soft)}
+.comp-top{display:grid;grid-template-columns:1fr 1.05fr;gap:60px;align-items:center}
+.comp-intro h2{font-size:clamp(28px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:600;margin-top:18px;text-wrap:balance}
+.comp-intro>p{font-size:clamp(16px,1.8vw,18.5px);color:var(--muted);margin-top:18px;line-height:1.55;text-wrap:pretty;max-width:52ch}
+.store-badges{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px}
+.store-badge{display:inline-flex;align-items:center;gap:11px;background:#050506;border:1px solid var(--border-strong);border-radius:12px;padding:10px 18px 10px 15px;transition:border-color .15s,transform .12s,background .15s}
+.store-badge:hover{border-color:#4a4a55;background:#0c0c10;transform:translateY(-2px)}
+.store-badge:active{transform:translateY(0)}
+.store-badge svg{flex:none;color:#fff}
+.store-badge .sb-txt{display:flex;flex-direction:column;line-height:1.15}
+.store-badge .sb-sm{font-size:10.5px;color:var(--text-2);letter-spacing:.02em}
+.store-badge .sb-lg{font-size:16.5px;font-weight:600;color:#fff;letter-spacing:-.01em}
+.store-badge.is-soon{background:transparent;border-style:dashed;cursor:default}
+.store-badge.is-soon:hover{background:transparent;border-color:var(--border-strong);transform:none}
+.store-badge.is-soon svg{color:var(--muted)}
+.store-badge.is-soon .sb-lg{color:var(--text-2)}
+.comp-soon{margin-top:18px;font-size:14px;color:var(--muted);line-height:1.6;max-width:52ch}
+.comp-soon b{color:var(--text-2);font-weight:600}
+.comp-soon a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--accent-line);text-underline-offset:3px;transition:text-decoration-color .15s}
+.comp-soon a:hover{text-decoration-color:var(--accent)}
+.comp-meta{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.comp-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--dim)}
+.comp-phones{position:relative;display:flex;justify-content:center;align-items:flex-end;min-height:520px}
+.comp-phones::after{content:"";position:absolute;left:8%;right:8%;bottom:0;height:120px;z-index:0;background:radial-gradient(50% 100% at 50% 100%,rgba(108,125,240,.28),transparent 72%);filter:blur(20px)}
+.comp-phones img{position:relative;z-index:1;width:44%;height:auto;filter:drop-shadow(0 40px 60px rgba(0,0,0,.6))}
+.comp-phones .ph-side{width:40%;opacity:.94}
+.comp-phones .ph-a{transform:translateX(24%) translateY(-14px) rotate(-4deg)}
+.comp-phones .ph-b{transform:translateX(-24%) translateY(-14px) rotate(4deg)}
+.comp-phones .ph-mid{z-index:2;margin:0 -14%;transform:translateY(-40px)}
+.comp-how{margin-top:96px}
+.comp-how-head{max-width:640px;margin:0 auto 44px;text-align:center}
+.comp-how-head h3{font-size:clamp(24px,3vw,32px);letter-spacing:-.025em;font-weight:600;margin-top:16px;text-wrap:balance}
+.comp-how-head p{font-size:16px;color:var(--muted);margin-top:14px;line-height:1.55}
+.comp-steps{display:grid;grid-template-columns:1.4fr 1fr;gap:44px;align-items:center;max-width:980px;margin:0 auto}
+.comp-step-list{display:flex;flex-direction:column}
+.cstep{display:flex;gap:18px;padding:22px 0;border-top:1px solid var(--border-soft)}
+.cstep:first-child{border-top:0;padding-top:0}
+.cstep-num{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none}
+.cstep h4{font-size:16.5px;font-weight:600;letter-spacing:-.015em;margin-bottom:6px}
+.cstep p{font-size:14.5px;color:var(--muted);line-height:1.55}
+.cstep code,.cstep .kb{font-family:var(--mono);font-size:12.5px;color:var(--text-2);background:var(--elev);border:1px solid var(--border-strong);border-radius:5px;padding:1px 6px}
+.comp-qr{display:flex;justify-content:center}
+.comp-qr img{width:270px;height:auto;max-width:100%;filter:drop-shadow(0 40px 60px rgba(0,0,0,.6))}
+
 /* reveal */
 .reveal{opacity:0;transform:translateY(20px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
 .reveal.in{opacity:1;transform:none}
 
 /* ---------- RESPONSIVE ---------- */
 @media(max-width:900px){
+  .comp-top{grid-template-columns:1fr;gap:20px}
+  .comp-phones{min-height:440px;margin-top:56px}
+  .comp-steps{grid-template-columns:1fr;gap:40px}
+  .comp-qr{order:-1}
   .feat-grid{grid-template-columns:1fr}
   .feat.wide{grid-template-columns:1fr;grid-column:auto}
   .feat.wide .prompt-card{border-left:0;border-top:1px solid var(--border)}
 }
-@media(max-width:680px){
-  .wrap,.nav-inner{padding-left:20px;padding-right:20px}
+/* The nav bar needs ~750px to lay out flat (brand + 4 links + Download).
+   Below that it collapses to the hamburger — earlier than the other mobile
+   rules below, which stay at 680px. */
+@media(max-width:780px){
   .nav-inner{position:relative}
   .nav-toggle{display:inline-flex;margin-left:auto}
   .nav-menu{
@@ -385,6 +493,9 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
   .nav.open .nav-menu{display:flex}
   .nav-menu .nav-link{padding:12px 14px}
   .nav-menu .btn{width:100%;justify-content:center;margin-top:8px}
+}
+@media(max-width:680px){
+  .wrap,.nav-inner{padding-left:20px;padding-right:20px}
   .gal-zoom-hint{opacity:1}
   .sec{padding:72px 0}
   .hero{padding:60px 0 0}
@@ -445,10 +556,7 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
       <a class="nav-link" href="#drift">Drift tracking</a>
       <a class="nav-link" href="#gallery">Screenshots</a>
       <a class="nav-link" href="#features">Features</a>
-      <a class="nav-link nav-ghost" href="https://github.com/prof18/difftray" target="_blank" rel="noopener">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub
-      </a>
+      <a class="nav-link" href="#companion">Mobile companion</a>
       <a class="btn btn-primary" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">Download</a>
     </nav>
   </div>
@@ -473,6 +581,11 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
     <div class="cta-meta">
       <span>Runs entirely on your machine</span>
     </div>
+    <a class="hero-companion" href="#companion">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+      <span>New — review from your phone with the <b><span data-ios-only>iOS &amp; Android</span><span data-ios-alt>Android</span> companion</b></span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
   </div>
 
   <div class="gallery wrap" id="gallery">
@@ -589,6 +702,70 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
   </div>
 </section>
 
+<!-- COMPANION -->
+<section class="sec companion" id="companion">
+  <div class="wrap">
+    <div class="comp-top">
+      <div class="comp-intro reveal">
+        <span class="eyebrow">On your phone</span>
+        <h2>Take the review with you.</h2>
+        <p>Difftray Companion pairs with your Mac and puts the whole review loop in your pocket — browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent. From the couch, the commute, anywhere.</p>
+        <div class="store-badges">
+          <a class="store-badge" data-ios-only href="https://apps.apple.com/app/id6789255782" target="_blank" rel="noopener">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
+            <span class="sb-txt"><span class="sb-sm">Download on the</span><span class="sb-lg">App Store</span></span>
+          </a>
+          <a class="store-badge" href="https://play.google.com/store/apps/details?id=com.prof18.difftray.companion" target="_blank" rel="noopener">
+            <svg width="20" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.6 2.2c-.25.27-.4.68-.4 1.22v17.16c0 .54.15.95.4 1.22l.06.05L13.4 12.1v-.2L3.66 2.15l-.06.05z" opacity=".85"/><path d="M16.7 15.4l-3.3-3.3v-.2l3.3-3.3.08.05 3.9 2.22c1.12.63 1.12 1.67 0 2.31l-3.9 2.2-.08.02z"/><path d="M16.78 15.35 13.4 12 3.6 21.8c.37.39.98.44 1.66.06l11.52-6.5" opacity=".9"/><path d="M16.78 8.65 5.26 2.15c-.68-.39-1.29-.34-1.66.05L13.4 12l3.38-3.35z" opacity=".7"/></svg>
+            <span class="sb-txt"><span class="sb-sm">Get it on</span><span class="sb-lg">Google Play</span></span>
+          </a>
+          <span class="store-badge is-soon" data-ios-alt>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
+            <span class="sb-txt"><span class="sb-sm">Coming soon to the</span><span class="sb-lg">App Store</span></span>
+          </span>
+        </div>
+        <p class="comp-soon" data-ios-alt>
+          <b>iOS is coming soon.</b> Want a heads-up the moment it lands on the App Store?
+          <a href="mailto:mgp.dev.studio&#43;difftray@gmail.com?subject=Notify%20me%20when%20Difftray%20Companion%20is%20on%20the%20iOS%20App%20Store&amp;body=Hi%2C%0A%0ACould%20you%20email%20me%20once%20Difftray%20Companion%20is%20available%20on%20the%20iOS%20App%20Store%3F%0A%0AThanks%21">Email me and I'll tell you when it's out</a>.
+        </p>
+        <div class="comp-meta"><span data-ios-only>iOS &amp; Android</span><span data-ios-alt>Android</span><span class="dot"></span><span>Free companion</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
+      </div>
+      <div class="comp-phones reveal">
+        <img class="ph-side ph-a" src="assets/companion-comments.png" alt="Companion comments and generated-prompt screen" width="780" height="1688" loading="lazy" decoding="async">
+        <img class="ph-mid" src="assets/companion-workspace.png" alt="Companion workspace: changed files with review state and drift flags" width="780" height="1688" loading="lazy" decoding="async">
+        <img class="ph-side ph-b" src="assets/companion-diff.png" alt="Companion diff view with Mark reviewed action" width="780" height="1688" loading="lazy" decoding="async">
+      </div>
+    </div>
+
+    <div class="comp-how reveal">
+      <div class="comp-how-head">
+        <span class="eyebrow" style="justify-content:center">Pair in under a minute</span>
+        <h3>Your Mac does the reviewing. Your phone drives it.</h3>
+        <p>The Mac stays the source of truth — Companion connects to it and reads the same local changes. Nothing leaves your machine.</p>
+      </div>
+      <div class="comp-steps">
+        <div class="comp-step-list">
+          <div class="cstep">
+            <div class="cstep-num">1</div>
+            <div><h4>Install the app</h4><p>Get <b>Difftray Companion</b> from <span data-ios-only>the App Store or Google Play</span><span data-ios-alt>Google Play</span> and open it on your phone.</p></div>
+          </div>
+          <div class="cstep">
+            <div class="cstep-num">2</div>
+            <div><h4>Turn on Companion mode</h4><p>In Difftray on your Mac, open <span class="kb">Settings → Companion</span> and hit <b>Pair new device</b> to show a QR code.</p></div>
+          </div>
+          <div class="cstep">
+            <div class="cstep-num">3</div>
+            <div><h4>Scan &amp; confirm</h4><p>Scan the code, match the key fingerprint on both screens, and your projects appear. Same Wi-Fi works out of the box — sign both into <b>Tailscale</b> to review from anywhere.</p></div>
+          </div>
+        </div>
+        <div class="comp-qr">
+          <img src="assets/companion-qr.png" alt="Companion QR pairing screen" width="780" height="1688" loading="lazy" decoding="async">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- FINAL CTA -->
 <section class="final">
   <div class="wrap">
@@ -629,6 +806,7 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
           <a href="#drift">Drift tracking</a>
           <a href="#gallery">Screenshots</a>
           <a href="#features">Features</a>
+          <a href="#companion">Mobile companion</a>
           <a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">Download</a>
         </div>
         <div class="foot-col">
