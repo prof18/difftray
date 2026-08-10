@@ -35,6 +35,7 @@ describe("ProjectTabBar", () => {
     expect(html).toContain("1/5");
     expect(html).toContain('aria-label="Close repository"');
     expect(html).toContain('aria-label="Open repository"');
+    expect(html).toContain('aria-label="Open Repo One in Finder"');
     expect(html).toContain('aria-label="Project settings"');
   });
 
@@ -78,6 +79,7 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     activeProjectId: "repo-one",
     disabled: false,
     onCloseActiveProject: vi.fn(),
+    onOpenActiveProjectInFinder: vi.fn(),
     onOpenProject: vi.fn(),
     onOpenSettings: vi.fn(),
     onReorderProjects: vi.fn(),

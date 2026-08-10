@@ -127,6 +127,7 @@ The command bar should be utilitarian:
 - filter
 - refresh
 - open in editor
+- open the active project in Finder
 - mark reviewed
 - review mode switch, when available
 - settings

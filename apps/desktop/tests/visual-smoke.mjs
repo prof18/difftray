@@ -37,6 +37,9 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
+  await window
+    .getByRole("button", { name: "Open visual-repo in Finder" })
+    .waitFor({ timeout: 10_000 });
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);

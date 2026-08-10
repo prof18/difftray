@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Folder, Plus, Settings, X } from "lucide-react";
+import { Folder, FolderOpen, Plus, Settings, X } from "lucide-react";
 
 import styles from "./project-tab-bar.module.css";
 import {
@@ -23,6 +23,7 @@ export type ProjectTabBarProps = {
   readonly disabled: boolean;
   readonly loadingStatus?: WorkspaceLoadStatus;
   readonly onCloseActiveProject: () => void;
+  readonly onOpenActiveProjectInFinder: () => void;
   readonly onOpenProject: () => void;
   readonly onOpenSettings: () => void;
   readonly onReorderProjects: (nextProjects: readonly RecentProjectView[]) => void;
@@ -42,6 +43,7 @@ export function ProjectTabBar({
   disabled,
   loadingStatus,
   onCloseActiveProject,
+  onOpenActiveProjectInFinder,
   onOpenProject,
   onOpenSettings,
   onReorderProjects,
@@ -61,6 +63,12 @@ export function ProjectTabBar({
   const [draggedProjectId, setDraggedProjectId] = useState<string | undefined>();
   const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | undefined>();
   const [openButtonInline, setOpenButtonInline] = useState(false);
+  const activeProjectName = projects.find(
+    (project) => project.id === activeProjectId
+  )?.name;
+  const openInFinderLabel = activeProjectName
+    ? `Open ${activeProjectName} in Finder`
+    : "Open project in Finder";
 
   useLayoutEffect(() => {
     function updateOpenButtonPlacement(): void {
@@ -357,6 +365,16 @@ export function ProjectTabBar({
         type="button"
       >
         <Plus size={15} strokeWidth={1.4} aria-hidden />
+      </button>
+      <button
+        aria-label={openInFinderLabel}
+        className={styles.tabIconButton}
+        disabled={disabled}
+        onClick={onOpenActiveProjectInFinder}
+        title={openInFinderLabel}
+        type="button"
+      >
+        <FolderOpen size={15} strokeWidth={1.4} aria-hidden />
       </button>
       <button
         aria-label="Project settings"

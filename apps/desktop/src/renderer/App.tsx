@@ -163,12 +163,14 @@ export function App(): React.JSX.Element {
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
   const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
+  const activeProjectIdRef = useRef<string | undefined>(undefined);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const commentReportCopyPendingRef = useRef(false);
   const commentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
   const focusRefreshRunningRef = useRef(false);
   const lastFocusRefreshAtRef = useRef(0);
   const loadStateRef = useRef<LoadState>("idle");
+  const openProjectInFinderRequestRef = useRef(0);
   const paletteOpenRef = useRef(false);
   const selectedPathRef = useRef<string | undefined>(undefined);
   const nextReviewNavigationPerformanceIdRef = useRef(0);
@@ -541,6 +543,10 @@ export function App(): React.JSX.Element {
   const showDriftToast =
     appSettings.notifyOnDrift && Boolean(toastKey) && toastDismissedFor !== toastKey;
   const activeProject = loadingProject ?? workspace?.project;
+  useLayoutEffect(() => {
+    activeProjectIdRef.current = activeProject?.id;
+    openProjectInFinderRequestRef.current += 1;
+  }, [activeProject?.id]);
   const activeReviewSummary = loadingProject
     ? loadingProject.reviewSummary
     : workspace
@@ -2178,6 +2184,21 @@ export function App(): React.JSX.Element {
           }}
           onCloseActiveProject={() => {
             void closeProject(workspace.project.id);
+          }}
+          onOpenActiveProjectInFinder={() => {
+            const projectId = activeProject.id;
+            const requestId = ++openProjectInFinderRequestRef.current;
+            setError(undefined);
+            void window.difftray
+              .openProjectInFinder(projectId)
+              .catch((caughtError: unknown) => {
+                if (
+                  requestId === openProjectInFinderRequestRef.current &&
+                  projectId === activeProjectIdRef.current
+                ) {
+                  setError(errorMessage(caughtError));
+                }
+              });
           }}
           onOpenSettings={() => {
             void openSettings();

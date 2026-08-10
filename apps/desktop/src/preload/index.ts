@@ -75,6 +75,7 @@ export type DifftrayApi = {
   ) => Promise<MarkReviewedResult>;
   readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
   readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
+  readonly openProjectInFinder: (projectId: string) => Promise<void>;
   readonly openProject: () => Promise<ReviewWorkspaceView | null>;
   readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
   readonly updateProjectSettings: (
@@ -595,6 +596,8 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
   openCompanionStore: async (store) =>
     ipcRenderer.invoke("external:openStore", store) as Promise<void>,
+  openProjectInFinder: async (projectId) =>
+    ipcRenderer.invoke("projects:openInFinder", { projectId }) as Promise<void>,
   openProject: async () =>
     ipcRenderer.invoke("projects:open") as Promise<ReviewWorkspaceView | null>,
   getProjectSettings: async (projectId) =>

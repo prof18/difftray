@@ -63,6 +63,28 @@ describe("ProjectTabBar drag", () => {
     container.remove();
   });
 
+  it("opens the active project in Finder", () => {
+    const onOpenActiveProjectInFinder = vi.fn();
+
+    act(() => {
+      root.render(
+        <ProjectTabBar {...projectTabBarProps({ onOpenActiveProjectInFinder })} />
+      );
+    });
+
+    const openInFinderButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Open Repo One in Finder"]'
+    );
+
+    expect(openInFinderButton).not.toBeNull();
+
+    act(() => {
+      openInFinderButton?.click();
+    });
+
+    expect(onOpenActiveProjectInFinder).toHaveBeenCalledOnce();
+  });
+
   it("cancels an active drag when tabDragCancelKey changes", () => {
     const onReorderProjects = vi.fn();
     const props = projectTabBarProps({
@@ -116,6 +138,7 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     activeProjectId: "repo-one",
     disabled: false,
     onCloseActiveProject: vi.fn(),
+    onOpenActiveProjectInFinder: vi.fn(),
     onOpenProject: vi.fn(),
     onOpenSettings: vi.fn(),
     onReorderProjects: vi.fn(),

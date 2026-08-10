@@ -101,6 +101,7 @@ import {
   readStringProperty
 } from "./ipc-input.js";
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
+import { openStoredProjectDirectory } from "./project-folder-open.js";
 import {
   resolveAppRuntimeConfig,
   resolveWindowPresentationMode,
@@ -608,6 +609,17 @@ handleTrusted(
 );
 handleTrusted("projects:open", async (event: IpcMainInvokeEvent) =>
   openProjectFromDialog(event.sender)
+);
+handleTrusted(
+  "projects:openInFinder",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<void> => {
+    const projectId = readStringProperty(input, "projectId");
+
+    await openStoredProjectDirectory(projectId, {
+      findProject: (storedProjectId) => getStorage().getProject(storedProjectId),
+      openPath: (projectPath) => shell.openPath(projectPath)
+    });
+  }
 );
 handleTrusted(
   "projects:load",

@@ -57,6 +57,7 @@ declare global {
     ) => Promise<MarkReviewedResult>;
     readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
     readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
+    readonly openProjectInFinder: (projectId: string) => Promise<void>;
     readonly openProject: () => Promise<ReviewWorkspaceView | null>;
     readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
     readonly updateProjectSettings: (

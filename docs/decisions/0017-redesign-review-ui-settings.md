@@ -45,7 +45,9 @@ mounting every row while preserving continuous navigation.
 
 The open-repository button follows the last tab when the tab strip has enough
 horizontal space. When the tab strip overflows, it stays fixed at the trailing edge
-with settings.
+with the active-project Finder action and settings. The Finder action sends only the
+active stored project ID through the typed preload API; the main process resolves the
+trusted project path before opening it with the native shell.
 
 When the app window regains focus, the active workspace refreshes through the same
 path as manual refresh so review invalidation and drift notifications react to
