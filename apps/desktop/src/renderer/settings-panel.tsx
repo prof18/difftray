@@ -426,8 +426,8 @@ function CompanionOnboarding(): React.JSX.Element {
           <li>
             <span>1</span>
             <p>
-              Install <strong>Difftray Companion</strong> on your phone from{" "}
-              the App Store or Google Play.
+              Install <strong>Difftray Companion</strong> on your phone from the App Store
+              or Google Play.
             </p>
           </li>
           <li>
