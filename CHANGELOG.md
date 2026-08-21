@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.11 - 2026-08-21
+
+### Improved
+
+- **Difftray Companion is now available on iOS.** Get it from the App Store or
+  Google Play directly from Difftray’s Companion settings or the website.
+
 ## 0.0.10 - 2026-08-07
 
 ### Added

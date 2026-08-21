@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { featureFlags } from "./feature-flags.js";
 import { SettingsPanel } from "./settings-panel.js";
 
 describe("SettingsPanel", () => {
@@ -182,8 +181,9 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Review your changes from your phone");
     expect(html).toContain("No paired devices yet — install the app and pair below.");
     expect(html).toContain("Get the app");
+    expect(html).toContain(">App Store<");
     expect(html).toContain(">Google Play<");
-    expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(1);
+    expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2);
     expect(html).not.toContain("download-on-the-app-store.svg");
     expect(html).not.toContain("get-it-on-google-play.png");
     expect(html).toContain("How to connect your phone");
@@ -194,9 +194,7 @@ describe("SettingsPanel", () => {
     expect(html).not.toContain("<details");
   });
 
-  it("hides App Store references while the iOS companion store is disabled", () => {
-    expect(featureFlags.iosCompanionStoreEnabled).toBe(false);
-
+  it("shows App Store references alongside Google Play", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel
         appSettings={appSettings({ companionEnabled: true })}
@@ -219,10 +217,9 @@ describe("SettingsPanel", () => {
       />
     );
 
-    expect(html).not.toContain("App Store");
-    expect(html).not.toContain("apps.apple.com");
+    expect(html).toContain("App Store");
     expect(html).toContain("Install <strong>Difftray Companion</strong> on your phone");
-    expect(html).toContain("Google Play");
+    expect(html).toContain("the App Store or Google Play");
   });
 
   it("keeps paired-device help compact in a closed accordion", () => {

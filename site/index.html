@@ -1,27 +1,5 @@
 <!DOCTYPE html>
-<!-- =============================================================================
-     FEATURE FLAG · iOS companion store
-     -----------------------------------------------------------------------------
-     data-ios-companion-store="off" hides every App Store reference on this page:
-     the App Store badge, the "iOS &" wording in the hero pill and section meta,
-     and the store names in pairing step 1. The Google Play path is untouched.
-
-     It also swaps in the "off"-only pieces: a dimmed "Coming soon to the App
-     Store" badge and the .comp-soon line with its mailto notify-me link. Both
-     carry data-ios-alt, so flipping the flag removes them automatically.
-
-     Mirrors `iosCompanionStoreEnabled` in
-     apps/desktop/src/renderer/feature-flags.ts — keep the two in sync.
-
-     To re-enable once the iOS listing is available again:
-       1. set the attribute below to "on"
-       2. set "operatingSystem" to "Android, iOS" on the MobileApplication entity
-          in the JSON-LD block (CSS cannot reach <head>, so it is hand-edited)
-     Nothing else changes — the meta/og/twitter copy is deliberately written
-     platform-neutral ("mobile companion", "from your phone") so it stays
-     accurate in both states.
-     ============================================================================= -->
-<html lang="en" data-ios-companion-store="off">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -84,7 +62,7 @@
       "@id": "https://difftray.app/#companion-app",
       "name": "Difftray Companion",
       "applicationCategory": "DeveloperApplication",
-      "operatingSystem": "Android",
+      "operatingSystem": "Android, iOS",
       "description": "Mobile companion for Difftray. Pairs with the macOS app over Wi-Fi or Tailscale to browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent.",
       "url": "https://difftray.app/#companion",
       "downloadUrl": "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion",
@@ -414,10 +392,6 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
 }
 .foot-donate:hover{color:var(--text);border-color:var(--border-strong);background:var(--panel-2)}
 
-/* feature flag: iOS companion store (see the comment above <html>) */
-html[data-ios-companion-store="off"] [data-ios-only]{display:none}
-html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
-
 /* ---------- COMPANION ---------- */
 .companion{background:linear-gradient(180deg,var(--bg-2),var(--bg));border-top:1px solid var(--border-soft)}
 .comp-top{display:grid;grid-template-columns:1fr 1.05fr;gap:60px;align-items:center}
@@ -431,14 +405,6 @@ html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
 .store-badge .sb-txt{display:flex;flex-direction:column;line-height:1.15}
 .store-badge .sb-sm{font-size:10.5px;color:var(--text-2);letter-spacing:.02em}
 .store-badge .sb-lg{font-size:16.5px;font-weight:600;color:#fff;letter-spacing:-.01em}
-.store-badge.is-soon{background:transparent;border-style:dashed;cursor:default}
-.store-badge.is-soon:hover{background:transparent;border-color:var(--border-strong);transform:none}
-.store-badge.is-soon svg{color:var(--muted)}
-.store-badge.is-soon .sb-lg{color:var(--text-2)}
-.comp-soon{margin-top:18px;font-size:14px;color:var(--muted);line-height:1.6;max-width:52ch}
-.comp-soon b{color:var(--text-2);font-weight:600}
-.comp-soon a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--accent-line);text-underline-offset:3px;transition:text-decoration-color .15s}
-.comp-soon a:hover{text-decoration-color:var(--accent)}
 .comp-meta{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .comp-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--dim)}
 .comp-phones{position:relative;display:flex;justify-content:center;align-items:flex-end;min-height:520px}
@@ -583,7 +549,7 @@ html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
     </div>
     <a class="hero-companion" href="#companion">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
-      <span>New — review from your phone with the <b><span data-ios-only>iOS &amp; Android</span><span data-ios-alt>Android</span> companion</b></span>
+      <span>New — review from your phone with the <b>iOS &amp; Android companion</b></span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </a>
   </div>
@@ -711,7 +677,7 @@ html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
         <h2>Take the review with you.</h2>
         <p>Difftray Companion pairs with your Mac and puts the whole review loop in your pocket — browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent. From the couch, the commute, anywhere.</p>
         <div class="store-badges">
-          <a class="store-badge" data-ios-only href="https://apps.apple.com/app/id6789255782" target="_blank" rel="noopener">
+          <a class="store-badge" href="https://apps.apple.com/app/id6789255782" target="_blank" rel="noopener">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
             <span class="sb-txt"><span class="sb-sm">Download on the</span><span class="sb-lg">App Store</span></span>
           </a>
@@ -719,16 +685,8 @@ html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
             <svg width="20" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.6 2.2c-.25.27-.4.68-.4 1.22v17.16c0 .54.15.95.4 1.22l.06.05L13.4 12.1v-.2L3.66 2.15l-.06.05z" opacity=".85"/><path d="M16.7 15.4l-3.3-3.3v-.2l3.3-3.3.08.05 3.9 2.22c1.12.63 1.12 1.67 0 2.31l-3.9 2.2-.08.02z"/><path d="M16.78 15.35 13.4 12 3.6 21.8c.37.39.98.44 1.66.06l11.52-6.5" opacity=".9"/><path d="M16.78 8.65 5.26 2.15c-.68-.39-1.29-.34-1.66.05L13.4 12l3.38-3.35z" opacity=".7"/></svg>
             <span class="sb-txt"><span class="sb-sm">Get it on</span><span class="sb-lg">Google Play</span></span>
           </a>
-          <span class="store-badge is-soon" data-ios-alt>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
-            <span class="sb-txt"><span class="sb-sm">Coming soon to the</span><span class="sb-lg">App Store</span></span>
-          </span>
         </div>
-        <p class="comp-soon" data-ios-alt>
-          <b>iOS is coming soon.</b> Want a heads-up the moment it lands on the App Store?
-          <a href="mailto:mgp.dev.studio&#43;difftray@gmail.com?subject=Notify%20me%20when%20Difftray%20Companion%20is%20on%20the%20iOS%20App%20Store&amp;body=Hi%2C%0A%0ACould%20you%20email%20me%20once%20Difftray%20Companion%20is%20available%20on%20the%20iOS%20App%20Store%3F%0A%0AThanks%21">Email me and I'll tell you when it's out</a>.
-        </p>
-        <div class="comp-meta"><span data-ios-only>iOS &amp; Android</span><span data-ios-alt>Android</span><span class="dot"></span><span>Free companion</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
+        <div class="comp-meta"><span>iOS &amp; Android</span><span class="dot"></span><span>Free companion</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
       </div>
       <div class="comp-phones reveal">
         <img class="ph-side ph-a" src="assets/companion-comments.png" alt="Companion comments and generated-prompt screen" width="780" height="1688" loading="lazy" decoding="async">
@@ -747,7 +705,7 @@ html[data-ios-companion-store="on"] [data-ios-alt]{display:none}
         <div class="comp-step-list">
           <div class="cstep">
             <div class="cstep-num">1</div>
-            <div><h4>Install the app</h4><p>Get <b>Difftray Companion</b> from <span data-ios-only>the App Store or Google Play</span><span data-ios-alt>Google Play</span> and open it on your phone.</p></div>
+            <div><h4>Install the app</h4><p>Get <b>Difftray Companion</b> from the App Store or Google Play and open it on your phone.</p></div>
           </div>
           <div class="cstep">
             <div class="cstep-num">2</div>
