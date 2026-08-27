@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.12 - 2026-08-27
+
+### Improved
+
+- Companion project lists now stay responsive when one repository is slow to
+  load, with review progress filled in as it becomes available.
+- Already-released mobile clients reliably refresh companion project summaries
+  after reconnecting.
+
 ## 0.0.11 - 2026-08-21
 
 ### Improved
