@@ -122,6 +122,7 @@ import {
   CompanionLifecycleController,
   CompanionWorkspaceChangeBroadcaster
 } from "./companion/lifecycle.js";
+import { CompanionProjectList } from "./companion/project-list.js";
 import { createCompanionServer } from "./companion/server.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
@@ -195,6 +196,7 @@ let updateCheckScheduler: UpdateCheckScheduler | undefined;
 let updateCheckSchedulerPromise: Promise<UpdateCheckScheduler | undefined> | undefined;
 let companionLifecycleController: CompanionLifecycleController | undefined;
 let companionWorkspaceChangeBroadcaster: CompanionWorkspaceChangeBroadcaster | undefined;
+let companionProjectList: CompanionProjectList | undefined;
 let companionAuthManager: CompanionAuthManager | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
@@ -434,6 +436,7 @@ handleTrusted(
 handleTrusted(
   "settings:updateApp",
   async (_event: IpcMainInvokeEvent, input: unknown): Promise<AppSettingsView> => {
+    const previousSettings = getStorage().getAppSettings();
     const autoCollapseHunksOver = readNumberProperty(input, "autoCollapseHunksOver");
     const companionEnabled = readBooleanProperty(input, "companionEnabled");
     const companionPort = readNumberProperty(input, "companionPort");
@@ -481,6 +484,12 @@ handleTrusted(
 
     getStorage().upsertAppSettings(settings);
     await syncCompanionLifecycleWithSettings();
+
+    if (previousSettings.showGeneratedFiles !== settings.showGeneratedFiles) {
+      for (const project of getStorage().listRecentProjects()) {
+        notifyCompanionWorkspaceChanged(project.id, "filesystem");
+      }
+    }
 
     return appSettingsView(getStorage().getAppSettings());
   }
@@ -603,6 +612,8 @@ handleTrusted(
 
     deleteStoredProject(projectId);
     await getProjectWatchService().stopProject(projectId);
+    companionProjectList?.remove(projectId);
+    broadcastCompanionWorkspaceChanged(projectId, "filesystem");
 
     return listAvailableRecentProjectViews();
   }
@@ -655,7 +666,11 @@ handleTrusted(
             } satisfies DiffTargetBody)
           : ({ mode } satisfies DiffTargetBody);
 
-    return updateProjectDiffTarget(projectId, target, reportProgress);
+    const workspace = await updateProjectDiffTarget(projectId, target, reportProgress);
+
+    notifyCompanionWorkspaceChanged(projectId, "diff_target");
+
+    return workspace;
   }
 );
 handleTrusted(
@@ -696,12 +711,18 @@ handleTrusted(
     const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
 
-    return markProjectFileReviewed({
+    const result = await markProjectFileReviewed({
       displayedDiffHash,
       path,
       projectId,
       reviewTargetId
     });
+
+    if (result.status === "marked") {
+      notifyCompanionWorkspaceChanged(projectId, "review_state");
+    }
+
+    return result;
   }
 );
 handleTrusted(
@@ -712,12 +733,18 @@ handleTrusted(
     const path = readStringProperty(input, "path");
     const displayedDiffHash = readStringProperty(input, "displayedDiffHash");
 
-    return unmarkProjectFileReviewed({
+    const result = await unmarkProjectFileReviewed({
       displayedDiffHash,
       path,
       projectId,
       reviewTargetId
     });
+
+    if (result.status === "unmarked") {
+      notifyCompanionWorkspaceChanged(projectId, "review_state");
+    }
+
+    return result;
   }
 );
 handleTrusted(
@@ -860,6 +887,7 @@ app.on("before-quit", () => {
   companionLifecycleController = undefined;
   companionWorkspaceChangeBroadcaster?.dispose();
   companionWorkspaceChangeBroadcaster = undefined;
+  companionProjectList = undefined;
   void projectWatchService?.close();
   projectWatchService = undefined;
   updateCheckScheduler?.stop();
@@ -1193,6 +1221,22 @@ function getCompanionAuthManager(): CompanionAuthManager {
   return companionAuthManager;
 }
 
+function getCompanionProjectList(): CompanionProjectList {
+  if (companionProjectList) {
+    return companionProjectList;
+  }
+
+  companionProjectList = new CompanionProjectList({
+    listProjects: listAvailableRecentProjectViews,
+    loadSummary: loadProjectReviewSummaryIfAvailable,
+    onSummaryUpdated: (projectId) => {
+      broadcastCompanionWorkspaceChanged(projectId, "filesystem");
+    }
+  });
+
+  return companionProjectList;
+}
+
 function companionServerIdentity(): ReturnType<
   typeof getOrCreateCompanionServerIdentity
 > {
@@ -1360,16 +1404,31 @@ function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroad
 }
 
 function emitProjectChange(change: ProjectWatchChangeEvent): void {
+  emitRendererProjectChange(change);
+
+  getCompanionWorkspaceChangeBroadcaster().notify(change.projectId, "filesystem");
+}
+
+function emitRendererProjectChange(change: ProjectWatchChangeEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send("projects:changed", change);
     }
   }
-
-  getCompanionWorkspaceChangeBroadcaster().notify(change.projectId, "filesystem");
 }
 
 function notifyCompanionWorkspaceChanged(
+  projectId: string,
+  reason: "comments" | "diff_target" | "filesystem" | "review_state"
+): void {
+  if (reason !== "comments") {
+    companionProjectList?.invalidate(projectId);
+  }
+
+  broadcastCompanionWorkspaceChanged(projectId, reason);
+}
+
+function broadcastCompanionWorkspaceChanged(
   projectId: string,
   reason: "comments" | "diff_target" | "filesystem" | "review_state"
 ): void {
@@ -1455,25 +1514,6 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   const projects = listAvailableRecentProjects();
 
   return projects.map((project) => projectView(project));
-}
-
-async function listAvailableRecentProjectViewsWithSummaries(): Promise<
-  readonly RecentProjectView[]
-> {
-  const projects = listAvailableRecentProjects();
-  const summaries = await Promise.all(
-    projects.map(async (project) => {
-      try {
-        return await loadProjectReviewSummaryIfAvailable(project.id);
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  return projects.map((project, index) =>
-    projectView(project, summaries[index] ?? undefined)
-  );
 }
 
 function listBranchRefsForProject(projectId: string): Promise<readonly string[]> {
@@ -1577,7 +1617,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     },
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
-    listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
+    listRecentProjects: () => Promise.resolve(getCompanionProjectList().list()),
     loadFileDiff: async (projectId, pathName) => {
       const [diff, workspace] = await Promise.all([
         loadProjectFileDiffForCompanion(projectId, pathName),
@@ -1693,11 +1733,14 @@ async function openProjectFromDialog(
   }
 
   const project = await storeRepositoryAtPath(selectedPath);
-
-  return loadProjectWorkspace(
+  const workspace = await loadProjectWorkspace(
     project.id,
     projectLoadProgressReporter(sender, project.id)
   );
+
+  notifyCompanionWorkspaceChanged(project.id, "filesystem");
+
+  return workspace;
 }
 
 async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecord> {
@@ -2150,7 +2193,7 @@ function notifyDesktopRenderer(projectId: string): void {
     return;
   }
 
-  emitProjectChange({
+  emitRendererProjectChange({
     projectId,
     projectPath: project.path,
     reasons: ["worktree"],

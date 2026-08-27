@@ -529,8 +529,88 @@ describe("companion server core", () => {
     await expect(waitForSocketClose(socket)).resolves.toBe(1008);
   });
 
+  it("replays a project-list invalidation after hello for older protocol-v1 clients", async () => {
+    const projects = deferredProjectList();
+    const { baseUrl } = await startServer({
+      listRecentProjects: async () => projects.promise
+    });
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    const helloMessage = waitForSocketMessage(socket);
+    socket.send(
+      JSON.stringify(
+        sealEnvelope({
+          devicePublicKey,
+          plaintext: { kind: "auth", ts: "2026-07-02T12:00:00.000Z" },
+          recipientPublicKey: serverPublicKey,
+          senderSecretKey: deviceSecretKey
+        })
+      )
+    );
+
+    expect(openServerEventEnvelope(await helloMessage)).toMatchObject({ kind: "hello" });
+
+    const refreshMessage = waitForSocketMessage(socket);
+    projects.resolve([
+      {
+        id: "project-1",
+        name: "Difftray",
+        path: "/repo"
+      }
+    ]);
+
+    expect(openServerEventEnvelope(await refreshMessage)).toEqual({
+      kind: "workspace_changed",
+      projectId: "project-1",
+      reason: "filesystem"
+    });
+
+    socket.close();
+  });
+
+  it("replays a project-list invalidation after hello when no project is current", async () => {
+    const projects = deferredProjectList();
+    const { baseUrl } = await startServer({
+      listRecentProjects: async () => projects.promise
+    });
+    const socket = new WebSocket(
+      `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
+    );
+
+    await waitForSocketOpen(socket);
+    const helloMessage = waitForSocketMessage(socket);
+    socket.send(
+      JSON.stringify(
+        sealEnvelope({
+          devicePublicKey,
+          plaintext: { kind: "auth", ts: "2026-07-02T12:00:00.000Z" },
+          recipientPublicKey: serverPublicKey,
+          senderSecretKey: deviceSecretKey
+        })
+      )
+    );
+
+    expect(openServerEventEnvelope(await helloMessage)).toMatchObject({ kind: "hello" });
+
+    const refreshMessage = waitForSocketMessage(socket);
+    projects.resolve([]);
+    expect(openServerEventEnvelope(await refreshMessage)).toEqual({
+      kind: "workspace_changed",
+      projectId: "__difftray_no_current_project__",
+      reason: "filesystem"
+    });
+
+    socket.close();
+  });
+
   it("authenticates websocket connections and seals broadcast frames per device", async () => {
-    const { baseUrl, server } = await startServer();
+    const projects = deferredProjectList();
+    const { baseUrl, server } = await startServer({
+      listRecentProjects: async () => projects.promise
+    });
     const socket = new WebSocket(
       `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
     );
@@ -555,6 +635,13 @@ describe("companion server core", () => {
       protocolVersion: 1,
       serverName: "Test Mac"
     });
+    const refreshMessage = waitForSocketMessage(socket);
+    projects.resolve([]);
+    expect(openServerEventEnvelope(await refreshMessage)).toEqual({
+      kind: "workspace_changed",
+      projectId: "__difftray_no_current_project__",
+      reason: "filesystem"
+    });
 
     const eventMessage = waitForSocketMessage(socket);
     server.broadcast({
@@ -576,7 +663,10 @@ describe("companion server core", () => {
   });
 
   it("notifies and disconnects an authenticated websocket when its device is revoked", async () => {
-    const { baseUrl, server } = await startServer();
+    const projects = deferredProjectList();
+    const { baseUrl, server } = await startServer({
+      listRecentProjects: async () => projects.promise
+    });
     const socket = new WebSocket(
       `${baseUrl.replace("http:", "ws:")}/companion/v1/events`
     );
@@ -594,6 +684,13 @@ describe("companion server core", () => {
       )
     );
     await helloMessage;
+    const refreshMessage = waitForSocketMessage(socket);
+    projects.resolve([]);
+    expect(openServerEventEnvelope(await refreshMessage)).toEqual({
+      kind: "workspace_changed",
+      projectId: "__difftray_no_current_project__",
+      reason: "filesystem"
+    });
 
     const stillConnectedMessage = waitForSocketMessage(socket);
     server.revokeDevice("other-device");
@@ -733,6 +830,24 @@ describe("companion server core", () => {
     });
   });
 });
+
+function deferredProjectList(): {
+  readonly promise: Promise<Awaited<ReturnType<CompanionDeps["listRecentProjects"]>>>;
+  readonly resolve: (
+    projects: Awaited<ReturnType<CompanionDeps["listRecentProjects"]>>
+  ) => void;
+} {
+  let resolve!: (
+    projects: Awaited<ReturnType<CompanionDeps["listRecentProjects"]>>
+  ) => void;
+  const promise = new Promise<Awaited<ReturnType<CompanionDeps["listRecentProjects"]>>>(
+    (promiseResolve) => {
+      resolve = promiseResolve;
+    }
+  );
+
+  return { promise, resolve };
+}
 
 async function startServer(
   overrides: Partial<CompanionDeps> = {}

@@ -24,6 +24,7 @@ type ConnectedSocket = {
 };
 
 const webSocketAuthTimeoutMs = 5_000;
+const noCurrentProjectId = "__difftray_no_current_project__";
 
 export function createCompanionServer(deps: CompanionDeps): CompanionServer {
   const router = createCompanionRouter(createCompanionApi(deps), deps.companionEnvelope);
@@ -86,6 +87,11 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
           protocolVersion: COMPANION_PROTOCOL_VERSION,
           serverName: deps.serverIdentity().serverName
         });
+        void replayProjectListInvalidation(
+          deps,
+          webSocket,
+          verified.device.devicePublicKey
+        );
         webSocket.on("message", (message) => {
           handleAuthenticatedWebSocketMessage(
             deps,
@@ -149,6 +155,27 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
       await closeHttpServer(httpServer);
     }
   };
+}
+
+async function replayProjectListInvalidation(
+  deps: CompanionDeps,
+  socket: WebSocket,
+  devicePublicKey: string
+): Promise<void> {
+  try {
+    const firstProject = (await deps.listRecentProjects())[0];
+
+    // Protocol-v1 mobile releases invalidate the complete project list for any
+    // workspace change. Replaying one event after hello closes the race where a
+    // background summary finished before an older client authenticated.
+    sendWebSocketBody(deps, socket, devicePublicKey, {
+      kind: "workspace_changed",
+      projectId: firstProject?.id ?? noCurrentProjectId,
+      reason: "filesystem"
+    });
+  } catch {
+    // The compatibility refresh is best effort; hello and the live socket remain valid.
+  }
 }
 
 function handleAuthenticatedWebSocketMessage(
