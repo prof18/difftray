@@ -9,6 +9,7 @@ describe("ProjectTabBar", () => {
       <ProjectTabBar
         {...projectTabBarProps({
           activeProjectId: "repo-one",
+          activeProjectHasWorktreeSiblings: true,
           projects: [
             project("repo-one", "Repo One", {
               attentionCount: 0,
@@ -35,8 +36,16 @@ describe("ProjectTabBar", () => {
     expect(html).toContain("1/5");
     expect(html).toContain('aria-label="Close repository"');
     expect(html).toContain('aria-label="Open repository"');
-    expect(html).toContain('aria-label="Open Repo One in Finder"');
-    expect(html).toContain('aria-label="Project settings"');
+    expect(html).toContain('aria-label="Worktrees for Repo One"');
+    expect(html).toContain(">Worktrees<");
+    expect(html).toContain('aria-label="Repository actions for Repo One"');
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('role="menu"');
+    expect(html).toContain('data-project-tab-strip="true"');
+    expect(html).toContain('data-repository-actions="true"');
+    expect(html).toContain("Show in Finder");
+    expect(html).toContain("Forget Repository…");
+    expect(html).not.toContain('aria-label="Project settings"');
   });
 
   it("renders active tab loading status instead of review count", () => {
@@ -59,6 +68,56 @@ describe("ProjectTabBar", () => {
     expect(html).toContain("3/10");
     expect(html).toContain("3 / 10 files");
   });
+
+  it("hides the worktree action until sibling worktrees are available", () => {
+    const hiddenHtml = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({
+          activeProjectId: "repo-one",
+          activeProjectHasWorktreeSiblings: false,
+          projects: [project("repo-one", "Repo One")]
+        })}
+      />
+    );
+    const visibleHtml = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({
+          activeProjectId: "repo-one",
+          activeProjectHasWorktreeSiblings: true,
+          projects: [project("repo-one", "Repo One")]
+        })}
+      />
+    );
+
+    expect(hiddenHtml).not.toContain(">Worktrees<");
+    expect(visibleHtml).toContain('aria-label="Worktrees for Repo One"');
+  });
+
+  it("labels secondary worktrees with their parent repository", () => {
+    const worktree = {
+      ...project("agent-cli", "agent-cli"),
+      repositoryName: "feed-flow",
+      worktreeName: "agent-cli"
+    } satisfies RecentProjectView;
+    const html = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({
+          activeProjectId: worktree.id,
+          activeProjectHasWorktreeSiblings: true,
+          projects: [project("feed-flow", "feed-flow"), worktree]
+        })}
+      />
+    );
+
+    expect(html).toContain('data-worktree-tab="true"');
+    expect(html).toContain(
+      'aria-label="feed-flow / agent-cli · /workspace/agent-cli · Review status not loaded"'
+    );
+    expect(html).toContain('data-tab-repository-name="true">feed-flow</span>');
+    expect(html).toContain('data-tab-worktree-name="true">agent-cli</span>');
+    expect(html).toContain("folder-git-2");
+    expect(html).toContain('aria-label="Worktrees for feed-flow"');
+  });
 });
 
 function project(
@@ -79,9 +138,11 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     activeProjectId: "repo-one",
     disabled: false,
     onCloseActiveProject: vi.fn(),
+    onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
+    onOpenActiveProjectWorktrees: vi.fn(),
     onOpenProject: vi.fn(),
-    onOpenSettings: vi.fn(),
+    onRefreshActiveProject: vi.fn(),
     onReorderProjects: vi.fn(),
     onCommitProjectOrder: vi.fn(),
     onSelectProject: vi.fn(),

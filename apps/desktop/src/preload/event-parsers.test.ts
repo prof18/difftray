@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseApplicationCommand,
   parseProjectChangedEvent,
   parseProjectLoadProgress,
+  parseRepositoryScanProgress,
   parseUpdatePhase
 } from "./event-parsers.js";
 
 describe("preload event parsers", () => {
+  it("accepts only known application commands", () => {
+    expect(parseApplicationCommand("open-settings")).toBe("open-settings");
+    expect(parseApplicationCommand("repository-worktrees")).toBe("repository-worktrees");
+    expect(parseApplicationCommand("delete-everything")).toBeUndefined();
+    expect(parseApplicationCommand({ command: "open-settings" })).toBeUndefined();
+  });
+
   it("parses update phases and rejects malformed payloads", () => {
     expect(parseUpdatePhase({ kind: "idle" })).toEqual({ kind: "idle" });
     expect(parseUpdatePhase({ kind: "checking" })).toEqual({ kind: "checking" });
@@ -124,5 +133,64 @@ describe("preload event parsers", () => {
         projectPath: "/repo"
       })
     ).toBeUndefined();
+  });
+
+  it("parses repository scan progress only with valid statuses and safe counters", () => {
+    expect(
+      parseRepositoryScanProgress({
+        rootId: "root-1",
+        scannedDirectories: 12,
+        skippedDirectories: 3,
+        status: "scanning"
+      })
+    ).toEqual({
+      rootId: "root-1",
+      scannedDirectories: 12,
+      skippedDirectories: 3,
+      status: "scanning"
+    });
+    expect(
+      parseRepositoryScanProgress({
+        rootId: "root-1",
+        scannedDirectories: 0,
+        skippedDirectories: 0,
+        status: "cancelled"
+      })
+    ).toEqual({
+      rootId: "root-1",
+      scannedDirectories: 0,
+      skippedDirectories: 0,
+      status: "cancelled"
+    });
+
+    for (const payload of [
+      {
+        rootId: "root-1",
+        scannedDirectories: -1,
+        skippedDirectories: 0,
+        status: "complete"
+      },
+      {
+        rootId: "root-1",
+        scannedDirectories: Number.MAX_SAFE_INTEGER + 1,
+        skippedDirectories: 0,
+        status: "complete"
+      },
+      {
+        rootId: "root-1",
+        scannedDirectories: 0,
+        skippedDirectories: 0.5,
+        status: "failed"
+      },
+      {
+        rootId: "root-1",
+        scannedDirectories: 0,
+        skippedDirectories: 0,
+        status: "unknown"
+      }
+    ]) {
+      expect(parseRepositoryScanProgress(payload)).toBeUndefined();
+    }
+    expect(parseRepositoryScanProgress(null)).toBeUndefined();
   });
 });

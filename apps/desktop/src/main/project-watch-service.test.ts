@@ -91,6 +91,88 @@ describe("ProjectWatchService", () => {
     expect(created[1]?.watcher.closeCount).toBe(1);
   });
 
+  it("does not install a watcher whose startup was invalidated by stopProject", async () => {
+    let resolveWatchPaths:
+      | ((paths: {
+          readonly gitMetadataContainerPaths: readonly string[];
+          readonly gitMetadataPaths: readonly string[];
+          readonly worktreeRoot: string;
+        }) => void)
+      | undefined;
+    const created: FakeWatcher[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: async () => {
+        const watcher = new FakeWatcher();
+        created.push(watcher);
+        return watcher;
+      },
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: () =>
+        new Promise((resolve) => {
+          resolveWatchPaths = resolve;
+        })
+    });
+
+    const watch = service.watchProject(project("one"));
+    await Promise.resolve();
+    await service.stopProject("one");
+    resolveWatchPaths?.({
+      gitMetadataContainerPaths: [repoPath("one", ".git")],
+      gitMetadataPaths: [repoPath("one", ".git", "HEAD")],
+      worktreeRoot: repoPath("one")
+    });
+    await watch;
+
+    expect(created).toHaveLength(0);
+  });
+
+  it("does not emit startup errors from resolution canceled by stopProject", async () => {
+    let rejectWatchPaths: ((error: Error) => void) | undefined;
+    const changes: ProjectWatchChangeEvent[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: async () => new FakeWatcher(),
+      emitProjectChange: (change) => changes.push(change),
+      resolveWatchPaths: () =>
+        new Promise((_resolve, reject) => {
+          rejectWatchPaths = reject;
+        })
+    });
+
+    const watch = service.watchProject(project("one"));
+    await Promise.resolve();
+    await service.stopProject("one");
+    rejectWatchPaths?.(new Error("stale resolver failure"));
+    await watch;
+
+    expect(changes).toEqual([]);
+  });
+
+  it("does not emit startup errors from watcher creation canceled by stopProject", async () => {
+    let rejectCreateWatcher: ((error: Error) => void) | undefined;
+    const changes: ProjectWatchChangeEvent[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: () =>
+        new Promise((_resolve, reject) => {
+          rejectCreateWatcher = reject;
+        }),
+      emitProjectChange: (change) => changes.push(change),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    const watch = service.watchProject(project("one"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await service.stopProject("one");
+    rejectCreateWatcher?.(new Error("stale factory failure"));
+    await watch;
+
+    expect(changes).toEqual([]);
+  });
+
   it("debounces raw events and coalesces worktree, Git metadata, and deleted reasons", async () => {
     const { changes, created, service } = serviceFixture({ debounceMs: 40 });
     await service.watchProject(project("one"));

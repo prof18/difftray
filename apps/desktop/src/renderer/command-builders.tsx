@@ -6,7 +6,8 @@ import {
   FolderOpen,
   PanelLeftClose,
   RefreshCw,
-  Settings
+  Settings,
+  Trash2
 } from "lucide-react";
 
 import type { CommandItem } from "./command-palette.js";
@@ -17,11 +18,13 @@ export type BuildCommandsInput = {
   readonly closePalette: () => void;
   readonly diffMode: DiffMode;
   readonly files: readonly ReviewFileView[];
+  readonly forgetRepository: () => void;
   readonly loadProject: (projectId: string) => Promise<void>;
   readonly openProject: () => void;
   readonly openSettings: () => void;
   readonly projects: readonly RecentProjectView[];
   readonly refresh: () => void;
+  readonly scanRepositoryFolder?: () => void;
   readonly selectFile: (path: string) => void;
   readonly setDiffMode: (mode: DiffMode) => void;
   readonly toggleFileList: () => void;
@@ -34,11 +37,13 @@ export function buildCommands({
   closePalette,
   diffMode,
   files,
+  forgetRepository,
   loadProject,
   openProject,
   openSettings,
   projects,
   refresh,
+  scanRepositoryFolder,
   selectFile,
   setDiffMode,
   toggleFileList,
@@ -56,6 +61,17 @@ export function buildCommands({
       sub: "Choose a local Git repository"
     }
   ];
+
+  if (scanRepositoryFolder) {
+    items.push({
+      icon: <Folder size={14} strokeWidth={1.4} aria-hidden />,
+      id: "action-scan-repositories",
+      kind: "action",
+      label: "Scan a folder for repositories…",
+      run: scanRepositoryFolder,
+      sub: "Add an approved repository search folder"
+    });
+  }
 
   if (workspace) {
     items.push(
@@ -102,6 +118,14 @@ export function buildCommands({
         label: "Settings",
         run: openSettings,
         sub: "Review preferences"
+      },
+      {
+        icon: <Trash2 size={14} strokeWidth={1.4} aria-hidden />,
+        id: "action-forget-repository",
+        kind: "action",
+        label: "Forget repository…",
+        run: forgetRepository,
+        sub: `Remove ${workspace.project.name} and its saved review state`
       }
     );
   }

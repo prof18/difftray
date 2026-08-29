@@ -39,17 +39,24 @@ import {
   createProjectTabOrderSaveQueue
 } from "./project-tabs.js";
 import { ProjectTabBar } from "./project-tab-bar.js";
+import { projectIdentityLabel } from "./project-identity.js";
 import { LoadingProgress, TabLoadBanner } from "./workspace-loading.js";
 import {
   applyLoadedFileDiffToWorkspace,
   carryLoadedDiffsForward,
   isFileDiffLoaded,
+  shouldReloadWorkspaceAfterProjectChange,
   shouldRefreshCachedWorkspaceAfterTabSwitch,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
 import type { DiffSideFocus } from "./diffs-renderer.js";
 import { filterCommands, type PaletteMode } from "./command-palette.js";
 import { CommandPalette } from "./command-palette-view.js";
+import {
+  projectToShowWhileLoading,
+  RepositoryPicker,
+  type RepositoryPickerItem
+} from "./repository-picker.js";
 import {
   commentCountsByPath,
   sameCommentSavePending,
@@ -80,6 +87,13 @@ import {
 } from "./workspace-load-status.js";
 import { editorSettingsError, updateAppSettingsInput } from "./editor-settings.js";
 import { elapsedSince, logRendererPerformance } from "./renderer-performance.js";
+import { WorktreePicker } from "./worktree-picker.js";
+import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
+import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
+import {
+  canRunApplicationCommand,
+  runApplicationCommandIfAllowed
+} from "./application-command-state.js";
 
 type LoadState = "idle" | "loading";
 type ResolvedTheme = "dark" | "light";
@@ -128,6 +142,10 @@ export function App(): React.JSX.Element {
   const [diffSideFocus, setDiffSideFocus] = useState<DiffSideFocus>("both");
   const [error, setError] = useState<string | undefined>();
   const [editorOptions, setEditorOptions] = useState<readonly EditorPresetView[]>([]);
+  const [externalDropActive, setExternalDropActive] = useState(false);
+  const [droppedRepositoryPreview, setDroppedRepositoryPreview] = useState<
+    readonly DroppedRepositoryPreviewView[]
+  >([]);
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
   const [fileListWidth, setFileListWidth] = useState(340);
   const [hasBootstrapped, setHasBootstrapped] = useState(false);
@@ -147,6 +165,17 @@ export function App(): React.JSX.Element {
   const [projectSettings, setProjectSettings] =
     useState<ProjectSettingsView>(defaultProjectSettings);
   const [recentProjects, setRecentProjects] = useState<readonly RecentProjectView[]>([]);
+  const [knownProjects, setKnownProjects] = useState<readonly RecentProjectView[]>([]);
+  const [repositoryCatalog, setRepositoryCatalog] = useState<
+    readonly RepositoryCatalogView[]
+  >([]);
+  const [repositorySearchRoots, setRepositorySearchRoots] = useState<
+    readonly RepositorySearchRootView[]
+  >([]);
+  const [repositorySearchRootSuggestions, setRepositorySearchRootSuggestions] = useState<
+    readonly RepositorySearchRootSuggestionView[]
+  >([]);
+  const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
   const [tabDragCancelKey, setTabDragCancelKey] = useState(0);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
@@ -161,9 +190,23 @@ export function App(): React.JSX.Element {
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: "idle" });
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
+  const [worktreePickerProject, setWorktreePickerProject] = useState<
+    RecentProjectView | undefined
+  >();
+  const [worktrees, setWorktrees] = useState<readonly RepositoryWorktreeView[]>([]);
+  const [activeProjectHasWorktreeSiblings, setActiveProjectHasWorktreeSiblings] =
+    useState<boolean | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
+  const droppedRepositoryPreviewRequestRef = useRef(0);
   const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
   const activeProjectIdRef = useRef<string | undefined>(undefined);
+  const applicationCommandHandlerRef = useRef<(command: ApplicationCommand) => void>(
+    () => undefined
+  );
+  const projectsOpenedHandlerRef = useRef<(focusProjectId: string) => void>(
+    () => undefined
+  );
+  const projectsOpenedRequestRef = useRef(0);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const commentReportCopyPendingRef = useRef(false);
   const commentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
@@ -182,6 +225,7 @@ export function App(): React.JSX.Element {
   const tabSummaryInvalidationRef = useRef<Map<string, number>>(new Map());
   const tabSummaryLoadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const projectTabOrderSaveQueueRef = useRef(createProjectTabOrderSaveQueue());
+  const recentProjectsRefreshRequestRef = useRef(0);
   const tabSummaryLoadsInFlightRef = useRef<Set<string>>(new Set());
   const tabSummaryLoadSkippedRef = useRef<Set<string>>(new Set());
   const visibleCommentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
@@ -190,11 +234,22 @@ export function App(): React.JSX.Element {
   >();
   const workspaceApplyVersionRef = useRef(0);
   const workspaceCacheRef = useRef<Map<string, WorkspaceCacheEntry>>(new Map());
+  const workspaceLoadRequestRef = useRef(0);
   const workspaceRef = useRef<ReviewWorkspaceView | undefined>(undefined);
+  const worktreeAvailabilityRequestRef = useRef(0);
+  const worktreePickerRequestRef = useRef(0);
+  const repositoryPickerRequestRef = useRef(0);
+  const settingsRequestRef = useRef(0);
+  const settingsLoadingRequestRef = useRef<number | undefined>(undefined);
   const resizeStartRef = useRef<{
     readonly startWidth: number;
     readonly x: number;
   } | null>(null);
+
+  function updateLoadState(nextState: LoadState): void {
+    loadStateRef.current = nextState;
+    setLoadState(nextState);
+  }
 
   useLayoutEffect(() => {
     void bootstrapApp();
@@ -328,6 +383,164 @@ export function App(): React.JSX.Element {
   }, [hasBootstrapped, loadState, recentProjects, workspace?.project.id]);
 
   useEffect(() => {
+    let dragDepth = 0;
+    const isFileDrag = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+    function onDragEnter(event: DragEvent): void {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      dragDepth += 1;
+      setExternalDropActive(true);
+    }
+
+    function onDragOver(event: DragEvent): void {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    }
+
+    function onDragLeave(event: DragEvent): void {
+      if (!isFileDrag(event)) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setExternalDropActive(false);
+    }
+
+    function onDrop(event: DragEvent): void {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      dragDepth = 0;
+      setExternalDropActive(false);
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      const requestId = ++droppedRepositoryPreviewRequestRef.current;
+
+      if (files.length > 0) {
+        void window.difftray
+          .previewDroppedRepositories(files)
+          .then((candidates) => {
+            if (requestId !== droppedRepositoryPreviewRequestRef.current) return;
+            if (candidates.length === 0) {
+              setError("No Git repositories were found in the dropped folders.");
+            } else {
+              closeTransientOverlays();
+              setDroppedRepositoryPreview(candidates);
+            }
+          })
+          .catch((caughtError: unknown) => {
+            if (requestId === droppedRepositoryPreviewRequestRef.current) {
+              setError(errorMessage(caughtError));
+            }
+          });
+      }
+    }
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
+
+  useEffect(
+    () =>
+      window.difftray.onRepositoryScanProgress((progress) => {
+        setRepositorySearchRoots((current) =>
+          current.map((root) =>
+            root.id === progress.rootId
+              ? {
+                  ...root,
+                  scannedDirectories: progress.scannedDirectories,
+                  scanning: progress.status === "scanning",
+                  skippedDirectories: progress.skippedDirectories
+                }
+              : root
+          )
+        );
+        if (progress.status === "complete" || progress.status === "cancelled") {
+          void Promise.all([
+            window.difftray.listRepositorySearchRoots(),
+            window.difftray.listRepositoryCatalog()
+          ])
+            .then(([roots, catalog]) => {
+              setRepositorySearchRoots(roots);
+              setRepositoryCatalog(catalog);
+            })
+            .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+        } else if (progress.status === "failed") {
+          void window.difftray
+            .listRepositorySearchRoots()
+            .then(setRepositorySearchRoots)
+            .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+        }
+      }),
+    []
+  );
+
+  useEffect(() => {
+    const stopQuickOpen = window.difftray.onRepositoryQuickOpenRequested(() => {
+      runApplicationCommandIfAllowed(
+        loadStateRef.current,
+        () => {
+          void openRepositoryPicker();
+        },
+        settingsOpenRef.current
+      );
+    });
+    const stopScan = window.difftray.onRepositoryScanFolderRequested(() => {
+      runApplicationCommandIfAllowed(
+        loadStateRef.current,
+        () => {
+          void addRepositorySearchRootThen(
+            window.difftray.addRepositorySearchRoot,
+            () => void openRepositoryPicker()
+          ).catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+        },
+        settingsOpenRef.current
+      );
+    });
+    return () => {
+      stopQuickOpen();
+      stopScan();
+    };
+  }, []);
+
+  useEffect(() => {
+    const stopProjectsOpened = window.difftray.onProjectsOpened(({ focusProjectId }) => {
+      projectsOpenedHandlerRef.current(focusProjectId);
+    });
+    const stopWorktreeChangeCount = window.difftray.onWorktreeChangeCount(
+      ({ changeCount, worktreePath }) => {
+        setWorktrees((current) =>
+          current.map((worktree) =>
+            worktree.displayPath === worktreePath
+              ? { ...worktree, changeCount }
+              : worktree
+          )
+        );
+      }
+    );
+
+    return () => {
+      stopProjectsOpened();
+      stopWorktreeChangeCount();
+    };
+  }, []);
+
+  useEffect(
+    () =>
+      window.difftray.onApplicationCommand((command) => {
+        applicationCommandHandlerRef.current(command);
+      }),
+    []
+  );
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.defaultPrevented || loadState === "loading") {
         return;
@@ -339,6 +552,16 @@ export function App(): React.JSX.Element {
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         (target instanceof HTMLElement && target.isContentEditable);
+      const isInteractiveControl = isGlobalShortcutTarget(target);
+
+      if (settingsOpen) {
+        if (key === "Escape") {
+          event.preventDefault();
+          closeSettings();
+        }
+
+        return;
+      }
 
       if (event.metaKey && key === "k") {
         event.preventDefault();
@@ -354,7 +577,7 @@ export function App(): React.JSX.Element {
 
       if (event.metaKey && key === "o") {
         event.preventDefault();
-        void openProject();
+        void openRepositoryPicker();
         return;
       }
 
@@ -396,21 +619,19 @@ export function App(): React.JSX.Element {
         }
       }
 
-      if (settingsOpen) {
-        if (key === "Escape") {
-          event.preventDefault();
-          closeSettings();
-        }
-
-        return;
-      }
-
       if (isTextInput) {
         if (key === "Escape" && target instanceof HTMLElement) {
           event.preventDefault();
           target.blur();
         }
 
+        return;
+      }
+
+      // Single-key review shortcuts should never hijack focused buttons,
+      // menu items, or other controls. Meta shortcuts above intentionally
+      // remain available from those controls.
+      if (isInteractiveControl && key !== "Escape") {
         return;
       }
 
@@ -547,6 +768,50 @@ export function App(): React.JSX.Element {
     activeProjectIdRef.current = activeProject?.id;
     openProjectInFinderRequestRef.current += 1;
   }, [activeProject?.id]);
+
+  useEffect(() => {
+    const projectId = activeProject?.id;
+    const requestId = ++worktreeAvailabilityRequestRef.current;
+    let cancelled = false;
+
+    setActiveProjectHasWorktreeSiblings(undefined);
+
+    if (!projectId) {
+      setWorktrees([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void window.difftray
+      .listProjectWorktrees(projectId)
+      .then((nextWorktrees) => {
+        if (
+          cancelled ||
+          requestId !== worktreeAvailabilityRequestRef.current ||
+          activeProjectIdRef.current !== projectId
+        ) {
+          return;
+        }
+
+        setWorktrees(nextWorktrees);
+        setActiveProjectHasWorktreeSiblings(nextWorktrees.length > 1);
+      })
+      .catch(() => {
+        if (
+          !cancelled &&
+          requestId === worktreeAvailabilityRequestRef.current &&
+          activeProjectIdRef.current === projectId
+        ) {
+          setActiveProjectHasWorktreeSiblings(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject?.id]);
+
   const activeReviewSummary = loadingProject
     ? loadingProject.reviewSummary
     : workspace
@@ -718,6 +983,7 @@ export function App(): React.JSX.Element {
         loadState === "loading" ||
         settingsOpen ||
         paletteOpen ||
+        repositoryPickerOpen ||
         focusRefreshRunningRef.current
       ) {
         return;
@@ -748,7 +1014,17 @@ export function App(): React.JSX.Element {
     return window.difftray.onProjectChanged((event) => {
       void handleProjectChanged(event);
     });
-  }, [loadState, paletteOpen, selectedFile, settingsOpen, workspace]);
+  }, [
+    droppedRepositoryPreview,
+    externalDropActive,
+    loadState,
+    paletteOpen,
+    repositoryPickerOpen,
+    selectedFile,
+    settingsOpen,
+    worktreePickerProject,
+    workspace
+  ]);
 
   useEffect(() => {
     return window.difftray.onProjectLoadProgress((progress) => {
@@ -763,12 +1039,15 @@ export function App(): React.JSX.Element {
         closePalette,
         diffMode,
         files: visibleFiles,
+        forgetRepository: () => {
+          void forgetRepository(workspace?.project);
+        },
         loadProject,
         toggleReview: () => {
           void toggleSelectedReviewed();
         },
         openProject: () => {
-          void openProject();
+          void openRepositoryPicker();
         },
         openSettings: () => {
           void openSettings();
@@ -776,6 +1055,12 @@ export function App(): React.JSX.Element {
         projects: recentProjects,
         refresh: () => {
           void refreshWorkspace();
+        },
+        scanRepositoryFolder: () => {
+          closePalette();
+          void window.difftray
+            .addRepositorySearchRoot()
+            .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
         },
         selectFile: selectPath,
         setDiffMode: setAndPersistDiffMode,
@@ -799,7 +1084,7 @@ export function App(): React.JSX.Element {
 
   async function bootstrapApp(): Promise<void> {
     setError(undefined);
-    setLoadState("loading");
+    updateLoadState("loading");
     setLoadStatus(defaultWorkspaceLoadStatus);
     await nextPaint();
 
@@ -836,13 +1121,16 @@ export function App(): React.JSX.Element {
       setError(errorMessage(caughtError));
     } finally {
       setHasBootstrapped(true);
-      setLoadState("idle");
+      updateLoadState("idle");
       setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
 
   async function refreshRecentProjects(): Promise<void> {
+    const requestId = ++recentProjectsRefreshRequestRef.current;
     const nextProjects = await window.difftray.listRecentProjects();
+
+    if (requestId !== recentProjectsRefreshRequestRef.current) return;
 
     setRecentProjects((currentProjects) =>
       mergeProjectTabs(currentProjects, nextProjects)
@@ -940,8 +1228,12 @@ export function App(): React.JSX.Element {
   async function applyWorkspace(
     nextWorkspace: ReviewWorkspaceView,
     nextPath?: string,
-    options: ApplyWorkspaceOptions = {}
-  ): Promise<void> {
+    options: ApplyWorkspaceOptions = {},
+    requestId?: number
+  ): Promise<boolean> {
+    if (requestId !== undefined && requestId !== workspaceLoadRequestRef.current) {
+      return false;
+    }
     rememberCurrentDiffScrollPosition();
 
     const workspaceToApply = carryLoadedDiffsForward(workspaceRef.current, nextWorkspace);
@@ -962,6 +1254,10 @@ export function App(): React.JSX.Element {
         : window.difftray.listProjectRecentCommits(workspaceToApply.project.id)
     ]);
     const nextAppSettings = options.appSettings ?? appSettings;
+
+    if (requestId !== undefined && requestId !== workspaceLoadRequestRef.current) {
+      return false;
+    }
 
     workspaceCacheRef.current.set(workspaceToApply.project.id, {
       branchRefs: nextBranchRefs,
@@ -996,6 +1292,7 @@ export function App(): React.JSX.Element {
       projectReviewSummary(workspaceToApply)
     );
     setSettingsOpen(false);
+    return true;
   }
 
   function invalidatePendingSilentWorkspaceRefreshes(): void {
@@ -1065,6 +1362,7 @@ export function App(): React.JSX.Element {
     projectLoadingDelayMs = 0
   ): Promise<void> {
     let loadingProjectTimeout: number | undefined;
+    const requestId = ++workspaceLoadRequestRef.current;
 
     invalidatePendingSilentWorkspaceRefreshes();
     setError(undefined);
@@ -1074,41 +1372,54 @@ export function App(): React.JSX.Element {
     } else if (projectToShowWhileLoading) {
       setPendingLoadingProjectId(projectToShowWhileLoading.id);
       loadingProjectTimeout = window.setTimeout(() => {
-        setPendingLoadingProjectId(undefined);
-        setLoadingProject(projectToShowWhileLoading);
+        if (requestId === workspaceLoadRequestRef.current) {
+          setPendingLoadingProjectId(undefined);
+          setLoadingProject(projectToShowWhileLoading);
+        }
       }, projectLoadingDelayMs);
     } else {
       setPendingLoadingProjectId(undefined);
       setLoadingProject(undefined);
     }
-    setLoadState("loading");
+    updateLoadState("loading");
     setLoadStatus(initialStatus);
     await nextPaint();
 
     try {
       const nextWorkspace = await loadWorkspace();
 
+      if (requestId !== workspaceLoadRequestRef.current) return;
+
       if (nextWorkspace) {
-        await applyWorkspace(nextWorkspace, nextPath);
+        const applied = await applyWorkspace(nextWorkspace, nextPath, {}, requestId);
+        if (!applied) return;
         await refreshRecentProjects();
       } else {
         await refreshRecentProjects();
       }
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (requestId === workspaceLoadRequestRef.current) {
+        setError(errorMessage(caughtError));
+      }
     } finally {
       if (loadingProjectTimeout !== undefined) {
         window.clearTimeout(loadingProjectTimeout);
       }
 
-      setLoadState("idle");
-      setLoadStatus(defaultWorkspaceLoadStatus);
-      setPendingLoadingProjectId((currentProjectId) =>
-        currentProjectId === projectToShowWhileLoading?.id ? undefined : currentProjectId
-      );
-      setLoadingProject((currentProject) =>
-        currentProject?.id === projectToShowWhileLoading?.id ? undefined : currentProject
-      );
+      if (requestId === workspaceLoadRequestRef.current) {
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+        setPendingLoadingProjectId((currentProjectId) =>
+          currentProjectId === projectToShowWhileLoading?.id
+            ? undefined
+            : currentProjectId
+        );
+        setLoadingProject((currentProject) =>
+          currentProject?.id === projectToShowWhileLoading?.id
+            ? undefined
+            : currentProject
+        );
+      }
     }
   }
 
@@ -1119,10 +1430,117 @@ export function App(): React.JSX.Element {
     });
   }
 
+  async function openRepositoryPicker(): Promise<void> {
+    setError(undefined);
+    closeTransientOverlays();
+    const requestId = ++repositoryPickerRequestRef.current;
+
+    try {
+      const [known, catalog] = await Promise.all([
+        window.difftray.listKnownProjects(),
+        window.difftray.listRepositoryCatalog()
+      ]);
+      if (requestId !== repositoryPickerRequestRef.current) return;
+      setKnownProjects(known);
+      setRepositoryCatalog(catalog);
+      setRepositoryPickerOpen(true);
+    } catch (caughtError) {
+      if (requestId === repositoryPickerRequestRef.current) {
+        setError(errorMessage(caughtError));
+      }
+    }
+  }
+
+  function closeRepositoryPicker(): void {
+    repositoryPickerRequestRef.current += 1;
+    setRepositoryPickerOpen(false);
+  }
+
+  async function selectRepositoryPickerItem(item: RepositoryPickerItem): Promise<void> {
+    closeRepositoryPicker();
+
+    if (item.state === "open") {
+      await loadProject(item.project.id);
+      return;
+    }
+
+    if (item.state === "catalog") {
+      await runWorkspaceLoad(
+        () => window.difftray.openRepositoryCatalogEntry(item.project.id),
+        undefined,
+        { detail: item.project.name, title: "Opening repository" },
+        projectToShowWhileLoading(item)
+      );
+      return;
+    }
+
+    await runWorkspaceLoad(
+      () => window.difftray.openKnownProject(item.project.id),
+      undefined,
+      {
+        detail: item.project.name,
+        title: "Opening repository"
+      },
+      item.project
+    );
+  }
+
+  async function openWorktreePicker(project: RecentProjectView): Promise<void> {
+    closeTransientOverlays();
+    const requestId = ++worktreePickerRequestRef.current;
+    setError(undefined);
+
+    try {
+      const nextWorktrees = await window.difftray.listProjectWorktrees(project.id);
+      if (
+        requestId !== worktreePickerRequestRef.current ||
+        activeProjectIdRef.current !== project.id
+      ) {
+        return;
+      }
+      setWorktrees(nextWorktrees);
+      setWorktreePickerProject(project);
+    } catch (caughtError) {
+      if (requestId === worktreePickerRequestRef.current) {
+        setError(errorMessage(caughtError));
+      }
+    }
+  }
+
+  async function selectWorktree(worktree: RepositoryWorktreeView): Promise<void> {
+    worktreePickerRequestRef.current += 1;
+    const sourceProject = worktreePickerProject;
+
+    if (!sourceProject || worktree.state === "current") {
+      setWorktreePickerProject(undefined);
+      return;
+    }
+
+    setWorktreePickerProject(undefined);
+
+    if (worktree.state === "open") {
+      const openProject = recentProjects.find(
+        (project) => project.path === worktree.displayPath
+      );
+
+      if (openProject) {
+        await loadProject(openProject.id);
+        return;
+      }
+    }
+
+    await runWorkspaceLoad(
+      () => window.difftray.openProjectWorktree(sourceProject.id, worktree.id),
+      undefined,
+      { detail: worktree.displayName, title: "Opening worktree" }
+    );
+  }
+
   async function loadProject(projectId: string): Promise<void> {
     const cachedWorkspace = workspaceCacheRef.current.get(projectId);
 
     if (cachedWorkspace) {
+      const requestId = ++workspaceLoadRequestRef.current;
       const refreshAfterSwitch = shouldRefreshCachedWorkspaceAfterTabSwitch({
         activeProjectId: workspaceRef.current?.project.id,
         loadState: loadStateRef.current,
@@ -1133,15 +1551,26 @@ export function App(): React.JSX.Element {
 
       invalidatePendingSilentWorkspaceRefreshes();
       setError(undefined);
-      await applyWorkspace(
+      const applied = await applyWorkspace(
         cachedWorkspace.workspace,
         selectedPathByProjectRef.current.get(projectId),
         {
           branchRefs: cachedWorkspace.branchRefs,
           recentCommits: cachedWorkspace.recentCommits,
           projectSettings: cachedWorkspace.projectSettings
-        }
+        },
+        requestId
       );
+
+      if (!applied) return;
+
+      setPendingLoadingProjectId(undefined);
+      setLoadingProject(undefined);
+
+      if (loadStateRef.current === "loading") {
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+      }
 
       if (refreshAfterSwitch) {
         void refreshWorkspaceSilently(projectId);
@@ -1165,6 +1594,32 @@ export function App(): React.JSX.Element {
   }
 
   async function closeProject(projectId: string): Promise<void> {
+    await removeProjectTab(projectId, "Closing repository", () =>
+      window.difftray.closeProject(projectId)
+    );
+  }
+
+  async function forgetRepository(project: RecentProjectView | undefined): Promise<void> {
+    if (
+      !project ||
+      !window.confirm(
+        `Forget ${project.name}? This permanently removes its saved review marks, comments, and settings from Difftray.`
+      )
+    ) {
+      return;
+    }
+
+    setPaletteOpen(false);
+    await removeProjectTab(project.id, "Forgetting repository", () =>
+      window.difftray.forgetProject(project.id)
+    );
+  }
+
+  async function removeProjectTab(
+    projectId: string,
+    title: string,
+    remove: () => Promise<readonly RecentProjectView[]>
+  ): Promise<void> {
     const closingActiveProject = workspace?.project.id === projectId;
     const closedProjectIndex = recentProjects.findIndex(
       (project) => project.id === projectId
@@ -1172,17 +1627,17 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
-    setLoadState("loading");
+    updateLoadState("loading");
     setLoadStatus({
       detail: "Updating open repositories",
-      title: "Closing repository"
+      title
     });
     await nextPaint();
 
     try {
       workspaceCacheRef.current.delete(projectId);
       selectedPathByProjectRef.current.delete(projectId);
-      const nextProjects = await window.difftray.closeProject(projectId);
+      const nextProjects = await remove();
       const orderedNextProjects = mergeProjectTabs(recentProjects, nextProjects);
 
       setRecentProjects(orderedNextProjects);
@@ -1228,7 +1683,7 @@ export function App(): React.JSX.Element {
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     } finally {
-      setLoadState("idle");
+      updateLoadState("idle");
       setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
@@ -1248,6 +1703,102 @@ export function App(): React.JSX.Element {
     );
   }
 
+  function openActiveProjectInFinder(): void {
+    const activeWorkspace = workspaceRef.current;
+
+    if (!activeWorkspace) {
+      return;
+    }
+
+    const projectId = activeWorkspace.project.id;
+    const requestId = ++openProjectInFinderRequestRef.current;
+    setError(undefined);
+    void window.difftray.openProjectInFinder(projectId).catch((caughtError: unknown) => {
+      if (
+        requestId === openProjectInFinderRequestRef.current &&
+        projectId === activeProjectIdRef.current
+      ) {
+        setError(errorMessage(caughtError));
+      }
+    });
+  }
+
+  function handleProjectsOpened(focusProjectId: string): void {
+    const requestId = ++projectsOpenedRequestRef.current;
+    void refreshRecentProjects()
+      .then(async () => {
+        if (requestId === projectsOpenedRequestRef.current) {
+          await loadProject(focusProjectId);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        if (requestId === projectsOpenedRequestRef.current) {
+          setError(errorMessage(caughtError));
+        }
+      });
+  }
+
+  async function runRepositorySearchRootAction(
+    action: () => Promise<unknown>
+  ): Promise<void> {
+    setError(undefined);
+
+    try {
+      await action();
+      const [roots, suggestions] = await Promise.all([
+        window.difftray.listRepositorySearchRoots(),
+        window.difftray.listRepositorySearchRootSuggestions()
+      ]);
+      setRepositorySearchRoots(roots);
+      setRepositorySearchRootSuggestions(suggestions);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    }
+  }
+
+  function handleApplicationCommand(command: ApplicationCommand): void {
+    const activeWorkspace = workspaceRef.current;
+
+    if (!canRunApplicationCommand(loadStateRef.current, settingsOpenRef.current)) {
+      return;
+    }
+
+    switch (command) {
+      case "open-settings":
+        void openSettings();
+        return;
+      case "repository-close":
+        closeTransientOverlays();
+        if (activeWorkspace) void closeProject(activeWorkspace.project.id);
+        return;
+      case "repository-forget":
+        closeTransientOverlays();
+        if (activeWorkspace) void forgetRepository(activeWorkspace.project);
+        return;
+      case "repository-refresh":
+        closeTransientOverlays();
+        void refreshWorkspace();
+        return;
+      case "repository-show-in-finder":
+        openActiveProjectInFinder();
+        return;
+      case "repository-worktrees":
+        if (activeWorkspace) void openWorktreePicker(activeWorkspace.project);
+        return;
+      case "view-split-diff":
+        setAndPersistDiffMode("split");
+        return;
+      case "view-toggle-file-list":
+        toggleFileListCollapsed();
+        return;
+      case "view-toggle-wrap-lines":
+        void persistAppSettings({ wrapDiffLines: !appSettings.wrapDiffLines });
+        return;
+      case "view-unified-diff":
+        setAndPersistDiffMode("unified");
+    }
+  }
+
   async function handleProjectChanged(event: ProjectChangedEvent): Promise<void> {
     workspaceCacheRef.current.delete(event.projectId);
     invalidateProjectReviewSummary(event.projectId);
@@ -1256,7 +1807,19 @@ export function App(): React.JSX.Element {
       return;
     }
 
-    if (workspace?.project.id === event.projectId && !settingsOpen && !paletteOpen) {
+    if (
+      shouldReloadWorkspaceAfterProjectChange({
+        activeProjectId: workspace?.project.id,
+        droppedRepositoryPreviewOpen: droppedRepositoryPreview.length > 0,
+        eventProjectId: event.projectId,
+        externalDropActive,
+        loadState,
+        paletteOpen,
+        repositoryPickerOpen,
+        settingsOpen,
+        worktreePickerOpen: worktreePickerProject !== undefined
+      })
+    ) {
       await runWorkspaceLoad(
         () => window.difftray.loadProject(event.projectId),
         selectedFile?.path,
@@ -1272,12 +1835,11 @@ export function App(): React.JSX.Element {
   }
 
   async function openSettings(): Promise<void> {
-    if (!workspace) {
-      return;
-    }
-
+    closeTransientOverlays();
+    const requestId = ++settingsRequestRef.current;
+    settingsLoadingRequestRef.current = requestId;
     setError(undefined);
-    setLoadState("loading");
+    updateLoadState("loading");
     setLoadStatus({
       detail: "Reading current preferences",
       title: "Opening settings"
@@ -1285,33 +1847,48 @@ export function App(): React.JSX.Element {
     await nextPaint();
 
     try {
-      const [nextAppSettings, nextProjectSettings, nextCompanionState] =
+      const [nextAppSettings, nextCompanionState, nextRoots, nextRootSuggestions] =
         await Promise.all([
           window.difftray.getAppSettings(),
-          window.difftray.getProjectSettings(workspace.project.id),
-          window.difftray.getCompanionState()
+          window.difftray.getCompanionState(),
+          window.difftray.listRepositorySearchRoots(),
+          window.difftray.listRepositorySearchRootSuggestions()
         ]);
+      const nextProjectSettings = workspace
+        ? await window.difftray.getProjectSettings(workspace.project.id)
+        : defaultProjectSettings;
+
+      if (requestId !== settingsRequestRef.current) return;
 
       setAppSettings(nextAppSettings);
       setAppSettingsDraft(nextAppSettings);
       setProjectSettings(nextProjectSettings);
       setCompanionState(nextCompanionState);
       setCompanionPairing(nextCompanionState.activePairing);
+      setRepositorySearchRoots(nextRoots);
+      setRepositorySearchRootSuggestions(nextRootSuggestions);
       setSettingsOpen(true);
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (requestId === settingsRequestRef.current) {
+        setError(errorMessage(caughtError));
+      }
     } finally {
-      setLoadState("idle");
-      setLoadStatus(defaultWorkspaceLoadStatus);
+      if (settingsLoadingRequestRef.current === requestId) {
+        settingsLoadingRequestRef.current = undefined;
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+      }
     }
   }
 
   function closeSettings(): void {
+    cancelPendingSettingsOpen();
     setSettingsOpen(false);
     setAppSettingsDraft(appSettings);
   }
 
   function openPalette(mode: PaletteMode): void {
+    closeTransientOverlays();
     setPaletteMode(mode);
     setPaletteQuery("");
     setPaletteOpen(true);
@@ -1320,6 +1897,26 @@ export function App(): React.JSX.Element {
   function closePalette(): void {
     setPaletteOpen(false);
     setPaletteQuery("");
+  }
+
+  function closeTransientOverlays(): void {
+    closeRepositoryPicker();
+    worktreePickerRequestRef.current += 1;
+    cancelPendingSettingsOpen();
+    droppedRepositoryPreviewRequestRef.current += 1;
+    setPaletteOpen(false);
+    setSettingsOpen(false);
+    setRepositoryPickerOpen(false);
+    setWorktreePickerProject(undefined);
+    setDroppedRepositoryPreview([]);
+  }
+
+  function cancelPendingSettingsOpen(): void {
+    settingsRequestRef.current += 1;
+    if (settingsLoadingRequestRef.current === undefined) return;
+    settingsLoadingRequestRef.current = undefined;
+    updateLoadState("idle");
+    setLoadStatus(defaultWorkspaceLoadStatus);
   }
 
   function updateAppSettingsDraft(patch: Partial<AppSettingsView>): void {
@@ -1403,10 +2000,6 @@ export function App(): React.JSX.Element {
   }
 
   async function saveSettings(): Promise<void> {
-    if (!workspace) {
-      return;
-    }
-
     const settingsError = editorSettingsError(appSettingsDraft);
 
     if (settingsError) {
@@ -1416,7 +2009,7 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
-    setLoadState("loading");
+    updateLoadState("loading");
     setLoadStatus({
       detail: "Refreshing review after preferences change",
       title: "Saving settings"
@@ -1424,15 +2017,19 @@ export function App(): React.JSX.Element {
     await nextPaint();
 
     try {
-      const [savedAppSettings, savedSettings] = await Promise.all([
-        window.difftray.updateAppSettings(updateAppSettingsInput(appSettingsDraft)),
-        window.difftray.updateProjectSettings({
-          fileListCollapsed: projectSettings.fileListCollapsed,
-          fileListWidth: projectSettings.fileListWidth,
-          projectId: workspace.project.id
-        })
-      ]);
-      const nextWorkspace = await window.difftray.loadProject(workspace.project.id);
+      const savedAppSettings = await window.difftray.updateAppSettings(
+        updateAppSettingsInput(appSettingsDraft)
+      );
+      const savedSettings = workspace
+        ? await window.difftray.updateProjectSettings({
+            fileListCollapsed: projectSettings.fileListCollapsed,
+            fileListWidth: projectSettings.fileListWidth,
+            projectId: workspace.project.id
+          })
+        : defaultProjectSettings;
+      const nextWorkspace = workspace
+        ? await window.difftray.loadProject(workspace.project.id)
+        : undefined;
 
       setAppSettings(savedAppSettings);
       setAppSettingsDraft(savedAppSettings);
@@ -1459,7 +2056,7 @@ export function App(): React.JSX.Element {
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     } finally {
-      setLoadState("idle");
+      updateLoadState("idle");
       setLoadStatus(defaultWorkspaceLoadStatus);
     }
   }
@@ -2164,44 +2761,46 @@ export function App(): React.JSX.Element {
     void persistProjectSettings({ fileListWidth });
   }
 
+  applicationCommandHandlerRef.current = handleApplicationCommand;
+  projectsOpenedHandlerRef.current = handleProjectsOpened;
+
   return (
     <main className={styles.windowShell}>
       <div className={styles.titlebarDragArea}>
         {activeProject ? (
-          <div className={styles.titlebarProjectName}>{activeProject.name}</div>
+          <div className={styles.titlebarProjectName}>
+            {projectIdentityLabel(activeProject)}
+          </div>
         ) : null}
       </div>
 
       {workspace && activeProject ? (
         <ProjectTabBar
           activeProjectId={activeProject.id}
+          {...(activeProjectHasWorktreeSiblings === undefined
+            ? {}
+            : { activeProjectHasWorktreeSiblings })}
           {...(activeReviewSummary ? { activeReviewSummary } : {})}
           disabled={loadState === "loading"}
           {...(loadState === "loading" ? { loadingStatus: loadStatus } : {})}
           tabDragCancelKey={tabDragCancelKey}
           onOpenProject={() => {
-            void openProject();
+            void openRepositoryPicker();
           }}
           onCloseActiveProject={() => {
             void closeProject(workspace.project.id);
           }}
-          onOpenActiveProjectInFinder={() => {
-            const projectId = activeProject.id;
-            const requestId = ++openProjectInFinderRequestRef.current;
-            setError(undefined);
-            void window.difftray
-              .openProjectInFinder(projectId)
-              .catch((caughtError: unknown) => {
-                if (
-                  requestId === openProjectInFinderRequestRef.current &&
-                  projectId === activeProjectIdRef.current
-                ) {
-                  setError(errorMessage(caughtError));
-                }
-              });
+          onForgetActiveProject={() => {
+            void forgetRepository(workspace.project);
           }}
-          onOpenSettings={() => {
-            void openSettings();
+          onOpenActiveProjectInFinder={() => {
+            openActiveProjectInFinder();
+          }}
+          onOpenActiveProjectWorktrees={() => {
+            void openWorktreePicker(activeProject);
+          }}
+          onRefreshActiveProject={() => {
+            void refreshWorkspace();
           }}
           onReorderProjects={(nextProjects) => {
             setRecentProjects(nextProjects);
@@ -2456,7 +3055,7 @@ export function App(): React.JSX.Element {
         <EmptyState
           disabled={false}
           onOpenProject={() => {
-            void openProject();
+            void openRepositoryPicker();
           }}
           onSelectProject={(projectId) => {
             void loadProject(projectId);
@@ -2475,6 +3074,101 @@ export function App(): React.JSX.Element {
           selectedIndex={paletteSelected}
           setSelectedIndex={setPaletteSelected}
           inputRef={paletteInputRef}
+        />
+      ) : null}
+
+      {externalDropActive ? (
+        <div className={styles.repositoryDropOverlay} role="status">
+          <strong>Drop repositories to open</strong>
+          <span>Folders are validated as local Git repositories</span>
+        </div>
+      ) : null}
+
+      {repositoryPickerOpen ? (
+        <RepositoryPicker
+          catalog={repositoryCatalog}
+          knownProjects={knownProjects}
+          onBrowse={() => {
+            closeRepositoryPicker();
+            void openProject();
+          }}
+          onClose={() => {
+            closeRepositoryPicker();
+          }}
+          onSelect={(item) => {
+            void selectRepositoryPickerItem(item);
+          }}
+          onScan={() => {
+            closeRepositoryPicker();
+            const requestId = repositoryPickerRequestRef.current;
+            void addRepositorySearchRootThen(
+              window.difftray.addRepositorySearchRoot,
+              () => {
+                if (requestId === repositoryPickerRequestRef.current) {
+                  void openRepositoryPicker();
+                }
+              }
+            ).catch((caughtError: unknown) => {
+              if (requestId === repositoryPickerRequestRef.current) {
+                setError(errorMessage(caughtError));
+              }
+            });
+          }}
+          onRefresh={() => {
+            const requestId = repositoryPickerRequestRef.current;
+            void window.difftray
+              .refreshRepositoryCatalog()
+              .then(() => {
+                if (requestId === repositoryPickerRequestRef.current) {
+                  void openRepositoryPicker();
+                }
+              })
+              .catch((caughtError: unknown) => {
+                if (requestId === repositoryPickerRequestRef.current) {
+                  setError(errorMessage(caughtError));
+                }
+              });
+          }}
+          openProjects={recentProjects}
+        />
+      ) : null}
+
+      {droppedRepositoryPreview.length > 0 ? (
+        <DroppedRepositoryPreview
+          candidates={droppedRepositoryPreview}
+          onCancel={() => setDroppedRepositoryPreview([])}
+          onOpen={(candidateIds, rememberSearchFolders) => {
+            setDroppedRepositoryPreview([]);
+            void runWorkspaceLoad(
+              () =>
+                window.difftray.openDroppedRepositoryPreview({
+                  candidateIds,
+                  rememberSearchFolders
+                }),
+              undefined,
+              {
+                detail: `${String(candidateIds.length)} selected`,
+                title: "Opening repositories"
+              }
+            );
+          }}
+        />
+      ) : null}
+
+      {worktreePickerProject ? (
+        <WorktreePicker
+          onClose={() => {
+            worktreePickerRequestRef.current += 1;
+            setWorktreePickerProject(undefined);
+          }}
+          onRefresh={() => {
+            void openWorktreePicker(worktreePickerProject);
+          }}
+          onSelect={(worktree) => {
+            void selectWorktree(worktree);
+          }}
+          projectName={worktreePickerProject.repositoryName ?? worktreePickerProject.name}
+          worktrees={worktrees}
         />
       ) : null}
 
@@ -2505,6 +3199,33 @@ export function App(): React.JSX.Element {
           onToggleCompanion={(enabled) => {
             void toggleCompanion(enabled);
           }}
+          repositorySearchRoots={repositorySearchRoots}
+          repositorySearchRootSuggestions={repositorySearchRootSuggestions}
+          onAddRepositorySearchRoot={() => {
+            void runRepositorySearchRootAction(() =>
+              window.difftray.addRepositorySearchRoot()
+            );
+          }}
+          onAddSuggestedRepositorySearchRoot={(suggestionId) => {
+            void runRepositorySearchRootAction(() =>
+              window.difftray.addSuggestedRepositorySearchRoot(suggestionId)
+            );
+          }}
+          onCancelRepositoryScan={(rootId) => {
+            void window.difftray
+              .cancelRepositoryScan(rootId)
+              .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+          }}
+          onRefreshRepositorySearchRoot={(rootId) => {
+            void runRepositorySearchRootAction(() =>
+              window.difftray.refreshRepositorySearchRoot(rootId)
+            );
+          }}
+          onRemoveRepositorySearchRoot={(rootId) => {
+            void runRepositorySearchRootAction(() =>
+              window.difftray.removeRepositorySearchRoot(rootId)
+            );
+          }}
         />
       ) : null}
     </main>
@@ -2519,4 +3240,16 @@ function nextPaint(): Promise<void> {
       });
     });
   });
+}
+
+export function isGlobalShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      'button, [role="button"], [role="menuitem"], [role="option"], [role="listbox"], [tabindex]:not([tabindex="-1"]), select, textarea, input, [contenteditable="true"]'
+    )
+  );
 }

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 
 import { workspaceAliases } from "./vite.workspace-aliases.config";
 
@@ -9,11 +10,17 @@ export default defineConfig({
     rollupOptions: {
       external: ["electron", "electron-log/main.js", "electron-updater", "node:path"],
       output: {
-        entryFileNames: "index.cjs",
+        entryFileNames: "[name].cjs",
         format: "cjs"
+      },
+      input: {
+        index: fileURLToPath(new URL("src/main/index.ts", import.meta.url)),
+        "repository-discovery-worker": fileURLToPath(
+          new URL("src/main/repository-discovery-worker.ts", import.meta.url)
+        )
       }
     },
-    ssr: "src/main/index.ts",
+    ssr: true,
     sourcemap: false,
     target: "node22"
   },

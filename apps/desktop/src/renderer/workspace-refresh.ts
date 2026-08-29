@@ -18,6 +18,18 @@ export type CachedWorkspaceTabSwitchRefreshState = {
   readonly settingsOpen: boolean;
 };
 
+export type ProjectChangeRefreshState = {
+  readonly activeProjectId: string | undefined;
+  readonly droppedRepositoryPreviewOpen: boolean;
+  readonly eventProjectId: string;
+  readonly externalDropActive: boolean;
+  readonly loadState: WorkspaceLoadState;
+  readonly paletteOpen: boolean;
+  readonly repositoryPickerOpen: boolean;
+  readonly settingsOpen: boolean;
+  readonly worktreePickerOpen: boolean;
+};
+
 export type LoadedFileDiffView = Pick<
   ReviewFileView,
   "additions" | "deletions" | "path" | "status"
@@ -47,6 +59,21 @@ export function shouldRefreshCachedWorkspaceAfterTabSwitch(
     state.loadState === "idle" &&
     !state.paletteOpen &&
     !state.settingsOpen
+  );
+}
+
+export function shouldReloadWorkspaceAfterProjectChange(
+  state: ProjectChangeRefreshState
+): boolean {
+  return (
+    state.activeProjectId === state.eventProjectId &&
+    state.loadState === "idle" &&
+    !state.droppedRepositoryPreviewOpen &&
+    !state.externalDropActive &&
+    !state.paletteOpen &&
+    !state.repositoryPickerOpen &&
+    !state.settingsOpen &&
+    !state.worktreePickerOpen
   );
 }
 

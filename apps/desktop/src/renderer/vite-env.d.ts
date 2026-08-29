@@ -13,8 +13,12 @@ declare global {
     readonly onCompanionStateChanged: (
       listener: CompanionStateChangedListener
     ) => () => void;
+    readonly onApplicationCommand: (
+      listener: (command: ApplicationCommand) => void
+    ) => () => void;
     readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
     readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
+    readonly forgetProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
     readonly copyReviewCommentsReport: (
       input: CopyReviewCommentsReportInput
     ) => Promise<CopyReviewCommentsReportResult>;
@@ -35,6 +39,17 @@ declare global {
       projectId: string
     ) => Promise<readonly RecentCommitView[]>;
     readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+    readonly listKnownProjects: () => Promise<readonly RecentProjectView[]>;
+    readonly listRepositoryCatalog: () => Promise<readonly RepositoryCatalogView[]>;
+    readonly listRepositorySearchRoots: () => Promise<
+      readonly RepositorySearchRootView[]
+    >;
+    readonly listRepositorySearchRootSuggestions: () => Promise<
+      readonly RepositorySearchRootSuggestionView[]
+    >;
+    readonly listProjectWorktrees: (
+      projectId: string
+    ) => Promise<readonly RepositoryWorktreeView[]>;
     readonly respondToCompanionPairRequest: (
       input: RespondToCompanionPairRequestInput
     ) => Promise<CompanionStateView>;
@@ -51,7 +66,13 @@ declare global {
       options?: LoadProjectOptions
     ) => Promise<ReviewWorkspaceView | null>;
     readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
+    readonly onProjectsOpened: (
+      listener: (event: ProjectsOpenedEvent) => void
+    ) => () => void;
     readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
+    readonly onWorktreeChangeCount: (
+      listener: (event: WorktreeChangeCountEvent) => void
+    ) => () => void;
     readonly markFileReviewed: (
       input: MarkFileReviewedInput
     ) => Promise<MarkReviewedResult>;
@@ -59,6 +80,42 @@ declare global {
     readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
     readonly openProjectInFinder: (projectId: string) => Promise<void>;
     readonly openProject: () => Promise<ReviewWorkspaceView | null>;
+    readonly openDroppedRepositories: (
+      files: readonly File[]
+    ) => Promise<ReviewWorkspaceView | null>;
+    readonly previewDroppedRepositories: (
+      files: readonly File[]
+    ) => Promise<readonly DroppedRepositoryPreviewView[]>;
+    readonly openDroppedRepositoryPreview: (input: {
+      readonly candidateIds: readonly string[];
+      readonly rememberSearchFolders: boolean;
+    }) => Promise<ReviewWorkspaceView | null>;
+    readonly openKnownProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+    readonly openRepositoryCatalogEntry: (
+      repositoryId: string
+    ) => Promise<ReviewWorkspaceView | null>;
+    readonly openRepositoryCatalogEntries: (
+      repositoryIds: readonly string[]
+    ) => Promise<ReviewWorkspaceView | null>;
+    readonly openRepositoryPickerEntries: (input: {
+      readonly knownProjectIds: readonly string[];
+      readonly repositoryIds: readonly string[];
+    }) => Promise<ReviewWorkspaceView | null>;
+    readonly addRepositorySearchRoot: () => Promise<boolean>;
+    readonly addSuggestedRepositorySearchRoot: (suggestionId: string) => Promise<void>;
+    readonly refreshRepositoryCatalog: () => Promise<void>;
+    readonly refreshRepositorySearchRoot: (rootId: string) => Promise<void>;
+    readonly cancelRepositoryScan: (rootId: string) => Promise<void>;
+    readonly removeRepositorySearchRoot: (rootId: string) => Promise<void>;
+    readonly onRepositoryScanProgress: (
+      listener: (progress: RepositoryScanProgressView) => void
+    ) => () => void;
+    readonly onRepositoryQuickOpenRequested: (listener: () => void) => () => void;
+    readonly onRepositoryScanFolderRequested: (listener: () => void) => () => void;
+    readonly openProjectWorktree: (
+      projectId: string,
+      worktreeId: string
+    ) => Promise<ReviewWorkspaceView>;
     readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
     readonly updateProjectSettings: (
       input: UpdateProjectSettingsInput
@@ -78,6 +135,18 @@ declare global {
   };
 
   type ThemeMode = "dark" | "light" | "system";
+
+  type ApplicationCommand =
+    | "open-settings"
+    | "repository-close"
+    | "repository-forget"
+    | "repository-refresh"
+    | "repository-show-in-finder"
+    | "repository-worktrees"
+    | "view-split-diff"
+    | "view-toggle-file-list"
+    | "view-toggle-wrap-lines"
+    | "view-unified-diff";
 
   type CompanionStateChangedListener = (state: CompanionStateView) => void;
 
@@ -173,7 +242,62 @@ declare global {
     readonly lastOpenedAt?: string;
     readonly name: string;
     readonly path: string;
+    readonly repositoryName?: string;
     readonly reviewSummary?: ProjectReviewSummaryView;
+    readonly worktreeName?: string;
+  };
+
+  type RepositoryWorktreeView = {
+    readonly branchName?: string;
+    readonly changeCount?: number;
+    readonly displayName: string;
+    readonly displayPath: string;
+    readonly headSha?: string;
+    readonly id: string;
+    readonly locked: boolean;
+    readonly shortHeadSha?: string;
+    readonly state: "available" | "current" | "open";
+  };
+
+  type RepositoryCatalogView = {
+    readonly available: boolean;
+    readonly id: string;
+    readonly lastSeenAt: string;
+    readonly name: string;
+    readonly path: string;
+    readonly rootId: string;
+  };
+
+  type RepositoryScanProgressView = {
+    readonly rootId: string;
+    readonly scannedDirectories: number;
+    readonly skippedDirectories: number;
+    readonly status: "cancelled" | "complete" | "failed" | "scanning";
+  };
+
+  type RepositorySearchRootView = {
+    readonly enabled: boolean;
+    readonly id: string;
+    readonly lastScanCompletedAt?: string;
+    readonly lastScanError?: string;
+    readonly path: string;
+    readonly repositoryCount: number;
+    readonly scannedDirectories?: number;
+    readonly scanning: boolean;
+    readonly skippedDirectories?: number;
+  };
+
+  type RepositorySearchRootSuggestionView = {
+    readonly id: string;
+    readonly name: string;
+    readonly path: string;
+  };
+
+  type DroppedRepositoryPreviewView = {
+    readonly displayPath: string;
+    readonly id: string;
+    readonly name: string;
+    readonly rememberEligible: boolean;
   };
 
   type RecentCommitView = {
@@ -203,6 +327,16 @@ declare global {
   };
 
   type ProjectChangedListener = (event: ProjectChangedEvent) => void;
+
+  type ProjectsOpenedEvent = {
+    readonly focusProjectId: string;
+    readonly projectIds: readonly string[];
+  };
+
+  type WorktreeChangeCountEvent = {
+    readonly changeCount: number;
+    readonly worktreePath: string;
+  };
 
   type ProjectLoadProgressPhase =
     | "loading_files"

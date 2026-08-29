@@ -487,6 +487,13 @@ async function createIntegrationHarness(): Promise<{
     listRecentCommits: async () => [],
     listRecentProjects: async () =>
       storage.listRecentProjects().map((record) => projectView(record)),
+    listRepositoryCatalog: async () => [],
+    listProjectWorktreeAvailability: async () => [],
+    listProjectWorktrees: async () => [],
+    openProjectWorktree: async () => {
+      throw new Error("Worktree not found");
+    },
+    openRepositories: async () => ({ failures: [], openedProjects: [] }),
     loadFileDiff: async (projectId, pathName) =>
       loadFileDiff(storage, projectId, pathName),
     loadFileImage: async () => null,

@@ -9,6 +9,7 @@ export type EncryptedEnvelope = {
 
 export type EnvelopeRequestPlain = {
   readonly body?: unknown;
+  readonly capabilities?: readonly string[];
   readonly method: string;
   readonly path: string;
   readonly requestId: string;

@@ -30,6 +30,7 @@ describe("buildCommands", () => {
       ["action-file-list", "Toggle file list"],
       ["action-diff-mode", "Switch to unified diff"],
       ["action-settings", "Settings"],
+      ["action-forget-repository", "Forget repository…"],
       ["file-src/App.tsx", "App.tsx"]
     ]);
 
@@ -38,12 +39,14 @@ describe("buildCommands", () => {
     commands.find((command) => command.id === "action-file-list")?.run();
     commands.find((command) => command.id === "action-settings")?.run();
     commands.find((command) => command.id === "action-diff-mode")?.run();
+    commands.find((command) => command.id === "action-forget-repository")?.run();
     commands.find((command) => command.id === "file-src/App.tsx")?.run();
 
     expect(input.refresh).toHaveBeenCalledOnce();
     expect(input.toggleReview).toHaveBeenCalledOnce();
     expect(input.toggleFileList).toHaveBeenCalledOnce();
     expect(input.openSettings).toHaveBeenCalledOnce();
+    expect(input.forgetRepository).toHaveBeenCalledOnce();
     expect(input.setDiffMode).toHaveBeenCalledWith("unified");
     expect(input.selectFile).toHaveBeenCalledWith("src/App.tsx");
     expect(input.closePalette).toHaveBeenCalledOnce();
@@ -100,6 +103,7 @@ function buildCommandsInput(input: Partial<BuildCommandsInput> = {}): BuildComma
     closePalette: vi.fn(),
     diffMode: "split",
     files: [],
+    forgetRepository: vi.fn(),
     loadProject: vi.fn(),
     openProject: vi.fn(),
     openSettings: vi.fn(),

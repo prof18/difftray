@@ -113,6 +113,7 @@ export function createCompanionRouter(
           const result = await Promise.resolve(
             routeMatch.route.handler({
               body: verified.body,
+              capabilities: verified.capabilities ?? [],
               device: verified.device,
               params: routeMatch.params,
               query: new URLSearchParams()
@@ -144,6 +145,7 @@ export function createCompanionRouter(
 
       const result = await routeMatch.route.handler({
         body: body.value,
+        capabilities: [],
         device: null,
         params: routeMatch.params,
         query: url.searchParams
@@ -180,7 +182,7 @@ function consumeRateLimit(
 ): boolean {
   const method = request.method ?? "GET";
   const limit = rateLimitFor(method, pathname);
-  const key = `${request.socket.remoteAddress ?? "unknown"}:${method}:${pathname}`;
+  const key = `${request.socket.remoteAddress ?? "unknown"}:${rateLimitBucketKey(method, pathname)}`;
   const now = Date.now();
   const bucket = buckets.get(key);
 
@@ -210,7 +212,42 @@ function rateLimitFor(method: string, pathname: string): number {
     return 40;
   }
 
+  if (method === "POST" && pathname === "/companion/v1/projects/open") {
+    return 10;
+  }
+
+  if (method === "POST" && pathname === "/companion/v1/projects/worktree-availability") {
+    return 20;
+  }
+
+  if (
+    method === "POST" &&
+    /^\/companion\/v1\/projects\/[^/]+\/worktrees$/.test(pathname)
+  ) {
+    return 20;
+  }
+
+  if (
+    method === "POST" &&
+    /^\/companion\/v1\/projects\/[^/]+\/worktrees\/open$/.test(pathname)
+  ) {
+    return 10;
+  }
+
   return 60;
+}
+
+function rateLimitBucketKey(method: string, pathname: string): string {
+  if (pathname === "/companion/v1/projects/worktree-availability") {
+    return `${method}:/companion/v1/projects/worktree-availability`;
+  }
+  if (/^\/companion\/v1\/projects\/[^/]+\/worktrees$/.test(pathname)) {
+    return `${method}:/companion/v1/projects/:projectId/worktrees`;
+  }
+  if (/^\/companion\/v1\/projects\/[^/]+\/worktrees\/open$/.test(pathname)) {
+    return `${method}:/companion/v1/projects/:projectId/worktrees/open`;
+  }
+  return `${method}:${pathname}`;
 }
 
 function hostWithoutPort(hostHeader: string): string {

@@ -1,0 +1,47 @@
+{
+  "benchmark": "difftray-repository-discovery-v1",
+  "discovery": [
+    {
+      "directoryCount": 1000,
+      "markerFirstMs": 146,
+      "perDirectoryGitMs": 5602.7,
+      "repositoryCount": 10
+    },
+    {
+      "directoryCount": 1000,
+      "markerFirstMs": 394.13,
+      "perDirectoryGitMs": 5920.73,
+      "repositoryCount": 50
+    },
+    {
+      "directoryCount": 5000,
+      "markerFirstMs": 402.25,
+      "perDirectoryGitMs": 26150.69,
+      "repositoryCount": 10
+    },
+    {
+      "directoryCount": 5000,
+      "markerFirstMs": 587.56,
+      "perDirectoryGitMs": 25322.58,
+      "repositoryCount": 50
+    }
+  ],
+  "openProjects": [
+    {
+      "listOpenProjectsMs": 0.15,
+      "openCount": 10,
+      "projectCount": 10
+    },
+    {
+      "listOpenProjectsMs": 0.3,
+      "openCount": 100,
+      "projectCount": 100
+    },
+    {
+      "listOpenProjectsMs": 2.53,
+      "openCount": 1000,
+      "projectCount": 1000
+    }
+  ],
+  "sample": "2026-08-10T14:04:45.983Z"
+}

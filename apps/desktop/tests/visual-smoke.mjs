@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -38,8 +38,30 @@ try {
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
   await window
-    .getByRole("button", { name: "Open visual-repo in Finder" })
+    .getByRole("button", { name: "Worktrees for visual-repo" })
     .waitFor({ timeout: 10_000 });
+  const repositoryActions = window.locator('[data-repository-actions="true"]');
+  await expectNoDragRegion(repositoryActions, "repository action cluster");
+  const repositoryActionsButton = window.getByRole("button", {
+    name: "Repository actions for visual-repo"
+  });
+  await repositoryActionsButton.click();
+  const showInFinderItem = window.getByRole("menuitem", { name: "Show in Finder" });
+  await showInFinderItem.waitFor({
+    timeout: 10_000
+  });
+  await expectHoverBackgroundChange(showInFinderItem, "repository menu item");
+  await window.keyboard.press("Escape");
+  await expectNoOuterFocusOutline(repositoryActionsButton, "repository actions button");
+  await window.getByRole("button", { name: "Worktrees for visual-repo" }).click();
+  await window
+    .getByRole("dialog", { name: "Worktrees for visual-repo" })
+    .waitFor({ timeout: 10_000 });
+  await expectHoverBackgroundChange(
+    window.getByRole("button", { name: "Refresh worktrees" }),
+    "worktree refresh button"
+  );
+  await window.getByRole("button", { name: "Close worktrees" }).click();
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
@@ -138,7 +160,7 @@ try {
     .waitFor({ state: "detached", timeout: 10_000 });
   await expectDecodedImage(window, "After image, 1 by 1 pixels");
   await window.getByRole("button", { name: "Show both diff sides" }).click();
-  await window.getByRole("button", { name: "Project settings" }).click();
+  await openSettingsFromApplicationMenu(app, window);
   await expectSettingsDiffModeSelector(window, "split");
   const companionToggle = window.getByLabel("Enable companion mode");
   await companionToggle.check();
@@ -166,7 +188,7 @@ try {
     .waitFor({ timeout: 10_000 });
   await window.getByRole("button", { name: /schema\.generated\.ts/ }).click();
   await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
-  await window.getByRole("button", { name: "Project settings" }).click();
+  await openSettingsFromApplicationMenu(app, window);
   await expectChecked(window, "Show generated files");
   await expectComboboxValue(window, /Appearance/, "light");
   await expectEditorChoice(window, "System default");
@@ -361,6 +383,9 @@ async function createChangedRepository(name = "visual-repo") {
   git(repo, ["checkout", "-b", "feature/review"]);
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\n", "utf8");
   git(repo, ["commit", "-am", "Branch change"]);
+  if (includeContextFile) {
+    git(repo, ["worktree", "add", path.join(parent, `${name}-sibling`), "main"]);
+  }
   await writeFile(path.join(repo, "tracked.txt"), "before\nbranch\nafter\n", "utf8");
   if (includeContextFile) {
     await writeFile(path.join(repo, "preview.png"), pngFixture("after"));
@@ -389,7 +414,7 @@ async function createChangedRepository(name = "visual-repo") {
     "utf8"
   );
 
-  return repo;
+  return realpath(repo);
 }
 
 async function seedRecentProject(userDataPath, repoPath) {
@@ -404,6 +429,7 @@ async function seedRecentProject(userDataPath, repoPath) {
       name: path.basename(repoPath),
       path: repoPath
     });
+    storage.appendProjectToTabOrder(repoPath);
   } finally {
     storage.close();
   }
@@ -495,6 +521,7 @@ async function expectDismissibleOpenProjectError(app, window, folderPath) {
 
   try {
     await window.getByRole("button", { name: "Open repository" }).click();
+    await window.getByRole("button", { name: "Open Repositories…" }).click();
     await dismissErrorBanner(window, "Selected folder is not inside a Git repository.");
   } finally {
     await app.evaluate(() => {
@@ -919,6 +946,15 @@ async function expectSettingsDiffModeSelector(window, expectedMode) {
   }, expectedMode);
 }
 
+async function openSettingsFromApplicationMenu(app, window) {
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()?.getMenuItemById("settings")?.click();
+  });
+  await window.getByRole("heading", { name: "Settings" }).waitFor({
+    timeout: 10_000
+  });
+}
+
 async function expectSettingsScrollable(window) {
   const dialog = window.getByRole("dialog");
   const form = dialog.locator("form");
@@ -951,6 +987,46 @@ async function expectSettingsScrollable(window) {
   if (appRegion !== "no-drag") {
     throw new Error(
       `Expected settings overlay to be -webkit-app-region: no-drag, got "${appRegion}"`
+    );
+  }
+}
+
+async function expectHoverBackgroundChange(locator, label) {
+  const before = await locator.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  );
+  await locator.hover();
+  const after = await locator.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  );
+
+  if (before === after) {
+    throw new Error(`Expected ${label} hover background to change from ${before}`);
+  }
+}
+
+async function expectNoDragRegion(locator, label) {
+  const appRegion = await locator.evaluate(
+    (element) =>
+      getComputedStyle(element).getPropertyValue("-webkit-app-region") ||
+      getComputedStyle(element).webkitAppRegion
+  );
+
+  if (appRegion !== "no-drag") {
+    throw new Error(
+      `Expected ${label} to be -webkit-app-region: no-drag, got "${appRegion}"`
+    );
+  }
+}
+
+async function expectNoOuterFocusOutline(locator, label) {
+  const outlineStyle = await locator.evaluate(
+    (element) => getComputedStyle(element).outlineStyle
+  );
+
+  if (outlineStyle !== "none") {
+    throw new Error(
+      `Expected ${label} to avoid an outer focus outline, got "${outlineStyle}"`
     );
   }
 }

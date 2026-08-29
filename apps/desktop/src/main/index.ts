@@ -12,8 +12,9 @@ import {
   type OpenDialogOptions
 } from "electron";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { homedir, networkInterfaces } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -22,6 +23,7 @@ import {
   createDiffHash,
   createReviewTargetId,
   formatReviewCommentsReport,
+  isPathInsideApprovedRoot,
   resolveReviewStates,
   type ReviewCommentReportItem,
   type ReviewMark,
@@ -39,10 +41,17 @@ import {
   FileImageSide,
   MarkReviewedBody as CompanionMarkReviewedBody,
   UpdateCommentBody as CompanionUpdateCommentBody,
-  WorkspaceSummary
+  WorkspaceSummary,
+  type OpenRepositoriesBody,
+  type OpenRepositoriesResponse,
+  type RepositoryCatalogEntry,
+  type RepositoryWorktreeView
 } from "@difftray/companion-protocol";
 import {
   findGitRepository,
+  getGitStatus,
+  getWorktreeInfo,
+  listGitWorktrees,
   loadBranchReviewTarget,
   loadBranchDiffSummaries,
   loadBranchFileDiffSummary,
@@ -63,7 +72,6 @@ import {
   type GitLoadedFileDiff
 } from "@difftray/git";
 import {
-  applyProjectTabOrder,
   bootstrapStorageFromExistingProfile,
   replaceStorageFromExistingProfile,
   sanitizeProjectTabOrder,
@@ -82,6 +90,10 @@ import {
   type ProjectWatchChangeEvent,
   type WatchedProject
 } from "./project-watch-service.js";
+import {
+  isSafeRepositorySearchRootSuggestion,
+  shouldRefreshRepositorySearchRoot
+} from "./repository-scan-policy.js";
 import {
   externalStoreUrl,
   isTrustedRendererUrl,
@@ -103,12 +115,18 @@ import {
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
 import { openStoredProjectDirectory } from "./project-folder-open.js";
 import {
+  createRepositoryOpenService,
+  type RepositoryOpenBatchResult
+} from "./repository-open-service.js";
+import { createRepositoryWorktreeService } from "./repository-worktree-service.js";
+import {
   resolveAppRuntimeConfig,
   resolveWindowPresentationMode,
   type AppRuntimeConfig
 } from "./app-runtime.js";
 import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
+import { sendToBrowserWindow } from "./window-messaging.js";
 import {
   createCompanionAuthManager,
   createCompanionEnvelopeVerifier,
@@ -125,6 +143,14 @@ import {
 import { createCompanionServer } from "./companion/server.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
+import { ProjectSummaryCoordinator } from "./project-summary-coordinator.js";
+import {
+  discoverRepositories,
+  isRepositoryScanAbort
+} from "./repository-discovery-service.js";
+import { previewDroppedRepositoryCandidates } from "./repository-drop-preview.js";
+import { listCompanionRepositoryCatalog as listCompanionRepositoryCatalogView } from "./repository-catalog-service.js";
+import { BoundedLruCache } from "./bounded-lru-cache.js";
 import {
   activeCompanionDeviceRecords,
   appSettingsView,
@@ -185,6 +211,18 @@ const windowPresentationMode = resolveWindowPresentationMode(
 
 let mainWindow: BrowserWindow | undefined;
 let projectWatchService: ProjectWatchService | undefined;
+let projectSummaryCoordinator:
+  | ProjectSummaryCoordinator<ProjectReviewSummaryView>
+  | undefined;
+let worktreeChangeCountCoordinator: ProjectSummaryCoordinator<number> | undefined;
+const repositoryScans = new Map<
+  string,
+  { readonly controller: AbortController; readonly promise: Promise<void> }
+>();
+const droppedRepositoryCandidates = new Map<
+  string,
+  { readonly path: string; readonly searchRootPath?: string }
+>();
 let storage: DifftrayStorage | undefined;
 let didConfigureAppRuntime = false;
 let isQuitting = false;
@@ -198,6 +236,8 @@ let companionWorkspaceChangeBroadcaster: CompanionWorkspaceChangeBroadcaster | u
 let companionAuthManager: CompanionAuthManager | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
+const companionWorkspaceCache = new BoundedLruCache<string, ReviewWorkspaceView>(3);
+const companionWorkspaceGenerations = new Map<string, number>();
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
 
@@ -345,10 +385,35 @@ const createMainWindow = async (): Promise<void> => {
 
   window.once("ready-to-show", showWindow);
   window.webContents.once("did-finish-load", showWindow);
+  window.on("closed", () => {
+    if (mainWindow === window) {
+      mainWindow = undefined;
+    }
+  });
   setTimeout(showWindow, 1_500);
 
   if (bootProjectPath) {
-    await storeRepositoryAtPath(bootProjectPath);
+    const previouslyOpenProjectIds = new Set(
+      getStorage()
+        .listOpenProjects()
+        .map((project) => project.id)
+    );
+    const result = await openRepositoryPaths([bootProjectPath]);
+    const bootProject = result.projects[0];
+
+    if (!bootProject) {
+      throw new Error("Boot project is not inside a Git repository.");
+    }
+
+    if (!previouslyOpenProjectIds.has(bootProject.id)) {
+      getStorage().upsertProjectTabOrder([
+        bootProject.id,
+        ...getStorage()
+          .listOpenProjects()
+          .map((project) => project.id)
+          .filter((projectId) => projectId !== bootProject.id)
+      ]);
+    }
   }
 
   const rendererDevUrl = resolveRendererDevUrl(rendererDevUrlFromEnv, app.isPackaged);
@@ -552,11 +617,191 @@ handleTrusted(
   }
 );
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
+handleTrusted("projects:listKnown", () =>
+  getStorage()
+    .listKnownProjects()
+    .map((project) => projectView(project))
+);
+handleTrusted("repositories:listCatalog", () => {
+  const catalog = getStorage().listRepositoryCatalog();
+  setImmediate(queueStaleRepositoryScans);
+  return catalog;
+});
+handleTrusted("repositories:listSearchRoots", () => {
+  const roots = getStorage()
+    .listRepositorySearchRoots()
+    .map((root) => ({
+      ...root,
+      repositoryCount: getStorage().countAvailableRepositoriesForRoot(root.id),
+      scanning: repositoryScans.has(root.id)
+    }));
+  setImmediate(queueStaleRepositoryScans);
+  return roots;
+});
+handleTrusted("repositories:listSearchRootSuggestions", () =>
+  repositorySearchRootSuggestions()
+);
+handleTrusted("repositories:addSearchRoot", async (): Promise<boolean> => {
+  const options: OpenDialogOptions = {
+    buttonLabel: "Scan for Repositories",
+    message: "Choose a folder to search for Git repositories.",
+    properties: ["openDirectory"],
+    title: "Scan a folder for repositories"
+  };
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  const rootPath = result.filePaths[0];
+  if (!result.canceled && rootPath) {
+    const root = getStorage().addRepositorySearchRoot(rootPath);
+    void scanRepositoryRoot(root.id).catch(() => undefined);
+    return true;
+  }
+  return false;
+});
+handleTrusted(
+  "repositories:addSuggestedSearchRoot",
+  (_event: IpcMainInvokeEvent, input: unknown): void => {
+    const suggestionId = readStringProperty(input, "suggestionId");
+    const suggestion = repositorySearchRootSuggestions().find(
+      (candidate) => candidate.id === suggestionId
+    );
+    if (!suggestion) {
+      throw new Error("Repository search folder suggestion is no longer available.");
+    }
+    const root = getStorage().addRepositorySearchRoot(suggestion.path);
+    void scanRepositoryRoot(root.id).catch(() => undefined);
+  }
+);
+handleTrusted(
+  "repositories:refreshSearchRoot",
+  (_event: IpcMainInvokeEvent, input: unknown): void => {
+    void scanRepositoryRoot(readStringProperty(input, "rootId")).catch(() => undefined);
+  }
+);
+handleTrusted("repositories:refreshAll", (): void => {
+  for (const root of getStorage()
+    .listRepositorySearchRoots()
+    .filter((candidate) => candidate.enabled)) {
+    void scanRepositoryRoot(root.id).catch(() => undefined);
+  }
+});
+handleTrusted("repositories:cancelScan", (_event, input: unknown): void => {
+  repositoryScans.get(readStringProperty(input, "rootId"))?.controller.abort();
+});
+handleTrusted("repositories:removeSearchRoot", (_event, input: unknown): void => {
+  const rootId = readStringProperty(input, "rootId");
+  repositoryScans.get(rootId)?.controller.abort();
+  getStorage().removeRepositorySearchRoot(rootId);
+});
+handleTrusted(
+  "repositories:openCatalogEntry",
+  async (
+    event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const entry = getStorage().getRepositoryCatalogEntry(
+      readStringProperty(input, "repositoryId")
+    );
+    if (!entry?.available) {
+      throw new Error("Repository is no longer available.");
+    }
+    const root = getStorage()
+      .listRepositorySearchRoots()
+      .find((candidate) => candidate.id === entry.rootId && candidate.enabled);
+    if (!root || !isCatalogPathAuthorized(root.path, entry.path)) {
+      throw new Error("Repository is no longer available.");
+    }
+    const validatedPath = await validatedAuthorizedCatalogRepositoryPath(
+      root.path,
+      entry.path
+    );
+    if (!validatedPath) throw new Error("Repository is no longer available.");
+    const result = await openRepositoryPaths([validatedPath]);
+    const project = result.projects[0];
+    return project
+      ? loadProjectWorkspace(
+          project.id,
+          projectLoadProgressReporter(event.sender, project.id)
+        )
+      : Promise.reject(new Error("Repository is no longer available."));
+  }
+);
+handleTrusted(
+  "repositories:openCatalogEntries",
+  async (
+    event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const repositoryIds = readStringArrayProperty(input, "repositoryIds");
+    if (repositoryIds.length === 0 || repositoryIds.length > 100) return null;
+    const paths: string[] = [];
+    for (const repositoryId of new Set(repositoryIds)) {
+      const entry = getStorage().getRepositoryCatalogEntry(repositoryId);
+      if (!entry?.available) continue;
+      const root = getStorage()
+        .listRepositorySearchRoots()
+        .find((candidate) => candidate.id === entry.rootId && candidate.enabled);
+      if (root && isCatalogPathAuthorized(root.path, entry.path)) {
+        const validatedPath = await validatedAuthorizedCatalogRepositoryPath(
+          root.path,
+          entry.path
+        );
+        if (validatedPath) paths.push(validatedPath);
+      }
+    }
+    const result = await openRepositoryPaths(paths);
+    const first = result.projects[0];
+    return first
+      ? loadProjectWorkspace(
+          first.id,
+          projectLoadProgressReporter(event.sender, first.id)
+        )
+      : null;
+  }
+);
+handleTrusted(
+  "repositories:openPickerEntries",
+  async (
+    event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const knownProjectIds = readStringArrayProperty(input, "knownProjectIds");
+    const repositoryIds = readStringArrayProperty(input, "repositoryIds");
+    if (knownProjectIds.length + repositoryIds.length > 100) return null;
+    if (knownProjectIds.length + repositoryIds.length === 0) return null;
+    const paths = knownProjectIds
+      .map((id) => getStorage().getProject(id)?.path)
+      .filter((pathName): pathName is string => Boolean(pathName));
+    for (const repositoryId of new Set(repositoryIds)) {
+      const entry = getStorage().getRepositoryCatalogEntry(repositoryId);
+      if (!entry?.available) continue;
+      const root = getStorage()
+        .listRepositorySearchRoots()
+        .find((candidate) => candidate.id === entry.rootId && candidate.enabled);
+      if (root && isCatalogPathAuthorized(root.path, entry.path)) {
+        const validatedPath = await validatedAuthorizedCatalogRepositoryPath(
+          root.path,
+          entry.path
+        );
+        if (validatedPath) paths.push(validatedPath);
+      }
+    }
+    const result = await openRepositoryPaths(paths);
+    const first = result.projects[0];
+    return first
+      ? loadProjectWorkspace(
+          first.id,
+          projectLoadProgressReporter(event.sender, first.id)
+        )
+      : null;
+  }
+);
 handleTrusted(
   "projects:saveTabOrder",
   (_event: IpcMainInvokeEvent, input: unknown): void => {
     const projectIds = readStringArrayProperty(input, "projectIds");
-    const knownProjects = getStorage().listRecentProjects();
+    const knownProjects = getStorage().listKnownProjects();
 
     getStorage().upsertProjectTabOrder(
       sanitizeProjectTabOrder(knownProjects, projectIds)
@@ -601,7 +846,23 @@ handleTrusted(
   ): Promise<readonly RecentProjectView[]> => {
     const projectId = readStringProperty(input, "projectId");
 
-    deleteStoredProject(projectId);
+    closeProjectTab(projectId);
+    await getProjectWatchService().stopProject(projectId);
+
+    return listAvailableRecentProjectViews();
+  }
+);
+handleTrusted(
+  "projects:forget",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<readonly RecentProjectView[]> => {
+    const projectId = readStringProperty(input, "projectId");
+
+    invalidateCompanionWorkspace(projectId);
+    getStorage().forgetProject(projectId);
+    getProjectSummaryCoordinator().cancel(projectId);
     await getProjectWatchService().stopProject(projectId);
 
     return listAvailableRecentProjectViews();
@@ -609,6 +870,115 @@ handleTrusted(
 );
 handleTrusted("projects:open", async (event: IpcMainInvokeEvent) =>
   openProjectFromDialog(event.sender)
+);
+handleTrusted(
+  "projects:openPaths",
+  async (
+    event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const paths = readStringArrayProperty(input, "paths");
+    if (paths.length > 100) throw new Error("Open at most 100 repositories at once.");
+    const result = await openRepositoryPaths(paths);
+    if (paths.length > 1) void showRepositoryOpenSummary(result);
+    await offerDroppedFoldersAsSearchRoots(
+      result.failures.map((failure) => failure.selectedPath)
+    );
+    const project = result.projects[0];
+
+    return project
+      ? loadProjectWorkspace(
+          project.id,
+          projectLoadProgressReporter(event.sender, project.id)
+        )
+      : null;
+  }
+);
+handleTrusted("repositories:previewDroppedPaths", async (_event, input: unknown) =>
+  previewDroppedRepositoryPaths(boundedRepositoryBatch(input, "paths"))
+);
+handleTrusted(
+  "repositories:openDroppedPreview",
+  async (event: IpcMainInvokeEvent, input: unknown) => {
+    const candidateIds = readStringArrayProperty(input, "candidateIds");
+    if (candidateIds.length > 100) {
+      throw new Error("Open at most 100 repositories at once.");
+    }
+    const rememberSearchFolders = readBooleanProperty(input, "rememberSearchFolders");
+    const selected = candidateIds
+      .map((id) => droppedRepositoryCandidates.get(id))
+      .filter(
+        (
+          candidate
+        ): candidate is { readonly path: string; readonly searchRootPath?: string } =>
+          Boolean(candidate)
+      );
+    droppedRepositoryCandidates.clear();
+    if (rememberSearchFolders) {
+      for (const rootPath of new Set(
+        selected.map((candidate) => candidate.searchRootPath).filter(Boolean)
+      )) {
+        if (!rootPath) continue;
+        const root = getStorage().addRepositorySearchRoot(rootPath);
+        void scanRepositoryRoot(root.id).catch(() => undefined);
+      }
+    }
+    const result = await openRepositoryPaths(selected.map((candidate) => candidate.path));
+    const first = result.projects[0];
+    return first
+      ? loadProjectWorkspace(
+          first.id,
+          projectLoadProgressReporter(event.sender, first.id)
+        )
+      : null;
+  }
+);
+handleTrusted(
+  "projects:openKnown",
+  async (
+    event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<ReviewWorkspaceView | null> => {
+    const projectId = readStringProperty(input, "projectId");
+    const knownProject = getStorage().getProject(projectId);
+
+    if (!knownProject) throw new Error("Repository is no longer available.");
+
+    const validatedPath = await validatedCatalogRepositoryPath(knownProject.path);
+    if (!validatedPath) throw new Error("Repository is no longer available.");
+
+    const result = await openRepositoryPaths([validatedPath]);
+    const project = result.projects[0];
+
+    return project
+      ? loadProjectWorkspace(
+          project.id,
+          projectLoadProgressReporter(event.sender, project.id)
+        )
+      : Promise.reject(new Error("Repository is no longer available."));
+  }
+);
+handleTrusted(
+  "projects:listWorktrees",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<readonly RepositoryWorktreeView[]> =>
+    repositoryWorktreeService().list(readStringProperty(input, "projectId"))
+);
+handleTrusted(
+  "projects:openWorktree",
+  async (event: IpcMainInvokeEvent, input: unknown): Promise<ReviewWorkspaceView> => {
+    const project = await repositoryWorktreeService().open(
+      readStringProperty(input, "projectId"),
+      readStringProperty(input, "worktreeId")
+    );
+
+    return loadProjectWorkspace(
+      project.id,
+      projectLoadProgressReporter(event.sender, project.id)
+    );
+  }
 );
 handleTrusted(
   "projects:openInFinder",
@@ -856,6 +1226,10 @@ configureAppRuntime();
 app.on("before-quit", () => {
   isQuitting = true;
   pendingProjectWatcherSync = undefined;
+  for (const { controller } of repositoryScans.values()) {
+    controller.abort();
+  }
+  repositoryScans.clear();
   void companionLifecycleController?.stop();
   companionLifecycleController = undefined;
   companionWorkspaceChangeBroadcaster?.dispose();
@@ -940,6 +1314,12 @@ function installApplicationMenu(): void {
     checkForUpdates: checkForUpdatesNow,
     developerToolsEnabled: resolvedAppRuntimeConfig.variant === "dev",
     getUpdatePhase: () => updateState.phase,
+    onOpenRepositories: () =>
+      sendToBrowserWindow(mainWindow, "repositories:quickOpenRequested"),
+    onScanRepositoryFolder: () =>
+      sendToBrowserWindow(mainWindow, "repositories:scanFolderRequested"),
+    onApplicationCommand: (command) =>
+      sendToBrowserWindow(mainWindow, "application:command", command),
     onUpdatePhaseChange: (listener) => updateState.subscribe(listener),
     updatesEnabled: resolvedAppRuntimeConfig.variant === "production"
   });
@@ -1144,6 +1524,10 @@ async function wireAutoUpdater(): Promise<UpdateCheckScheduler | undefined> {
 function getStorage(): DifftrayStorage {
   if (storage) {
     return storage;
+  }
+
+  if (isQuitting) {
+    throw new Error("Storage is unavailable while Difftray is quitting.");
   }
 
   const storageDir = path.join(userDataPath ?? app.getPath("userData"), "data");
@@ -1360,6 +1744,9 @@ function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroad
 }
 
 function emitProjectChange(change: ProjectWatchChangeEvent): void {
+  invalidateCompanionWorkspace(change.projectId);
+  projectSummaryCoordinator?.invalidate(change.projectId);
+  worktreeChangeCountCoordinator?.invalidate(change.projectPath);
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send("projects:changed", change);
@@ -1369,10 +1756,31 @@ function emitProjectChange(change: ProjectWatchChangeEvent): void {
   getCompanionWorkspaceChangeBroadcaster().notify(change.projectId, "filesystem");
 }
 
+function emitProjectsOpened(projectIds: readonly string[], focusProjectId: string): void {
+  const payload = { focusProjectId, projectIds: [...projectIds] };
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("projects:opened", payload);
+    }
+  }
+}
+
+function emitWorktreeChangeCount(worktreePath: string, changeCount: number): void {
+  const payload = { changeCount, worktreePath };
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("projects:worktreeChangeCount", payload);
+    }
+  }
+}
+
 function notifyCompanionWorkspaceChanged(
   projectId: string,
   reason: "comments" | "diff_target" | "filesystem" | "review_state"
 ): void {
+  invalidateCompanionWorkspace(projectId);
   companionLifecycleController?.broadcastWorkspaceChanged(projectId, reason);
 }
 
@@ -1437,18 +1845,20 @@ function projectWatchTarget(
 }
 
 function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
-  const projects = getStorage().listRecentProjects();
+  const projects = getStorage().listOpenProjects();
 
   for (const project of projects) {
     if (!existsSync(project.path)) {
-      deleteStoredProject(project.id);
+      closeProjectTab(project.id);
+      if (projectWatchService) {
+        void projectWatchService.stopProject(project.id).catch((caughtError: unknown) => {
+          console.error("Failed to stop missing project watcher", caughtError);
+        });
+      }
     }
   }
 
-  return applyProjectTabOrder(
-    getStorage().listRecentProjects(),
-    getStorage().getProjectTabOrder()
-  );
+  return getStorage().listOpenProjects();
 }
 
 function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
@@ -1457,23 +1867,34 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
   return projects.map((project) => projectView(project));
 }
 
-async function listAvailableRecentProjectViewsWithSummaries(): Promise<
-  readonly RecentProjectView[]
-> {
+async function listAvailableRecentProjectViewsWithSummaries(options: {
+  readonly summaryMode: "background" | "complete";
+}): Promise<readonly RecentProjectView[]> {
   const projects = listAvailableRecentProjects();
-  const summaries = await Promise.all(
-    projects.map(async (project) => {
-      try {
-        return await loadProjectReviewSummaryIfAvailable(project.id);
-      } catch {
-        return null;
-      }
-    })
-  );
+  const coordinator = getProjectSummaryCoordinator();
 
-  return projects.map((project, index) =>
-    projectView(project, summaries[index] ?? undefined)
+  if (options.summaryMode === "complete") {
+    const summaries = await coordinator.loadAll(projects.map((project) => project.id));
+
+    return projects.map((project, index) =>
+      projectView(project, summaries[index] ?? undefined)
+    );
+  }
+
+  coordinator.queueMissing(projects.map((project) => project.id));
+
+  return projects.map((project) =>
+    projectView(project, coordinator.get(project.id) ?? undefined)
   );
+}
+
+function getProjectSummaryCoordinator(): ProjectSummaryCoordinator<ProjectReviewSummaryView> {
+  projectSummaryCoordinator ??= new ProjectSummaryCoordinator({
+    concurrency: 2,
+    load: loadProjectReviewSummaryIfAvailable
+  });
+
+  return projectSummaryCoordinator;
 }
 
 function listBranchRefsForProject(projectId: string): Promise<readonly string[]> {
@@ -1548,6 +1969,8 @@ export function createDesktopCompanionDeps(): CompanionDeps {
   const storage = getStorage();
 
   return {
+    areProjectSummariesPending: (projectIds) =>
+      projectIds.some((projectId) => getProjectSummaryCoordinator().isPending(projectId)),
     companionAuth: getCompanionAuthManager(),
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
     commentsReport: async (projectId) =>
@@ -1578,6 +2001,17 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
     listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
+    listRepositoryCatalog: () => Promise.resolve(listCompanionRepositoryCatalog()),
+    isRepositoryCatalogScanPending: repositoryCatalogScanPending,
+    listProjectWorktreeAvailability: (projectIds) =>
+      repositoryWorktreeService().availability(projectIds),
+    listProjectWorktrees: (projectId) => repositoryWorktreeService().list(projectId),
+    openProjectWorktree: async (projectId, body) => {
+      const project = await repositoryWorktreeService().open(projectId, body.worktreeId);
+      emitProjectsOpened([project.id], project.id);
+      return projectView(project);
+    },
+    openRepositories: openCompanionRepositories,
     loadFileDiff: async (projectId, pathName) => {
       const [diff, workspace] = await Promise.all([
         loadProjectFileDiffForCompanion(projectId, pathName),
@@ -1600,7 +2034,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     },
     loadFileImage: (projectId, pathName, side, diffHash, previousPath, status) =>
       loadProjectFileImage(projectId, pathName, side, diffHash, previousPath, status),
-    loadWorkspaceView: loadProjectWorkspace,
+    loadWorkspaceView: loadCompanionProjectWorkspace,
     markReviewed: async (input) => {
       const result = await markProjectFileReviewed(input);
 
@@ -1675,24 +2109,30 @@ async function openProjectFromDialog(
   sender: WebContents
 ): Promise<ReviewWorkspaceView | null> {
   const dialogOptions: OpenDialogOptions = {
-    buttonLabel: "Open Repository",
-    properties: ["openDirectory"]
+    buttonLabel: "Open Repositories",
+    message: "Select one or more repository folders.",
+    properties: ["openDirectory", "multiSelections"],
+    title: "Select one or more repository folders"
   };
-  const result = mainWindow
+  const dialogResult = mainWindow
     ? await dialog.showOpenDialog(mainWindow, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions);
 
-  if (result.canceled) {
+  if (dialogResult.canceled) {
     return null;
   }
 
-  const selectedPath = result.filePaths[0];
-
-  if (!selectedPath) {
+  if (dialogResult.filePaths.length === 0) {
     return null;
   }
 
-  const project = await storeRepositoryAtPath(selectedPath);
+  const openResult = await openRepositoryPaths(dialogResult.filePaths);
+  if (dialogResult.filePaths.length > 1) void showRepositoryOpenSummary(openResult);
+  const project = openResult.projects[0];
+
+  if (!project) {
+    throw new Error("Selected folder is not inside a Git repository.");
+  }
 
   return loadProjectWorkspace(
     project.id,
@@ -1700,23 +2140,369 @@ async function openProjectFromDialog(
   );
 }
 
-async function storeRepositoryAtPath(selectedPath: string): Promise<ProjectRecord> {
-  const repository = await findGitRepository(selectedPath);
+function openRepositoryPaths(
+  selectedPaths: readonly string[]
+): Promise<RepositoryOpenBatchResult> {
+  return createRepositoryOpenService({
+    findRepository: findGitRepository,
+    isLinkedWorktree: async (repositoryPath) =>
+      (await getWorktreeInfo(repositoryPath)).isLinkedWorktree,
+    isProjectOpen: (projectId) => getStorage().getProjectTabOrder().includes(projectId),
+    now: () => new Date(),
+    clearProjectWorktreeIdentity: (projectId) =>
+      getStorage().clearProjectWorktreeIdentity(projectId),
+    registerProject: upsertOpenedProject
+  }).openPaths(selectedPaths);
+}
 
-  if (!repository) {
-    throw new Error("Selected folder is not inside a Git repository.");
+async function previewDroppedRepositoryPaths(droppedPaths: readonly string[]): Promise<
+  readonly {
+    readonly displayPath: string;
+    readonly id: string;
+    readonly name: string;
+    readonly rememberEligible: boolean;
+  }[]
+> {
+  droppedRepositoryCandidates.clear();
+  const candidates = await previewDroppedRepositoryCandidates(droppedPaths, {
+    discoverRepositories,
+    findRepository: findGitRepository,
+    isDirectory: (pathName) => statSync(pathName).isDirectory(),
+    realpath: (pathName) => realpathSync.native(pathName)
+  });
+  return candidates.map((candidate) => {
+    const id = randomUUID();
+    droppedRepositoryCandidates.set(id, candidate);
+    return {
+      displayPath: candidate.path,
+      id,
+      name: path.basename(candidate.path),
+      rememberEligible: Boolean(candidate.searchRootPath)
+    };
+  });
+}
+
+async function showRepositoryOpenSummary(
+  result: RepositoryOpenBatchResult
+): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  await dialog.showMessageBox(mainWindow, {
+    buttons: ["Done"],
+    detail: `${String(result.newlyOpenedCount)} opened · ${String(result.duplicates.length)} already open or duplicated · ${String(result.failures.length)} failed validation`,
+    message: `Opened ${String(result.newlyOpenedCount)} ${result.newlyOpenedCount === 1 ? "repository" : "repositories"}`,
+    title: "Repository open complete",
+    type: result.failures.length > 0 ? "warning" : "info"
+  });
+}
+
+async function offerDroppedFoldersAsSearchRoots(
+  failedPaths: readonly string[]
+): Promise<void> {
+  const folders = failedPaths.filter((pathName) => {
+    try {
+      return statSync(pathName).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  if (folders.length === 0) return;
+  const response = mainWindow
+    ? await dialog.showMessageBox(mainWindow, {
+        buttons: ["Scan for repositories", "Not now"],
+        cancelId: 1,
+        defaultId: 0,
+        detail: folders.join("\n"),
+        message:
+          folders.length === 1
+            ? "This folder is not a Git repository. Scan inside it instead?"
+            : "Some folders are not Git repositories. Scan inside them instead?",
+        title: "Remember as repository search folder?",
+        type: "question"
+      })
+    : { response: 1 };
+  if (response.response !== 0) return;
+  for (const folder of folders) {
+    const root = getStorage().addRepositorySearchRoot(folder);
+    void scanRepositoryRoot(root.id).catch(() => undefined);
+  }
+}
+
+function listCompanionRepositoryCatalog(): readonly RepositoryCatalogEntry[] {
+  return listCompanionRepositoryCatalogView({
+    listOpenProjects: () => getStorage().listOpenProjects(),
+    listRepositoryCatalog: () => getStorage().listRepositoryCatalog(),
+    scheduleStaleScans: () => {
+      setImmediate(queueStaleRepositoryScans);
+    }
+  });
+}
+
+function repositoryCatalogScanPending(): boolean {
+  if (repositoryScans.size > 0) return true;
+
+  const staleBefore = Date.now() - 24 * 60 * 60 * 1000;
+  return getStorage()
+    .listRepositorySearchRoots()
+    .some((root) => shouldRefreshRepositorySearchRoot(root, staleBefore));
+}
+
+async function openCompanionRepositories(
+  body: OpenRepositoriesBody
+): Promise<OpenRepositoriesResponse> {
+  const failures: OpenRepositoriesResponse["failures"][number][] = [];
+  const paths: string[] = [];
+
+  for (const repositoryId of body.repositoryIds) {
+    const entry = getStorage().getRepositoryCatalogEntry(repositoryId);
+    if (!entry) {
+      failures.push({ reason: "invalid", repositoryId });
+      continue;
+    }
+    if (!entry.available || !existsSync(entry.path)) {
+      failures.push({ reason: "missing", repositoryId });
+      continue;
+    }
+    const root = getStorage()
+      .listRepositorySearchRoots()
+      .find((candidate) => candidate.id === entry.rootId && candidate.enabled);
+    if (!root || !isCatalogPathAuthorized(root.path, entry.path)) {
+      failures.push({ reason: "unauthorized", repositoryId });
+      continue;
+    }
+    const validatedPath = await validatedAuthorizedCatalogRepositoryPath(
+      root.path,
+      entry.path
+    );
+    if (!validatedPath) {
+      failures.push({ reason: "missing", repositoryId });
+      continue;
+    }
+    paths.push(validatedPath);
   }
 
-  const project = {
-    id: repository.root,
-    lastOpenedAt: new Date().toISOString(),
-    name: path.basename(repository.root),
-    path: repository.root
+  const result = await openRepositoryPaths(paths);
+  const focusProject = result.projects[0];
+  if (focusProject) {
+    emitProjectsOpened(
+      result.projects.map((project) => project.id),
+      focusProject.id
+    );
+  }
+  const openedPaths = new Set(result.projects.map((project) => project.path));
+  for (const pathName of paths) {
+    if (!openedPaths.has(pathName)) {
+      const entry = getStorage()
+        .listRepositoryCatalog()
+        .find((candidate) => candidate.path === pathName);
+      if (entry) failures.push({ reason: "missing", repositoryId: entry.id });
+    }
+  }
+
+  return {
+    failures,
+    openedProjects: result.projects.map((project) => projectView(project))
   };
+}
 
-  upsertOpenedProject(project);
+function repositoryWorktreeService() {
+  const changeCounts = getWorktreeChangeCountCoordinator();
 
-  return project;
+  return createRepositoryWorktreeService({
+    changeCount: (worktreePath) => changeCounts.get(worktreePath),
+    findProject: (projectId) => getStorage().getProject(projectId),
+    findRepository: findGitRepository,
+    listOpenProjects: () => getStorage().listOpenProjects(),
+    listWorktrees: listGitWorktrees,
+    openPaths: openRepositoryPaths,
+    persistProject: (project) => getStorage().upsertProject(project),
+    pathExists: existsSync,
+    queueChangeCount: (worktreePath, options) =>
+      changeCounts.queue(worktreePath, options),
+    worktreeInfo: getWorktreeInfo
+  });
+}
+
+function repositorySearchRootSuggestions(): readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+}[] {
+  const configuredRoots = getStorage()
+    .listRepositorySearchRoots()
+    .filter((root) => root.enabled)
+    .map((root) => path.normalize(root.path));
+  const candidates = [
+    ...getStorage()
+      .listKnownProjects()
+      .map((project) => path.dirname(project.path)),
+    ...["Workspace", "Developer", "Projects", "src"].map((name) =>
+      path.join(homedir(), name)
+    )
+  ];
+  const seen = new Set<string>();
+
+  return candidates.flatMap((candidate) => {
+    let resolved: string;
+    try {
+      if (!statSync(candidate).isDirectory()) return [];
+      resolved = path.normalize(realpathSync(candidate));
+    } catch {
+      return [];
+    }
+    if (
+      !isSafeRepositorySearchRootSuggestion(resolved) ||
+      seen.has(resolved) ||
+      configuredRoots.some(
+        (root) => root === resolved || isPathInsideApprovedRoot(root, resolved)
+      )
+    ) {
+      return [];
+    }
+    seen.add(resolved);
+    return [
+      {
+        id: createHash("sha256").update(resolved).digest("base64url"),
+        name: path.basename(resolved),
+        path: resolved
+      }
+    ];
+  });
+}
+
+function getWorktreeChangeCountCoordinator(): ProjectSummaryCoordinator<number> {
+  worktreeChangeCountCoordinator ??= new ProjectSummaryCoordinator({
+    concurrency: 2,
+    load: async (worktreePath) => (await getGitStatus(worktreePath)).length,
+    onLoaded: (worktreePath, changeCount) => {
+      if (changeCount !== null) {
+        emitWorktreeChangeCount(worktreePath, changeCount);
+      }
+    }
+  });
+
+  return worktreeChangeCountCoordinator;
+}
+
+function scanRepositoryRoot(rootId: string): Promise<void> {
+  if (isQuitting) {
+    return Promise.reject(new Error("Cannot scan repositories while quitting."));
+  }
+  const existing = repositoryScans.get(rootId);
+  if (existing) return existing.promise;
+  const root = getStorage()
+    .listRepositorySearchRoots()
+    .find((candidate) => candidate.id === rootId && candidate.enabled);
+  if (!root) return Promise.reject(new Error("Repository search root not found."));
+
+  getStorage().beginRepositoryRootScan(rootId);
+  const controller = new AbortController();
+  const scan = discoverRepositories({
+    findRepository: findGitRepository,
+    onProgress: (progress) => {
+      emitRepositoryScanProgress({ ...progress, rootId, status: "scanning" });
+    },
+    rootPath: root.path,
+    signal: controller.signal
+  })
+    .then((result) => {
+      if (isQuitting || !storage) return;
+      storage.replaceRepositoryCatalogForRoot(rootId, result.candidates);
+      emitRepositoryScanProgress({
+        rootId,
+        scannedDirectories: result.scannedDirectories,
+        skippedDirectories: result.skippedDirectories,
+        status: "complete"
+      });
+    })
+    .catch((error: unknown) => {
+      if (isRepositoryScanAbort(error) || isQuitting) {
+        if (isQuitting) return;
+        emitRepositoryScanProgress({
+          rootId,
+          scannedDirectories: 0,
+          skippedDirectories: 0,
+          status: "cancelled"
+        });
+        return;
+      }
+      if (!storage) return;
+      storage.failRepositoryRootScan(
+        rootId,
+        error instanceof Error ? error.message : "Repository scan failed"
+      );
+      emitRepositoryScanProgress({
+        rootId,
+        scannedDirectories: 0,
+        skippedDirectories: 0,
+        status: "failed"
+      });
+      throw error;
+    })
+    .finally(() => {
+      repositoryScans.delete(rootId);
+    });
+  repositoryScans.set(rootId, { controller, promise: scan });
+  return scan;
+}
+
+function emitRepositoryScanProgress(progress: {
+  readonly rootId: string;
+  readonly scannedDirectories: number;
+  readonly skippedDirectories: number;
+  readonly status: "cancelled" | "complete" | "failed" | "scanning";
+}): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("repositories:scanProgress", progress);
+    }
+  }
+}
+
+function queueStaleRepositoryScans(): void {
+  if (isQuitting || !storage) return;
+  const activeStorage = storage;
+  const staleBefore = Date.now() - 24 * 60 * 60 * 1000;
+  for (const root of activeStorage.listRepositorySearchRoots()) {
+    if (shouldRefreshRepositorySearchRoot(root, staleBefore)) {
+      void scanRepositoryRoot(root.id).catch(() => undefined);
+    }
+  }
+}
+
+function isCatalogPathAuthorized(rootPath: string, candidatePath: string): boolean {
+  try {
+    return isPathInsideApprovedRoot(
+      realpathSync.native(rootPath),
+      realpathSync.native(candidatePath)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function validatedCatalogRepositoryPath(
+  catalogPath: string
+): Promise<string | null> {
+  try {
+    const repository = await findGitRepository(catalogPath);
+    if (!repository) return null;
+    return realpathSync.native(repository.root) === realpathSync.native(catalogPath)
+      ? repository.root
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function validatedAuthorizedCatalogRepositoryPath(
+  rootPath: string,
+  catalogPath: string
+): Promise<string | null> {
+  const validatedPath = await validatedCatalogRepositoryPath(catalogPath);
+  if (!validatedPath || !isCatalogPathAuthorized(rootPath, validatedPath)) {
+    return null;
+  }
+  return validatedPath;
 }
 
 async function loadProjectWorkspace(
@@ -1760,7 +2546,7 @@ async function loadProjectReviewSummaryIfAvailable(
   }
 
   if (!existsSync(project.path)) {
-    deleteStoredProject(project.id);
+    closeProjectTab(project.id);
     await projectWatchService?.stopProject(project.id);
     return null;
   }
@@ -1768,6 +2554,19 @@ async function loadProjectReviewSummaryIfAvailable(
   const { files, progress } = await loadProjectReviewState(project);
 
   return projectReviewSummaryView(files, progress);
+}
+
+async function loadCompanionProjectWorkspace(
+  projectId: string
+): Promise<ReviewWorkspaceView> {
+  const cached = companionWorkspaceCache.get(projectId);
+  if (cached) return cached;
+  const generation = companionWorkspaceGenerations.get(projectId) ?? 0;
+  const workspace = await loadProjectWorkspace(projectId);
+  if ((companionWorkspaceGenerations.get(projectId) ?? 0) === generation) {
+    companionWorkspaceCache.set(projectId, workspace);
+  }
+  return workspace;
 }
 
 async function loadProjectReviewState(
@@ -1843,7 +2642,7 @@ async function loadProjectWorkspaceIfAvailable(
   }
 
   if (!existsSync(project.path)) {
-    deleteStoredProject(project.id);
+    closeProjectTab(project.id);
     await projectWatchService?.stopProject(project.id);
     return null;
   }
@@ -2144,6 +2943,7 @@ function workspaceSummaryFromWorkspace(workspace: ReviewWorkspaceView): Workspac
 }
 
 function notifyDesktopRenderer(projectId: string): void {
+  getProjectSummaryCoordinator().invalidate(projectId);
   const project = getStorage().getProject(projectId);
 
   if (!project) {
@@ -2452,13 +3252,30 @@ async function reviewCommentReportItems(
 }
 
 function upsertOpenedProject(project: ProjectRecord): void {
+  invalidateCompanionWorkspace(project.id);
+  getProjectSummaryCoordinator().cancel(project.id);
   getStorage().upsertProject(project);
   getStorage().appendProjectToTabOrder(project.id);
 }
 
-function deleteStoredProject(projectId: string): void {
-  getStorage().removeProjectFromTabOrder(projectId);
-  getStorage().deleteProject(projectId);
+function boundedRepositoryBatch(input: unknown, property: string): readonly string[] {
+  const values = readStringArrayProperty(input, property);
+  if (values.length > 100) throw new Error("Process at most 100 folders at once.");
+  return [...new Set(values)];
+}
+
+function closeProjectTab(projectId: string): void {
+  invalidateCompanionWorkspace(projectId);
+  projectSummaryCoordinator?.cancel(projectId);
+  getStorage().closeProjectTab(projectId);
+}
+
+function invalidateCompanionWorkspace(projectId: string): void {
+  companionWorkspaceCache.delete(projectId);
+  companionWorkspaceGenerations.set(
+    projectId,
+    (companionWorkspaceGenerations.get(projectId) ?? 0) + 1
+  );
 }
 
 function assertStoredProject(projectId: string): StoredProjectRecord {

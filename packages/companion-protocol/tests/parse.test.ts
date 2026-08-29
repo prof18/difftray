@@ -6,9 +6,61 @@ import {
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
+  parseProjectWorktreeAvailabilityBody,
+  parseOpenWorktreeBody,
+  parseOpenRepositoriesBody,
   parsePairRequestBody,
   parseUpdateCommentBody
 } from "../src/index.js";
+
+describe("parseOpenWorktreeBody", () => {
+  it("accepts opaque ids and rejects raw or missing path payloads", () => {
+    expect(parseOpenWorktreeBody({ worktreeId: "opaque-id" })).toEqual({
+      ok: true,
+      value: { worktreeId: "opaque-id" }
+    });
+    expect(parseOpenWorktreeBody({ path: "/workspace/agent" })).toEqual({
+      error: "missing worktreeId",
+      ok: false
+    });
+  });
+});
+
+describe("parseProjectWorktreeAvailabilityBody", () => {
+  it("accepts a bounded unique set of opaque project ids", () => {
+    expect(parseProjectWorktreeAvailabilityBody({ projectIds: ["one", "two"] })).toEqual({
+      ok: true,
+      value: { projectIds: ["one", "two"] }
+    });
+  });
+
+  it("rejects malformed, duplicate, and oversized project id requests", () => {
+    expect(parseProjectWorktreeAvailabilityBody({})).toEqual({
+      error: "projectIds must contain 1 to 100 ids",
+      ok: false
+    });
+    expect(parseProjectWorktreeAvailabilityBody({ projectIds: ["one", "one"] })).toEqual({
+      error: "projectIds must not contain duplicates",
+      ok: false
+    });
+    expect(
+      parseProjectWorktreeAvailabilityBody({
+        projectIds: Array.from({ length: 101 }, (_, index) => `project-${index}`)
+      })
+    ).toEqual({ error: "projectIds must contain 1 to 100 ids", ok: false });
+  });
+});
+
+describe("parseOpenRepositoriesBody", () => {
+  it("accepts bounded opaque ids and rejects duplicates and raw paths", () => {
+    expect(parseOpenRepositoriesBody({ repositoryIds: ["one", "two"] })).toEqual({
+      ok: true,
+      value: { repositoryIds: ["one", "two"] }
+    });
+    expect(parseOpenRepositoriesBody({ repositoryIds: ["one", "one"] }).ok).toBe(false);
+    expect(parseOpenRepositoriesBody({ paths: ["/workspace/repo"] }).ok).toBe(false);
+  });
+});
 
 describe("parsePairRequestBody", () => {
   it("accepts exactly one QR secret or manual code", () => {

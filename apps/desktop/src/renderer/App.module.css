@@ -9,6 +9,31 @@
   letter-spacing: 0;
 }
 
+.repositoryDropOverlay {
+  -webkit-app-region: no-drag;
+  position: fixed;
+  z-index: 20;
+  inset: 50px 18px 18px;
+  display: grid;
+  place-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  text-align: center;
+}
+
+.repositoryDropOverlay strong {
+  font-size: 20px;
+}
+
+.repositoryDropOverlay span {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
 .titlebarDragArea {
   -webkit-app-region: drag;
   display: grid;
@@ -109,7 +134,7 @@
 .launchState,
 .emptyState,
 .noFileState {
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   display: flex;
   min-height: 0;
   flex: 1;

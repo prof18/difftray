@@ -2,6 +2,9 @@ import { request, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  COMPANION_CAPABILITY_PROJECT_IDENTITY,
+  COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
+  COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
   COMPANION_PROTOCOL_VERSION,
   openEnvelope,
   sealEnvelope,
@@ -12,6 +15,7 @@ import { WebSocket } from "ws";
 
 import type { CompanionDeps } from "./api.js";
 import { createCompanionEnvelopeVerifier } from "./auth.js";
+import { ExpectedUnavailableWorktreeError } from "../repository-worktree-service.js";
 import { createCompanionServer } from "./server.js";
 
 type StartedServer = {
@@ -311,6 +315,175 @@ describe("companion server core", () => {
     expect(pairResponses.at(10)?.status).toBe(429);
   });
 
+  it("rate limits worktree listings on the encrypted POST transport separately from opens", async () => {
+    const { baseUrl } = await startServer({
+      openProjectWorktree: async () => ({
+        id: "opened-project",
+        name: "Opened project",
+        path: "/tmp/opened-project"
+      })
+    });
+
+    const openResponses = [];
+    for (let index = 0; index < 10; index += 1) {
+      openResponses.push(
+        await rawEncryptedRequest({
+          baseUrl,
+          body: { worktreeId: "worktree-id" },
+          logicalMethod: "POST",
+          path: "/companion/v1/projects/project-1/worktrees/open"
+        })
+      );
+    }
+
+    const listResponses = [];
+    for (let index = 0; index < 21; index += 1) {
+      listResponses.push(
+        await rawEncryptedRequest({
+          baseUrl,
+          logicalMethod: "GET",
+          path: "/companion/v1/projects/project-1/worktrees"
+        })
+      );
+    }
+
+    expect(openResponses.every(({ status }) => status === 200)).toBe(true);
+    expect(listResponses.slice(0, 20).every(({ status }) => status === 200)).toBe(true);
+    expect(listResponses.at(20)?.status).toBe(429);
+  });
+
+  it("returns not_found for an unknown project before listing worktrees", async () => {
+    const listProjectWorktrees = vi.fn(async () => {
+      throw new Error("unexpected list for unknown project");
+    });
+    const { baseUrl } = await startServer({
+      listProjectWorktrees,
+      storage: {
+        ...testCompanionStorage(),
+        getProject: () => null
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/stale-project/worktrees"
+    });
+
+    expect(response.wireStatus).toBe(404);
+    expect(response.plain).toMatchObject({
+      body: {
+        error: { code: "not_found", protocolVersion: COMPANION_PROTOCOL_VERSION }
+      },
+      status: 404
+    });
+    expect(listProjectWorktrees).not.toHaveBeenCalled();
+  });
+
+  it("maps a project disappearing during worktree listing to not_found", async () => {
+    const listProjectWorktrees = vi.fn(async () => {
+      throw new ExpectedUnavailableWorktreeError("project was removed");
+    });
+    const { baseUrl } = await startServer({ listProjectWorktrees });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/worktrees"
+    });
+
+    expect(response.wireStatus).toBe(404);
+    expect(response.plain).toMatchObject({
+      body: {
+        error: { code: "not_found", protocolVersion: COMPANION_PROTOCOL_VERSION }
+      },
+      status: 404
+    });
+    expect(listProjectWorktrees).toHaveBeenCalledOnce();
+  });
+
+  it("maps only expected unavailable worktree errors to not_found", async () => {
+    const expected = await encryptedRequest({
+      baseUrl: (
+        await startServer({
+          openProjectWorktree: async () => {
+            throw new ExpectedUnavailableWorktreeError("stale worktree");
+          }
+        })
+      ).baseUrl,
+      body: { worktreeId: "worktree-id" },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/project-1/worktrees/open"
+    });
+
+    expect(expected.wireStatus).toBe(404);
+    expect(expected.plain.body).toMatchObject({
+      error: { code: "not_found", protocolVersion: COMPANION_PROTOCOL_VERSION }
+    });
+  });
+
+  it("seals genuine worktree open failures as internal", async () => {
+    const { baseUrl } = await startServer({
+      openProjectWorktree: async () => {
+        throw new Error("git unavailable");
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      body: { worktreeId: "worktree-id" },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/project-1/worktrees/open"
+    });
+
+    expect(response.wireStatus).toBe(500);
+    expect(response.plain.body).toMatchObject({
+      error: { code: "internal", protocolVersion: COMPANION_PROTOCOL_VERSION }
+    });
+  });
+
+  it("returns batched worktree availability and rejects invalid batch bodies", async () => {
+    const listProjectWorktreeAvailability = vi.fn(async (projectIds: readonly string[]) =>
+      projectIds.map((projectId) => ({
+        hasSiblingWorktrees: projectId === "project-1",
+        projectId
+      }))
+    );
+    const { baseUrl } = await startServer({ listProjectWorktreeAvailability });
+
+    const valid = await encryptedRequest({
+      baseUrl,
+      body: { projectIds: ["project-1"] },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/worktree-availability"
+    });
+    const unknown = await encryptedRequest({
+      baseUrl,
+      body: { projectIds: ["project-2"] },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/worktree-availability"
+    });
+    const duplicate = await encryptedRequest({
+      baseUrl,
+      body: { projectIds: ["project-1", "project-1"] },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/worktree-availability"
+    });
+
+    expect(valid.plain).toMatchObject({
+      body: {
+        availability: [{ hasSiblingWorktrees: true, projectId: "project-1" }]
+      },
+      status: 200
+    });
+    expect(unknown.plain).toMatchObject({
+      body: { error: { code: "not_found" } },
+      status: 404
+    });
+    expect(duplicate.plain.status).toBe(400);
+    expect(listProjectWorktreeAvailability).toHaveBeenCalledTimes(1);
+  });
+
   it("validates file diff paths against the current workspace before loading content", async () => {
     const calls: string[] = [];
     const { baseUrl } = await startServer({
@@ -485,6 +658,199 @@ describe("companion server core", () => {
       },
       status: 200
     });
+  });
+
+  it("only exposes pending project summaries to clients that opt in", async () => {
+    const requestedSummaryModes: string[] = [];
+    const { baseUrl } = await startServer({
+      areProjectSummariesPending: () => true,
+      listRecentProjects: async (...args: unknown[]) => {
+        const options = args[0] as { readonly summaryMode?: string } | undefined;
+        const summaryMode = options?.summaryMode ?? "missing";
+        requestedSummaryModes.push(summaryMode);
+        return [
+          {
+            id: "project-1",
+            name: "Difftray",
+            path: "/repo",
+            ...(summaryMode === "complete"
+              ? {
+                  reviewSummary: {
+                    attentionCount: 0,
+                    progress: {
+                      reviewedVisibleFiles: 2,
+                      totalVisibleReviewableFiles: 3
+                    }
+                  }
+                }
+              : {})
+          }
+        ];
+      }
+    });
+
+    const legacyResponse = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+    const capableResponse = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+
+    expect(legacyResponse.plain.body).toEqual({
+      projects: [
+        {
+          id: "project-1",
+          name: "Difftray",
+          path: "/repo",
+          reviewSummary: {
+            attentionCount: 0,
+            progress: {
+              reviewedVisibleFiles: 2,
+              totalVisibleReviewableFiles: 3
+            }
+          }
+        }
+      ]
+    });
+    expect(capableResponse.plain.body).toEqual({
+      projects: [{ id: "project-1", name: "Difftray", path: "/repo" }],
+      summariesPending: true
+    });
+    expect(requestedSummaryModes).toEqual(["complete", "background"]);
+  });
+
+  it("only exposes structured worktree identity to clients that opt in", async () => {
+    const project = {
+      id: "project-1",
+      name: "worktree-folder",
+      path: "/repo/worktree-folder",
+      repositoryName: "Difftray",
+      worktreeName: "feature/compatibility"
+    };
+    const { baseUrl } = await startServer({
+      listRecentProjects: async () => [project],
+      loadWorkspaceView: async () => ({
+        ...testWorkspace(project.id),
+        project
+      })
+    });
+
+    const legacyProjects = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+    const capableProjects = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_PROJECT_IDENTITY],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+    const legacyWorkspace = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+    const capableWorkspace = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_PROJECT_IDENTITY],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(legacyProjects.plain.body).toEqual({
+      projects: [{ id: project.id, name: project.name, path: project.path }]
+    });
+    expect(capableProjects.plain.body).toEqual({ projects: [project] });
+    expect(legacyWorkspace.plain.body).toMatchObject({
+      workspace: {
+        project: { id: project.id, name: project.name, path: project.path }
+      }
+    });
+    expect(
+      (legacyWorkspace.plain.body as { workspace: { project: unknown } }).workspace
+        .project
+    ).toEqual({ id: project.id, name: project.name, path: project.path });
+    expect(capableWorkspace.plain.body).toMatchObject({ workspace: { project } });
+  });
+
+  it("lists the approved repository catalog and opens opaque ids in a batch", async () => {
+    const openRepositories = vi.fn(async () => ({
+      failures: [{ reason: "missing" as const, repositoryId: "missing-id" }],
+      openedProjects: [{ id: "project-2", name: "Catalog", path: "/catalog" }]
+    }));
+    const { baseUrl } = await startServer({
+      listRepositoryCatalog: async () => [
+        {
+          displayPath: "/catalog",
+          id: "opaque-id",
+          name: "Catalog",
+          state: "available"
+        }
+      ],
+      isRepositoryCatalogScanPending: () => true,
+      openRepositories
+    });
+
+    const listed = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/repositories"
+    });
+    const capableListed = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE],
+      logicalMethod: "GET",
+      path: "/companion/v1/repositories"
+    });
+    const opened = await encryptedRequest({
+      baseUrl,
+      body: { repositoryIds: ["opaque-id", "missing-id"] },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/open"
+    });
+
+    expect(listed.plain.body).toMatchObject({
+      repositories: [{ id: "opaque-id", state: "available" }]
+    });
+    expect(listed.plain.body).not.toHaveProperty("scanning");
+    expect(capableListed.plain.body).toMatchObject({
+      repositories: [{ id: "opaque-id", state: "available" }],
+      scanning: true
+    });
+    expect(opened.plain.body).toMatchObject({
+      failures: [{ reason: "missing", repositoryId: "missing-id" }],
+      openedProjects: [{ id: "project-2" }]
+    });
+    expect(openRepositories).toHaveBeenCalledWith({
+      repositoryIds: ["opaque-id", "missing-id"]
+    });
+  });
+
+  it("rejects paths and oversized repository batches before invoking desktop open", async () => {
+    const openRepositories = vi.fn(async () => ({ failures: [], openedProjects: [] }));
+    const { baseUrl } = await startServer({ openRepositories });
+    const rawPath = await encryptedRequest({
+      baseUrl,
+      body: { paths: ["/private/repo"] },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/open"
+    });
+    const oversized = await encryptedRequest({
+      baseUrl,
+      body: { repositoryIds: Array.from({ length: 101 }, (_, index) => `id-${index}`) },
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/open"
+    });
+
+    expect(rawPath.plain.status).toBe(400);
+    expect(oversized.plain.status).toBe(400);
+    expect(openRepositories).not.toHaveBeenCalled();
   });
 
   it("rejects plaintext access to authenticated routes", async () => {
@@ -764,6 +1130,13 @@ async function startServer(
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
     listRecentProjects: async () => [],
+    listRepositoryCatalog: async () => [],
+    listProjectWorktreeAvailability: async () => [],
+    listProjectWorktrees: async () => [],
+    openProjectWorktree: async () => {
+      throw new Error("Worktree not found");
+    },
+    openRepositories: async () => ({ failures: [], openedProjects: [] }),
     loadFileDiff: async () => {
       throw new Error("unexpected loadFileDiff call");
     },
@@ -864,6 +1237,16 @@ function testCompanionStorage(
       publicKey: serverPublicKey,
       secretKey: serverSecretKey
     }),
+    getProject: (id: string) =>
+      id === "project-1"
+        ? {
+            createdAt: "2026-07-02T12:00:00.000Z",
+            id,
+            name: "Project",
+            path: "/tmp/project",
+            updatedAt: "2026-07-02T12:00:00.000Z"
+          }
+        : null,
     touchCompanionDeviceLastSeen: () => undefined,
     upsertCompanionServerKeyPair: () => undefined
   } as unknown as CompanionDeps["storage"];
@@ -903,6 +1286,7 @@ async function sequentialRequests(
 async function encryptedRequest(input: {
   readonly baseUrl: string;
   readonly body?: unknown;
+  readonly capabilities?: readonly string[];
   readonly logicalMethod: string;
   readonly path: string;
 }): Promise<{
@@ -915,6 +1299,7 @@ async function encryptedRequest(input: {
     devicePublicKey,
     plaintext: {
       ...(input.body === undefined ? {} : { body: input.body }),
+      ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
       method: input.logicalMethod,
       path: input.path,
       requestId,

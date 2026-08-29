@@ -144,6 +144,8 @@ export function projectView(
     ...(project.lastOpenedAt ? { lastOpenedAt: project.lastOpenedAt } : {}),
     name: project.name,
     path: project.path,
+    ...(project.repositoryName ? { repositoryName: project.repositoryName } : {}),
+    ...(project.worktreeName ? { worktreeName: project.worktreeName } : {}),
     ...(reviewSummary ? { reviewSummary } : {})
   };
 }

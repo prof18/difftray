@@ -24,6 +24,47 @@ projects (
 When it is null, Difftray reviews working-tree Git changes. When it is set,
 Difftray reviews the current `HEAD` branch against the merge base with that base ref.
 
+Closing a project removes it from the explicit open-tab order; it does not delete
+this row or its settings, marks, and comments. Forgetting a repository is the
+separate destructive operation.
+
+### repository_roots and repository_catalog
+
+```sql
+repository_roots (
+  id text primary key,
+  path text not null unique,
+  enabled integer not null,
+  last_scan_started_at text,
+  last_scan_completed_at text,
+  last_scan_error text
+)
+
+repository_catalog (
+  id text primary key,
+  root_id text not null,
+  path text not null unique,
+  name text not null,
+  last_seen_at text not null,
+  available integer not null
+)
+
+repository_catalog_roots (
+  repository_id text not null,
+  root_id text not null,
+  last_seen_at text not null,
+  available integer not null,
+  primary key(repository_id, root_id)
+)
+```
+
+Catalog IDs are deterministic opaque hashes of normalized paths. Root membership
+is many-to-many so overlapping approved roots do not duplicate repositories or
+make a shared repository disappear when one root is removed. A rescan atomically
+updates membership availability while retaining missing entries as unavailable.
+The main process still canonicalizes and revalidates the exact Git root immediately
+before every open.
+
 ### review_targets
 
 ```sql
@@ -165,6 +206,15 @@ repositories:
 - `notify_on_drift`
 - `review_reset_trigger`
 - `wrap_diff_lines`
+- `project_tab_order_json`
+
+`project_tab_order_json` stores the ordered open-project IDs as JSON. The
+`project_tabs_explicit_v1` key marks that the tab order has been initialized;
+before that marker exists, existing projects are treated as initially open and
+the order is seeded from recency. Closing a project removes it from this
+explicit order without deleting the project or its settings, marks, and
+comments. Open-tab order is an app setting, not a `project_tab_order` table.
+Forgetting a repository remains the separate destructive operation.
 
 Installed editor presets are not stored as separate rows. Selecting a preset writes
 the existing `editor_launch_config_json` command/args shape. The Electron main

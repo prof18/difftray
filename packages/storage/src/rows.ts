@@ -16,6 +16,8 @@ export type ProjectRow = {
   readonly last_opened_at: null | string;
   readonly name: string;
   readonly path: string;
+  readonly repository_name: null | string;
+  readonly worktree_name: null | string;
   readonly updated_at: string;
 };
 
@@ -82,6 +84,8 @@ export function projectFromRow(row: ProjectRow): StoredProjectRecord {
     ...(row.last_opened_at ? { lastOpenedAt: row.last_opened_at } : {}),
     name: row.name,
     path: row.path,
+    ...(row.repository_name ? { repositoryName: row.repository_name } : {}),
+    ...(row.worktree_name ? { worktreeName: row.worktree_name } : {}),
     updatedAt: row.updated_at
   };
 }

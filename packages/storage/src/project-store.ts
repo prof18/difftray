@@ -22,16 +22,20 @@ export function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
       id,
       name,
       path,
+      repository_name,
+      worktree_name,
       default_base_ref,
       default_commit_ref,
       default_diff_target_mode,
       created_at,
       updated_at,
       last_opened_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(id) do update set
       name = excluded.name,
       path = excluded.path,
+      repository_name = case when excluded.repository_name is null then projects.repository_name else excluded.repository_name end,
+      worktree_name = case when excluded.worktree_name is null then projects.worktree_name else excluded.worktree_name end,
       default_base_ref = case
         when excluded.default_base_ref is null then projects.default_base_ref
         else excluded.default_base_ref
@@ -52,6 +56,8 @@ export function upsertProject(db: DatabaseSync, project: ProjectRecord): void {
     project.id,
     project.name,
     project.path,
+    project.repositoryName ?? null,
+    project.worktreeName ?? null,
     project.defaultBaseRef ?? null,
     project.defaultCommitRef ?? null,
     project.defaultDiffTargetMode ??
@@ -101,6 +107,19 @@ export function updateProjectDefaultDiffTarget(
     currentTimestamp(),
     projectId
   );
+}
+
+/** Clear worktree identity while preserving the rest of the project record. */
+export function clearProjectWorktreeIdentity(db: DatabaseSync, projectId: string): void {
+  db.prepare(
+    `
+      update projects
+      set repository_name = null,
+          worktree_name = null,
+          updated_at = ?
+      where id = ?
+    `
+  ).run(currentTimestamp(), projectId);
 }
 
 export function deleteProject(db: DatabaseSync, projectId: string): void {

@@ -63,6 +63,7 @@ boxes. Authenticated HTTP requests encrypt this plaintext shape:
 ```ts
 type EnvelopeRequestPlain = {
   readonly body?: unknown;
+  readonly capabilities?: readonly string[];
   readonly method: string;
   readonly path: string;
   readonly requestId: string;
@@ -74,6 +75,26 @@ The server validates the registered device public key, route-bound `method` and
 `path`, a five-minute timestamp skew window, and nonce replay within a bounded
 ten-minute replay cache. Authenticated responses encrypt the matching
 `requestId`, status, timestamp, and response body.
+
+Capabilities are additive, authenticated opt-ins. A client that sends
+`project-identity-v1` may receive the optional `repositoryName` and
+`worktreeName` fields on project views. The server omits those fields when the
+capability is absent so already-shipped v1 clients with strict response parsing
+remain compatible with newer desktop releases. Older v1 desktop releases ignore
+the additional envelope field and continue returning their legacy project shape.
+
+A client that sends `repository-scan-state-v1` may receive `scanning: true` from
+the repository-catalog endpoint while an approved search root is being scanned.
+The field is omitted for clients that do not opt in, preserving the strict legacy
+`{ repositories }` response. Capable clients can poll only while that flag is set
+and stop as soon as discovery completes or fails.
+
+A client that sends `project-summary-state-v1` may receive
+`summariesPending: true` from the project-list endpoint while its bounded
+background summary queue is still running. The field is omitted for legacy
+clients and after the queue settles, including when a project has no available
+summary. Capable clients must use this explicit state instead of inferring work
+from a missing `reviewSummary` field.
 
 ## Authenticated API
 
@@ -87,6 +108,17 @@ inside the encrypted envelope. Current routes cover:
   longer matches the current workspace.
 - Comment list/create/update/delete and comment report generation.
 - Branch/commit target discovery and diff-target switching.
+- Git-recorded worktree listing and opening by opaque, server-issued worktree id;
+  listings may include a cached, best-effort `changeCount` and never wait for Git
+  status enrichment.
+- Batched worktree availability for 1–100 distinct opaque project ids:
+  `POST /companion/v1/projects/worktree-availability`. It returns one ordered
+  `{ projectId, hasSiblingWorktrees }` entry per requested project, avoiding a
+  full worktree listing and Git status refresh per project row.
+- Approved-root repository catalog listing and batch opening by opaque catalog ids:
+  `GET /companion/v1/repositories` and `POST /companion/v1/projects/open`.
+  Batch requests contain 1–100 distinct ids and return opened projects plus
+  per-id `invalid`, `missing`, or `unauthorized` failures.
 
 The WebSocket endpoint is:
 
@@ -108,9 +140,14 @@ review state, comment reports, WebSocket events, or pairing responses without
 the paired device secret key.
 
 A paired device is trusted to view and update review workflow state for projects
-already opened in Difftray. It is not given shell execution, Git credential
-access, staging/fetch/push controls, or arbitrary file reads. File paths are
-validated as safe relative paths before diff lookup.
+already opened in Difftray. It may also enumerate and open repositories inside
+desktop-approved search roots, and Git-recorded sibling worktrees of a known
+project. Those capabilities use opaque ids: clients cannot submit filesystem
+paths. The desktop re-lists/revalidates candidates immediately before opening,
+resolves real paths to reject symlink escapes, and never grants general directory
+browsing. A paired device is not given shell execution, Git credential access,
+worktree creation/removal, staging/fetch/push controls, or arbitrary file reads.
+File paths are validated as safe relative paths before diff lookup.
 
 Revoking a device in desktop settings prevents future authenticated requests
 from that device public key. Existing clients should also treat

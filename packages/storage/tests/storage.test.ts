@@ -27,6 +27,92 @@ const reviewTarget = {
 } satisfies ReviewTargetRecord;
 
 describe("storage", () => {
+  it("atomically replaces cached repositories for an approved search root", () => {
+    const storage = openStorage(":memory:");
+    const root = storage.addRepositorySearchRoot("/workspace");
+
+    expect(root.discoveryVersion).toBe(0);
+
+    storage.beginRepositoryRootScan(root.id);
+    storage.replaceRepositoryCatalogForRoot(root.id, [
+      { name: "Difftray", path: "/workspace/difftray" },
+      { name: "FeedFlow", path: "/workspace/feed-flow" }
+    ]);
+    const firstCatalog = storage.listRepositoryCatalog();
+
+    expect(firstCatalog).toHaveLength(2);
+    expect(storage.getRepositoryCatalogEntry(firstCatalog[0]?.id ?? "")).not.toBeNull();
+    expect(storage.listRepositorySearchRoots()[0]).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        discoveryVersion: 2,
+        lastScanCompletedAt: expect.any(String),
+        path: "/workspace"
+      })
+    );
+
+    storage.replaceRepositoryCatalogForRoot(root.id, [
+      { name: "Difftray", path: "/workspace/difftray" }
+    ]);
+
+    const catalog = storage.listRepositoryCatalog();
+    expect(catalog).toEqual([
+      expect.objectContaining({ available: true, name: "Difftray" }),
+      expect.objectContaining({ available: false, name: "FeedFlow" })
+    ]);
+    storage.removeRepositorySearchRoot(root.id);
+    expect(storage.listRepositoryCatalog()).toEqual([]);
+    storage.close();
+  });
+
+  it("retains repositories shared by overlapping search roots when one root is removed", () => {
+    const storage = openStorage(":memory:");
+    const parent = storage.addRepositorySearchRoot("/workspace");
+    const nested = storage.addRepositorySearchRoot("/workspace/team");
+    const candidate = { name: "App", path: "/workspace/team/app" };
+    storage.replaceRepositoryCatalogForRoot(parent.id, [candidate]);
+    storage.replaceRepositoryCatalogForRoot(nested.id, [candidate]);
+
+    expect(storage.countAvailableRepositoriesForRoot(parent.id)).toBe(1);
+    expect(storage.countAvailableRepositoriesForRoot(nested.id)).toBe(1);
+
+    storage.removeRepositorySearchRoot(nested.id);
+
+    expect(storage.countAvailableRepositoriesForRoot(parent.id)).toBe(1);
+    expect(storage.listRepositoryCatalog()).toEqual([
+      expect.objectContaining({ available: true, name: "App", rootId: parent.id })
+    ]);
+    storage.close();
+  });
+
+  it("selects an available root for repositories shared by overlapping roots", () => {
+    const storage = openStorage(":memory:");
+    const roots = [
+      storage.addRepositorySearchRoot("/workspace"),
+      storage.addRepositorySearchRoot("/workspace/team")
+    ].sort((left, right) => left.id.localeCompare(right.id));
+    const unavailableRoot = roots[0];
+    const availableRoot = roots[1];
+    const candidate = { name: "App", path: "/workspace/team/app" };
+
+    storage.replaceRepositoryCatalogForRoot(unavailableRoot.id, [candidate]);
+    storage.replaceRepositoryCatalogForRoot(availableRoot.id, [candidate]);
+    storage.replaceRepositoryCatalogForRoot(unavailableRoot.id, []);
+
+    const catalog = storage.listRepositoryCatalog();
+    expect(catalog).toEqual([
+      expect.objectContaining({
+        available: true,
+        name: "App",
+        rootId: availableRoot.id
+      })
+    ]);
+    expect(storage.getRepositoryCatalogEntry(catalog[0]?.id ?? "")).toEqual(
+      expect.objectContaining({ available: true, rootId: availableRoot.id })
+    );
+    storage.close();
+  });
+
   it("creates and retrieves projects", () => {
     const storage = openStorage(":memory:");
 
@@ -41,6 +127,72 @@ describe("storage", () => {
     );
     expect(storage.getProjectByPath(project.path)).toEqual(
       expect.objectContaining({ id: project.id })
+    );
+    storage.close();
+  });
+
+  it("round-trips optional repository and worktree names", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject({
+      ...project,
+      repositoryName: "Difftray",
+      worktreeName: "codex/feature"
+    });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        repositoryName: "Difftray",
+        worktreeName: "codex/feature"
+      })
+    );
+    storage.close();
+  });
+
+  it("clears worktree identity without changing the project path or settings", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject({
+      ...project,
+      defaultBaseRef: "main",
+      defaultDiffTargetMode: "branch",
+      repositoryName: "Difftray",
+      worktreeName: "codex/feature"
+    });
+
+    storage.clearProjectWorktreeIdentity(project.id);
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        defaultBaseRef: "main",
+        defaultDiffTargetMode: "branch",
+        id: project.id,
+        name: project.name,
+        path: project.path
+      })
+    );
+    expect(storage.getProject(project.id)).not.toEqual(
+      expect.objectContaining({
+        repositoryName: expect.any(String),
+        worktreeName: expect.any(String)
+      })
+    );
+    storage.close();
+  });
+
+  it("preserves worktree identity for unrelated project upserts", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject({
+      ...project,
+      repositoryName: "Difftray",
+      worktreeName: "codex/feature"
+    });
+
+    storage.upsertProject({ ...project, lastOpenedAt: "2026-01-01T00:00:00.000Z" });
+
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        repositoryName: "Difftray",
+        worktreeName: "codex/feature"
+      })
     );
     storage.close();
   });
@@ -193,6 +345,79 @@ describe("storage", () => {
     storage.close();
   });
 
+  it("lists known projects separately from the open tab subset", () => {
+    const storage = openStorage(":memory:");
+
+    storage.upsertProject({
+      id: "closed-project",
+      lastOpenedAt: "2026-01-02T00:00:00.000Z",
+      name: "Closed",
+      path: "/tmp/closed"
+    });
+    storage.upsertProject({
+      id: "open-project",
+      lastOpenedAt: "2026-01-01T00:00:00.000Z",
+      name: "Open",
+      path: "/tmp/open"
+    });
+    storage.appendProjectToTabOrder("open-project");
+
+    expect(storage.listKnownProjects().map(({ id }) => id)).toEqual([
+      "closed-project",
+      "open-project"
+    ]);
+    expect(storage.listOpenProjects().map(({ id }) => id)).toEqual(["open-project"]);
+    storage.close();
+  });
+
+  it("closes a tab without deleting project-owned review state", () => {
+    const storage = openStorage(":memory:");
+    storage.upsertProject({
+      ...project,
+      lastOpenedAt: "2026-01-02T00:00:00.000Z"
+    });
+    storage.appendProjectToTabOrder(project.id);
+    storage.upsertReviewTarget(reviewTarget);
+    storage.upsertProjectSettings({
+      fileListCollapsed: true,
+      fileListWidth: 500,
+      projectId: project.id
+    });
+    storage.markReviewed({
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewedDiffHash: "hash-a",
+      reviewTargetId: reviewTarget.id
+    });
+    const comment = storage.createReviewComment({
+      body: "Keep this after closing.",
+      diffHash: "hash-a",
+      lineEnd: 12,
+      lineStart: 12,
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id,
+      side: "additions"
+    });
+
+    storage.closeProjectTab(project.id);
+
+    expect(storage.listOpenProjects()).toEqual([]);
+    expect(storage.getProject(project.id)).toEqual(
+      expect.objectContaining({
+        id: project.id,
+        lastOpenedAt: "2026-01-02T00:00:00.000Z"
+      })
+    );
+    expect(storage.getReviewTarget(reviewTarget.id)).not.toBeNull();
+    expect(storage.listReviewMarks(reviewTarget.id)).toHaveLength(1);
+    expect(storage.getReviewComment(comment.id)).toEqual(comment);
+    expect(storage.getProjectSettings(project.id)).toEqual(
+      expect.objectContaining({ fileListCollapsed: true, fileListWidth: 500 })
+    );
+    storage.close();
+  });
+
   it("deletes projects and cascades project-owned records", () => {
     const storage = openStorage(":memory:");
     storage.upsertProject(project);
@@ -219,7 +444,7 @@ describe("storage", () => {
       side: "additions"
     });
 
-    storage.deleteProject(project.id);
+    storage.forgetProject(project.id);
 
     expect(storage.getProject(project.id)).toBeNull();
     expect(storage.listRecentProjects()).toEqual([]);

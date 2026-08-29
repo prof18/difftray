@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 
 import {
+  clearProjectWorktreeIdentity,
   deleteProject,
   getProject,
   getReviewTarget,
@@ -40,10 +41,26 @@ import {
   updateReviewComment
 } from "./review-store.js";
 import { runMigrations } from "./schema.js";
+import {
+  addRepositorySearchRoot,
+  beginRepositoryRootScan,
+  countAvailableRepositoriesForRoot,
+  failRepositoryRootScan,
+  getRepositoryCatalogEntry,
+  listRepositoryCatalog,
+  listRepositorySearchRoots,
+  removeRepositorySearchRoot,
+  replaceRepositoryCatalogForRoot,
+  type RepositoryCatalogCandidate,
+  type RepositoryCatalogRecord,
+  type RepositorySearchRootRecord
+} from "./repository-catalog-store.js";
 import { type AppSettingsRecord, type ProjectSettingsRecord } from "./settings.js";
 import {
+  applyProjectTabOrder,
   appendProjectToTabOrder,
   getProjectTabOrder,
+  initializeProjectTabs,
   removeProjectFromTabOrder,
   upsertProjectTabOrder
 } from "./project-tab-order.js";
@@ -91,6 +108,12 @@ export {
   type ThemeMode
 } from "./settings.js";
 export { type CompanionServerKeyPairRecord } from "./settings-store.js";
+export type {
+  RepositoryCatalogCandidate,
+  RepositoryCatalogRecord,
+  RepositorySearchRootRecord
+} from "./repository-catalog-store.js";
+export { repositoryDiscoveryVersion } from "./repository-catalog-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
@@ -127,9 +150,13 @@ export type VerifyAndUnmarkReviewedResult =
     };
 
 export type DifftrayStorage = {
+  readonly addRepositorySearchRoot: (path: string) => RepositorySearchRootRecord;
+  readonly beginRepositoryRootScan: (rootId: string) => void;
   readonly close: () => void;
+  readonly closeProjectTab: (id: string) => void;
+  readonly clearProjectWorktreeIdentity: (projectId: string) => void;
+  readonly countAvailableRepositoriesForRoot: (rootId: string) => number;
   readonly createReviewComment: (input: CreateReviewCommentInput) => ReviewCommentRecord;
-  readonly deleteProject: (id: string) => void;
   readonly deleteReviewComment: (id: string) => boolean;
   readonly findCompanionDeviceByPublicKey: (
     publicKey: string
@@ -142,12 +169,19 @@ export type DifftrayStorage = {
   readonly getProjectTabOrder: () => readonly string[];
   readonly getReviewComment: (id: string) => ReviewCommentRecord | null;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
+  readonly forgetProject: (id: string) => void;
+  readonly failRepositoryRootScan: (rootId: string, message: string) => void;
+  readonly getRepositoryCatalogEntry: (id: string) => RepositoryCatalogRecord | null;
   readonly isReviewed: (
     reviewTargetId: string,
     path: string,
     currentDiffHash: string
   ) => boolean;
   readonly listCompanionDevices: () => readonly CompanionDeviceRecord[];
+  readonly listKnownProjects: () => readonly StoredProjectRecord[];
+  readonly listOpenProjects: () => readonly StoredProjectRecord[];
+  readonly listRepositoryCatalog: () => readonly RepositoryCatalogRecord[];
+  readonly listRepositorySearchRoots: () => readonly RepositorySearchRootRecord[];
   readonly listReviewComments: (reviewTargetId: string) => readonly ReviewCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
@@ -175,6 +209,11 @@ export type DifftrayStorage = {
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
   readonly appendProjectToTabOrder: (projectId: string) => void;
   readonly removeProjectFromTabOrder: (projectId: string) => void;
+  readonly removeRepositorySearchRoot: (rootId: string) => void;
+  readonly replaceRepositoryCatalogForRoot: (
+    rootId: string,
+    candidates: readonly RepositoryCatalogCandidate[]
+  ) => void;
   readonly revokeCompanionDevice: (id: string) => void;
   readonly touchCompanionDeviceLastSeen: (id: string) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
@@ -196,15 +235,23 @@ export function openStorage(filename: string): DifftrayStorage {
   const db = new DatabaseSync(filename);
   db.exec("PRAGMA foreign_keys = ON");
   runMigrations(db);
+  initializeProjectTabs(db, listRecentProjects(db));
 
   return {
+    addRepositorySearchRoot: (rootPath) => addRepositorySearchRoot(db, rootPath),
+    beginRepositoryRootScan: (rootId) => beginRepositoryRootScan(db, rootId),
     close: () => {
       db.close();
     },
-    createReviewComment: (input) => createReviewComment(db, input),
-    deleteProject: (id) => {
-      deleteProject(db, id);
+    closeProjectTab: (id) => {
+      removeProjectFromTabOrder(db, id);
     },
+    clearProjectWorktreeIdentity: (projectId) => {
+      clearProjectWorktreeIdentity(db, projectId);
+    },
+    countAvailableRepositoriesForRoot: (rootId) =>
+      countAvailableRepositoriesForRoot(db, rootId),
+    createReviewComment: (input) => createReviewComment(db, input),
     deleteReviewComment: (id) => deleteReviewComment(db, id),
     findCompanionDeviceByPublicKey: (publicKey) =>
       findCompanionDeviceByPublicKey(db, publicKey),
@@ -216,9 +263,29 @@ export function openStorage(filename: string): DifftrayStorage {
     getProjectTabOrder: () => getProjectTabOrder(db),
     getReviewComment: (id) => getReviewComment(db, id),
     getReviewTarget: (id) => getReviewTarget(db, id),
+    forgetProject: (id) => {
+      db.exec("begin immediate");
+
+      try {
+        removeProjectFromTabOrder(db, id);
+        deleteProject(db, id);
+        db.exec("commit");
+      } catch (error) {
+        db.exec("rollback");
+        throw error;
+      }
+    },
+    failRepositoryRootScan: (rootId, message) =>
+      failRepositoryRootScan(db, rootId, message),
+    getRepositoryCatalogEntry: (id) => getRepositoryCatalogEntry(db, id),
     isReviewed: (reviewTargetId, filePath, currentDiffHash) =>
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
     listCompanionDevices: () => listCompanionDevices(db),
+    listKnownProjects: () => listRecentProjects(db),
+    listOpenProjects: () =>
+      applyProjectTabOrder(listRecentProjects(db), getProjectTabOrder(db)),
+    listRepositoryCatalog: () => listRepositoryCatalog(db),
+    listRepositorySearchRoots: () => listRepositorySearchRoots(db),
     listReviewComments: (reviewTargetId) => listReviewComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
@@ -238,6 +305,9 @@ export function openStorage(filename: string): DifftrayStorage {
     removeProjectFromTabOrder: (projectId) => {
       removeProjectFromTabOrder(db, projectId);
     },
+    removeRepositorySearchRoot: (rootId) => removeRepositorySearchRoot(db, rootId),
+    replaceRepositoryCatalogForRoot: (rootId, candidates) =>
+      replaceRepositoryCatalogForRoot(db, rootId, candidates),
     revokeCompanionDevice: (id) => {
       revokeCompanionDevice(db, id);
     },

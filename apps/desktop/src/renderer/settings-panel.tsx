@@ -7,7 +7,9 @@ import {
   Code2,
   Copy,
   ExternalLink,
+  LoaderCircle,
   QrCode,
+  RefreshCw,
   Save,
   Smartphone,
   Trash2,
@@ -16,13 +18,14 @@ import {
 import QRCode from "qrcode";
 
 import styles from "./settings-panel.module.css";
+import { useDialogFocusTrap } from "./dialog-focus.js";
 import {
   editorChoices,
   editorPatchForSelection,
   editorSelectionValue,
   type EditorChoice
 } from "./editor-settings.js";
-import { themeModeFromValue } from "./review-view-model.js";
+import { classList, themeModeFromValue } from "./review-view-model.js";
 
 export function SettingsPanel({
   appSettings,
@@ -37,7 +40,14 @@ export function SettingsPanel({
   onRevokeCompanionDevice,
   onSave,
   onStartCompanionPairing,
-  onToggleCompanion
+  onToggleCompanion,
+  repositorySearchRoots = [],
+  repositorySearchRootSuggestions = [],
+  onAddRepositorySearchRoot,
+  onAddSuggestedRepositorySearchRoot,
+  onCancelRepositoryScan,
+  onRefreshRepositorySearchRoot,
+  onRemoveRepositorySearchRoot
 }: {
   readonly appSettings: AppSettingsView;
   readonly companionPairing: CompanionPairingStateView | null;
@@ -54,12 +64,27 @@ export function SettingsPanel({
   readonly onSave: () => void;
   readonly onStartCompanionPairing: () => void;
   readonly onToggleCompanion: (enabled: boolean) => void;
+  readonly repositorySearchRoots?: readonly RepositorySearchRootView[];
+  readonly repositorySearchRootSuggestions?: readonly RepositorySearchRootSuggestionView[];
+  readonly onAddRepositorySearchRoot?: () => void;
+  readonly onAddSuggestedRepositorySearchRoot?: (suggestionId: string) => void;
+  readonly onCancelRepositoryScan?: (rootId: string) => void;
+  readonly onRefreshRepositorySearchRoot?: (rootId: string) => void;
+  readonly onRemoveRepositorySearchRoot?: (rootId: string) => void;
 }): React.JSX.Element {
   const activePairing = companionPairing ?? companionState.activePairing;
+  const settingsWindowRef = useRef<HTMLElement>(null);
+
+  useDialogFocusTrap(settingsWindowRef);
 
   return (
     <div className={styles.settingsOverlay}>
-      <section className={styles.settingsWindow} aria-modal="true" role="dialog">
+      <section
+        aria-modal="true"
+        className={styles.settingsWindow}
+        ref={settingsWindowRef}
+        role="dialog"
+      >
         <form
           className={styles.settingsContent}
           onSubmit={(event) => {
@@ -129,6 +154,108 @@ export function SettingsPanel({
               onStartPairing={onStartCompanionPairing}
               onToggle={onToggleCompanion}
             />
+
+            <SettingsSection title="Repository search folders">
+              <div className={classList(styles.settingRow, styles.repositoryRootIntro)}>
+                <div>
+                  <div className={styles.repositoryRootTitle}>Search folders</div>
+                  <p>
+                    Only folders you approve are scanned. Git metadata, dependencies,
+                    build output, caches, and Trash are skipped automatically.
+                  </p>
+                </div>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={disabled}
+                  onClick={onAddRepositorySearchRoot}
+                  type="button"
+                >
+                  Choose folder…
+                </button>
+              </div>
+              {repositorySearchRoots.length === 0 &&
+              repositorySearchRootSuggestions.length > 0 ? (
+                <div className={styles.repositoryRootSuggestions}>
+                  <small>Suggestions</small>
+                  <div>
+                    {repositorySearchRootSuggestions.map((suggestion) => (
+                      <button
+                        aria-label={`Add suggested folder ${suggestion.path}`}
+                        disabled={disabled}
+                        key={suggestion.id}
+                        onClick={() =>
+                          onAddSuggestedRepositorySearchRoot?.(suggestion.id)
+                        }
+                        title={suggestion.path}
+                        type="button"
+                      >
+                        {suggestion.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {repositorySearchRoots.map((root) => (
+                <div
+                  className={classList(styles.settingRow, styles.repositoryRootRow)}
+                  key={root.id}
+                >
+                  <div>
+                    <strong title={root.path}>{root.path}</strong>
+                    {root.scanning ? (
+                      <small className={styles.repositoryScanStatus} role="status">
+                        <LoaderCircle aria-hidden size={13} strokeWidth={1.7} />
+                        <span>
+                          Scanning folders
+                          {root.scannedDirectories
+                            ? ` · ${String(root.scannedDirectories)} checked`
+                            : "…"}
+                        </span>
+                      </small>
+                    ) : (
+                      <small>
+                        {root.repositoryCount} repositories ·{" "}
+                        {root.lastScanCompletedAt
+                          ? `Last scanned ${new Date(root.lastScanCompletedAt).toLocaleString()}`
+                          : "Not scanned yet"}
+                        {root.lastScanError ? ` · ${root.lastScanError}` : ""}
+                      </small>
+                    )}
+                  </div>
+                  <div className={styles.repositoryRootActions}>
+                    <button
+                      className={styles.secondaryButton}
+                      disabled={disabled}
+                      onClick={() =>
+                        root.scanning
+                          ? onCancelRepositoryScan?.(root.id)
+                          : onRefreshRepositorySearchRoot?.(root.id)
+                      }
+                      type="button"
+                    >
+                      {root.scanning ? (
+                        <X aria-hidden size={13} strokeWidth={1.7} />
+                      ) : (
+                        <RefreshCw aria-hidden size={13} strokeWidth={1.7} />
+                      )}
+                      {root.scanning ? "Cancel" : "Refresh"}
+                    </button>
+                    <button
+                      aria-label={`Remove ${root.path}`}
+                      className={classList(
+                        styles.secondaryButton,
+                        styles.repositoryRootIconButton
+                      )}
+                      disabled={disabled}
+                      onClick={() => onRemoveRepositorySearchRoot?.(root.id)}
+                      type="button"
+                    >
+                      <Trash2 size={13} aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </SettingsSection>
 
             {activePairing ? (
               <CompanionPairingDialog

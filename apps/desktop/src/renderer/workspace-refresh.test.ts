@@ -5,8 +5,33 @@ import {
   carryLoadedDiffsForward,
   isFileDiffLoaded,
   shouldRefreshCachedWorkspaceAfterTabSwitch,
+  shouldReloadWorkspaceAfterProjectChange,
   shouldApplySilentWorkspaceRefresh
 } from "./workspace-refresh.js";
+
+describe("shouldReloadWorkspaceAfterProjectChange", () => {
+  const state = {
+    activeProjectId: "difftray",
+    droppedRepositoryPreviewOpen: false,
+    eventProjectId: "difftray",
+    externalDropActive: false,
+    loadState: "idle" as const,
+    paletteOpen: false,
+    repositoryPickerOpen: false,
+    settingsOpen: false,
+    worktreePickerOpen: false
+  };
+
+  it("reloads the active workspace when no overlay is open", () => {
+    expect(shouldReloadWorkspaceAfterProjectChange(state)).toBe(true);
+  });
+
+  it("does not reload while an external repository drop is active", () => {
+    expect(
+      shouldReloadWorkspaceAfterProjectChange({ ...state, externalDropActive: true })
+    ).toBe(false);
+  });
+});
 
 describe("shouldApplySilentWorkspaceRefresh", () => {
   it("applies a silent refresh only when the original project is still active and idle", () => {

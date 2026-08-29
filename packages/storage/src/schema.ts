@@ -6,6 +6,8 @@ export function runMigrations(db: DatabaseSync): void {
       id text primary key,
       name text not null,
       path text not null unique,
+      repository_name text,
+      worktree_name text,
       default_base_ref text,
       default_commit_ref text,
       default_diff_target_mode text not null default 'working_tree',
@@ -103,8 +105,43 @@ export function runMigrations(db: DatabaseSync): void {
       last_seen_at text,
       revoked_at text
     );
+
+    create table if not exists repository_roots (
+      id text primary key,
+      path text not null unique,
+      enabled integer not null,
+      discovery_version integer not null default 0,
+      last_scan_started_at text,
+      last_scan_completed_at text,
+      last_scan_error text
+    );
+
+    create table if not exists repository_catalog (
+      id text primary key,
+      root_id text not null references repository_roots(id) on delete cascade,
+      path text not null unique,
+      name text not null,
+      last_seen_at text not null,
+      available integer not null
+    );
+
+    create table if not exists repository_catalog_roots (
+      repository_id text not null references repository_catalog(id) on delete cascade,
+      root_id text not null references repository_roots(id) on delete cascade,
+      last_seen_at text not null,
+      available integer not null,
+      primary key (repository_id, root_id)
+    );
+
+    insert or ignore into repository_catalog_roots (
+      repository_id, root_id, last_seen_at, available
+    )
+    select id, root_id, last_seen_at, available from repository_catalog;
   `);
   ensureProjectColumn(db, "default_commit_ref", "text");
+  ensureProjectColumn(db, "repository_name", "text");
+  ensureProjectColumn(db, "worktree_name", "text");
+  ensureColumn(db, "repository_roots", "discovery_version", "integer not null default 0");
   ensureProjectColumn(
     db,
     "default_diff_target_mode",

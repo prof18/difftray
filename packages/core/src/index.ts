@@ -14,6 +14,11 @@ export {
   type EditorPreset,
   type InstalledEditorPresetInput
 } from "./editor-presets.js";
+export {
+  defaultRepositoryDiscoveryExclusions,
+  isPathInsideApprovedRoot,
+  shouldTraverseRepositoryDirectory
+} from "./repository-discovery.js";
 
 const reviewTargetFingerprintVersion = "difftray-review-target-v1";
 const fileDiffFingerprintVersion = "difftray-file-diff-v1";

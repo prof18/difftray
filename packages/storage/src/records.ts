@@ -6,6 +6,8 @@ export type ProjectRecord = {
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
+  readonly repositoryName?: string;
+  readonly worktreeName?: string;
 };
 
 export type StoredProjectRecord = ProjectRecord & {

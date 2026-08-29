@@ -1,9 +1,12 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 
 import {
+  parseApplicationCommand,
   parseProjectChangedEvent,
   parseProjectLoadProgress,
+  parseRepositoryScanProgress,
   parseUpdatePhase,
+  type ApplicationCommand,
   type ProjectChangedListener,
   type ProjectLoadProgressListener,
   type UpdatePhase,
@@ -11,6 +14,7 @@ import {
 } from "./event-parsers.js";
 
 export {
+  type ApplicationCommand,
   type ProjectChangedEvent,
   type ProjectChangedListener,
   type ProjectLoadProgressListener,
@@ -20,6 +24,16 @@ export {
   type UpdatePhase,
   type UpdatePhaseListener
 } from "./event-parsers.js";
+
+export type ProjectsOpenedEvent = {
+  readonly focusProjectId: string;
+  readonly projectIds: readonly string[];
+};
+
+export type WorktreeChangeCountEvent = {
+  readonly changeCount: number;
+  readonly worktreePath: string;
+};
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
@@ -31,8 +45,12 @@ export type DifftrayApi = {
   readonly onCompanionStateChanged: (
     listener: CompanionStateChangedListener
   ) => () => void;
+  readonly onApplicationCommand: (
+    listener: (command: ApplicationCommand) => void
+  ) => () => void;
   readonly onUpdatePhase: (listener: UpdatePhaseListener) => () => void;
   readonly closeProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
+  readonly forgetProject: (projectId: string) => Promise<readonly RecentProjectView[]>;
   readonly copyReviewCommentsReport: (
     input: CopyReviewCommentsReportInput
   ) => Promise<CopyReviewCommentsReportResult>;
@@ -53,6 +71,15 @@ export type DifftrayApi = {
     projectId: string
   ) => Promise<readonly RecentCommitView[]>;
   readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+  readonly listKnownProjects: () => Promise<readonly RecentProjectView[]>;
+  readonly listRepositoryCatalog: () => Promise<readonly RepositoryCatalogView[]>;
+  readonly listRepositorySearchRoots: () => Promise<readonly RepositorySearchRootView[]>;
+  readonly listRepositorySearchRootSuggestions: () => Promise<
+    readonly RepositorySearchRootSuggestionView[]
+  >;
+  readonly listProjectWorktrees: (
+    projectId: string
+  ) => Promise<readonly RepositoryWorktreeView[]>;
   readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
   readonly respondToCompanionPairRequest: (
     input: RespondToCompanionPairRequestInput
@@ -69,7 +96,13 @@ export type DifftrayApi = {
     options?: LoadProjectOptions
   ) => Promise<ReviewWorkspaceView | null>;
   readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
+  readonly onProjectsOpened: (
+    listener: (event: ProjectsOpenedEvent) => void
+  ) => () => void;
   readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
+  readonly onWorktreeChangeCount: (
+    listener: (event: WorktreeChangeCountEvent) => void
+  ) => () => void;
   readonly markFileReviewed: (
     input: MarkFileReviewedInput
   ) => Promise<MarkReviewedResult>;
@@ -77,6 +110,42 @@ export type DifftrayApi = {
   readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
   readonly openProjectInFinder: (projectId: string) => Promise<void>;
   readonly openProject: () => Promise<ReviewWorkspaceView | null>;
+  readonly openDroppedRepositories: (
+    files: readonly File[]
+  ) => Promise<ReviewWorkspaceView | null>;
+  readonly previewDroppedRepositories: (
+    files: readonly File[]
+  ) => Promise<readonly DroppedRepositoryPreviewView[]>;
+  readonly openDroppedRepositoryPreview: (input: {
+    readonly candidateIds: readonly string[];
+    readonly rememberSearchFolders: boolean;
+  }) => Promise<ReviewWorkspaceView | null>;
+  readonly openKnownProject: (projectId: string) => Promise<ReviewWorkspaceView | null>;
+  readonly openRepositoryCatalogEntry: (
+    repositoryId: string
+  ) => Promise<ReviewWorkspaceView | null>;
+  readonly openRepositoryCatalogEntries: (
+    repositoryIds: readonly string[]
+  ) => Promise<ReviewWorkspaceView | null>;
+  readonly openRepositoryPickerEntries: (input: {
+    readonly knownProjectIds: readonly string[];
+    readonly repositoryIds: readonly string[];
+  }) => Promise<ReviewWorkspaceView | null>;
+  readonly addRepositorySearchRoot: () => Promise<boolean>;
+  readonly addSuggestedRepositorySearchRoot: (suggestionId: string) => Promise<void>;
+  readonly refreshRepositoryCatalog: () => Promise<void>;
+  readonly refreshRepositorySearchRoot: (rootId: string) => Promise<void>;
+  readonly cancelRepositoryScan: (rootId: string) => Promise<void>;
+  readonly removeRepositorySearchRoot: (rootId: string) => Promise<void>;
+  readonly onRepositoryScanProgress: (
+    listener: (progress: RepositoryScanProgressView) => void
+  ) => () => void;
+  readonly onRepositoryQuickOpenRequested: (listener: () => void) => () => void;
+  readonly onRepositoryScanFolderRequested: (listener: () => void) => () => void;
+  readonly openProjectWorktree: (
+    projectId: string,
+    worktreeId: string
+  ) => Promise<ReviewWorkspaceView>;
   readonly getProjectSettings: (projectId: string) => Promise<ProjectSettingsView>;
   readonly updateProjectSettings: (
     input: UpdateProjectSettingsInput
@@ -189,7 +258,62 @@ export type RecentProjectView = {
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
+  readonly repositoryName?: string;
   readonly reviewSummary?: ProjectReviewSummaryView;
+  readonly worktreeName?: string;
+};
+
+export type RepositoryWorktreeView = {
+  readonly branchName?: string;
+  readonly changeCount?: number;
+  readonly displayName: string;
+  readonly displayPath: string;
+  readonly headSha?: string;
+  readonly id: string;
+  readonly locked: boolean;
+  readonly shortHeadSha?: string;
+  readonly state: "available" | "current" | "open";
+};
+
+export type RepositoryCatalogView = {
+  readonly available: boolean;
+  readonly id: string;
+  readonly lastSeenAt: string;
+  readonly name: string;
+  readonly path: string;
+  readonly rootId: string;
+};
+
+export type RepositoryScanProgressView = {
+  readonly rootId: string;
+  readonly scannedDirectories: number;
+  readonly skippedDirectories: number;
+  readonly status: "cancelled" | "complete" | "failed" | "scanning";
+};
+
+export type RepositorySearchRootView = {
+  readonly enabled: boolean;
+  readonly id: string;
+  readonly lastScanCompletedAt?: string;
+  readonly lastScanError?: string;
+  readonly path: string;
+  readonly repositoryCount: number;
+  readonly scannedDirectories?: number;
+  readonly scanning: boolean;
+  readonly skippedDirectories?: number;
+};
+
+export type RepositorySearchRootSuggestionView = {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+};
+
+export type DroppedRepositoryPreviewView = {
+  readonly displayPath: string;
+  readonly id: string;
+  readonly name: string;
+  readonly rememberEligible: boolean;
 };
 
 export type RecentCommitView = {
@@ -484,6 +608,21 @@ const api: DifftrayApi = {
       ipcRenderer.removeListener("companion:stateChanged", handler);
     };
   },
+  onApplicationCommand: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      const command = parseApplicationCommand(payload);
+
+      if (command) {
+        listener(command);
+      }
+    };
+
+    ipcRenderer.on("application:command", handler);
+
+    return () => {
+      ipcRenderer.removeListener("application:command", handler);
+    };
+  },
   onUpdatePhase: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
       const phase = parseUpdatePhase(payload);
@@ -501,6 +640,10 @@ const api: DifftrayApi = {
   },
   closeProject: async (projectId) =>
     ipcRenderer.invoke("projects:close", {
+      projectId
+    }) as Promise<readonly RecentProjectView[]>,
+  forgetProject: async (projectId) =>
+    ipcRenderer.invoke("projects:forget", {
       projectId
     }) as Promise<readonly RecentProjectView[]>,
   copyReviewCommentsReport: async (input) =>
@@ -532,6 +675,24 @@ const api: DifftrayApi = {
     }) as Promise<readonly RecentCommitView[]>,
   listRecentProjects: async () =>
     ipcRenderer.invoke("projects:listRecent") as Promise<readonly RecentProjectView[]>,
+  listKnownProjects: async () =>
+    ipcRenderer.invoke("projects:listKnown") as Promise<readonly RecentProjectView[]>,
+  listRepositoryCatalog: async () =>
+    ipcRenderer.invoke("repositories:listCatalog") as Promise<
+      readonly RepositoryCatalogView[]
+    >,
+  listRepositorySearchRoots: async () =>
+    ipcRenderer.invoke("repositories:listSearchRoots") as Promise<
+      readonly RepositorySearchRootView[]
+    >,
+  listRepositorySearchRootSuggestions: async () =>
+    ipcRenderer.invoke("repositories:listSearchRootSuggestions") as Promise<
+      readonly RepositorySearchRootSuggestionView[]
+    >,
+  listProjectWorktrees: async (projectId) =>
+    ipcRenderer.invoke("projects:listWorktrees", {
+      projectId
+    }) as Promise<readonly RepositoryWorktreeView[]>,
   respondToCompanionPairRequest: async (input) =>
     ipcRenderer.invoke(
       "companion:respondToPairRequest",
@@ -577,6 +738,18 @@ const api: DifftrayApi = {
       ipcRenderer.removeListener("projects:changed", handler);
     };
   },
+  onProjectsOpened: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      if (!isProjectsOpenedEvent(payload)) return;
+      listener(payload);
+    };
+
+    ipcRenderer.on("projects:opened", handler);
+
+    return () => {
+      ipcRenderer.removeListener("projects:opened", handler);
+    };
+  },
   onProjectLoadProgress: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
       const progress = parseProjectLoadProgress(payload);
@@ -592,6 +765,18 @@ const api: DifftrayApi = {
       ipcRenderer.removeListener("projects:loadProgress", handler);
     };
   },
+  onWorktreeChangeCount: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      if (!isWorktreeChangeCountEvent(payload)) return;
+      listener(payload);
+    };
+
+    ipcRenderer.on("projects:worktreeChangeCount", handler);
+
+    return () => {
+      ipcRenderer.removeListener("projects:worktreeChangeCount", handler);
+    };
+  },
   openFileInEditor: async (input) =>
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
   openCompanionStore: async (store) =>
@@ -600,6 +785,78 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("projects:openInFinder", { projectId }) as Promise<void>,
   openProject: async () =>
     ipcRenderer.invoke("projects:open") as Promise<ReviewWorkspaceView | null>,
+  openDroppedRepositories: async (files) => {
+    const paths = files
+      .map((file) => webUtils.getPathForFile(file))
+      .filter((filePath) => filePath.length > 0);
+
+    return ipcRenderer.invoke("projects:openPaths", {
+      paths
+    }) as Promise<ReviewWorkspaceView | null>;
+  },
+  previewDroppedRepositories: async (files) => {
+    const paths = files.map((file) => webUtils.getPathForFile(file)).filter(Boolean);
+    return ipcRenderer.invoke("repositories:previewDroppedPaths", { paths }) as Promise<
+      readonly DroppedRepositoryPreviewView[]
+    >;
+  },
+  openDroppedRepositoryPreview: async (input) =>
+    ipcRenderer.invoke(
+      "repositories:openDroppedPreview",
+      input
+    ) as Promise<ReviewWorkspaceView | null>,
+  openKnownProject: async (projectId) =>
+    ipcRenderer.invoke("projects:openKnown", {
+      projectId
+    }) as Promise<ReviewWorkspaceView | null>,
+  openRepositoryCatalogEntry: async (repositoryId) =>
+    ipcRenderer.invoke("repositories:openCatalogEntry", {
+      repositoryId
+    }) as Promise<ReviewWorkspaceView | null>,
+  openRepositoryCatalogEntries: async (repositoryIds) =>
+    ipcRenderer.invoke("repositories:openCatalogEntries", {
+      repositoryIds
+    }) as Promise<ReviewWorkspaceView | null>,
+  openRepositoryPickerEntries: async (input) =>
+    ipcRenderer.invoke(
+      "repositories:openPickerEntries",
+      input
+    ) as Promise<ReviewWorkspaceView | null>,
+  addRepositorySearchRoot: async () =>
+    ipcRenderer.invoke("repositories:addSearchRoot") as Promise<boolean>,
+  addSuggestedRepositorySearchRoot: async (suggestionId) =>
+    ipcRenderer.invoke("repositories:addSuggestedSearchRoot", {
+      suggestionId
+    }) as Promise<void>,
+  refreshRepositoryCatalog: async () =>
+    ipcRenderer.invoke("repositories:refreshAll") as Promise<void>,
+  refreshRepositorySearchRoot: async (rootId) =>
+    ipcRenderer.invoke("repositories:refreshSearchRoot", { rootId }) as Promise<void>,
+  cancelRepositoryScan: async (rootId) =>
+    ipcRenderer.invoke("repositories:cancelScan", { rootId }) as Promise<void>,
+  removeRepositorySearchRoot: async (rootId) =>
+    ipcRenderer.invoke("repositories:removeSearchRoot", { rootId }) as Promise<void>,
+  onRepositoryScanProgress: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, progress: unknown) => {
+      const parsed = parseRepositoryScanProgress(progress);
+      if (parsed) listener(parsed);
+    };
+    ipcRenderer.on("repositories:scanProgress", wrapped);
+    return () => ipcRenderer.removeListener("repositories:scanProgress", wrapped);
+  },
+  onRepositoryQuickOpenRequested: (listener) => {
+    ipcRenderer.on("repositories:quickOpenRequested", listener);
+    return () => ipcRenderer.removeListener("repositories:quickOpenRequested", listener);
+  },
+  onRepositoryScanFolderRequested: (listener) => {
+    ipcRenderer.on("repositories:scanFolderRequested", listener);
+    return () => ipcRenderer.removeListener("repositories:scanFolderRequested", listener);
+  },
+  openProjectWorktree: async (projectId, worktreeId) =>
+    ipcRenderer.invoke("projects:openWorktree", {
+      projectId,
+      worktreeId
+    }) as Promise<ReviewWorkspaceView>,
   getProjectSettings: async (projectId) =>
     ipcRenderer.invoke("settings:getProject", {
       projectId
@@ -621,5 +878,31 @@ const api: DifftrayApi = {
       input
     ) as Promise<UnmarkReviewedResult>
 };
+
+function isProjectsOpenedEvent(payload: unknown): payload is ProjectsOpenedEvent {
+  if (!isRecord(payload) || typeof payload.focusProjectId !== "string") return false;
+  return (
+    Array.isArray(payload.projectIds) &&
+    payload.projectIds.every(
+      (projectId): projectId is string => typeof projectId === "string"
+    )
+  );
+}
+
+function isWorktreeChangeCountEvent(
+  payload: unknown
+): payload is WorktreeChangeCountEvent {
+  return (
+    isRecord(payload) &&
+    typeof payload.changeCount === "number" &&
+    Number.isSafeInteger(payload.changeCount) &&
+    payload.changeCount >= 0 &&
+    typeof payload.worktreePath === "string"
+  );
+}
+
+function isRecord(payload: unknown): payload is Record<string, unknown> {
+  return typeof payload === "object" && payload !== null;
+}
 
 contextBridge.exposeInMainWorld("difftray", api);

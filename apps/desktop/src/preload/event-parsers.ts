@@ -8,6 +8,38 @@ export type UpdatePhase =
 
 export type UpdatePhaseListener = (phase: UpdatePhase) => void;
 
+export type ApplicationCommand =
+  | "open-settings"
+  | "repository-close"
+  | "repository-forget"
+  | "repository-refresh"
+  | "repository-show-in-finder"
+  | "repository-worktrees"
+  | "view-split-diff"
+  | "view-toggle-file-list"
+  | "view-toggle-wrap-lines"
+  | "view-unified-diff";
+
+export function parseApplicationCommand(
+  payload: unknown
+): ApplicationCommand | undefined {
+  switch (payload) {
+    case "open-settings":
+    case "repository-close":
+    case "repository-forget":
+    case "repository-refresh":
+    case "repository-show-in-finder":
+    case "repository-worktrees":
+    case "view-split-diff":
+    case "view-toggle-file-list":
+    case "view-toggle-wrap-lines":
+    case "view-unified-diff":
+      return payload;
+    default:
+      return undefined;
+  }
+}
+
 export type ProjectWatchReason =
   | "deleted"
   | "git_metadata"
@@ -43,6 +75,13 @@ export type ProjectLoadProgressView = {
 };
 
 export type ProjectLoadProgressListener = (progress: ProjectLoadProgressView) => void;
+
+export type RepositoryScanProgressView = {
+  readonly rootId: string;
+  readonly scannedDirectories: number;
+  readonly skippedDirectories: number;
+  readonly status: "cancelled" | "complete" | "failed" | "scanning";
+};
 
 export function parseProjectChangedEvent(
   payload: unknown
@@ -141,6 +180,27 @@ export function parseUpdatePhase(payload: unknown): UpdatePhase | undefined {
   }
 }
 
+export function parseRepositoryScanProgress(
+  payload: unknown
+): RepositoryScanProgressView | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const { rootId, scannedDirectories, skippedDirectories, status } = payload;
+
+  if (
+    typeof rootId !== "string" ||
+    !isNonNegativeSafeInteger(scannedDirectories) ||
+    !isNonNegativeSafeInteger(skippedDirectories) ||
+    !isRepositoryScanStatus(status)
+  ) {
+    return undefined;
+  }
+
+  return { rootId, scannedDirectories, skippedDirectories, status };
+}
+
 function isProjectWatchReason(value: unknown): value is ProjectWatchReason {
   return (
     value === "deleted" ||
@@ -158,6 +218,21 @@ function isProjectLoadProgressPhase(value: unknown): value is ProjectLoadProgres
     value === "resolving_target" ||
     value === "scanning_files"
   );
+}
+
+function isRepositoryScanStatus(
+  value: unknown
+): value is RepositoryScanProgressView["status"] {
+  return (
+    value === "cancelled" ||
+    value === "complete" ||
+    value === "failed" ||
+    value === "scanning"
+  );
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

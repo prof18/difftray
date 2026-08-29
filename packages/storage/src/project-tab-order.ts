@@ -3,15 +3,12 @@ import type { DatabaseSync } from "node:sqlite";
 import { currentTimestamp } from "./timestamps.js";
 
 const projectTabOrderKey = "project_tab_order_json";
+const projectTabsExplicitKey = "project_tabs_explicit_v1";
 
 export function applyProjectTabOrder<TProject extends { readonly id: string }>(
   projects: readonly TProject[],
   tabOrder: readonly string[]
 ): readonly TProject[] {
-  if (tabOrder.length === 0) {
-    return projects;
-  }
-
   const projectsById = new Map(projects.map((project) => [project.id, project] as const));
   const orderedProjects: TProject[] = [];
   const orderedProjectIds = new Set<string>();
@@ -29,13 +26,38 @@ export function applyProjectTabOrder<TProject extends { readonly id: string }>(
     }
   }
 
-  for (const project of projects) {
-    if (!orderedProjectIds.has(project.id)) {
-      orderedProjects.push(project);
-    }
+  return orderedProjects;
+}
+
+export function initializeProjectTabs(
+  db: DatabaseSync,
+  projects: readonly { readonly id: string }[]
+): void {
+  if (hasProjectTabsExplicitMarker(db)) {
+    return;
   }
 
-  return orderedProjects;
+  const storedOrder = getProjectTabOrder(db);
+  const seededOrder = legacyProjectTabOrder(projects, storedOrder);
+
+  db.exec("begin immediate");
+
+  try {
+    upsertProjectTabOrder(db, seededOrder);
+    db.prepare(
+      `
+        insert into app_settings (key, value, updated_at)
+        values (?, ?, ?)
+        on conflict(key) do update set
+          value = excluded.value,
+          updated_at = excluded.updated_at
+      `
+    ).run(projectTabsExplicitKey, "1", currentTimestamp());
+    db.exec("commit");
+  } catch (error) {
+    db.exec("rollback");
+    throw error;
+  }
 }
 
 export function parseStoredProjectTabOrder(value: string | undefined): readonly string[] {
@@ -127,4 +149,28 @@ export function removeProjectFromTabOrder(db: DatabaseSync, projectId: string): 
     db,
     tabOrder.filter((storedProjectId) => storedProjectId !== projectId)
   );
+}
+
+function hasProjectTabsExplicitMarker(db: DatabaseSync): boolean {
+  return Boolean(
+    db.prepare("select 1 from app_settings where key = ?").get(projectTabsExplicitKey)
+  );
+}
+
+function legacyProjectTabOrder(
+  projects: readonly { readonly id: string }[],
+  storedOrder: readonly string[]
+): readonly string[] {
+  const knownIds = new Set(projects.map(({ id }) => id));
+  const seededOrder = storedOrder.filter((id) => knownIds.has(id));
+  const seededIds = new Set(seededOrder);
+
+  for (const { id } of projects) {
+    if (!seededIds.has(id)) {
+      seededOrder.push(id);
+      seededIds.add(id);
+    }
+  }
+
+  return seededOrder;
 }

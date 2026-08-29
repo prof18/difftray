@@ -169,6 +169,7 @@ export type CompanionEnvelopeResponseInput = {
 export type CompanionEnvelopeVerificationResult =
   | {
       readonly body: unknown;
+      readonly capabilities?: readonly string[];
       readonly device: CompanionDeviceContext;
       readonly ok: true;
       readonly requestId: string;
@@ -337,9 +338,11 @@ export function createCompanionEnvelopeVerifier(input: {
       replayCache.set(replayKey, now().getTime());
       pruneReplayCache(replayCache, now().getTime());
       storage.touchCompanionDeviceLastSeen(device.id);
+      const capabilities = readCompanionCapabilities(plaintext.capabilities);
 
       return {
         body: plaintext.body,
+        ...(capabilities.length === 0 ? {} : { capabilities }),
         device: {
           deviceId: device.id,
           devicePublicKey: device.publicKey
@@ -399,6 +402,14 @@ export function createCompanionEnvelopeVerifier(input: {
       };
     }
   };
+}
+
+function readCompanionCapabilities(input: unknown): readonly string[] {
+  if (!Array.isArray(input) || !input.every((value) => typeof value === "string")) {
+    return [];
+  }
+
+  return [...new Set(input)].slice(0, 32);
 }
 
 function readEncryptedEnvelope(

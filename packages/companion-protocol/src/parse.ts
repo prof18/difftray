@@ -4,6 +4,9 @@ import type {
   DiffTargetBody,
   FileImageBody,
   MarkReviewedBody,
+  OpenWorktreeBody,
+  ProjectWorktreeAvailabilityBody,
+  OpenRepositoriesBody,
   PairRequestBody,
   UpdateCommentBody
 } from "./index.js";
@@ -79,6 +82,52 @@ export function parseMarkReviewedBody(input: unknown): ParseResult<MarkReviewedB
       reviewTargetId: reviewTargetId.value
     }
   };
+}
+
+export function parseOpenWorktreeBody(input: unknown): ParseResult<OpenWorktreeBody> {
+  const worktreeId = readString(input, "worktreeId");
+  if (!worktreeId.ok) return worktreeId;
+
+  return { ok: true, value: { worktreeId: worktreeId.value } };
+}
+
+export function parseProjectWorktreeAvailabilityBody(
+  input: unknown
+): ParseResult<ProjectWorktreeAvailabilityBody> {
+  const value = readUnknown(input, "projectIds");
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 100 ||
+    value.some((id) => typeof id !== "string" || id.length === 0)
+  ) {
+    return { error: "projectIds must contain 1 to 100 ids", ok: false };
+  }
+  const projectIds = value as string[];
+  if (new Set(projectIds).size !== projectIds.length) {
+    return { error: "projectIds must not contain duplicates", ok: false };
+  }
+
+  return { ok: true, value: { projectIds } };
+}
+
+export function parseOpenRepositoriesBody(
+  input: unknown
+): ParseResult<OpenRepositoriesBody> {
+  const value = readUnknown(input, "repositoryIds");
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 100 ||
+    value.some((id) => typeof id !== "string" || id.length === 0)
+  ) {
+    return { error: "repositoryIds must contain 1 to 100 ids", ok: false };
+  }
+  const repositoryIds = value as string[];
+  if (new Set(repositoryIds).size !== repositoryIds.length) {
+    return { error: "repositoryIds must not contain duplicates", ok: false };
+  }
+  return { ok: true, value: { repositoryIds } };
 }
 
 export function parseFileImageBody(input: unknown): ParseResult<FileImageBody> {

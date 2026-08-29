@@ -8,6 +8,14 @@ import {
   gitOutputOrNull,
   requiredGitOutput
 } from "./git-command.js";
+
+export {
+  listGitWorktrees,
+  parseWorktreePorcelain,
+  worktreeOpaqueId,
+  type GitWorktreeCandidate,
+  type ParsedGitWorktree
+} from "./worktrees.js";
 import {
   isDefined,
   loadTrackedDiffContent,

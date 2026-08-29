@@ -1,4 +1,9 @@
-export { COMPANION_PROTOCOL_VERSION } from "./version.js";
+export {
+  COMPANION_CAPABILITY_PROJECT_IDENTITY,
+  COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
+  COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
+  COMPANION_PROTOCOL_VERSION
+} from "./version.js";
 export {
   decodeBase64Url,
   encodeBase64Url,
@@ -19,6 +24,9 @@ export {
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
+  parseOpenWorktreeBody,
+  parseProjectWorktreeAvailabilityBody,
+  parseOpenRepositoriesBody,
   parsePairRequestBody,
   parseUpdateCommentBody,
   type ParseResult
@@ -68,7 +76,9 @@ export type RecentProjectView = {
   readonly lastOpenedAt?: string;
   readonly name: string;
   readonly path: string;
+  readonly repositoryName?: string;
   readonly reviewSummary?: ProjectReviewSummaryView;
+  readonly worktreeName?: string;
 };
 
 export type ProjectReviewSummaryView = {
@@ -223,6 +233,69 @@ export type WorkspaceSummary = {
 
 export type ProjectsResponse = {
   readonly projects: readonly RecentProjectView[];
+  readonly summariesPending?: boolean;
+};
+
+export type RepositoryWorktreeView = {
+  readonly branchName?: string;
+  readonly changeCount?: number;
+  readonly displayName: string;
+  readonly displayPath: string;
+  readonly headSha?: string;
+  readonly id: string;
+  readonly locked: boolean;
+  readonly shortHeadSha?: string;
+  readonly state: "available" | "current" | "open";
+};
+
+export type ProjectWorktreesResponse = {
+  readonly worktrees: readonly RepositoryWorktreeView[];
+};
+
+export type ProjectWorktreeAvailabilityBody = {
+  readonly projectIds: readonly string[];
+};
+
+export type ProjectWorktreeAvailabilityView = {
+  readonly hasSiblingWorktrees: boolean;
+  readonly projectId: string;
+};
+
+export type ProjectWorktreeAvailabilityResponse = {
+  readonly availability: readonly ProjectWorktreeAvailabilityView[];
+};
+
+export type OpenWorktreeBody = {
+  readonly worktreeId: string;
+};
+
+export type OpenWorktreeResponse = {
+  readonly project: RecentProjectView;
+};
+
+export type RepositoryCatalogEntry = {
+  readonly displayPath: string;
+  readonly id: string;
+  readonly lastSeenAt?: string;
+  readonly name: string;
+  readonly state: "available" | "open";
+};
+
+export type RepositoriesResponse = {
+  readonly repositories: readonly RepositoryCatalogEntry[];
+  readonly scanning?: boolean;
+};
+
+export type OpenRepositoriesBody = {
+  readonly repositoryIds: readonly string[];
+};
+
+export type OpenRepositoriesResponse = {
+  readonly failures: readonly {
+    readonly reason: "invalid" | "missing" | "unauthorized";
+    readonly repositoryId: string;
+  }[];
+  readonly openedProjects: readonly RecentProjectView[];
 };
 
 export type WorkspaceResponse = {

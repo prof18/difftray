@@ -886,3 +886,108 @@
   gap: 8px;
   padding-bottom: 6px;
 }
+
+.repositoryRootIntro > div {
+  min-width: 0;
+}
+
+.repositoryRootTitle {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.repositoryRootIntro p {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.repositoryRootIntro .secondaryButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.repositoryRootSuggestions {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  padding: 10px 14px;
+}
+
+.repositoryRootSuggestions > small {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 28px;
+}
+
+.repositoryRootSuggestions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.repositoryRootSuggestions button {
+  align-items: center;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.repositoryRootSuggestions button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.repositoryRootRow > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.repositoryRootRow strong,
+.repositoryRootRow small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repositoryRootRow small {
+  color: var(--text-muted);
+}
+
+.repositoryRootActions {
+  display: flex;
+  gap: 6px;
+}
+
+.repositoryScanStatus {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.repositoryScanStatus svg {
+  animation: repositoryScanSpin 900ms linear infinite;
+  color: var(--accent);
+}
+
+.repositoryRootIconButton {
+  width: 28px;
+  padding: 0;
+}
+
+@keyframes repositoryScanSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

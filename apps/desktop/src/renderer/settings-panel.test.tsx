@@ -1,9 +1,68 @@
+/** @vitest-environment jsdom */
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPanel } from "./settings-panel.js";
 
 describe("SettingsPanel", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("focuses the dialog, traps Tab, and restores the opener", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+
+    act(() => {
+      root.render(<SettingsPanel {...settingsPanelProps()} />);
+    });
+
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+    const buttons = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const closeButton = dialog?.querySelector<HTMLButtonElement>(
+      '[aria-label="Close settings"]'
+    );
+
+    expect(document.activeElement).toBe(closeButton);
+    expect(buttons.length).toBeGreaterThan(1);
+
+    const lastButton = buttons.at(-1);
+    lastButton?.focus();
+    const tab = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Tab"
+    });
+
+    act(() => {
+      lastButton?.dispatchEvent(tab);
+    });
+
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(closeButton);
+
+    act(() => root.unmount());
+
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   it("renders app settings sections, active values, and actions", () => {
     const html = renderToStaticMarkup(
       <SettingsPanel
@@ -60,6 +119,22 @@ describe("SettingsPanel", () => {
         onRevokeCompanionDevice={vi.fn()}
         onStartCompanionPairing={vi.fn()}
         onToggleCompanion={vi.fn()}
+        repositorySearchRoots={[
+          {
+            enabled: true,
+            id: "workspace",
+            path: "/Users/example/Workspace",
+            repositoryCount: 2,
+            scanning: false
+          }
+        ]}
+        repositorySearchRootSuggestions={[
+          {
+            id: "projects",
+            name: "Projects",
+            path: "/Users/example/Projects"
+          }
+        ]}
       />
     );
 
@@ -108,11 +183,143 @@ describe("SettingsPanel", () => {
         onRevokeCompanionDevice={vi.fn()}
         onStartCompanionPairing={vi.fn()}
         onToggleCompanion={vi.fn()}
+        repositorySearchRoots={[
+          {
+            enabled: true,
+            id: "workspace",
+            path: "/Users/example/Workspace",
+            repositoryCount: 2,
+            scanning: false
+          }
+        ]}
+        repositorySearchRootSuggestions={[
+          {
+            id: "projects",
+            name: "Projects",
+            path: "/Users/example/Projects"
+          }
+        ]}
       />
     );
 
     expect(html).toContain('aria-label="Editor: System default"');
     expect(html).toContain('disabled=""');
+    expect(html).not.toContain(
+      'aria-label="Add suggested folder /Users/example/Projects"'
+    );
+    expect(html).toContain('aria-label="Remove /Users/example/Workspace"');
+  });
+
+  it("presents repository folders with the standard settings row hierarchy", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        appSettings={appSettings({})}
+        companionPairing={null}
+        companionState={companionState({})}
+        disabled={false}
+        editorOptions={[]}
+        onAddRepositorySearchRoot={vi.fn()}
+        onAddSuggestedRepositorySearchRoot={vi.fn()}
+        onCancel={vi.fn()}
+        onCancelCompanionPairing={vi.fn()}
+        onChangeAppSettings={vi.fn()}
+        onRespondToCompanionPairRequest={vi.fn()}
+        onRevokeCompanionDevice={vi.fn()}
+        onSave={vi.fn()}
+        onStartCompanionPairing={vi.fn()}
+        onToggleCompanion={vi.fn()}
+        repositorySearchRootSuggestions={[
+          {
+            id: "workspace",
+            name: "Workspace",
+            path: "/Users/example/Workspace"
+          }
+        ]}
+      />
+    );
+
+    expect(html).toContain("Search folders");
+    expect(html).toContain("Suggestions");
+    expect(html).toContain("Choose folder…");
+    expect(html).toContain('aria-label="Add suggested folder /Users/example/Workspace"');
+  });
+
+  it("hides suggested folders after a search folder is attached", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        appSettings={appSettings({})}
+        companionPairing={null}
+        companionState={companionState({})}
+        disabled={false}
+        editorOptions={[]}
+        onCancel={vi.fn()}
+        onCancelCompanionPairing={vi.fn()}
+        onChangeAppSettings={vi.fn()}
+        onRespondToCompanionPairRequest={vi.fn()}
+        onRevokeCompanionDevice={vi.fn()}
+        onSave={vi.fn()}
+        onStartCompanionPairing={vi.fn()}
+        onToggleCompanion={vi.fn()}
+        repositorySearchRoots={[
+          {
+            enabled: true,
+            id: "workspace",
+            path: "/Users/example/Workspace",
+            repositoryCount: 2,
+            scanning: false
+          }
+        ]}
+        repositorySearchRootSuggestions={[
+          {
+            id: "projects",
+            name: "Projects",
+            path: "/Users/example/Projects"
+          }
+        ]}
+      />
+    );
+
+    expect(html).not.toContain("Suggestions");
+    expect(html).not.toContain(
+      'aria-label="Add suggested folder /Users/example/Projects"'
+    );
+  });
+
+  it("shows live scan progress instead of making a new folder look idle", () => {
+    const html = renderToStaticMarkup(
+      <SettingsPanel
+        appSettings={appSettings({})}
+        companionPairing={null}
+        companionState={companionState({})}
+        disabled={false}
+        editorOptions={[]}
+        onCancel={vi.fn()}
+        onCancelCompanionPairing={vi.fn()}
+        onChangeAppSettings={vi.fn()}
+        onRespondToCompanionPairRequest={vi.fn()}
+        onRevokeCompanionDevice={vi.fn()}
+        onSave={vi.fn()}
+        onStartCompanionPairing={vi.fn()}
+        onToggleCompanion={vi.fn()}
+        repositorySearchRoots={[
+          {
+            enabled: true,
+            id: "workspace",
+            path: "/Users/example/Workspace",
+            repositoryCount: 0,
+            scannedDirectories: 12,
+            scanning: true,
+            skippedDirectories: 3
+          }
+        ]}
+      />
+    );
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Scanning folders");
+    expect(html).toContain("12 checked");
+    expect(html).toContain("loader-circle");
+    expect(html).not.toContain("Not scanned yet");
   });
 
   it("collapses the companion section while disabled", () => {
@@ -401,6 +608,27 @@ function companionState(input: Partial<CompanionStateView>): CompanionStateView 
     enabled: false,
     pendingPairRequests: [],
     status: "stopped",
+    ...input
+  };
+}
+
+function settingsPanelProps(
+  input: Partial<Parameters<typeof SettingsPanel>[0]> = {}
+): Parameters<typeof SettingsPanel>[0] {
+  return {
+    appSettings: appSettings({}),
+    companionPairing: null,
+    companionState: companionState({}),
+    disabled: false,
+    editorOptions: [],
+    onCancel: vi.fn(),
+    onCancelCompanionPairing: vi.fn(),
+    onChangeAppSettings: vi.fn(),
+    onRespondToCompanionPairRequest: vi.fn(),
+    onRevokeCompanionDevice: vi.fn(),
+    onSave: vi.fn(),
+    onStartCompanionPairing: vi.fn(),
+    onToggleCompanion: vi.fn(),
     ...input
   };
 }

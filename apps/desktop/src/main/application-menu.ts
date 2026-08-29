@@ -5,7 +5,14 @@ import {
   type UpdateMenuItemState
 } from "./update-menu-item.js";
 import type { UpdatePhase } from "./update-state.js";
-import { viewMenuItemOptions } from "./application-menu-options.js";
+import {
+  repositoryMenuItemOptions,
+  reviewViewMenuItemOptions,
+  settingsMenuItemOptions,
+  viewMenuItemOptions,
+  type ApplicationCommand,
+  type ApplicationCommandHandler
+} from "./application-menu-options.js";
 
 export type ApplicationMenuDependencies = {
   readonly appName: string;
@@ -13,6 +20,9 @@ export type ApplicationMenuDependencies = {
   readonly developerToolsEnabled: boolean;
   readonly getUpdatePhase: () => UpdatePhase;
   readonly onUpdatePhaseChange: (listener: (phase: UpdatePhase) => void) => () => void;
+  readonly onOpenRepositories?: () => void;
+  readonly onScanRepositoryFolder?: () => void;
+  readonly onApplicationCommand?: ApplicationCommandHandler;
   readonly updatesEnabled: boolean;
 };
 
@@ -132,6 +142,9 @@ function buildApplicationMenu(
     enabled: updateMenuItemState.enabled,
     label: updateMenuItemState.label
   });
+  const runApplicationCommand = (command: ApplicationCommand): void => {
+    dependencies.onApplicationCommand?.(command);
+  };
 
   if (process.platform === "darwin") {
     const appMenu = new Menu();
@@ -139,9 +152,11 @@ function buildApplicationMenu(
 
     if (dependencies.updatesEnabled) {
       appMenu.append(checkForUpdatesMenuItem);
-      appMenu.append(new MenuItem({ type: "separator" }));
     }
 
+    appMenu.append(new MenuItem({ type: "separator" }));
+    appMenu.append(new MenuItem(settingsMenuItemOptions(runApplicationCommand)));
+    appMenu.append(new MenuItem({ type: "separator" }));
     appMenu.append(new MenuItem({ role: "services" }));
     appMenu.append(new MenuItem({ type: "separator" }));
     appMenu.append(new MenuItem({ role: "hide" }));
@@ -151,11 +166,13 @@ function buildApplicationMenu(
     appMenu.append(new MenuItem({ role: "quit" }));
     menu.append(new MenuItem({ label: dependencies.appName, submenu: appMenu }));
 
-    const fileMenu = new Menu();
+    const fileMenu = repositoryFileMenu(dependencies);
     fileMenu.append(new MenuItem({ role: "close" }));
     menu.append(new MenuItem({ label: "File", submenu: fileMenu }));
   } else {
-    const fileMenu = new Menu();
+    const fileMenu = repositoryFileMenu(dependencies);
+    fileMenu.append(new MenuItem(settingsMenuItemOptions(runApplicationCommand)));
+    fileMenu.append(new MenuItem({ type: "separator" }));
     fileMenu.append(new MenuItem({ role: "close" }));
 
     if (process.platform === "win32") {
@@ -175,7 +192,17 @@ function buildApplicationMenu(
   editMenu.append(new MenuItem({ role: "selectAll" }));
   menu.append(new MenuItem({ label: "Edit", submenu: editMenu }));
 
+  const repositoryMenu = new Menu();
+  for (const options of repositoryMenuItemOptions(runApplicationCommand)) {
+    repositoryMenu.append(new MenuItem(options));
+  }
+  menu.append(new MenuItem({ label: "Repository", submenu: repositoryMenu }));
+
   const viewMenu = new Menu();
+  for (const options of reviewViewMenuItemOptions(runApplicationCommand)) {
+    viewMenu.append(new MenuItem(options));
+  }
+  viewMenu.append(new MenuItem({ type: "separator" }));
   for (const options of viewMenuItemOptions({
     developerToolsEnabled: dependencies.developerToolsEnabled
   })) {
@@ -196,6 +223,25 @@ function buildApplicationMenu(
     menu.append(new MenuItem({ label: "Help", submenu: helpMenu }));
   }
 
+  return menu;
+}
+
+function repositoryFileMenu(dependencies: ApplicationMenuDependencies): Menu {
+  const menu = new Menu();
+  menu.append(
+    new MenuItem({
+      accelerator: "CommandOrControl+O",
+      click: () => dependencies.onOpenRepositories?.(),
+      label: "Quick Open Repositories…"
+    })
+  );
+  menu.append(
+    new MenuItem({
+      click: () => dependencies.onScanRepositoryFolder?.(),
+      label: "Scan a Folder for Repositories…"
+    })
+  );
+  menu.append(new MenuItem({ type: "separator" }));
   return menu;
 }
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Open and search repositories from a durable Quick Open catalog, with approved
+  search folders, background discovery, drag-and-drop batch preview, and explicit
+  close-versus-forget behavior.
+- Discover and open linked Git worktrees from desktop or a paired mobile device.
+- Paired mobile devices can search and open approved catalog entries individually
+  without sending arbitrary filesystem paths.
+
+### Improved
+
+- Preserve project and workspace response compatibility for already-shipped mobile
+  clients while allowing newer clients to opt into structured worktree identity.
+
 ## 0.0.11 - 2026-08-21
 
 ### Improved

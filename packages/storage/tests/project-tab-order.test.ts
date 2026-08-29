@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import { openStorage } from "../src/index.js";
@@ -11,10 +12,10 @@ import {
 } from "../src/project-tab-order.js";
 
 describe("applyProjectTabOrder", () => {
-  it("keeps storage order when no tab order is stored", () => {
+  it("returns no open projects when the explicit tab order is empty", () => {
     const projects = [project("newest"), project("older")];
 
-    expect(applyProjectTabOrder(projects, [])).toEqual(projects);
+    expect(applyProjectTabOrder(projects, [])).toEqual([]);
   });
 
   it("reorders projects to match the stored tab order", () => {
@@ -26,10 +27,10 @@ describe("applyProjectTabOrder", () => {
     ).toEqual([project("oldest"), project("newest"), project("middle")]);
   });
 
-  it("appends projects missing from the stored tab order", () => {
+  it("keeps known projects that are not in the tab order closed", () => {
     expect(
       applyProjectTabOrder([project("newest"), project("older")], ["older"])
-    ).toEqual([project("older"), project("newest")]);
+    ).toEqual([project("older")]);
   });
 
   it("drops stored ids that no longer exist", () => {
@@ -73,6 +74,44 @@ describe("parseStoredProjectTabOrder", () => {
 });
 
 describe("stored project tab order", () => {
+  it("seeds legacy databases with every known project in current order", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-tab-migration-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const initialStorage = openStorage(storagePath);
+
+    initialStorage.upsertProject({
+      id: "older",
+      lastOpenedAt: "2026-01-01T00:00:00.000Z",
+      name: "Older",
+      path: "/tmp/older"
+    });
+    initialStorage.upsertProject({
+      id: "newer",
+      lastOpenedAt: "2026-01-02T00:00:00.000Z",
+      name: "Newer",
+      path: "/tmp/newer"
+    });
+    initialStorage.close();
+
+    const legacyDb = new DatabaseSync(storagePath);
+    legacyDb
+      .prepare("delete from app_settings where key = ?")
+      .run("project_tabs_explicit_v1");
+    legacyDb.close();
+
+    const migratedStorage = openStorage(storagePath);
+
+    try {
+      expect(migratedStorage.getProjectTabOrder()).toEqual(["newer", "older"]);
+      expect(migratedStorage.listOpenProjects().map(({ id }) => id)).toEqual([
+        "newer",
+        "older"
+      ]);
+    } finally {
+      migratedStorage.close();
+    }
+  });
+
   it("persists and reloads the tab order", () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-tab-order-"));
     const storagePath = path.join(storageDir, "difftray.sqlite");
@@ -131,6 +170,27 @@ describe("stored project tab order", () => {
       expect(storage.getProjectTabOrder()).toEqual(["project-a", "project-c"]);
     } finally {
       storage.close();
+    }
+  });
+
+  it("preserves an explicitly empty tab set after reopening storage", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-empty-tabs-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+    const storage = openStorage(storagePath);
+
+    storage.upsertProject({ id: "project-a", name: "A", path: "/tmp/a" });
+    storage.appendProjectToTabOrder("project-a");
+    storage.closeProjectTab("project-a");
+    storage.close();
+
+    const reopenedStorage = openStorage(storagePath);
+
+    try {
+      expect(reopenedStorage.listKnownProjects()).toHaveLength(1);
+      expect(reopenedStorage.listOpenProjects()).toEqual([]);
+      expect(reopenedStorage.getProjectTabOrder()).toEqual([]);
+    } finally {
+      reopenedStorage.close();
     }
   });
 

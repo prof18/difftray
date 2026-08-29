@@ -1,0 +1,76 @@
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.header div {
+  display: grid;
+  gap: 3px;
+}
+
+.header span,
+.remember,
+.footer {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.checkbox {
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  display: inline-flex;
+  height: 16px;
+  justify-content: center;
+  width: 16px;
+}
+
+.checkbox[data-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--panel);
+}
+
+.remember {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.footer {
+  align-items: center;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 12px;
+}
+
+.footer span {
+  margin-right: auto;
+}
+
+.footer button {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+}
+
+.footer button:last-child {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--panel);
+}
+
+.footer button:disabled {
+  opacity: 0.45;
+}

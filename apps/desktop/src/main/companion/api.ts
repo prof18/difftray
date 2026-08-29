@@ -1,6 +1,9 @@
 import { posix as posixPath } from "node:path";
 
 import {
+  COMPANION_CAPABILITY_PROJECT_IDENTITY,
+  COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
+  COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
   COMPANION_PROTOCOL_VERSION,
   type CompanionServerEvent,
   type CreateCommentBody,
@@ -9,7 +12,13 @@ import {
   type FileDiffStatus,
   type FileImageResponse,
   type MarkReviewedBody,
+  type OpenWorktreeBody,
+  type OpenRepositoriesBody,
+  type OpenRepositoriesResponse,
+  type ProjectWorktreeAvailabilityResponse,
   type RecentProjectView,
+  type RepositoryCatalogEntry,
+  type RepositoryWorktreeView,
   type ReviewCommentView,
   type ReviewFileDiffContentView,
   type ReviewWorkspaceView,
@@ -19,6 +28,9 @@ import {
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
+  parseOpenWorktreeBody,
+  parseOpenRepositoriesBody,
+  parseProjectWorktreeAvailabilityBody,
   parsePairRequestBody,
   parseUpdateCommentBody
 } from "@difftray/companion-protocol";
@@ -30,6 +42,7 @@ import type {
   CompanionEnvelopeVerifier
 } from "./auth.js";
 import type { RouteDefinition } from "./router.js";
+import { ExpectedUnavailableWorktreeError } from "../repository-worktree-service.js";
 
 export type MarkResult =
   | {
@@ -98,7 +111,27 @@ export type CompanionDeps = {
     projectId: string,
     target: DiffTargetBody
   ) => Promise<ReviewWorkspaceView>;
-  readonly listRecentProjects: () => Promise<readonly RecentProjectView[]>;
+  readonly listRecentProjects: (options: {
+    readonly summaryMode: "background" | "complete";
+  }) => Promise<readonly RecentProjectView[]>;
+  readonly areProjectSummariesPending?: (projectIds: readonly string[]) => boolean;
+  readonly listProjectWorktrees: (
+    projectId: string
+  ) => Promise<readonly RepositoryWorktreeView[]>;
+  readonly listProjectWorktreeAvailability: (
+    projectIds: readonly string[]
+  ) => Promise<ProjectWorktreeAvailabilityResponse["availability"]>;
+  readonly openProjectWorktree: (
+    projectId: string,
+    body: OpenWorktreeBody
+  ) => Promise<RecentProjectView>;
+  readonly listRepositoryCatalog: (
+    capabilities?: readonly string[]
+  ) => Promise<readonly RepositoryCatalogEntry[]>;
+  readonly isRepositoryCatalogScanPending?: () => boolean;
+  readonly openRepositories: (
+    body: OpenRepositoriesBody
+  ) => Promise<OpenRepositoriesResponse>;
   readonly notifyDesktopRenderer: (projectId: string) => void;
   readonly serverIdentity: () => {
     readonly appVersion: string;
@@ -115,6 +148,7 @@ export type CompanionResponse = {
 
 export type CompanionHandlerInput = {
   readonly body: unknown;
+  readonly capabilities: readonly string[];
   readonly device: CompanionDeviceContext | null;
   readonly params: ReadonlyMap<string, string>;
   readonly query: URLSearchParams;
@@ -372,16 +406,174 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     },
     {
-      handler: async () => ({
-        body: { projects: await deps.listRecentProjects() },
-        status: 200
-      }),
+      handler: async ({ capabilities }) => {
+        const supportsBackgroundSummaries = capabilities.includes(
+          COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE
+        );
+        const projects = await deps.listRecentProjects({
+          summaryMode: supportsBackgroundSummaries ? "background" : "complete"
+        });
+
+        return {
+          body: {
+            projects: projects.map((project) =>
+              projectForCapabilities(project, capabilities)
+            ),
+            ...(supportsBackgroundSummaries &&
+            deps.areProjectSummariesPending?.(projects.map((project) => project.id))
+              ? { summariesPending: true }
+              : {})
+          },
+          status: 200
+        };
+      },
       method: "GET",
       path: "/companion/v1/projects",
       requiresAuth: true
     },
     {
+      handler: async ({ capabilities }) => ({
+        body: {
+          repositories: await deps.listRepositoryCatalog(capabilities),
+          ...(capabilities.includes(COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE) &&
+          deps.isRepositoryCatalogScanPending?.()
+            ? { scanning: true }
+            : {})
+        },
+        status: 200
+      }),
+      method: "GET",
+      path: "/companion/v1/repositories",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, capabilities }) => {
+        const parsed = parseOpenRepositoriesBody(body);
+
+        if (!parsed.ok) {
+          return badRequest(parsed.error);
+        }
+
+        const result = await deps.openRepositories(parsed.value);
+
+        return {
+          body: {
+            ...result,
+            openedProjects: result.openedProjects.map((project) =>
+              projectForCapabilities(project, capabilities)
+            )
+          },
+          status: 200
+        };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/open",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body }) => {
+        const parsed = parseProjectWorktreeAvailabilityBody(body);
+
+        if (!parsed.ok) {
+          return badRequest(parsed.error);
+        }
+
+        if (
+          parsed.value.projectIds.some((projectId) => !deps.storage.getProject(projectId))
+        ) {
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: {
+            availability: await deps.listProjectWorktreeAvailability(
+              parsed.value.projectIds
+            )
+          },
+          status: 200
+        };
+      },
+      method: "POST",
+      path: "/companion/v1/projects/worktree-availability",
+      requiresAuth: true
+    },
+    {
       handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId) {
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+
+        if (!deps.storage.getProject(projectId)) {
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+
+        try {
+          return {
+            body: { worktrees: await deps.listProjectWorktrees(projectId) },
+            status: 200
+          };
+        } catch (error) {
+          if (!(error instanceof ExpectedUnavailableWorktreeError)) {
+            throw error;
+          }
+
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+      },
+      method: "GET",
+      path: "/companion/v1/projects/:projectId/worktrees",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, capabilities, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseOpenWorktreeBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        try {
+          return {
+            body: {
+              project: projectForCapabilities(
+                await deps.openProjectWorktree(projectId, parsed.value),
+                capabilities
+              )
+            },
+            status: 200
+          };
+        } catch (error) {
+          if (!(error instanceof ExpectedUnavailableWorktreeError)) {
+            throw error;
+          }
+
+          return {
+            body: companionError("not_found", "Worktree is no longer available"),
+            status: 404
+          };
+        }
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/worktrees/open",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ capabilities, params }) => {
         const projectId = params.get("projectId");
 
         if (!projectId) {
@@ -392,7 +584,12 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         }
 
         return {
-          body: { workspace: await loadWorkspaceSingleFlight(projectId) },
+          body: {
+            workspace: workspaceForCapabilities(
+              await loadWorkspaceSingleFlight(projectId),
+              capabilities
+            )
+          },
           status: 200
         };
       },
@@ -587,7 +784,7 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     },
     {
-      handler: async ({ body, params }) => {
+      handler: async ({ body, capabilities, params }) => {
         const projectId = params.get("projectId");
         const parsed = parseDiffTargetBody(body);
 
@@ -596,7 +793,12 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         }
 
         return {
-          body: { workspace: await deps.updateDiffTarget(projectId, parsed.value) },
+          body: {
+            workspace: workspaceForCapabilities(
+              await deps.updateDiffTarget(projectId, parsed.value),
+              capabilities
+            )
+          },
           status: 200
         };
       },
@@ -605,6 +807,30 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     }
   ];
+}
+
+function projectForCapabilities(
+  project: RecentProjectView,
+  capabilities: readonly string[]
+): RecentProjectView {
+  if (capabilities.includes(COMPANION_CAPABILITY_PROJECT_IDENTITY)) {
+    return project;
+  }
+
+  const legacyProject = { ...project } as Record<string, unknown>;
+  delete legacyProject.repositoryName;
+  delete legacyProject.worktreeName;
+  return legacyProject as RecentProjectView;
+}
+
+function workspaceForCapabilities(
+  workspace: ReviewWorkspaceView,
+  capabilities: readonly string[]
+): ReviewWorkspaceView {
+  return {
+    ...workspace,
+    project: projectForCapabilities(workspace.project, capabilities)
+  };
 }
 
 function badRequest(message: string): CompanionResponse {

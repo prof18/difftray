@@ -50,6 +50,7 @@ describe("ProjectTabBar drag", () => {
       observe = vi.fn();
       unobserve = vi.fn();
     };
+    HTMLElement.prototype.scrollIntoView = vi.fn();
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -63,7 +64,7 @@ describe("ProjectTabBar drag", () => {
     container.remove();
   });
 
-  it("opens the active project in Finder", () => {
+  it("opens the active project in Finder from the repository menu", () => {
     const onOpenActiveProjectInFinder = vi.fn();
 
     act(() => {
@@ -72,17 +73,172 @@ describe("ProjectTabBar drag", () => {
       );
     });
 
-    const openInFinderButton = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Open Repo One in Finder"]'
+    const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
     );
 
-    expect(openInFinderButton).not.toBeNull();
+    expect(repositoryActionsButton).not.toBeNull();
+
+    act(() => {
+      repositoryActionsButton?.click();
+    });
+
+    const openInFinderButton = [
+      ...container.querySelectorAll<HTMLButtonElement>('[role="menu"] button')
+    ].find((button) => button.textContent === "Show in Finder");
+
+    expect(openInFinderButton).not.toBeUndefined();
 
     act(() => {
       openInFinderButton?.click();
     });
 
     expect(onOpenActiveProjectInFinder).toHaveBeenCalledOnce();
+  });
+
+  it("closes the repository menu when the active tab changes", () => {
+    const props = projectTabBarProps({
+      projects: [project("repo-one", "Repo One"), project("repo-two", "Repo Two")]
+    });
+
+    act(() => {
+      root.render(<ProjectTabBar {...props} />);
+    });
+
+    const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
+    );
+    act(() => {
+      repositoryActionsButton?.click();
+    });
+    expect(container.querySelector('[role="menu"]')?.getAttribute("hidden")).toBeNull();
+
+    act(() => {
+      root.render(<ProjectTabBar {...props} activeProjectId="repo-two" />);
+    });
+
+    expect(container.querySelector('[role="menu"]')?.getAttribute("hidden")).toBe("");
+  });
+
+  it("consumes Escape in the repository menu before App shortcuts see it", () => {
+    const onWindowKeyDown = vi.fn();
+    window.addEventListener("keydown", onWindowKeyDown);
+
+    try {
+      act(() => {
+        root.render(<ProjectTabBar {...projectTabBarProps()} />);
+      });
+
+      const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+        '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
+      );
+
+      act(() => {
+        repositoryActionsButton?.click();
+      });
+
+      expect(container.querySelector('[role="menu"]')).not.toBeNull();
+
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Escape"
+      });
+
+      act(() => {
+        document.dispatchEvent(event);
+      });
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(onWindowKeyDown).not.toHaveBeenCalled();
+      expect(container.querySelector('[role="menu"]')?.getAttribute("hidden")).toBe("");
+    } finally {
+      window.removeEventListener("keydown", onWindowKeyDown);
+    }
+  });
+
+  it("closes the repository menu when Tab leaves without trapping focus", () => {
+    act(() => {
+      root.render(<ProjectTabBar {...projectTabBarProps()} />);
+    });
+
+    const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
+    );
+
+    act(() => {
+      repositoryActionsButton?.click();
+    });
+
+    const firstMenuItem = container.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    expect(firstMenuItem).not.toBeNull();
+
+    const tab = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Tab"
+    });
+
+    act(() => {
+      firstMenuItem?.dispatchEvent(tab);
+    });
+
+    expect(tab.defaultPrevented).toBe(false);
+    expect(container.querySelector('[role="menu"]')?.getAttribute("hidden")).toBe("");
+  });
+
+  it("returns focus to the trigger after keyboard menu activation", () => {
+    const onRefreshActiveProject = vi.fn();
+
+    act(() => {
+      root.render(<ProjectTabBar {...projectTabBarProps({ onRefreshActiveProject })} />);
+    });
+
+    const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
+    );
+
+    act(() => {
+      repositoryActionsButton?.click();
+    });
+
+    const refreshButton = [
+      ...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+    ].find((button) => button.textContent === "Refresh");
+    expect(refreshButton).not.toBeUndefined();
+    expect(document.activeElement).toBe(refreshButton);
+
+    act(() => {
+      refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    });
+
+    expect(onRefreshActiveProject).toHaveBeenCalledOnce();
+    expect(container.querySelector('[role="menu"]')?.getAttribute("hidden")).toBe("");
+    expect(document.activeElement).toBe(repositoryActionsButton);
+  });
+
+  it("does not move mouse focus to the trigger when a menu item is clicked", () => {
+    act(() => {
+      root.render(<ProjectTabBar {...projectTabBarProps()} />);
+    });
+
+    const repositoryActionsButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Repository actions for Repo One"][aria-haspopup="menu"]'
+    );
+
+    act(() => {
+      repositoryActionsButton?.click();
+    });
+
+    const refreshButton = container.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    expect(refreshButton).not.toBeNull();
+
+    act(() => {
+      refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    });
+
+    expect(document.activeElement).toBe(refreshButton);
+    expect(document.activeElement).not.toBe(repositoryActionsButton);
   });
 
   it("cancels an active drag when tabDragCancelKey changes", () => {
@@ -138,9 +294,11 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     activeProjectId: "repo-one",
     disabled: false,
     onCloseActiveProject: vi.fn(),
+    onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
+    onOpenActiveProjectWorktrees: vi.fn(),
     onOpenProject: vi.fn(),
-    onOpenSettings: vi.fn(),
+    onRefreshActiveProject: vi.fn(),
     onReorderProjects: vi.fn(),
     onCommitProjectOrder: vi.fn(),
     onSelectProject: vi.fn(),
