@@ -128,15 +128,21 @@ describe("repository dialog state", () => {
     expect(onOpen).toHaveBeenCalledWith(["three", "four"], false);
   });
 
-  it("does not treat focused controls as global shortcut targets", () => {
+  it("blocks global shortcuts on controls except focused file rows", () => {
     const button = document.createElement("button");
     const icon = document.createElement("span");
+    const fileButton = document.createElement("button");
+    const fileIcon = document.createElement("span");
     const menu = document.createElement("div");
     menu.setAttribute("role", "menuitem");
     button.append(icon);
+    fileButton.dataset.filePath = "src/App.tsx";
+    fileButton.append(fileIcon);
 
     expect(isGlobalShortcutTarget(button)).toBe(true);
     expect(isGlobalShortcutTarget(icon)).toBe(true);
+    expect(isGlobalShortcutTarget(fileButton)).toBe(false);
+    expect(isGlobalShortcutTarget(fileIcon)).toBe(false);
     expect(isGlobalShortcutTarget(menu)).toBe(true);
     const listbox = document.createElement("div");
     listbox.setAttribute("role", "listbox");

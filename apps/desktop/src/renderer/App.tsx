@@ -3247,6 +3247,13 @@ export function isGlobalShortcutTarget(target: EventTarget | null): boolean {
     return false;
   }
 
+  // File rows intentionally retain the review shortcuts when focused. Selection
+  // moves focus between these buttons, so treating them like generic controls
+  // would make only the first Arrow/J/K/R key press work.
+  if (target.closest("button[data-file-path]")) {
+    return false;
+  }
+
   return Boolean(
     target.closest(
       'button, [role="button"], [role="menuitem"], [role="option"], [role="listbox"], [tabindex]:not([tabindex="-1"]), select, textarea, input, [contenteditable="true"]'
