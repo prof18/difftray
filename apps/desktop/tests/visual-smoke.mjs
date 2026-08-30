@@ -37,6 +37,7 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
+  await expectSelectedFileFinderActions(app, window, repoPath);
   await window
     .getByRole("button", { name: "Worktrees for visual-repo" })
     .waitFor({ timeout: 10_000 });
@@ -348,6 +349,11 @@ try {
   await window.getByRole("heading", { name: "No repository open" }).waitFor({
     timeout: 10_000
   });
+  await expectApplicationMenuItemEnabled(app, "file-show-in-finder", false);
+  await openRepositoryFromDialog(app, window, repoPath);
+  await expectApplicationMenuItemEnabled(app, "file-show-in-finder", true);
+  await window.close();
+  await expectApplicationMenuItemEnabled(app, "file-show-in-finder", false);
 } finally {
   await app.close();
 }
@@ -506,6 +512,110 @@ async function dismissErrorBanner(window, errorText) {
   await window.getByText(errorText).waitFor({ state: "detached", timeout: 10_000 });
 }
 
+async function expectSelectedFileFinderActions(app, window, repoPath) {
+  const expectedPath = await realpath(path.join(repoPath, "tracked.txt"));
+
+  await app.evaluate(({ shell }) => {
+    const originalShowItemInFolder = shell.showItemInFolder;
+
+    globalThis.__difftrayShownFilePaths = [];
+    globalThis.__difftrayRestoreShowItemInFolder = () => {
+      shell.showItemInFolder = originalShowItemInFolder;
+    };
+    shell.showItemInFolder = (filePath) => {
+      globalThis.__difftrayShownFilePaths.push(filePath);
+    };
+  });
+
+  try {
+    const row = window.getByRole("button", { name: /tracked\.txt modified/ });
+
+    await row.click();
+    await expectSelectedFile(window, "tracked.txt");
+    await window.keyboard.press("Meta+KeyK");
+    const commandPalette = window.getByRole("dialog", { name: "Command palette" });
+    await commandPalette.waitFor({ timeout: 10_000 });
+    await window.keyboard.type("selected file");
+    await commandPalette
+      .getByRole("button", { name: "Open selected file in Editor" })
+      .waitFor({ timeout: 10_000 });
+    await commandPalette
+      .getByRole("button", { name: "Show selected file in Finder" })
+      .waitFor({ timeout: 10_000 });
+    await window.keyboard.press("Escape");
+    await commandPalette.waitFor({ state: "detached", timeout: 10_000 });
+
+    await row.click({ button: "right", position: { x: 12, y: 12 } });
+    const contextMenu = window.getByRole("menu", {
+      name: "File actions for tracked.txt"
+    });
+    await contextMenu.waitFor({ timeout: 10_000 });
+    await window.screenshot({
+      fullPage: true,
+      path: path.join(artifactsDir, "desktop-file-context-menu.png")
+    });
+    await window.getByRole("menuitem", { name: "Show in Finder" }).click();
+    await expectShownFilePathCount(app, 1);
+    await expectFocusedFile(window, "tracked.txt");
+
+    await expectApplicationMenuItemEnabled(app, "file-show-in-finder", true);
+    await app.evaluate(({ Menu }) => {
+      Menu.getApplicationMenu()?.getMenuItemById("file-show-in-finder")?.click();
+    });
+    await expectShownFilePathCount(app, 2);
+
+    const shownPaths = await app.evaluate(
+      () => globalThis.__difftrayShownFilePaths ?? []
+    );
+    if (shownPaths.some((shownPath) => shownPath !== expectedPath)) {
+      throw new Error(
+        `Selected-file Finder action used unexpected paths: ${shownPaths.join(", ")}`
+      );
+    }
+  } finally {
+    await app.evaluate(() => {
+      globalThis.__difftrayRestoreShowItemInFolder?.();
+      delete globalThis.__difftrayRestoreShowItemInFolder;
+      delete globalThis.__difftrayShownFilePaths;
+    });
+  }
+}
+
+async function expectShownFilePathCount(app, expectedCount) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const count = await app.evaluate(
+      () => globalThis.__difftrayShownFilePaths?.length ?? 0
+    );
+
+    if (count === expectedCount) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`Expected ${expectedCount} selected-file Finder actions.`);
+}
+
+async function expectApplicationMenuItemEnabled(app, itemId, expectedEnabled) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const enabled = await app.evaluate(
+      ({ Menu }, id) => Menu.getApplicationMenu()?.getMenuItemById(id)?.enabled,
+      itemId
+    );
+
+    if (enabled === expectedEnabled) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(
+    `Expected application menu item ${itemId} enabled=${String(expectedEnabled)}.`
+  );
+}
+
 async function expectDismissibleOpenProjectError(app, window, folderPath) {
   await app.evaluate(({ dialog }, selectedPath) => {
     const originalShowOpenDialog = dialog.showOpenDialog;
@@ -523,6 +633,33 @@ async function expectDismissibleOpenProjectError(app, window, folderPath) {
     await window.getByRole("button", { name: "Open repository" }).click();
     await window.getByRole("button", { name: "Open Repositories…" }).click();
     await dismissErrorBanner(window, "Selected folder is not inside a Git repository.");
+  } finally {
+    await app.evaluate(() => {
+      globalThis.__difftrayRestoreShowOpenDialog?.();
+      delete globalThis.__difftrayRestoreShowOpenDialog;
+    });
+  }
+}
+
+async function openRepositoryFromDialog(app, window, folderPath) {
+  await app.evaluate(({ dialog }, selectedPath) => {
+    const originalShowOpenDialog = dialog.showOpenDialog;
+
+    globalThis.__difftrayRestoreShowOpenDialog = () => {
+      dialog.showOpenDialog = originalShowOpenDialog;
+    };
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [selectedPath]
+    });
+  }, folderPath);
+
+  try {
+    await window.getByRole("button", { name: "Open repository" }).click();
+    await window.getByRole("button", { name: "Open Repositories…" }).click();
+    await window
+      .getByRole("button", { name: /tracked\.txt modified/ })
+      .waitFor({ timeout: 10_000 });
   } finally {
     await app.evaluate(() => {
       globalThis.__difftrayRestoreShowOpenDialog?.();

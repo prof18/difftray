@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canRunApplicationCommand,
+  isSelectedFileActionRequestCurrent,
   runApplicationCommandIfAllowed
 } from "./application-command-state.js";
 
@@ -38,5 +39,42 @@ describe("application command state", () => {
     runApplicationCommandIfAllowed("idle", command, true);
 
     expect(command).not.toHaveBeenCalled();
+  });
+
+  it("accepts only the latest selected-file action for the active project and path", () => {
+    const request = {
+      id: 4,
+      path: "src/App.tsx",
+      projectId: "project-1"
+    };
+
+    expect(
+      isSelectedFileActionRequestCurrent(request, {
+        activePath: "src/App.tsx",
+        activeProjectId: "project-1",
+        latestRequestId: 4
+      })
+    ).toBe(true);
+    expect(
+      isSelectedFileActionRequestCurrent(request, {
+        activePath: "src/App.tsx",
+        activeProjectId: "project-1",
+        latestRequestId: 5
+      })
+    ).toBe(false);
+    expect(
+      isSelectedFileActionRequestCurrent(request, {
+        activePath: "src/Other.tsx",
+        activeProjectId: "project-1",
+        latestRequestId: 4
+      })
+    ).toBe(false);
+    expect(
+      isSelectedFileActionRequestCurrent(request, {
+        activePath: "src/App.tsx",
+        activeProjectId: "project-2",
+        latestRequestId: 4
+      })
+    ).toBe(false);
   });
 });

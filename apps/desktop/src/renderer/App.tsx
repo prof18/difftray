@@ -92,6 +92,7 @@ import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
 import {
   canRunApplicationCommand,
+  isSelectedFileActionRequestCurrent,
   runApplicationCommandIfAllowed
 } from "./application-command-state.js";
 
@@ -214,6 +215,8 @@ export function App(): React.JSX.Element {
   const lastFocusRefreshAtRef = useRef(0);
   const loadStateRef = useRef<LoadState>("idle");
   const openProjectInFinderRequestRef = useRef(0);
+  const selectedFileActionRequestRef = useRef(0);
+  const selectedFilePathRef = useRef<string | undefined>(undefined);
   const paletteOpenRef = useRef(false);
   const selectedPathRef = useRef<string | undefined>(undefined);
   const nextReviewNavigationPerformanceIdRef = useRef(0);
@@ -670,6 +673,22 @@ export function App(): React.JSX.Element {
 
   const selectedFile =
     visibleFiles.find((file) => file.path === selectedPath) ?? visibleFiles[0];
+
+  useLayoutEffect(() => {
+    selectedFilePathRef.current = selectedFile?.path;
+    selectedFileActionRequestRef.current += 1;
+  }, [selectedFile?.path]);
+
+  useEffect(() => {
+    void window.difftray
+      .setSelectedFileAvailable(
+        selectedFile !== undefined && selectedFile.status !== "deleted"
+      )
+      .catch((caughtError: unknown) => {
+        console.error("Failed to update selected file menu state", caughtError);
+      });
+  }, [selectedFile]);
+
   const selectedDiffSideFocus = selectedFile
     ? diffSideFocusForFile(selectedFile, diffMode, diffSideFocus)
     : diffSideFocus;
@@ -767,6 +786,7 @@ export function App(): React.JSX.Element {
   useLayoutEffect(() => {
     activeProjectIdRef.current = activeProject?.id;
     openProjectInFinderRequestRef.current += 1;
+    selectedFileActionRequestRef.current += 1;
   }, [activeProject?.id]);
 
   useEffect(() => {
@@ -1043,6 +1063,9 @@ export function App(): React.JSX.Element {
           void forgetRepository(workspace?.project);
         },
         loadProject,
+        openFileInEditor: (path) => {
+          void openFileInEditor(path);
+        },
         toggleReview: () => {
           void toggleSelectedReviewed();
         },
@@ -1064,6 +1087,9 @@ export function App(): React.JSX.Element {
         },
         selectFile: selectPath,
         setDiffMode: setAndPersistDiffMode,
+        showFileInFinder: (path) => {
+          void showFileInFinder(path);
+        },
         toggleFileList: toggleFileListCollapsed,
         workspace
       }),
@@ -1767,6 +1793,9 @@ export function App(): React.JSX.Element {
       case "open-settings":
         void openSettings();
         return;
+      case "file-show-in-finder":
+        void showFileInFinder();
+        return;
       case "repository-close":
         closeTransientOverlays();
         if (activeWorkspace) void closeProject(activeWorkspace.project.id);
@@ -2450,18 +2479,27 @@ export function App(): React.JSX.Element {
     }
   }
 
-  async function openSelectedInEditor(): Promise<void> {
-    if (!workspace || !selectedFile) {
+  async function openFileInEditor(path = selectedFile?.path): Promise<void> {
+    if (!workspace || !path) {
       return;
     }
 
+    const request = {
+      id: ++selectedFileActionRequestRef.current,
+      path,
+      projectId: workspace.project.id
+    };
     setError(undefined);
 
     try {
       const result = await window.difftray.openFileInEditor({
-        path: selectedFile.path,
-        projectId: workspace.project.id
+        path: request.path,
+        projectId: request.projectId
       });
+
+      if (!isCurrentSelectedFileActionRequest(request)) {
+        return;
+      }
 
       if (result.status === "rejected") {
         setError(
@@ -2471,8 +2509,54 @@ export function App(): React.JSX.Element {
         );
       }
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (isCurrentSelectedFileActionRequest(request)) {
+        setError(errorMessage(caughtError));
+      }
     }
+  }
+
+  async function showFileInFinder(path = selectedFile?.path): Promise<void> {
+    if (!workspace || !path) {
+      return;
+    }
+
+    const request = {
+      id: ++selectedFileActionRequestRef.current,
+      path,
+      projectId: workspace.project.id
+    };
+    setError(undefined);
+
+    try {
+      const result = await window.difftray.showFileInFinder({
+        path: request.path,
+        projectId: request.projectId
+      });
+
+      if (!isCurrentSelectedFileActionRequest(request)) {
+        return;
+      }
+
+      if (result.status === "rejected") {
+        setError("The selected file cannot be shown from the current working tree.");
+      }
+    } catch (caughtError) {
+      if (isCurrentSelectedFileActionRequest(request)) {
+        setError(errorMessage(caughtError));
+      }
+    }
+  }
+
+  function isCurrentSelectedFileActionRequest(request: {
+    readonly id: number;
+    readonly path: string;
+    readonly projectId: string;
+  }): boolean {
+    return isSelectedFileActionRequestCurrent(request, {
+      activePath: selectedFilePathRef.current,
+      activeProjectId: activeProjectIdRef.current,
+      latestRequestId: selectedFileActionRequestRef.current
+    });
   }
 
   function applyWorkspaceComments(
@@ -2905,7 +2989,14 @@ export function App(): React.JSX.Element {
                 <FileList
                   commentCountByPath={commentCountByPath}
                   files={visibleFiles}
+                  onOpenInEditor={(path) => {
+                    void openFileInEditor(path);
+                  }}
                   onSelect={selectPath}
+                  onShowInFinder={(path) => {
+                    void showFileInFinder(path);
+                  }}
+                  projectId={workspace.project.id}
                   selectedPath={selectedFile?.path}
                 />
                 <div className={styles.fileFooter}>
@@ -2953,7 +3044,7 @@ export function App(): React.JSX.Element {
                       void toggleSelectedReviewed();
                     }}
                     onOpenEditor={() => {
-                      void openSelectedInEditor();
+                      void openFileInEditor();
                     }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
                     reportCommentCount={workspace.comments.length}

@@ -8,6 +8,7 @@ import type { UpdatePhase } from "./update-state.js";
 import {
   repositoryMenuItemOptions,
   reviewViewMenuItemOptions,
+  selectedFileMenuItemOptions,
   settingsMenuItemOptions,
   viewMenuItemOptions,
   type ApplicationCommand,
@@ -27,6 +28,7 @@ export type ApplicationMenuDependencies = {
 };
 
 export class ApplicationMenuController {
+  private selectedFileAvailable = false;
   private updateMenuItemState: UpdateMenuItemState = {
     enabled: true,
     label: "Check for Updates…"
@@ -49,6 +51,19 @@ export class ApplicationMenuController {
     this.unsubscribeFromUpdatePhase = this.dependencies.onUpdatePhaseChange((phase) => {
       this.syncUpdateMenuItem(phase);
     });
+  }
+
+  setSelectedFileAvailable(available: boolean): void {
+    if (this.selectedFileAvailable === available) {
+      return;
+    }
+
+    this.selectedFileAvailable = available;
+    const item = Menu.getApplicationMenu()?.getMenuItemById("file-show-in-finder");
+
+    if (item) {
+      item.enabled = available;
+    }
   }
 
   dispose(): void {
@@ -76,9 +91,14 @@ export class ApplicationMenuController {
 
   private applyApplicationMenu(): void {
     Menu.setApplicationMenu(
-      buildApplicationMenu(this.dependencies, this.updateMenuItemState, () => {
-        void this.handleCheckForUpdates();
-      })
+      buildApplicationMenu(
+        this.dependencies,
+        this.updateMenuItemState,
+        () => {
+          void this.handleCheckForUpdates();
+        },
+        this.selectedFileAvailable
+      )
     );
   }
 
@@ -133,7 +153,8 @@ export class ApplicationMenuController {
 function buildApplicationMenu(
   dependencies: ApplicationMenuDependencies,
   updateMenuItemState: UpdateMenuItemState,
-  onCheckForUpdates: () => void
+  onCheckForUpdates: () => void,
+  selectedFileAvailable: boolean
 ): Menu {
   const menu = new Menu();
 
@@ -167,10 +188,22 @@ function buildApplicationMenu(
     menu.append(new MenuItem({ label: dependencies.appName, submenu: appMenu }));
 
     const fileMenu = repositoryFileMenu(dependencies);
+    fileMenu.append(
+      new MenuItem(
+        selectedFileMenuItemOptions(runApplicationCommand, selectedFileAvailable)
+      )
+    );
+    fileMenu.append(new MenuItem({ type: "separator" }));
     fileMenu.append(new MenuItem({ role: "close" }));
     menu.append(new MenuItem({ label: "File", submenu: fileMenu }));
   } else {
     const fileMenu = repositoryFileMenu(dependencies);
+    fileMenu.append(
+      new MenuItem(
+        selectedFileMenuItemOptions(runApplicationCommand, selectedFileAvailable)
+      )
+    );
+    fileMenu.append(new MenuItem({ type: "separator" }));
     fileMenu.append(new MenuItem(settingsMenuItemOptions(runApplicationCommand)));
     fileMenu.append(new MenuItem({ type: "separator" }));
     fileMenu.append(new MenuItem({ role: "close" }));

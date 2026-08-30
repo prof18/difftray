@@ -1,6 +1,7 @@
 import {
   Check,
   Code2,
+  ExternalLink,
   FileCode2,
   Folder,
   FolderOpen,
@@ -20,6 +21,7 @@ export type BuildCommandsInput = {
   readonly files: readonly ReviewFileView[];
   readonly forgetRepository: () => void;
   readonly loadProject: (projectId: string) => Promise<void>;
+  readonly openFileInEditor: (path: string) => void;
   readonly openProject: () => void;
   readonly openSettings: () => void;
   readonly projects: readonly RecentProjectView[];
@@ -27,6 +29,7 @@ export type BuildCommandsInput = {
   readonly scanRepositoryFolder?: () => void;
   readonly selectFile: (path: string) => void;
   readonly setDiffMode: (mode: DiffMode) => void;
+  readonly showFileInFinder: (path: string) => void;
   readonly toggleFileList: () => void;
   readonly toggleReview: () => void;
   readonly workspace: ReviewWorkspaceView | undefined;
@@ -39,6 +42,7 @@ export function buildCommands({
   files,
   forgetRepository,
   loadProject,
+  openFileInEditor,
   openProject,
   openSettings,
   projects,
@@ -46,6 +50,7 @@ export function buildCommands({
   scanRepositoryFolder,
   selectFile,
   setDiffMode,
+  showFileInFinder,
   toggleFileList,
   toggleReview,
   workspace
@@ -74,15 +79,41 @@ export function buildCommands({
   }
 
   if (workspace) {
+    items.push({
+      icon: <RefreshCw size={14} strokeWidth={1.4} aria-hidden />,
+      id: "action-refresh",
+      kind: "action",
+      label: "Refresh project",
+      run: refresh,
+      sub: workspace.project.name
+    });
+
+    if (activeFile && activeFile.status !== "deleted") {
+      items.push(
+        {
+          icon: <ExternalLink size={14} strokeWidth={1.4} aria-hidden />,
+          id: "action-open-file-in-editor",
+          kind: "action",
+          label: "Open selected file in Editor",
+          run: () => {
+            openFileInEditor(activeFile.path);
+          },
+          sub: activeFile.path
+        },
+        {
+          icon: <FolderOpen size={14} strokeWidth={1.4} aria-hidden />,
+          id: "action-show-file-in-finder",
+          kind: "action",
+          label: "Show selected file in Finder",
+          run: () => {
+            showFileInFinder(activeFile.path);
+          },
+          sub: activeFile.path
+        }
+      );
+    }
+
     items.push(
-      {
-        icon: <RefreshCw size={14} strokeWidth={1.4} aria-hidden />,
-        id: "action-refresh",
-        kind: "action",
-        label: "Refresh project",
-        run: refresh,
-        sub: workspace.project.name
-      },
       {
         icon: <Check size={14} strokeWidth={1.4} aria-hidden />,
         id: "action-review",

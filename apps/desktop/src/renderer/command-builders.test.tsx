@@ -26,6 +26,8 @@ describe("buildCommands", () => {
     expect(commands.map((command) => [command.id, command.label])).toEqual([
       ["action-open", "Open Repository"],
       ["action-refresh", "Refresh project"],
+      ["action-open-file-in-editor", "Open selected file in Editor"],
+      ["action-show-file-in-finder", "Show selected file in Finder"],
       ["action-review", "Mark reviewed"],
       ["action-file-list", "Toggle file list"],
       ["action-diff-mode", "Switch to unified diff"],
@@ -35,6 +37,8 @@ describe("buildCommands", () => {
     ]);
 
     commands.find((command) => command.id === "action-refresh")?.run();
+    commands.find((command) => command.id === "action-open-file-in-editor")?.run();
+    commands.find((command) => command.id === "action-show-file-in-finder")?.run();
     commands.find((command) => command.id === "action-review")?.run();
     commands.find((command) => command.id === "action-file-list")?.run();
     commands.find((command) => command.id === "action-settings")?.run();
@@ -43,6 +47,8 @@ describe("buildCommands", () => {
     commands.find((command) => command.id === "file-src/App.tsx")?.run();
 
     expect(input.refresh).toHaveBeenCalledOnce();
+    expect(input.openFileInEditor).toHaveBeenCalledWith("src/App.tsx");
+    expect(input.showFileInFinder).toHaveBeenCalledWith("src/App.tsx");
     expect(input.toggleReview).toHaveBeenCalledOnce();
     expect(input.toggleFileList).toHaveBeenCalledOnce();
     expect(input.openSettings).toHaveBeenCalledOnce();
@@ -50,6 +56,22 @@ describe("buildCommands", () => {
     expect(input.setDiffMode).toHaveBeenCalledWith("unified");
     expect(input.selectFile).toHaveBeenCalledWith("src/App.tsx");
     expect(input.closePalette).toHaveBeenCalledOnce();
+  });
+
+  it("omits selected-file external actions for deleted files", () => {
+    const input = buildCommandsInput({
+      activeFile: reviewFile({ status: "deleted" }),
+      workspace: reviewWorkspace()
+    });
+
+    const commands = buildCommands(input);
+
+    expect(commands.map((command) => command.id)).not.toContain(
+      "action-open-file-in-editor"
+    );
+    expect(commands.map((command) => command.id)).not.toContain(
+      "action-show-file-in-finder"
+    );
   });
 
   it("uses unmark copy for reviewed files and toggles back to split mode", () => {
@@ -105,12 +127,14 @@ function buildCommandsInput(input: Partial<BuildCommandsInput> = {}): BuildComma
     files: [],
     forgetRepository: vi.fn(),
     loadProject: vi.fn(),
+    openFileInEditor: vi.fn(),
     openProject: vi.fn(),
     openSettings: vi.fn(),
     projects: [],
     refresh: vi.fn(),
     selectFile: vi.fn(),
     setDiffMode: vi.fn(),
+    showFileInFinder: vi.fn(),
     toggleFileList: vi.fn(),
     toggleReview: vi.fn(),
     workspace: undefined,

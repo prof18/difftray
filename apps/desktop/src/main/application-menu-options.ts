@@ -1,6 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 
 export type ApplicationCommand =
+  | "file-show-in-finder"
   | "open-settings"
   | "repository-close"
   | "repository-forget"
@@ -13,6 +14,18 @@ export type ApplicationCommand =
   | "view-unified-diff";
 
 export type ApplicationCommandHandler = (command: ApplicationCommand) => void;
+
+export function selectedFileMenuItemOptions(
+  onCommand: ApplicationCommandHandler,
+  enabled = false
+): MenuItemConstructorOptions {
+  return {
+    click: () => onCommand("file-show-in-finder"),
+    enabled,
+    id: "file-show-in-finder",
+    label: "Show Selected File in Finder"
+  };
+}
 
 export function settingsMenuItemOptions(
   onCommand: ApplicationCommandHandler

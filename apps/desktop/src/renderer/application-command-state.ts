@@ -14,3 +14,22 @@ export function runApplicationCommandIfAllowed(
     command();
   }
 }
+
+export function isSelectedFileActionRequestCurrent(
+  request: {
+    readonly id: number;
+    readonly path: string;
+    readonly projectId: string;
+  },
+  current: {
+    readonly activePath: string | undefined;
+    readonly activeProjectId: string | undefined;
+    readonly latestRequestId: number;
+  }
+): boolean {
+  return (
+    request.id === current.latestRequestId &&
+    request.path === current.activePath &&
+    request.projectId === current.activeProjectId
+  );
+}

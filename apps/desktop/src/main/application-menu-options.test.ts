@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   repositoryMenuItemOptions,
   reviewViewMenuItemOptions,
+  selectedFileMenuItemOptions,
   settingsMenuItemOptions,
   viewMenuItemOptions
 } from "./application-menu-options.js";
@@ -48,6 +49,21 @@ describe("viewMenuItemOptions", () => {
       accelerator: "CommandOrControl+,",
       label: "Settings…"
     });
+  });
+
+  it("exposes the selected file Finder action in the File menu", () => {
+    const onCommand = vi.fn();
+
+    const item = selectedFileMenuItemOptions(onCommand);
+
+    expect(item).toMatchObject({
+      enabled: false,
+      id: "file-show-in-finder",
+      label: "Show Selected File in Finder"
+    });
+
+    item.click?.({} as never, undefined, {} as never);
+    expect(onCommand).toHaveBeenCalledWith("file-show-in-finder");
   });
 
   it("exposes review display commands in the View menu", () => {

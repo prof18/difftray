@@ -9,6 +9,7 @@ export type UpdatePhase =
 export type UpdatePhaseListener = (phase: UpdatePhase) => void;
 
 export type ApplicationCommand =
+  | "file-show-in-finder"
   | "open-settings"
   | "repository-close"
   | "repository-forget"
@@ -24,6 +25,7 @@ export function parseApplicationCommand(
   payload: unknown
 ): ApplicationCommand | undefined {
   switch (payload) {
+    case "file-show-in-finder":
     case "open-settings":
     case "repository-close":
     case "repository-forget":

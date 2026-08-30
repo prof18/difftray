@@ -113,6 +113,7 @@ import {
   readStringProperty
 } from "./ipc-input.js";
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
+import { revealStoredProjectFile } from "./file-finder-open.js";
 import { openStoredProjectDirectory } from "./project-folder-open.js";
 import {
   createRepositoryOpenService,
@@ -387,8 +388,12 @@ const createMainWindow = async (): Promise<void> => {
 
   window.once("ready-to-show", showWindow);
   window.webContents.once("did-finish-load", showWindow);
+  window.webContents.on("did-start-loading", () => {
+    applicationMenuController?.setSelectedFileAvailable(false);
+  });
   window.on("closed", () => {
     if (mainWindow === window) {
+      applicationMenuController?.setSelectedFileAvailable(false);
       mainWindow = undefined;
     }
   });
@@ -453,6 +458,11 @@ app.on("web-contents-created", (_event, contents) => {
 });
 
 handleTrusted("app:version", () => app.getVersion());
+handleTrusted("app:setSelectedFileAvailable", (_event, input): void => {
+  applicationMenuController?.setSelectedFileAvailable(
+    readBooleanProperty(input, "available")
+  );
+});
 handleTrusted("external:openStore", async (_event, store): Promise<void> => {
   const url = externalStoreUrl(store);
 
@@ -1196,6 +1206,15 @@ handleTrusted(
     const pathName = readStringProperty(input, "path");
 
     return openFileInEditor(projectId, pathName);
+  }
+);
+handleTrusted(
+  "files:showInFinder",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<OpenFileInEditorResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const pathName = readStringProperty(input, "path");
+
+    return showFileInFinder(projectId, pathName);
   }
 );
 handleTrusted(
@@ -3079,6 +3098,23 @@ async function openFileInEditor(
   child.unref();
 
   return { status: "opened" };
+}
+
+async function showFileInFinder(
+  projectId: string,
+  pathName: string
+): Promise<OpenFileInEditorResult> {
+  return revealStoredProjectFile(projectId, pathName, {
+    findProject: (id) => getStorage().getProject(id),
+    findReviewFile: async (id, filePath) => {
+      const workspace = await loadProjectWorkspace(id);
+      return workspace.files.find((candidate) => candidate.path === filePath);
+    },
+    resolveSafeFilePath: resolveSafeProjectFilePath,
+    showItemInFolder: (absoluteFilePath) => {
+      shell.showItemInFolder(absoluteFilePath);
+    }
+  });
 }
 
 async function loadProjectFileDiff(

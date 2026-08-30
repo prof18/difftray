@@ -79,6 +79,8 @@ declare global {
     readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
     readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
     readonly openProjectInFinder: (projectId: string) => Promise<void>;
+    readonly setSelectedFileAvailable: (available: boolean) => Promise<void>;
+    readonly showFileInFinder: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
     readonly openProject: () => Promise<ReviewWorkspaceView | null>;
     readonly openDroppedRepositories: (
       files: readonly File[]
@@ -137,6 +139,7 @@ declare global {
   type ThemeMode = "dark" | "light" | "system";
 
   type ApplicationCommand =
+    | "file-show-in-finder"
     | "open-settings"
     | "repository-close"
     | "repository-forget"

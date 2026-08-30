@@ -5,6 +5,7 @@ import {
   CollapsedRail,
   DiffTargetControl,
   FileButton,
+  FileContextMenu,
   FileListHeader,
   commitOptionLabel,
   selectedCommitOptions
@@ -224,6 +225,27 @@ describe("file list components", () => {
     expect(html).toContain(">2</span>");
     expect(html).toContain("+7");
     expect(html).toContain("-4");
+  });
+
+  it("renders file actions in the row context menu", () => {
+    const html = renderToStaticMarkup(
+      <FileContextMenu
+        filePath="src/renderer/App.tsx"
+        left={120}
+        onClose={vi.fn()}
+        onDismiss={vi.fn()}
+        onOpenInEditor={vi.fn()}
+        onShowInFinder={vi.fn()}
+        top={80}
+      />
+    );
+
+    expect(html).toContain('aria-label="File actions for App.tsx"');
+    expect(html).toContain('role="menu"');
+    expect(html).toContain("Open in Editor");
+    expect(html).toContain("Show in Finder");
+    expect(html).toContain("left:120px");
+    expect(html).toContain("top:80px");
   });
 });
 

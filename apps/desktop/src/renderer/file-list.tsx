@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -10,6 +11,8 @@ import {
 import {
   Check,
   ChevronDown,
+  ExternalLink,
+  FolderOpen,
   GitBranch,
   GitCommitHorizontal,
   MessageSquare,
@@ -615,18 +618,67 @@ export function CollapsedRail({
 export function FileList({
   commentCountByPath,
   files,
+  onOpenInEditor,
   onSelect,
+  onShowInFinder,
+  projectId,
   selectedPath
 }: {
   readonly commentCountByPath: ReadonlyMap<string, number>;
   readonly files: readonly ReviewFileView[];
+  readonly onOpenInEditor: (path: string) => void;
   readonly onSelect: (path: string) => void;
+  readonly onShowInFinder: (path: string) => void;
+  readonly projectId: string;
   readonly selectedPath: string | undefined;
 }): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
+  const contextMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const contextSelectedPathRef = useRef<string | undefined>(undefined);
+  const currentSelectedPathRef = useRef(selectedPath);
   const shouldMoveFileListFocusRef = useRef(false);
   const [scrollTop, setScrollTop] = useState(0);
+  const [contextMenu, setContextMenu] = useState<{
+    readonly disabled: boolean;
+    readonly filePath: string;
+    readonly left: number;
+    readonly top: number;
+  }>();
   const [viewportHeight, setViewportHeight] = useState(0);
+  const dismissContextMenu = useCallback(() => {
+    setContextMenu(undefined);
+    contextMenuTriggerRef.current = null;
+  }, []);
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(undefined);
+
+    const trigger = contextMenuTriggerRef.current;
+    contextMenuTriggerRef.current = null;
+
+    if (trigger?.isConnected) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, []);
+  const openContextMenu = useCallback(
+    (file: ReviewFileView, event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      const invokedByKeyboard = event.clientX === 0 && event.clientY === 0;
+      const triggerBounds = event.currentTarget.getBoundingClientRect();
+      const invocationX = invokedByKeyboard ? triggerBounds.left + 12 : event.clientX;
+      const invocationY = invokedByKeyboard ? triggerBounds.bottom : event.clientY;
+      contextSelectedPathRef.current =
+        currentSelectedPathRef.current === file.path ? undefined : file.path;
+      onSelect(file.path);
+      contextMenuTriggerRef.current = event.currentTarget;
+      setContextMenu({
+        disabled: file.status === "deleted",
+        filePath: file.path,
+        left: Math.max(8, Math.min(invocationX, window.innerWidth - 204)),
+        top: Math.max(8, Math.min(invocationY, window.innerHeight - 84))
+      });
+    },
+    [onSelect]
+  );
   const selectedIndex = selectedPath
     ? files.findIndex((file) => file.path === selectedPath)
     : -1;
@@ -636,6 +688,10 @@ export function FileList({
     viewportHeight
   });
   const renderedFiles = files.slice(startIndex, endIndex);
+
+  useLayoutEffect(() => {
+    currentSelectedPathRef.current = selectedPath;
+  }, [selectedPath]);
 
   useLayoutEffect(() => {
     const listElement = listRef.current;
@@ -660,11 +716,45 @@ export function FileList({
   }, []);
 
   useEffect(() => {
+    dismissContextMenu();
+  }, [dismissContextMenu, projectId]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const currentFile = files.find((file) => file.path === contextMenu.filePath);
+
+    if (!currentFile) {
+      dismissContextMenu();
+      return;
+    }
+
+    const disabled = currentFile.status === "deleted";
+
+    if (disabled !== contextMenu.disabled) {
+      setContextMenu((currentMenu) =>
+        currentMenu?.filePath === contextMenu.filePath
+          ? { ...currentMenu, disabled }
+          : currentMenu
+      );
+    }
+  }, [contextMenu, dismissContextMenu, files]);
+
+  useEffect(() => {
     const listElement = listRef.current;
 
     if (!listElement || selectedIndex < 0) {
       return;
     }
+
+    if (contextSelectedPathRef.current === selectedPath) {
+      contextSelectedPathRef.current = undefined;
+      return;
+    }
+
+    contextSelectedPathRef.current = undefined;
 
     shouldMoveFileListFocusRef.current =
       document.activeElement instanceof HTMLElement &&
@@ -707,6 +797,7 @@ export function FileList({
       className={styles.fileList}
       onScroll={(event) => {
         setScrollTop(event.currentTarget.scrollTop);
+        closeContextMenu();
       }}
       ref={listRef}
     >
@@ -726,6 +817,7 @@ export function FileList({
               file={file}
               isSelected={selectedPath === file.path}
               key={file.path}
+              onContextMenu={openContextMenu}
               onSelect={onSelect}
               position={startIndex + index + 1}
               total={files.length}
@@ -733,6 +825,142 @@ export function FileList({
           ))}
         </div>
       </div>
+      {contextMenu ? (
+        <FileContextMenu
+          disabled={contextMenu.disabled}
+          filePath={contextMenu.filePath}
+          left={contextMenu.left}
+          onClose={closeContextMenu}
+          onDismiss={dismissContextMenu}
+          onOpenInEditor={onOpenInEditor}
+          onShowInFinder={onShowInFinder}
+          top={contextMenu.top}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function FileContextMenu({
+  disabled = false,
+  filePath,
+  left,
+  onClose,
+  onDismiss,
+  onOpenInEditor,
+  onShowInFinder,
+  top
+}: {
+  readonly disabled?: boolean;
+  readonly filePath: string;
+  readonly left: number;
+  readonly onClose: () => void;
+  readonly onDismiss: () => void;
+  readonly onOpenInEditor: (path: string) => void;
+  readonly onShowInFinder: (path: string) => void;
+  readonly top: number;
+}): React.JSX.Element {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const filename = splitPath(filePath).filename;
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    const firstEnabledItem = menu?.querySelector<HTMLButtonElement>(
+      "[role='menuitem']:not(:disabled)"
+    );
+    (firstEnabledItem ?? menu)?.focus();
+
+    function closeOnOutsidePointer(event: PointerEvent): void {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
+        onClose();
+      }
+    }
+
+    function closeOnFocusOutside(event: FocusEvent): void {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
+        onDismiss();
+      }
+    }
+
+    function closeOnWindowChange(): void {
+      onClose();
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("focusin", closeOnFocusOutside);
+    window.addEventListener("blur", closeOnWindowChange);
+    window.addEventListener("resize", closeOnWindowChange);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("focusin", closeOnFocusOutside);
+      window.removeEventListener("blur", closeOnWindowChange);
+      window.removeEventListener("resize", closeOnWindowChange);
+    };
+  }, [onClose, onDismiss]);
+
+  function runAction(action: (path: string) => void): void {
+    action(filePath);
+    onClose();
+  }
+
+  return (
+    <div
+      aria-label={`File actions for ${filename}`}
+      className={styles.fileContextMenu}
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+          return;
+        }
+
+        const items = [
+          ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+            "[role='menuitem']:not(:disabled)"
+          )
+        ];
+        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+        const direction =
+          event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+
+        if (direction !== 0 && items.length > 0) {
+          event.preventDefault();
+          items[(currentIndex + direction + items.length) % items.length]?.focus();
+        }
+      }}
+      ref={menuRef}
+      role="menu"
+      style={{ left, top }}
+      tabIndex={-1}
+    >
+      <button
+        disabled={disabled}
+        onClick={() => {
+          runAction(onOpenInEditor);
+        }}
+        role="menuitem"
+        tabIndex={-1}
+        type="button"
+      >
+        <ExternalLink size={14} strokeWidth={1.4} aria-hidden />
+        Open in Editor
+      </button>
+      <button
+        disabled={disabled}
+        onClick={() => {
+          runAction(onShowInFinder);
+        }}
+        role="menuitem"
+        tabIndex={-1}
+        type="button"
+      >
+        <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
+        Show in Finder
+      </button>
     </div>
   );
 }
@@ -741,6 +969,7 @@ export const FileButton = memo(function FileButton({
   commentCount,
   file,
   isSelected,
+  onContextMenu,
   onSelect,
   position,
   total
@@ -748,6 +977,10 @@ export const FileButton = memo(function FileButton({
   readonly commentCount: number;
   readonly file: ReviewFileView;
   readonly isSelected: boolean;
+  readonly onContextMenu?: (
+    file: ReviewFileView,
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => void;
   readonly onSelect: (path: string) => void;
   readonly position: number;
   readonly total: number;
@@ -764,6 +997,9 @@ export const FileButton = memo(function FileButton({
       data-selected={isSelected}
       onClick={() => {
         onSelect(file.path);
+      }}
+      onContextMenu={(event) => {
+        onContextMenu?.(file, event);
       }}
       type="button"
     >

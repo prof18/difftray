@@ -109,6 +109,8 @@ export type DifftrayApi = {
   readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
   readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
   readonly openProjectInFinder: (projectId: string) => Promise<void>;
+  readonly setSelectedFileAvailable: (available: boolean) => Promise<void>;
+  readonly showFileInFinder: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
   readonly openProject: () => Promise<ReviewWorkspaceView | null>;
   readonly openDroppedRepositories: (
     files: readonly File[]
@@ -783,6 +785,10 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("external:openStore", store) as Promise<void>,
   openProjectInFinder: async (projectId) =>
     ipcRenderer.invoke("projects:openInFinder", { projectId }) as Promise<void>,
+  setSelectedFileAvailable: async (available) =>
+    ipcRenderer.invoke("app:setSelectedFileAvailable", { available }) as Promise<void>,
+  showFileInFinder: async (input) =>
+    ipcRenderer.invoke("files:showInFinder", input) as Promise<OpenFileResult>,
   openProject: async () =>
     ipcRenderer.invoke("projects:open") as Promise<ReviewWorkspaceView | null>,
   openDroppedRepositories: async (files) => {
