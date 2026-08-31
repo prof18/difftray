@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  closeWindowMenuItemOptions,
   repositoryMenuItemOptions,
   reviewViewMenuItemOptions,
   selectedFileMenuItemOptions,
@@ -40,6 +41,20 @@ describe("viewMenuItemOptions", () => {
 
     items[1]?.click?.({} as never, undefined, {} as never);
     expect(onCommand).toHaveBeenCalledWith("repository-worktrees");
+
+    expect(items[4]).toMatchObject({
+      accelerator: "CommandOrControl+W",
+      id: "repository-close",
+      label: "Close Repository"
+    });
+  });
+
+  it("keeps the native close-window action available without conflicting", () => {
+    expect(closeWindowMenuItemOptions()).toEqual({
+      accelerator: "CommandOrControl+Shift+W",
+      label: "Close Window",
+      role: "close"
+    });
   });
 
   it("uses the native settings location and shortcut", () => {

@@ -352,9 +352,23 @@ try {
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
   await expectDismissibleOpenProjectError(app, window, nonGitPath);
-  await window.getByRole("button", { name: "Close repository" }).click();
+  await app.evaluate(({ Menu }) => {
+    const closeRepositoryItem =
+      Menu.getApplicationMenu()?.getMenuItemById("repository-close");
+
+    if (closeRepositoryItem?.accelerator !== "CommandOrControl+W") {
+      throw new Error(
+        `Expected the close repository shortcut to be CommandOrControl+W, got ${closeRepositoryItem?.accelerator}`
+      );
+    }
+
+    closeRepositoryItem.click();
+  });
   await window
-    .getByRole("button", { name: /visual-secondary-repo/ })
+    .locator('[data-project-tab-name="visual-repo"]')
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await window
+    .locator('[data-project-tab-name="visual-secondary-repo"][data-active="true"]')
     .waitFor({ timeout: 10_000 });
   await window.getByRole("button", { name: "Close repository" }).click();
   await window.getByRole("heading", { name: "No repository open" }).waitFor({

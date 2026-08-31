@@ -15,6 +15,14 @@ export type ApplicationCommand =
 
 export type ApplicationCommandHandler = (command: ApplicationCommand) => void;
 
+export function closeWindowMenuItemOptions(): MenuItemConstructorOptions {
+  return {
+    accelerator: "CommandOrControl+Shift+W",
+    label: "Close Window",
+    role: "close"
+  };
+}
+
 export function selectedFileMenuItemOptions(
   onCommand: ApplicationCommandHandler,
   enabled = false
@@ -59,6 +67,7 @@ export function repositoryMenuItemOptions(
     },
     { type: "separator" },
     {
+      accelerator: "CommandOrControl+W",
       click: () => onCommand("repository-close"),
       id: "repository-close",
       label: "Close Repository"

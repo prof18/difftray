@@ -166,6 +166,8 @@ Cmd+O            open repository
 Cmd+K            open command palette
 Cmd+P            open file-only command palette
 Cmd+1            collapse or expand the file list
+Cmd+W            close the current repository tab
+Cmd+Shift+W      close the application window
 Escape           dismiss drift notification or close the active overlay
 ```
 

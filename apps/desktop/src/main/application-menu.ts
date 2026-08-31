@@ -6,6 +6,7 @@ import {
 } from "./update-menu-item.js";
 import type { UpdatePhase } from "./update-state.js";
 import {
+  closeWindowMenuItemOptions,
   repositoryMenuItemOptions,
   reviewViewMenuItemOptions,
   selectedFileMenuItemOptions,
@@ -194,7 +195,7 @@ function buildApplicationMenu(
       )
     );
     fileMenu.append(new MenuItem({ type: "separator" }));
-    fileMenu.append(new MenuItem({ role: "close" }));
+    fileMenu.append(new MenuItem(closeWindowMenuItemOptions()));
     menu.append(new MenuItem({ label: "File", submenu: fileMenu }));
   } else {
     const fileMenu = repositoryFileMenu(dependencies);
@@ -206,7 +207,7 @@ function buildApplicationMenu(
     fileMenu.append(new MenuItem({ type: "separator" }));
     fileMenu.append(new MenuItem(settingsMenuItemOptions(runApplicationCommand)));
     fileMenu.append(new MenuItem({ type: "separator" }));
-    fileMenu.append(new MenuItem({ role: "close" }));
+    fileMenu.append(new MenuItem(closeWindowMenuItemOptions()));
 
     if (process.platform === "win32") {
       fileMenu.append(new MenuItem({ role: "quit" }));
