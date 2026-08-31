@@ -298,6 +298,10 @@ export type OpenRepositoriesResponse = {
   readonly openedProjects: readonly RecentProjectView[];
 };
 
+export type CloseProjectResponse = {
+  readonly closed: true;
+};
+
 export type WorkspaceResponse = {
   readonly workspace: ReviewWorkspaceView;
 };

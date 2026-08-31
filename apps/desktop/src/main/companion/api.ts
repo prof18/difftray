@@ -74,6 +74,7 @@ export type CompanionDeps = {
   readonly companionAuth: CompanionAuthManager;
   readonly companionEnvelope: CompanionEnvelopeVerifier;
   readonly storage: DifftrayStorage;
+  readonly closeProject: (projectId: string) => Promise<boolean>;
   readonly loadWorkspaceView: (projectId: string) => Promise<ReviewWorkspaceView>;
   readonly loadFileDiff: (
     projectId: string,
@@ -429,6 +430,26 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       },
       method: "GET",
       path: "/companion/v1/projects",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const projectId = params.get("projectId");
+
+        if (!projectId || !(await deps.closeProject(projectId))) {
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+
+        return {
+          body: { closed: true },
+          status: 200
+        };
+      },
+      method: "DELETE",
+      path: "/companion/v1/projects/:projectId",
       requiresAuth: true
     },
     {

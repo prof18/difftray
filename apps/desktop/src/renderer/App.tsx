@@ -36,6 +36,7 @@ import {
 import {
   mergeProjectTabs,
   prepareProjectTabReorderUpdate,
+  reconcileProjectTabOrderRollback,
   createProjectTabOrderSaveQueue
 } from "./project-tabs.js";
 import { ProjectTabBar } from "./project-tab-bar.js";
@@ -44,10 +45,25 @@ import { LoadingProgress, TabLoadBanner } from "./workspace-loading.js";
 import {
   applyLoadedFileDiffToWorkspace,
   carryLoadedDiffsForward,
+  invalidateWorkspaceLoadRequest,
+  isWorkspaceScopedCompletionCurrent,
+  isWorkspaceLoadRequestCurrent,
   isFileDiffLoaded,
+  loadReplacementWorkspace,
+  openReplacementWorkspaceCandidates,
+  projectTabRemovalDisposition,
+  reconcileProjectTabsAfterRemoval,
+  shouldClearInvalidatedDisplayedWorkspace,
+  shouldClearUnavailableDisplayedWorkspace,
+  shouldCancelProjectsOpenedRequest,
+  shouldDismissWorktreePickerForProjectRemoval,
   shouldReloadWorkspaceAfterProjectChange,
   shouldRefreshCachedWorkspaceAfterTabSwitch,
   shouldApplySilentWorkspaceRefresh
+} from "./workspace-refresh.js";
+import type {
+  WorkspaceLoadTarget,
+  WorkspaceScopedCompletion
 } from "./workspace-refresh.js";
 import type { DiffSideFocus } from "./diffs-renderer.js";
 import { filterCommands, type PaletteMode } from "./command-palette.js";
@@ -203,10 +219,14 @@ export function App(): React.JSX.Element {
   const applicationCommandHandlerRef = useRef<(command: ApplicationCommand) => void>(
     () => undefined
   );
+  const projectClosedHandlerRef = useRef<(projectId: string) => void>(() => undefined);
   const projectsOpenedHandlerRef = useRef<(focusProjectId: string) => void>(
     () => undefined
   );
   const projectsOpenedRequestRef = useRef(0);
+  const projectsOpenedTargetRef = useRef<
+    { readonly projectId: string; readonly requestId: number } | undefined
+  >(undefined);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const commentReportCopyPendingRef = useRef(false);
   const commentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
@@ -234,10 +254,17 @@ export function App(): React.JSX.Element {
   >();
   const workspaceApplyVersionRef = useRef(0);
   const workspaceCacheRef = useRef<Map<string, WorkspaceCacheEntry>>(new Map());
+  const invalidatedDisplayedWorkspaceRef = useRef<string | undefined>(undefined);
   const workspaceLoadRequestRef = useRef(0);
+  const workspaceLoadTargetRef = useRef<
+    (WorkspaceLoadTarget & { readonly requestId: number }) | undefined
+  >(undefined);
   const workspaceRef = useRef<ReviewWorkspaceView | undefined>(undefined);
   const worktreeAvailabilityRequestRef = useRef(0);
   const worktreePickerRequestRef = useRef(0);
+  const worktreePickerTargetRef = useRef<
+    { readonly projectId: string; readonly requestId: number } | undefined
+  >(undefined);
   const repositoryPickerRequestRef = useRef(0);
   const settingsRequestRef = useRef(0);
   const settingsLoadingRequestRef = useRef<number | undefined>(undefined);
@@ -250,6 +277,86 @@ export function App(): React.JSX.Element {
     loadStateRef.current = nextState;
     setLoadState(nextState);
   }
+
+  function trackWorkspaceLoadTarget(
+    projectId: string | undefined,
+    requestId: number,
+    invalidatesOnAnyProjectRemoval = false
+  ): void {
+    workspaceLoadTargetRef.current = {
+      invalidatesOnAnyProjectRemoval,
+      projectId,
+      requestId
+    };
+  }
+
+  function clearWorkspaceLoadTarget(requestId: number): void {
+    if (workspaceLoadTargetRef.current?.requestId === requestId) {
+      workspaceLoadTargetRef.current = undefined;
+    }
+  }
+
+  function clearDisplayedWorkspace(): void {
+    invalidatedDisplayedWorkspaceRef.current = undefined;
+    workspaceRef.current = undefined;
+    selectedPathRef.current = undefined;
+    activeProjectIdRef.current = undefined;
+    setWorkspace(undefined);
+    setSelectedPath(undefined);
+    setProjectSettings(defaultProjectSettings);
+    setBranchRefs([]);
+    setBaseRefDraft("");
+    setDiffMode(appSettings.defaultDiffMode);
+    setFileListWidth(defaultProjectSettings.fileListWidth);
+    setFileListCollapsed(defaultProjectSettings.fileListCollapsed);
+    setSettingsOpen(false);
+    setPaletteOpen(false);
+    setToastDismissedFor(undefined);
+  }
+
+  function clearInvalidatedDisplayedWorkspaceAfterLoadFailure(): void {
+    if (
+      shouldClearInvalidatedDisplayedWorkspace(
+        invalidatedDisplayedWorkspaceRef.current,
+        workspaceRef.current?.project.id
+      )
+    ) {
+      clearDisplayedWorkspace();
+    }
+  }
+
+  function clearUnavailableDisplayedWorkspaceAfterNull(
+    targetProjectId: string | undefined
+  ): void {
+    if (
+      shouldClearUnavailableDisplayedWorkspace(
+        targetProjectId,
+        workspaceRef.current?.project.id
+      )
+    ) {
+      clearDisplayedWorkspace();
+      return;
+    }
+
+    clearInvalidatedDisplayedWorkspaceAfterLoadFailure();
+  }
+
+  const captureWorkspaceScopedCompletion = useCallback(
+    (projectId: string): WorkspaceScopedCompletion => ({
+      applyVersion: workspaceApplyVersionRef.current,
+      projectId
+    }),
+    []
+  );
+
+  const canApplyWorkspaceScopedCompletion = useCallback(
+    (request: WorkspaceScopedCompletion): boolean =>
+      isWorkspaceScopedCompletionCurrent(request, {
+        applyVersion: workspaceApplyVersionRef.current,
+        projectId: workspaceRef.current?.project.id
+      }),
+    []
+  );
 
   useLayoutEffect(() => {
     void bootstrapApp();
@@ -511,6 +618,9 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const stopProjectClosed = window.difftray.onProjectClosed(({ projectId }) => {
+      projectClosedHandlerRef.current(projectId);
+    });
     const stopProjectsOpened = window.difftray.onProjectsOpened(({ focusProjectId }) => {
       projectsOpenedHandlerRef.current(focusProjectId);
     });
@@ -527,6 +637,7 @@ export function App(): React.JSX.Element {
     );
 
     return () => {
+      stopProjectClosed();
       stopProjectsOpened();
       stopWorktreeChangeCount();
     };
@@ -890,11 +1001,14 @@ export function App(): React.JSX.Element {
         return workspaceRef.current;
       }
 
+      const completion = captureWorkspaceScopedCompletion(projectId);
       let loaderTimerId: number | undefined;
 
       if (showDelayedLoader) {
         loaderTimerId = window.setTimeout(() => {
-          setVisibleLoadingDiffPath(filePath);
+          if (canApplyWorkspaceScopedCompletion(completion)) {
+            setVisibleLoadingDiffPath(filePath);
+          }
         }, delayedFileDiffLoaderMs);
       }
 
@@ -913,6 +1027,7 @@ export function App(): React.JSX.Element {
         const currentWorkspace = workspaceRef.current;
 
         if (
+          !canApplyWorkspaceScopedCompletion(completion) ||
           currentWorkspace?.project.id !== projectId ||
           currentWorkspace.reviewTarget.id !== reviewTargetId
         ) {
@@ -934,20 +1049,34 @@ export function App(): React.JSX.Element {
         });
 
         return nextWorkspace;
+      } catch (caughtError) {
+        if (canApplyWorkspaceScopedCompletion(completion)) {
+          throw caughtError;
+        }
+
+        return workspaceRef.current;
       } finally {
         if (loaderTimerId !== undefined) {
           window.clearTimeout(loaderTimerId);
         }
 
-        setLoadingDiffPath((currentPath) =>
-          currentPath === filePath ? undefined : currentPath
-        );
-        setVisibleLoadingDiffPath((currentPath) =>
-          currentPath === filePath ? undefined : currentPath
-        );
+        if (canApplyWorkspaceScopedCompletion(completion)) {
+          setLoadingDiffPath((currentPath) =>
+            currentPath === filePath ? undefined : currentPath
+          );
+          setVisibleLoadingDiffPath((currentPath) =>
+            currentPath === filePath ? undefined : currentPath
+          );
+        }
       }
     },
-    [branchRefs, projectSettings, recentCommits]
+    [
+      branchRefs,
+      canApplyWorkspaceScopedCompletion,
+      captureWorkspaceScopedCompletion,
+      projectSettings,
+      recentCommits
+    ]
   );
 
   useEffect(() => {
@@ -1083,6 +1212,9 @@ export function App(): React.JSX.Element {
   }, [commands, paletteMode, paletteQuery]);
 
   async function bootstrapApp(): Promise<void> {
+    const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
+    trackWorkspaceLoadTarget(undefined, requestId, true);
+
     setError(undefined);
     updateLoadState("loading");
     setLoadStatus(defaultWorkspaceLoadStatus);
@@ -1097,7 +1229,6 @@ export function App(): React.JSX.Element {
           window.difftray.getCompanionState()
         ]);
 
-      setRecentProjects(projects);
       setAppSettings(settings);
       setAppSettingsDraft(settings);
       setEditorOptions(installedEditors);
@@ -1105,24 +1236,55 @@ export function App(): React.JSX.Element {
       setCompanionPairing(nextCompanionState.activePairing);
       setDiffMode(settings.defaultDiffMode);
 
+      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        return;
+      }
+
+      setRecentProjects(projects);
+
       for (const project of projects) {
+        if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+          return;
+        }
+
+        trackWorkspaceLoadTarget(project.id, requestId, true);
         const nextWorkspace = await window.difftray.loadProject(project.id);
+
+        if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+          return;
+        }
 
         if (!nextWorkspace) {
           continue;
         }
 
-        await applyWorkspace(nextWorkspace, undefined, { appSettings: settings });
+        const applied = await applyWorkspace(
+          nextWorkspace,
+          undefined,
+          { appSettings: settings },
+          requestId
+        );
+
+        if (!applied) {
+          return;
+        }
         break;
       }
 
-      await refreshRecentProjects();
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        await refreshRecentProjects();
+      }
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        setError(errorMessage(caughtError));
+      }
     } finally {
+      clearWorkspaceLoadTarget(requestId);
       setHasBootstrapped(true);
-      updateLoadState("idle");
-      setLoadStatus(defaultWorkspaceLoadStatus);
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+      }
     }
   }
 
@@ -1259,6 +1421,7 @@ export function App(): React.JSX.Element {
       return false;
     }
 
+    invalidatePendingSilentWorkspaceRefreshes();
     workspaceCacheRef.current.set(workspaceToApply.project.id, {
       branchRefs: nextBranchRefs,
       recentCommits: nextRecentCommits,
@@ -1266,6 +1429,7 @@ export function App(): React.JSX.Element {
       workspace: workspaceToApply
     });
     workspaceRef.current = workspaceToApply;
+    invalidatedDisplayedWorkspaceRef.current = undefined;
     setWorkspace(workspaceToApply);
     setProjectSettings(nextSettings);
     setBranchRefs(nextBranchRefs);
@@ -1297,6 +1461,8 @@ export function App(): React.JSX.Element {
 
   function invalidatePendingSilentWorkspaceRefreshes(): void {
     workspaceApplyVersionRef.current += 1;
+    setLoadingDiffPath(undefined);
+    setVisibleLoadingDiffPath(undefined);
   }
 
   function canApplySilentWorkspaceRefresh(
@@ -1316,6 +1482,7 @@ export function App(): React.JSX.Element {
 
   async function refreshWorkspaceSilently(projectId: string): Promise<void> {
     const requestApplyVersion = workspaceApplyVersionRef.current;
+    const requestId = workspaceLoadRequestRef.current;
 
     try {
       const nextWorkspace = await window.difftray.loadProject(projectId, {
@@ -1341,11 +1508,16 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      await applyWorkspace(nextWorkspace, selectedPathRef.current, {
-        branchRefs: nextBranchRefs,
-        recentCommits: nextRecentCommits,
-        projectSettings: nextSettings
-      });
+      await applyWorkspace(
+        nextWorkspace,
+        selectedPathRef.current,
+        {
+          branchRefs: nextBranchRefs,
+          recentCommits: nextRecentCommits,
+          projectSettings: nextSettings
+        },
+        requestId
+      );
       await refreshRecentProjects();
     } catch (caughtError) {
       if (canApplySilentWorkspaceRefresh(projectId, requestApplyVersion)) {
@@ -1359,10 +1531,14 @@ export function App(): React.JSX.Element {
     nextPath?: string,
     initialStatus: WorkspaceLoadStatus = defaultWorkspaceLoadStatus,
     projectToShowWhileLoading?: RecentProjectView,
-    projectLoadingDelayMs = 0
+    projectLoadingDelayMs = 0,
+    targetProjectId?: string
   ): Promise<void> {
     let loadingProjectTimeout: number | undefined;
-    const requestId = ++workspaceLoadRequestRef.current;
+    const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
+    const trackedProjectId = targetProjectId ?? projectToShowWhileLoading?.id;
+
+    trackWorkspaceLoadTarget(trackedProjectId, requestId);
 
     invalidatePendingSilentWorkspaceRefreshes();
     setError(undefined);
@@ -1372,7 +1548,7 @@ export function App(): React.JSX.Element {
     } else if (projectToShowWhileLoading) {
       setPendingLoadingProjectId(projectToShowWhileLoading.id);
       loadingProjectTimeout = window.setTimeout(() => {
-        if (requestId === workspaceLoadRequestRef.current) {
+        if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
           setPendingLoadingProjectId(undefined);
           setLoadingProject(projectToShowWhileLoading);
         }
@@ -1388,25 +1564,28 @@ export function App(): React.JSX.Element {
     try {
       const nextWorkspace = await loadWorkspace();
 
-      if (requestId !== workspaceLoadRequestRef.current) return;
+      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) return;
 
       if (nextWorkspace) {
         const applied = await applyWorkspace(nextWorkspace, nextPath, {}, requestId);
         if (!applied) return;
         await refreshRecentProjects();
       } else {
+        clearUnavailableDisplayedWorkspaceAfterNull(trackedProjectId);
         await refreshRecentProjects();
       }
     } catch (caughtError) {
-      if (requestId === workspaceLoadRequestRef.current) {
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        clearInvalidatedDisplayedWorkspaceAfterLoadFailure();
         setError(errorMessage(caughtError));
       }
     } finally {
+      clearWorkspaceLoadTarget(requestId);
       if (loadingProjectTimeout !== undefined) {
         window.clearTimeout(loadingProjectTimeout);
       }
 
-      if (requestId === workspaceLoadRequestRef.current) {
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
         updateLoadState("idle");
         setLoadStatus(defaultWorkspaceLoadStatus);
         setPendingLoadingProjectId((currentProjectId) =>
@@ -1488,6 +1667,7 @@ export function App(): React.JSX.Element {
   async function openWorktreePicker(project: RecentProjectView): Promise<void> {
     closeTransientOverlays();
     const requestId = ++worktreePickerRequestRef.current;
+    worktreePickerTargetRef.current = { projectId: project.id, requestId };
     setError(undefined);
 
     try {
@@ -1504,11 +1684,16 @@ export function App(): React.JSX.Element {
       if (requestId === worktreePickerRequestRef.current) {
         setError(errorMessage(caughtError));
       }
+    } finally {
+      if (requestId === worktreePickerRequestRef.current) {
+        worktreePickerTargetRef.current = undefined;
+      }
     }
   }
 
   async function selectWorktree(worktree: RepositoryWorktreeView): Promise<void> {
     worktreePickerRequestRef.current += 1;
+    worktreePickerTargetRef.current = undefined;
     const sourceProject = worktreePickerProject;
 
     if (!sourceProject || worktree.state === "current") {
@@ -1540,7 +1725,7 @@ export function App(): React.JSX.Element {
     const cachedWorkspace = workspaceCacheRef.current.get(projectId);
 
     if (cachedWorkspace) {
-      const requestId = ++workspaceLoadRequestRef.current;
+      const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
       const refreshAfterSwitch = shouldRefreshCachedWorkspaceAfterTabSwitch({
         activeProjectId: workspaceRef.current?.project.id,
         loadState: loadStateRef.current,
@@ -1551,16 +1736,23 @@ export function App(): React.JSX.Element {
 
       invalidatePendingSilentWorkspaceRefreshes();
       setError(undefined);
-      const applied = await applyWorkspace(
-        cachedWorkspace.workspace,
-        selectedPathByProjectRef.current.get(projectId),
-        {
-          branchRefs: cachedWorkspace.branchRefs,
-          recentCommits: cachedWorkspace.recentCommits,
-          projectSettings: cachedWorkspace.projectSettings
-        },
-        requestId
-      );
+      trackWorkspaceLoadTarget(projectId, requestId);
+      let applied = false;
+
+      try {
+        applied = await applyWorkspace(
+          cachedWorkspace.workspace,
+          selectedPathByProjectRef.current.get(projectId),
+          {
+            branchRefs: cachedWorkspace.branchRefs,
+            recentCommits: cachedWorkspace.recentCommits,
+            projectSettings: cachedWorkspace.projectSettings
+          },
+          requestId
+        );
+      } finally {
+        clearWorkspaceLoadTarget(requestId);
+      }
 
       if (!applied) return;
 
@@ -1589,7 +1781,8 @@ export function App(): React.JSX.Element {
         title: "Loading repository"
       },
       projectToLoad,
-      tabSwitchLoaderDelayMs(projectToLoad)
+      tabSwitchLoaderDelayMs(projectToLoad),
+      projectId
     );
   }
 
@@ -1620,10 +1813,65 @@ export function App(): React.JSX.Element {
     title: string,
     remove: () => Promise<readonly RecentProjectView[]>
   ): Promise<void> {
-    const closingActiveProject = workspace?.project.id === projectId;
+    const recentProjectsRequestId = ++recentProjectsRefreshRequestRef.current;
+    const { closingActiveProject, displayedProjectClosed } = projectTabRemovalDisposition(
+      workspaceRef.current?.project.id,
+      projectId,
+      workspaceLoadTargetRef.current
+    );
     const closedProjectIndex = recentProjects.findIndex(
       (project) => project.id === projectId
     );
+
+    setTabDragCancelKey((key) => key + 1);
+    setLoadingProject((currentProject) =>
+      currentProject?.id === projectId ? undefined : currentProject
+    );
+    setPendingLoadingProjectId((currentProjectId) =>
+      currentProjectId === projectId ? undefined : currentProjectId
+    );
+
+    const worktreePickerProjectId =
+      worktreePickerProject?.id ?? worktreePickerTargetRef.current?.projectId;
+    if (
+      shouldDismissWorktreePickerForProjectRemoval(worktreePickerProjectId, projectId)
+    ) {
+      worktreePickerRequestRef.current += 1;
+      worktreePickerTargetRef.current = undefined;
+      setWorktreePickerProject(undefined);
+      setWorktrees([]);
+    }
+
+    if (displayedProjectClosed && !closingActiveProject) {
+      invalidatedDisplayedWorkspaceRef.current = projectId;
+    }
+
+    if (!closingActiveProject) {
+      setError(undefined);
+      workspaceCacheRef.current.delete(projectId);
+      selectedPathByProjectRef.current.delete(projectId);
+
+      try {
+        const nextProjects = await remove();
+        if (recentProjectsRequestId === recentProjectsRefreshRequestRef.current) {
+          setRecentProjects((currentProjects) =>
+            reconcileProjectTabsAfterRemoval(
+              currentProjects,
+              projectId,
+              nextProjects,
+              "current"
+            )
+          );
+        }
+      } catch (caughtError) {
+        if (recentProjectsRequestId === recentProjectsRefreshRequestRef.current) {
+          setError(errorMessage(caughtError));
+        }
+      }
+      return;
+    }
+
+    const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
 
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
@@ -1634,57 +1882,118 @@ export function App(): React.JSX.Element {
     });
     await nextPaint();
 
+    if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+      return;
+    }
+
     try {
       workspaceCacheRef.current.delete(projectId);
       selectedPathByProjectRef.current.delete(projectId);
       const nextProjects = await remove();
-      const orderedNextProjects = mergeProjectTabs(recentProjects, nextProjects);
-
-      setRecentProjects(orderedNextProjects);
-
-      if (!closingActiveProject) {
+      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
         return;
       }
+      const recentProjectsRequestMode =
+        recentProjectsRequestId === recentProjectsRefreshRequestRef.current
+          ? "current"
+          : "stale";
+      const orderedNextProjects = reconcileProjectTabsAfterRemoval(
+        recentProjects,
+        projectId,
+        nextProjects,
+        recentProjectsRequestMode
+      );
+
+      setRecentProjects((currentProjects) =>
+        reconcileProjectTabsAfterRemoval(
+          currentProjects,
+          projectId,
+          nextProjects,
+          recentProjectsRequestId === recentProjectsRefreshRequestRef.current
+            ? "current"
+            : "stale"
+        )
+      );
 
       const replacementIndex =
         orderedNextProjects.length === 0
           ? 0
           : Math.min(Math.max(closedProjectIndex, 0), orderedNextProjects.length - 1);
-      const candidateProjects =
+      const reconciledCandidateProjects =
         orderedNextProjects.length === 0
           ? []
           : [
               ...orderedNextProjects.slice(replacementIndex),
               ...orderedNextProjects.slice(0, replacementIndex)
             ];
+      const candidateProjects = openReplacementWorkspaceCandidates(
+        reconciledCandidateProjects,
+        nextProjects
+      );
 
-      for (const project of candidateProjects) {
-        const nextWorkspace = await window.difftray.loadProject(project.id);
+      const replacement = await loadReplacementWorkspace(
+        candidateProjects,
+        async (project) => {
+          if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+            return undefined;
+          }
 
-        if (nextWorkspace) {
-          await applyWorkspace(nextWorkspace);
-          await refreshRecentProjects();
-          return;
+          trackWorkspaceLoadTarget(project.id, requestId);
+
+          try {
+            return (await window.difftray.loadProject(project.id)) ?? undefined;
+          } finally {
+            clearWorkspaceLoadTarget(requestId);
+          }
         }
+      );
+
+      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        return;
       }
 
-      setWorkspace(undefined);
-      setSelectedPath(undefined);
-      setProjectSettings(defaultProjectSettings);
-      setBranchRefs([]);
-      setBaseRefDraft("");
-      setDiffMode(appSettings.defaultDiffMode);
-      setFileListWidth(defaultProjectSettings.fileListWidth);
-      setFileListCollapsed(defaultProjectSettings.fileListCollapsed);
-      setSettingsOpen(false);
-      setPaletteOpen(false);
-      setToastDismissedFor(undefined);
-      await refreshRecentProjects();
+      if (replacement.kind === "loaded") {
+        const applied = await applyWorkspace(
+          replacement.workspace,
+          undefined,
+          {},
+          requestId
+        );
+        if (
+          !applied ||
+          !isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)
+        ) {
+          return;
+        }
+        await refreshRecentProjects();
+        return;
+      }
+
+      clearDisplayedWorkspace();
+      try {
+        await refreshRecentProjects();
+      } catch (refreshError) {
+        if (replacement.firstError === undefined) {
+          throw refreshError;
+        }
+      }
+      if (replacement.firstError !== undefined) {
+        setError(errorMessage(replacement.firstError));
+      }
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        try {
+          await refreshRecentProjects();
+        } catch {
+          // Preserve the original replacement/removal error below.
+        }
+        setError(errorMessage(caughtError));
+      }
     } finally {
-      updateLoadState("idle");
-      setLoadStatus(defaultWorkspaceLoadStatus);
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+      }
     }
   }
 
@@ -1699,7 +2008,10 @@ export function App(): React.JSX.Element {
       {
         detail: workspace.project.name,
         title: "Refreshing repository"
-      }
+      },
+      undefined,
+      0,
+      workspace.project.id
     );
   }
 
@@ -1725,6 +2037,7 @@ export function App(): React.JSX.Element {
 
   function handleProjectsOpened(focusProjectId: string): void {
     const requestId = ++projectsOpenedRequestRef.current;
+    projectsOpenedTargetRef.current = { projectId: focusProjectId, requestId };
     void refreshRecentProjects()
       .then(async () => {
         if (requestId === projectsOpenedRequestRef.current) {
@@ -1735,7 +2048,27 @@ export function App(): React.JSX.Element {
         if (requestId === projectsOpenedRequestRef.current) {
           setError(errorMessage(caughtError));
         }
+      })
+      .finally(() => {
+        if (projectsOpenedTargetRef.current?.requestId === requestId) {
+          projectsOpenedTargetRef.current = undefined;
+        }
       });
+  }
+
+  function handleProjectClosed(projectId: string): void {
+    if (
+      shouldCancelProjectsOpenedRequest(
+        projectsOpenedTargetRef.current?.projectId,
+        projectId
+      )
+    ) {
+      projectsOpenedRequestRef.current += 1;
+      projectsOpenedTargetRef.current = undefined;
+    }
+    void removeProjectTab(projectId, "Closing repository", () =>
+      window.difftray.listRecentProjects()
+    );
   }
 
   async function runRepositorySearchRootAction(
@@ -1826,7 +2159,10 @@ export function App(): React.JSX.Element {
         {
           detail: "Local changes changed",
           title: "Refreshing repository"
-        }
+        },
+        undefined,
+        0,
+        event.projectId
       );
       return;
     }
@@ -1902,6 +2238,7 @@ export function App(): React.JSX.Element {
   function closeTransientOverlays(): void {
     closeRepositoryPicker();
     worktreePickerRequestRef.current += 1;
+    worktreePickerTargetRef.current = undefined;
     cancelPendingSettingsOpen();
     droppedRepositoryPreviewRequestRef.current += 1;
     setPaletteOpen(false);
@@ -2007,6 +2344,9 @@ export function App(): React.JSX.Element {
       return;
     }
 
+    const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
+    const settingsWorkspace = workspace;
+
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
     updateLoadState("loading");
@@ -2020,16 +2360,20 @@ export function App(): React.JSX.Element {
       const savedAppSettings = await window.difftray.updateAppSettings(
         updateAppSettingsInput(appSettingsDraft)
       );
-      const savedSettings = workspace
+      const savedSettings = settingsWorkspace
         ? await window.difftray.updateProjectSettings({
             fileListCollapsed: projectSettings.fileListCollapsed,
             fileListWidth: projectSettings.fileListWidth,
-            projectId: workspace.project.id
+            projectId: settingsWorkspace.project.id
           })
         : defaultProjectSettings;
-      const nextWorkspace = workspace
-        ? await window.difftray.loadProject(workspace.project.id)
+      const nextWorkspace = settingsWorkspace
+        ? await window.difftray.loadProject(settingsWorkspace.project.id)
         : undefined;
+
+      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        return;
+      }
 
       setAppSettings(savedAppSettings);
       setAppSettingsDraft(savedAppSettings);
@@ -2039,39 +2383,53 @@ export function App(): React.JSX.Element {
       setFileListCollapsed(savedSettings.fileListCollapsed);
       setSettingsOpen(false);
       if (nextWorkspace) {
-        await applyWorkspace(
+        const applied = await applyWorkspace(
           nextWorkspace,
           visiblePathOrFirst(nextWorkspace, selectedPath),
           {
             appSettings: savedAppSettings
-          }
+          },
+          requestId
         );
+
+        if (!applied) {
+          return;
+        }
       } else {
         setWorkspace(undefined);
         setSelectedPath(undefined);
         setBranchRefs([]);
         setBaseRefDraft("");
       }
-      await refreshRecentProjects();
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        await refreshRecentProjects();
+      }
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        setError(errorMessage(caughtError));
+      }
     } finally {
-      updateLoadState("idle");
-      setLoadStatus(defaultWorkspaceLoadStatus);
+      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
+        updateLoadState("idle");
+        setLoadStatus(defaultWorkspaceLoadStatus);
+      }
     }
   }
 
   async function persistProjectSettings(
     patch: Partial<ProjectSettingsView>
   ): Promise<void> {
-    if (!workspace) {
+    const settingsWorkspace = workspace;
+
+    if (!settingsWorkspace) {
       return;
     }
 
+    const completion = captureWorkspaceScopedCompletion(settingsWorkspace.project.id);
     const nextSettings = {
       ...projectSettings,
       ...patch,
-      projectId: workspace.project.id
+      projectId: settingsWorkspace.project.id
     };
     setProjectSettings(nextSettings);
 
@@ -2079,18 +2437,30 @@ export function App(): React.JSX.Element {
       const savedSettings = await window.difftray.updateProjectSettings({
         fileListCollapsed: nextSettings.fileListCollapsed,
         fileListWidth: nextSettings.fileListWidth,
-        projectId: workspace.project.id
+        projectId: settingsWorkspace.project.id
       });
 
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
+
+      const currentWorkspace = workspaceRef.current;
+
+      if (!currentWorkspace) {
+        return;
+      }
+
       setProjectSettings(savedSettings);
-      workspaceCacheRef.current.set(workspace.project.id, {
+      workspaceCacheRef.current.set(settingsWorkspace.project.id, {
         branchRefs,
         recentCommits,
         projectSettings: savedSettings,
-        workspace
+        workspace: currentWorkspace
       });
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (canApplyWorkspaceScopedCompletion(completion)) {
+        setError(errorMessage(caughtError));
+      }
     }
   }
 
@@ -2394,6 +2764,7 @@ export function App(): React.JSX.Element {
 
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
+    const unmarkApplyVersion = workspaceApplyVersionRef.current;
     setWorkspace(optimisticWorkspace);
     workspaceRef.current = optimisticWorkspace;
 
@@ -2414,6 +2785,10 @@ export function App(): React.JSX.Element {
         userSelectedPath === optimisticFile.path
           ? visiblePathOrFirst(nextWorkspace, optimisticFile.path)
           : visiblePathOrFirst(nextWorkspace, userSelectedPath);
+
+      if (workspaceApplyVersionRef.current !== unmarkApplyVersion) {
+        return;
+      }
 
       setWorkspace(nextWorkspace);
       workspaceRef.current = nextWorkspace;
@@ -2437,6 +2812,10 @@ export function App(): React.JSX.Element {
         );
       }
     } catch (caughtError) {
+      if (workspaceApplyVersionRef.current !== unmarkApplyVersion) {
+        return;
+      }
+
       setError(errorMessage(caughtError));
       await refreshWorkspace();
     }
@@ -2476,29 +2855,36 @@ export function App(): React.JSX.Element {
   }
 
   function applyWorkspaceComments(
+    completion: WorkspaceScopedCompletion,
     updateComments: (
       comments: readonly ReviewCommentView[]
     ) => readonly ReviewCommentView[]
   ): void {
-    setWorkspace((currentWorkspace) => {
-      if (!currentWorkspace) {
-        return currentWorkspace;
-      }
+    const currentWorkspace = workspaceRef.current;
 
-      const nextWorkspace = {
-        ...currentWorkspace,
-        comments: sortReviewComments(updateComments(currentWorkspace.comments))
-      };
+    if (
+      !currentWorkspace ||
+      !isWorkspaceScopedCompletionCurrent(completion, {
+        applyVersion: workspaceApplyVersionRef.current,
+        projectId: currentWorkspace.project.id
+      })
+    ) {
+      return;
+    }
 
-      workspaceCacheRef.current.set(nextWorkspace.project.id, {
-        branchRefs,
-        recentCommits,
-        projectSettings,
-        workspace: nextWorkspace
-      });
+    const nextWorkspace = {
+      ...currentWorkspace,
+      comments: sortReviewComments(updateComments(currentWorkspace.comments))
+    };
 
-      return nextWorkspace;
+    workspaceCacheRef.current.set(nextWorkspace.project.id, {
+      branchRefs,
+      recentCommits,
+      projectSettings,
+      workspace: nextWorkspace
     });
+    workspaceRef.current = nextWorkspace;
+    setWorkspace(nextWorkspace);
   }
 
   function startComment(side: ReviewCommentSide, lineNumber: number): void {
@@ -2518,6 +2904,7 @@ export function App(): React.JSX.Element {
 
   async function runWithCommentSavePending(
     pending: CommentSavePending,
+    completion: WorkspaceScopedCompletion,
     action: () => Promise<boolean>
   ): Promise<boolean> {
     if (commentSavePendingRef.current) {
@@ -2528,7 +2915,10 @@ export function App(): React.JSX.Element {
     setCommentSavePending(pending);
 
     const loaderTimerId = window.setTimeout(() => {
-      if (sameCommentSavePending(commentSavePendingRef.current, pending)) {
+      if (
+        canApplyWorkspaceScopedCompletion(completion) &&
+        sameCommentSavePending(commentSavePendingRef.current, pending)
+      ) {
         visibleCommentSavePendingRef.current = pending;
         setVisibleCommentSavePending(pending);
       }
@@ -2562,6 +2952,9 @@ export function App(): React.JSX.Element {
       return false;
     }
 
+    const commentWorkspace = workspace;
+    const completion = captureWorkspaceScopedCompletion(commentWorkspace.project.id);
+
     setError(undefined);
 
     return runWithCommentSavePending(
@@ -2573,6 +2966,7 @@ export function App(): React.JSX.Element {
         path: commentDraft.path,
         side: commentDraft.side
       },
+      completion,
       async () => {
         try {
           const result = await window.difftray.createReviewComment({
@@ -2581,10 +2975,14 @@ export function App(): React.JSX.Element {
             lineEnd: commentDraft.lineEnd,
             lineStart: commentDraft.lineStart,
             path: selectedFile.path,
-            projectId: workspace.project.id,
-            reviewTargetId: workspace.reviewTarget.id,
+            projectId: commentWorkspace.project.id,
+            reviewTargetId: commentWorkspace.reviewTarget.id,
             side: commentDraft.side
           });
+
+          if (!canApplyWorkspaceScopedCompletion(completion)) {
+            return false;
+          }
 
           if (result.status === "rejected") {
             setError(
@@ -2596,11 +2994,13 @@ export function App(): React.JSX.Element {
             return false;
           }
 
-          applyWorkspaceComments((comments) => [...comments, result.comment]);
+          applyWorkspaceComments(completion, (comments) => [...comments, result.comment]);
           setCommentDraft(undefined);
           return true;
         } catch (caughtError) {
-          setError(errorMessage(caughtError));
+          if (canApplyWorkspaceScopedCompletion(completion)) {
+            setError(errorMessage(caughtError));
+          }
           return false;
         }
       }
@@ -2614,6 +3014,14 @@ export function App(): React.JSX.Element {
       return false;
     }
 
+    const commentWorkspace = workspaceRef.current;
+
+    if (!commentWorkspace) {
+      return false;
+    }
+
+    const completion = captureWorkspaceScopedCompletion(commentWorkspace.project.id);
+
     setError(undefined);
 
     return runWithCommentSavePending(
@@ -2621,6 +3029,7 @@ export function App(): React.JSX.Element {
         commentId,
         kind: "update"
       },
+      completion,
       async () => {
         try {
           const result = await window.difftray.updateReviewComment({
@@ -2628,22 +3037,28 @@ export function App(): React.JSX.Element {
             id: commentId
           });
 
+          if (!canApplyWorkspaceScopedCompletion(completion)) {
+            return false;
+          }
+
           if (result.status === "rejected") {
-            applyWorkspaceComments((comments) =>
+            applyWorkspaceComments(completion, (comments) =>
               comments.filter((comment) => comment.id !== commentId)
             );
             setError("That review comment is no longer present.");
             return false;
           }
 
-          applyWorkspaceComments((comments) =>
+          applyWorkspaceComments(completion, (comments) =>
             comments.map((comment) =>
               comment.id === result.comment.id ? result.comment : comment
             )
           );
           return true;
         } catch (caughtError) {
-          setError(errorMessage(caughtError));
+          if (canApplyWorkspaceScopedCompletion(completion)) {
+            setError(errorMessage(caughtError));
+          }
           return false;
         }
       }
@@ -2677,20 +3092,34 @@ export function App(): React.JSX.Element {
   }
 
   async function deleteComment(commentId: string): Promise<void> {
+    const commentWorkspace = workspaceRef.current;
+
+    if (!commentWorkspace) {
+      return;
+    }
+
+    const completion = captureWorkspaceScopedCompletion(commentWorkspace.project.id);
+
     setError(undefined);
 
     try {
       const result = await window.difftray.deleteReviewComment({ id: commentId });
 
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
+
       if (result.status === "rejected") {
         setError("That review comment is no longer present.");
       }
 
-      applyWorkspaceComments((comments) =>
+      applyWorkspaceComments(completion, (comments) =>
         comments.filter((comment) => comment.id !== commentId)
       );
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (canApplyWorkspaceScopedCompletion(completion)) {
+        setError(errorMessage(caughtError));
+      }
     }
   }
 
@@ -2703,16 +3132,23 @@ export function App(): React.JSX.Element {
       return;
     }
 
+    const reportWorkspace = workspace;
+    const completion = captureWorkspaceScopedCompletion(reportWorkspace.project.id);
+
     setError(undefined);
     commentReportCopyPendingRef.current = true;
     setCommentReportCopyPending(true);
 
     try {
       const result = await window.difftray.copyReviewCommentsReport({
-        expectedCommentIds: workspace.comments.map((comment) => comment.id),
-        projectId: workspace.project.id,
-        reviewTargetId: workspace.reviewTarget.id
+        expectedCommentIds: reportWorkspace.comments.map((comment) => comment.id),
+        projectId: reportWorkspace.project.id,
+        reviewTargetId: reportWorkspace.reviewTarget.id
       });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
 
       if (result.status === "rejected") {
         setError("The diff changed before the comment report could be copied.");
@@ -2726,7 +3162,9 @@ export function App(): React.JSX.Element {
           : `Copied ${String(result.commentCount)} review comments`
       );
     } catch (caughtError) {
-      setError(errorMessage(caughtError));
+      if (canApplyWorkspaceScopedCompletion(completion)) {
+        setError(errorMessage(caughtError));
+      }
     } finally {
       commentReportCopyPendingRef.current = false;
       setCommentReportCopyPending(false);
@@ -2762,6 +3200,7 @@ export function App(): React.JSX.Element {
   }
 
   applicationCommandHandlerRef.current = handleApplicationCommand;
+  projectClosedHandlerRef.current = handleProjectClosed;
   projectsOpenedHandlerRef.current = handleProjectsOpened;
 
   return (
@@ -2818,7 +3257,12 @@ export function App(): React.JSX.Element {
             setRecentProjects(reorderUpdate.nextProjects);
             projectTabOrderSaveQueueRef.current.enqueue({
               onFailure: (caughtError: unknown) => {
-                setRecentProjects(reorderUpdate.rollbackProjects);
+                setRecentProjects((currentProjects) =>
+                  reconcileProjectTabOrderRollback(
+                    currentProjects,
+                    reorderUpdate.rollbackProjects
+                  )
+                );
                 setError(errorMessage(caughtError));
                 setTabDragCancelKey((key) => key + 1);
               },
@@ -3159,6 +3603,7 @@ export function App(): React.JSX.Element {
         <WorktreePicker
           onClose={() => {
             worktreePickerRequestRef.current += 1;
+            worktreePickerTargetRef.current = undefined;
             setWorktreePickerProject(undefined);
           }}
           onRefresh={() => {

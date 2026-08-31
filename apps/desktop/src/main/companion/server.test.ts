@@ -832,6 +832,33 @@ describe("companion server core", () => {
     });
   });
 
+  it("closes an open project and reports projects that are no longer open", async () => {
+    const closeProject = vi
+      .fn<(projectId: string) => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const { baseUrl } = await startServer({ closeProject });
+
+    const closed = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "DELETE",
+      path: "/companion/v1/projects/project-1"
+    });
+    const alreadyClosed = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "DELETE",
+      path: "/companion/v1/projects/project-1"
+    });
+
+    expect(closed.plain).toMatchObject({ body: { closed: true }, status: 200 });
+    expect(alreadyClosed.plain).toMatchObject({
+      body: { error: { code: "not_found" } },
+      status: 404
+    });
+    expect(closeProject).toHaveBeenNthCalledWith(1, "project-1");
+    expect(closeProject).toHaveBeenNthCalledWith(2, "project-1");
+  });
+
   it("rejects paths and oversized repository batches before invoking desktop open", async () => {
     const openRepositories = vi.fn(async () => ({ failures: [], openedProjects: [] }));
     const { baseUrl } = await startServer({ openRepositories });
@@ -1238,6 +1265,7 @@ async function startServer(
       storage: testCompanionStorage()
     }),
     commentsReport: async () => "",
+    closeProject: async () => false,
     createComment: async () => {
       throw new Error("not implemented in test");
     },

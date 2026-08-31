@@ -30,6 +30,10 @@ export type ProjectsOpenedEvent = {
   readonly projectIds: readonly string[];
 };
 
+export type ProjectClosedEvent = {
+  readonly projectId: string;
+};
+
 export type WorktreeChangeCountEvent = {
   readonly changeCount: number;
   readonly worktreePath: string;
@@ -96,6 +100,7 @@ export type DifftrayApi = {
     options?: LoadProjectOptions
   ) => Promise<ReviewWorkspaceView | null>;
   readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
+  readonly onProjectClosed: (listener: (event: ProjectClosedEvent) => void) => () => void;
   readonly onProjectsOpened: (
     listener: (event: ProjectsOpenedEvent) => void
   ) => () => void;
@@ -738,6 +743,18 @@ const api: DifftrayApi = {
       ipcRenderer.removeListener("projects:changed", handler);
     };
   },
+  onProjectClosed: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      if (!isProjectClosedEvent(payload)) return;
+      listener(payload);
+    };
+
+    ipcRenderer.on("projects:closed", handler);
+
+    return () => {
+      ipcRenderer.removeListener("projects:closed", handler);
+    };
+  },
   onProjectsOpened: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
       if (!isProjectsOpenedEvent(payload)) return;
@@ -887,6 +904,10 @@ function isProjectsOpenedEvent(payload: unknown): payload is ProjectsOpenedEvent
       (projectId): projectId is string => typeof projectId === "string"
     )
   );
+}
+
+function isProjectClosedEvent(payload: unknown): payload is ProjectClosedEvent {
+  return isRecord(payload) && typeof payload.projectId === "string";
 }
 
 function isWorktreeChangeCountEvent(

@@ -82,6 +82,7 @@ export {
 export {
   applyProjectTabOrder,
   parseStoredProjectTabOrder,
+  reconcileProjectTabOrder,
   sanitizeProjectTabOrder
 } from "./project-tab-order.js";
 

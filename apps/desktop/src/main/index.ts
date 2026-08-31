@@ -74,7 +74,7 @@ import {
 import {
   bootstrapStorageFromExistingProfile,
   replaceStorageFromExistingProfile,
-  sanitizeProjectTabOrder,
+  reconcileProjectTabOrder,
   type AppSettingsRecord,
   openStorage,
   type DifftrayStorage,
@@ -114,6 +114,7 @@ import {
 } from "./ipc-input.js";
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
 import { openStoredProjectDirectory } from "./project-folder-open.js";
+import { closeProjectIfOpen } from "./project-close.js";
 import {
   createRepositoryOpenService,
   type RepositoryOpenBatchResult
@@ -810,11 +811,10 @@ handleTrusted(
   "projects:saveTabOrder",
   (_event: IpcMainInvokeEvent, input: unknown): void => {
     const projectIds = readStringArrayProperty(input, "projectIds");
-    const knownProjects = getStorage().listKnownProjects();
+    const storage = getStorage();
+    const openProjects = storage.listOpenProjects();
 
-    getStorage().upsertProjectTabOrder(
-      sanitizeProjectTabOrder(knownProjects, projectIds)
-    );
+    storage.upsertProjectTabOrder(reconcileProjectTabOrder(openProjects, projectIds));
   }
 );
 handleTrusted(
@@ -1262,8 +1262,13 @@ app.on("before-quit", () => {
   companionWorkspaceChangeBroadcaster?.dispose();
   companionWorkspaceChangeBroadcaster = undefined;
   companionProjectList = undefined;
-  void projectWatchService?.close();
+  const watcherServiceToClose = projectWatchService;
   projectWatchService = undefined;
+  if (watcherServiceToClose) {
+    void watcherServiceToClose.close().catch((caughtError: unknown) => {
+      console.error("Failed to close project watchers during shutdown", caughtError);
+    });
+  }
   updateCheckScheduler?.stop();
   updateCheckScheduler = undefined;
   applicationMenuController?.dispose();
@@ -1573,6 +1578,10 @@ function getProjectWatchService(): ProjectWatchService {
   projectWatchService = new ProjectWatchService({
     createWatcher: createChokidarProjectWatcherFactory(),
     emitProjectChange,
+    isProjectOpen: (projectId) =>
+      getStorage()
+        .listOpenProjects()
+        .some((project) => project.id === projectId),
     resolveWatchPaths: async (project) => resolveGitProjectWatchPaths(project.path)
   });
 
@@ -1812,6 +1821,14 @@ function emitProjectsOpened(projectIds: readonly string[], focusProjectId: strin
   }
 }
 
+function emitProjectClosed(projectId: string): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("projects:closed", { projectId });
+    }
+  }
+}
+
 function emitWorktreeChangeCount(worktreePath: string, changeCount: number): void {
   const payload = { changeCount, worktreePath };
 
@@ -2030,6 +2047,21 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       ),
     companionAuth: getCompanionAuthManager(),
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
+    closeProject: async (projectId) =>
+      closeProjectIfOpen({
+        closeProjectTab: () => closeProjectTab(projectId),
+        isProjectOpen: () =>
+          storage.listOpenProjects().some((project) => project.id === projectId),
+        isShuttingDown: () => isQuitting,
+        onProjectClosed: () => {
+          emitProjectClosed(projectId);
+          broadcastCompanionWorkspaceChanged(projectId, "filesystem");
+        },
+        onWatcherStopError: (caughtError) => {
+          console.error("Failed to stop closed project watcher", caughtError);
+        },
+        stopProjectWatcher: () => getProjectWatchService().stopProject(projectId)
+      }),
     commentsReport: async (projectId) =>
       formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
     createComment: async (input) => {

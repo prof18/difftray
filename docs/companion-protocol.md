@@ -102,6 +102,9 @@ Authenticated routes use the real HTTP path, but the logical method and body are
 inside the encrypted envelope. Current routes cover:
 
 - Project list and workspace loading.
+- Project closing through `DELETE /companion/v1/projects/:projectId`. Closing
+  removes the open desktop tab and watcher but preserves repository files,
+  review marks, comments, and project settings.
 - File diff loading, including text, binary, mode-only, symlink, submodule, and
   rename metadata.
 - Mark/unmark reviewed with stale-diff rejection when the displayed diff hash no
