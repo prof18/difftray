@@ -38,6 +38,40 @@ class FakeWatcher implements ProjectWatcher {
   }
 }
 
+class FailingWatcher implements ProjectWatcher {
+  closeCount = 0;
+  failClose = true;
+
+  async close(): Promise<void> {
+    this.closeCount += 1;
+    if (this.failClose) {
+      throw new Error("watcher close failed");
+    }
+  }
+}
+
+class DelayedWatcher implements ProjectWatcher {
+  closeCount = 0;
+  private resolveClose: (() => void) | undefined;
+  private resolveCloseStarted: (() => void) | undefined;
+  readonly closeStarted = new Promise<void>((resolve) => {
+    this.resolveCloseStarted = resolve;
+  });
+  private readonly closeFinished = new Promise<void>((resolve) => {
+    this.resolveClose = resolve;
+  });
+
+  async close(): Promise<void> {
+    this.closeCount += 1;
+    this.resolveCloseStarted?.();
+    await this.closeFinished;
+  }
+
+  finishClose(): void {
+    this.resolveClose?.();
+  }
+}
+
 type CreatedWatcher = {
   readonly input: ProjectWatcherInput;
   readonly watcher: FakeWatcher;
@@ -75,6 +109,33 @@ describe("ProjectWatchService", () => {
     expect(created[1]?.input.projectPath).toBe(repoPath("renamed"));
   });
 
+  it("serializes replacement startup behind a delayed watcher close", async () => {
+    const firstWatcher = new DelayedWatcher();
+    const secondWatcher = new FakeWatcher();
+    let createCount = 0;
+    const service = new ProjectWatchService({
+      createWatcher: async () => (createCount++ === 0 ? firstWatcher : secondWatcher),
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    await service.watchProject(project("one"));
+    const replacement = service.watchProject({
+      id: "one",
+      path: repoPath("replacement")
+    });
+    await firstWatcher.closeStarted;
+    expect(createCount).toBe(1);
+
+    firstWatcher.finishClose();
+    await replacement;
+    expect(createCount).toBe(2);
+  });
+
   it("stops removed projects and closes all watchers on shutdown", async () => {
     const { created, service } = serviceFixture();
 
@@ -89,6 +150,141 @@ describe("ProjectWatchService", () => {
 
     expect(created[0]?.watcher.closeCount).toBe(1);
     expect(created[1]?.watcher.closeCount).toBe(1);
+  });
+
+  it("releases lifecycle bookkeeping after closed projects churn", async () => {
+    const { created, service } = serviceFixture({ debounceMs: 20 });
+
+    for (const projectId of ["one", "two", "three"]) {
+      await service.watchProject(project(projectId));
+      created.at(-1)?.input.onEvent({
+        kind: "change",
+        path: repoPath(projectId, "changed.ts")
+      });
+      await vi.advanceTimersByTimeAsync(20);
+      await service.stopProject(projectId);
+    }
+
+    expect(projectWatchBookkeeping(service)).toEqual({
+      lifecycleQueues: 0,
+      sequences: 0,
+      stopRequestSerials: 0,
+      watcherGenerations: 0
+    });
+  });
+
+  it("retains a failed watcher close so a later stop can retry it", async () => {
+    const watcher = new FailingWatcher();
+    const service = new ProjectWatchService({
+      createWatcher: async () => watcher,
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    await service.watchProject(project("one"));
+    await expect(service.stopProject("one")).rejects.toThrow("watcher close failed");
+    expect(watcher.closeCount).toBe(2);
+
+    watcher.failClose = false;
+    await expect(service.stopProject("one")).resolves.toBeUndefined();
+    expect(watcher.closeCount).toBe(3);
+  });
+
+  it("cleans up an active watcher when a stale sync reaches a closed project", async () => {
+    let projectIsOpen = true;
+    const { created, service } = serviceFixture({
+      isProjectOpen: () => projectIsOpen
+    });
+
+    await service.watchProject(project("one"));
+    projectIsOpen = false;
+
+    await service.syncProjects([project("one")]);
+
+    expect(created[0]?.watcher.closeCount).toBe(1);
+  });
+
+  it("surfaces cleanup failure when a stale sync reaches a closed project", async () => {
+    let projectIsOpen = true;
+    const watcher = new FailingWatcher();
+    const service = new ProjectWatchService({
+      createWatcher: async () => watcher,
+      emitProjectChange: vi.fn(),
+      isProjectOpen: () => projectIsOpen,
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    await service.watchProject(project("one"));
+    projectIsOpen = false;
+
+    await expect(service.syncProjects([project("one")])).rejects.toThrow(
+      "watcher close failed"
+    );
+    expect(watcher.closeCount).toBe(2);
+  });
+
+  it("retries retained watcher cleanup before installing a reopened project", async () => {
+    const watcher = new FailingWatcher();
+    const replacement = new FakeWatcher();
+    let createCount = 0;
+    const created: ProjectWatcher[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: async () => {
+        const next = createCount++ === 0 ? watcher : replacement;
+        created.push(next);
+        return next;
+      },
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    await service.watchProject(project("one"));
+    await expect(service.stopProject("one")).rejects.toThrow("watcher close failed");
+    watcher.failClose = false;
+
+    await service.watchProject({ id: "one", path: repoPath("replacement") });
+
+    expect(watcher.closeCount).toBe(3);
+    expect(created).toHaveLength(2);
+  });
+
+  it("does not install a replacement while retained watcher cleanup still fails", async () => {
+    const watcher = new FailingWatcher();
+    let createCount = 0;
+    const service = new ProjectWatchService({
+      createWatcher: async () => {
+        createCount += 1;
+        return watcher;
+      },
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    await service.watchProject(project("one"));
+    await expect(service.stopProject("one")).rejects.toThrow("watcher close failed");
+
+    await expect(
+      service.watchProject({ id: "one", path: repoPath("replacement") })
+    ).rejects.toThrow("watcher close failed");
+
+    expect(createCount).toBe(1);
+    expect(watcher.closeCount).toBe(3);
   });
 
   it("does not install a watcher whose startup was invalidated by stopProject", async () => {
@@ -124,6 +320,122 @@ describe("ProjectWatchService", () => {
     await watch;
 
     expect(created).toHaveLength(0);
+  });
+
+  it("waits for an in-flight startup before completing shutdown", async () => {
+    let resolveCreateWatcher: ((watcher: ProjectWatcher) => void) | undefined;
+    const watcher = new FakeWatcher();
+    const service = new ProjectWatchService({
+      createWatcher: () =>
+        new Promise((resolve) => {
+          resolveCreateWatcher = resolve;
+        }),
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    const watch = service.watchProject(project("one"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const shutdown = service.close();
+    let shutdownFinished = false;
+    void shutdown.then(() => {
+      shutdownFinished = true;
+    });
+
+    await Promise.resolve();
+    expect(shutdownFinished).toBe(false);
+    resolveCreateWatcher?.(watcher);
+    await Promise.all([watch, shutdown]);
+    expect(shutdownFinished).toBe(true);
+    expect(watcher.closeCount).toBe(1);
+  });
+
+  it("retains a watcher when canceled startup close fails so a later stop can retry it", async () => {
+    let resolveCreateWatcher: ((watcher: ProjectWatcher) => void) | undefined;
+    const watcher = new FailingWatcher();
+    const service = new ProjectWatchService({
+      createWatcher: () =>
+        new Promise((resolve) => {
+          resolveCreateWatcher = resolve;
+        }),
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: async (watchedProject) => ({
+        gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+        gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+        worktreeRoot: watchedProject.path
+      })
+    });
+
+    const watch = service.watchProject(project("one"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const stop = service.stopProject("one");
+    resolveCreateWatcher?.(watcher);
+    await expect(stop).rejects.toThrow("watcher close failed");
+    await watch;
+
+    expect(watcher.closeCount).toBe(2);
+    watcher.failClose = false;
+    await service.stopProject("one");
+    expect(watcher.closeCount).toBe(3);
+  });
+
+  it("ignores events from a retained old watcher after the project reopens", async () => {
+    const firstWatcher = new FailingWatcher();
+    const secondWatcher = new FakeWatcher();
+    let createCount = 0;
+    const createdInputs: ProjectWatcherInput[] = [];
+    const { changes, service } = (() => {
+      const changes: ProjectWatchChangeEvent[] = [];
+      const service = new ProjectWatchService({
+        createWatcher: async (input) => {
+          createCount += 1;
+          createdInputs.push(input);
+          return createCount === 1 ? firstWatcher : secondWatcher;
+        },
+        debounceMs: 20,
+        emitProjectChange: (change) => changes.push(change),
+        resolveWatchPaths: async (watchedProject) => ({
+          gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
+          gitMetadataPaths: [path.join(watchedProject.path, ".git", "HEAD")],
+          worktreeRoot: watchedProject.path
+        })
+      });
+
+      return { changes, service };
+    })();
+
+    await service.watchProject(project("one"));
+    await expect(
+      service.watchProject({ id: "one", path: repoPath("replacement") })
+    ).rejects.toThrow("watcher close failed");
+
+    firstWatcher.failClose = false;
+    await service.watchProject({ id: "one", path: repoPath("replacement") });
+
+    createdInputs[0]?.onEvent({
+      kind: "change",
+      path: repoPath("one", "stale.ts")
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(changes).toEqual([]);
+
+    // The replacement watcher is the only one allowed to produce a change.
+    createdInputs[1]?.onEvent({
+      kind: "change",
+      path: repoPath("replacement", "current.ts")
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(changes).toHaveLength(1);
   });
 
   it("does not emit startup errors from resolution canceled by stopProject", async () => {
@@ -171,6 +483,101 @@ describe("ProjectWatchService", () => {
     await watch;
 
     expect(changes).toEqual([]);
+  });
+
+  it("does not resurrect a watcher when a stale sync arrives after a project closes", async () => {
+    let projectIsOpen = true;
+    const { created, service } = serviceFixture({
+      isProjectOpen: () => projectIsOpen
+    });
+
+    await service.watchProject(project("one"));
+    projectIsOpen = false;
+    await service.stopProject("one");
+
+    await service.syncProjects([project("one")]);
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.watcher.closeCount).toBe(1);
+  });
+
+  it("cancels a running sync when the project closes", async () => {
+    let projectIsOpen = true;
+    let resolveWatchPaths:
+      | ((paths: {
+          readonly gitMetadataContainerPaths: readonly string[];
+          readonly gitMetadataPaths: readonly string[];
+          readonly worktreeRoot: string;
+        }) => void)
+      | undefined;
+    const created: FakeWatcher[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: async () => {
+        const watcher = new FakeWatcher();
+        created.push(watcher);
+        return watcher;
+      },
+      emitProjectChange: vi.fn(),
+      isProjectOpen: () => projectIsOpen,
+      resolveWatchPaths: () =>
+        new Promise((resolve) => {
+          resolveWatchPaths = resolve;
+        })
+    });
+
+    const sync = service.syncProjects([project("one")]);
+    await Promise.resolve();
+    await Promise.resolve();
+    projectIsOpen = false;
+    await service.stopProject("one");
+    resolveWatchPaths?.({
+      gitMetadataContainerPaths: [repoPath("one", ".git")],
+      gitMetadataPaths: [repoPath("one", ".git", "HEAD")],
+      worktreeRoot: repoPath("one")
+    });
+    await sync;
+
+    expect(created).toHaveLength(0);
+  });
+
+  it("cancels queued startup when an overlapping sync removes the project", async () => {
+    let resolveWatchPaths:
+      | ((paths: {
+          readonly gitMetadataContainerPaths: readonly string[];
+          readonly gitMetadataPaths: readonly string[];
+          readonly worktreeRoot: string;
+        }) => void)
+      | undefined;
+    const created: FakeWatcher[] = [];
+    const service = new ProjectWatchService({
+      createWatcher: async () => {
+        const watcher = new FakeWatcher();
+        created.push(watcher);
+        return watcher;
+      },
+      emitProjectChange: vi.fn(),
+      resolveWatchPaths: () =>
+        new Promise((resolve) => {
+          resolveWatchPaths = resolve;
+        })
+    });
+
+    const startup = service.syncProjects([project("one")]);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stop = service.syncProjects([]);
+    resolveWatchPaths?.({
+      gitMetadataContainerPaths: [repoPath("one", ".git")],
+      gitMetadataPaths: [repoPath("one", ".git", "HEAD")],
+      worktreeRoot: repoPath("one")
+    });
+
+    await Promise.all([startup, stop]);
+
+    expect(created).toHaveLength(0);
   });
 
   it("debounces raw events and coalesces worktree, Git metadata, and deleted reasons", async () => {
@@ -316,9 +723,11 @@ describe("resolveGitProjectWatchPaths", () => {
 
 function serviceFixture({
   debounceMs = 25,
+  isProjectOpen = () => true,
   maxWaitMs = 100
 }: {
   readonly debounceMs?: number;
+  readonly isProjectOpen?: (projectId: string) => boolean;
   readonly maxWaitMs?: number;
 } = {}) {
   const created: CreatedWatcher[] = [];
@@ -333,6 +742,7 @@ function serviceFixture({
     emitProjectChange: (change) => {
       changes.push(change);
     },
+    isProjectOpen,
     maxWaitMs,
     resolveWatchPaths: async (watchedProject) => ({
       gitMetadataContainerPaths: [path.join(watchedProject.path, ".git")],
@@ -346,6 +756,27 @@ function serviceFixture({
   });
 
   return { changes, created, service };
+}
+
+function projectWatchBookkeeping(service: ProjectWatchService): {
+  readonly lifecycleQueues: number;
+  readonly sequences: number;
+  readonly stopRequestSerials: number;
+  readonly watcherGenerations: number;
+} {
+  const bookkeeping = service as unknown as {
+    readonly lifecycleQueues: ReadonlyMap<string, Promise<void>>;
+    readonly sequences: ReadonlyMap<string, number>;
+    readonly stopRequestSerials: ReadonlyMap<string, number>;
+    readonly watcherGenerations: ReadonlyMap<string, number>;
+  };
+
+  return {
+    lifecycleQueues: bookkeeping.lifecycleQueues.size,
+    sequences: bookkeeping.sequences.size,
+    stopRequestSerials: bookkeeping.stopRequestSerials.size,
+    watcherGenerations: bookkeeping.watcherGenerations.size
+  };
 }
 
 function emit(

@@ -286,6 +286,33 @@ export function mergeProjectTabs<TProject extends ProjectTabRecord>(
   return orderedProjects;
 }
 
+export function reconcileProjectTabOrderRollback<TProject extends ProjectTabRecord>(
+  currentProjects: readonly TProject[],
+  rollbackProjects: readonly TProject[]
+): readonly TProject[] {
+  const currentProjectsById = new Map(
+    currentProjects.map((project) => [project.id, project] as const)
+  );
+  const rollbackProjectIds = new Set(rollbackProjects.map((project) => project.id));
+  const reconciledProjects: TProject[] = [];
+
+  for (const project of rollbackProjects) {
+    const currentProject = currentProjectsById.get(project.id);
+
+    if (currentProject) {
+      reconciledProjects.push(currentProject);
+    }
+  }
+
+  for (const project of currentProjects) {
+    if (!rollbackProjectIds.has(project.id)) {
+      reconciledProjects.push(project);
+    }
+  }
+
+  return reconciledProjects;
+}
+
 export function reorderProjectTabs<TProject extends ProjectTabRecord>(
   projects: readonly TProject[],
   draggedProjectId: string,

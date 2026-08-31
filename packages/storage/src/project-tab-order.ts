@@ -100,6 +100,25 @@ export function sanitizeProjectTabOrder(
   return sanitizedOrder;
 }
 
+export function reconcileProjectTabOrder(
+  openProjects: readonly { readonly id: string }[],
+  requestedOrder: readonly string[]
+): readonly string[] {
+  const reconciledOrder = [...sanitizeProjectTabOrder(openProjects, requestedOrder)];
+  const seenProjectIds = new Set(reconciledOrder);
+
+  for (const { id } of openProjects) {
+    if (seenProjectIds.has(id)) {
+      continue;
+    }
+
+    seenProjectIds.add(id);
+    reconciledOrder.push(id);
+  }
+
+  return reconciledOrder;
+}
+
 export function getProjectTabOrder(db: DatabaseSync): readonly string[] {
   const row = db
     .prepare("select value from app_settings where key = ?")

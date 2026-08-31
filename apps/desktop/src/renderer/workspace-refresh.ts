@@ -1,5 +1,31 @@
 export type WorkspaceLoadState = "idle" | "loading";
 
+export type WorkspaceLoadRequestRef = { current: number };
+
+export type WorkspaceLoadTarget = {
+  readonly invalidatesOnAnyProjectRemoval: boolean;
+  readonly projectId: string | undefined;
+};
+
+export type ProjectTabRemovalDisposition = {
+  readonly closingActiveProject: boolean;
+  readonly displayedProjectClosed: boolean;
+};
+
+export type WorkspaceScopedCompletion = {
+  readonly applyVersion: number;
+  readonly projectId: string;
+};
+
+export type WorkspaceScopedCompletionState = {
+  readonly applyVersion: number;
+  readonly projectId: string | undefined;
+};
+
+export type ReplacementWorkspaceLoadResult<TWorkspace> =
+  | { readonly kind: "loaded"; readonly workspace: TWorkspace }
+  | { readonly firstError?: unknown; readonly kind: "exhausted" };
+
 export type SilentWorkspaceRefreshState = {
   readonly activeProjectId: string | undefined;
   readonly applyVersion: number;
@@ -38,6 +64,135 @@ export type LoadedFileDiffView = Pick<
     readonly patch: string;
   };
 
+export function invalidateWorkspaceLoadRequest(
+  requestRef: WorkspaceLoadRequestRef
+): number {
+  requestRef.current += 1;
+  return requestRef.current;
+}
+
+export function isWorkspaceLoadRequestCurrent(
+  requestId: number,
+  requestRef: WorkspaceLoadRequestRef
+): boolean {
+  return requestId === requestRef.current;
+}
+
+export async function loadReplacementWorkspace<TProject, TWorkspace>(
+  candidateProjects: readonly TProject[],
+  loadProject: (project: TProject) => Promise<TWorkspace | undefined>
+): Promise<ReplacementWorkspaceLoadResult<TWorkspace>> {
+  let firstError: unknown;
+
+  for (const project of candidateProjects) {
+    try {
+      const workspace = await loadProject(project);
+
+      if (workspace !== undefined) {
+        return { kind: "loaded", workspace };
+      }
+    } catch (caughtError) {
+      firstError ??= caughtError;
+    }
+  }
+
+  return { firstError, kind: "exhausted" };
+}
+
+export function openReplacementWorkspaceCandidates<
+  TProject extends { readonly id: string }
+>(
+  candidateProjects: readonly TProject[],
+  openProjects: readonly { readonly id: string }[]
+): readonly TProject[] {
+  const openProjectIds = new Set(openProjects.map((project) => project.id));
+
+  return candidateProjects.filter((project) => openProjectIds.has(project.id));
+}
+
+export function shouldClearInvalidatedDisplayedWorkspace(
+  invalidatedProjectId: string | undefined,
+  displayedProjectId: string | undefined
+): boolean {
+  return (
+    invalidatedProjectId !== undefined && invalidatedProjectId === displayedProjectId
+  );
+}
+
+export function shouldClearUnavailableDisplayedWorkspace(
+  targetProjectId: string | undefined,
+  displayedProjectId: string | undefined
+): boolean {
+  return targetProjectId !== undefined && targetProjectId === displayedProjectId;
+}
+
+export function isWorkspaceScopedCompletionCurrent(
+  request: WorkspaceScopedCompletion,
+  state: WorkspaceScopedCompletionState
+): boolean {
+  return (
+    request.applyVersion === state.applyVersion && request.projectId === state.projectId
+  );
+}
+
+export function shouldInvalidateWorkspaceLoadForTabRemoval(
+  activeProjectId: string | undefined,
+  removedProjectId: string,
+  loadTarget?: Pick<WorkspaceLoadTarget, "invalidatesOnAnyProjectRemoval" | "projectId">
+): boolean {
+  return (
+    loadTarget?.invalidatesOnAnyProjectRemoval === true ||
+    (loadTarget?.projectId ?? activeProjectId) === removedProjectId
+  );
+}
+
+export function projectTabRemovalDisposition(
+  currentProjectId: string | undefined,
+  removedProjectId: string,
+  loadTarget?: Pick<WorkspaceLoadTarget, "invalidatesOnAnyProjectRemoval" | "projectId">
+): ProjectTabRemovalDisposition {
+  return {
+    closingActiveProject: shouldInvalidateWorkspaceLoadForTabRemoval(
+      currentProjectId,
+      removedProjectId,
+      loadTarget
+    ),
+    displayedProjectClosed: currentProjectId === removedProjectId
+  };
+}
+
+export function reconcileProjectTabsAfterRemoval<
+  TProject extends { readonly id: string }
+>(
+  currentProjects: readonly TProject[],
+  removedProjectId: string,
+  nextProjects: readonly TProject[],
+  mode: "current" | "stale" = "current"
+): readonly TProject[] {
+  const nextProjectsById = new Map(
+    nextProjects.map((project) => [project.id, project] as const)
+  );
+  const reconciledProjects = currentProjects
+    .filter((project) => project.id !== removedProjectId)
+    .filter((project) => mode === "stale" || nextProjectsById.has(project.id))
+    .map((project) => {
+      const nextProject = nextProjectsById.get(project.id);
+
+      return mode === "stale" || !nextProject ? project : { ...project, ...nextProject };
+    });
+  const reconciledProjectIds = new Set(reconciledProjects.map((project) => project.id));
+
+  if (mode === "current") {
+    for (const project of nextProjects) {
+      if (project.id !== removedProjectId && !reconciledProjectIds.has(project.id)) {
+        reconciledProjects.push(project);
+      }
+    }
+  }
+
+  return reconciledProjects;
+}
+
 export function shouldApplySilentWorkspaceRefresh(
   state: SilentWorkspaceRefreshState
 ): boolean {
@@ -48,6 +203,20 @@ export function shouldApplySilentWorkspaceRefresh(
     !state.paletteOpen &&
     !state.settingsOpen
   );
+}
+
+export function shouldCancelProjectsOpenedRequest(
+  openingProjectId: string | undefined,
+  closedProjectId: string
+): boolean {
+  return openingProjectId === closedProjectId;
+}
+
+export function shouldDismissWorktreePickerForProjectRemoval(
+  worktreePickerProjectId: string | undefined,
+  removedProjectId: string
+): boolean {
+  return worktreePickerProjectId === removedProjectId;
 }
 
 export function shouldRefreshCachedWorkspaceAfterTabSwitch(

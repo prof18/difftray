@@ -8,6 +8,7 @@ import { openStorage } from "../src/index.js";
 import {
   applyProjectTabOrder,
   parseStoredProjectTabOrder,
+  reconcileProjectTabOrder,
   sanitizeProjectTabOrder
 } from "../src/project-tab-order.js";
 
@@ -57,6 +58,17 @@ describe("sanitizeProjectTabOrder", () => {
         ["difftray", "missing", "reader-flow", "difftray"]
       )
     ).toEqual(["difftray", "reader-flow"]);
+  });
+});
+
+describe("reconcileProjectTabOrder", () => {
+  it("keeps requested known ids and appends omitted open ids in storage order", () => {
+    expect(
+      reconcileProjectTabOrder(
+        [project("open-b"), project("open-a")],
+        ["closed", "open-a", "closed", "missing"]
+      )
+    ).toEqual(["open-a", "open-b"]);
   });
 });
 

@@ -60,6 +60,7 @@ export type ProjectWatchServiceOptions = {
   readonly createWatcher: ProjectWatcherFactory;
   readonly debounceMs?: number;
   readonly emitProjectChange: (change: ProjectWatchChangeEvent) => void;
+  readonly isProjectOpen?: (projectId: string) => boolean;
   readonly maxWaitMs?: number;
   readonly resolveWatchPaths: (project: WatchedProject) => Promise<ProjectWatchPaths>;
 };
@@ -72,6 +73,7 @@ type ProjectWatchState = {
   readonly pendingReasons: Set<ProjectWatchReason>;
   readonly project: WatchedProject;
   readonly watcher: ProjectWatcher;
+  readonly watcherGeneration: number;
   readonly watchPaths: ProjectWatchPaths;
 };
 
@@ -121,31 +123,53 @@ export class ProjectWatchService {
   private isClosed = false;
   private readonly debounceMs: number;
   private readonly emitProjectChange: (change: ProjectWatchChangeEvent) => void;
+  private readonly failedWatcherClosures = new Map<string, Set<ProjectWatcher>>();
+  private readonly isProjectOpen: (projectId: string) => boolean;
   private readonly maxWaitMs: number;
   private readonly projects = new Map<string, ProjectWatchState>();
   private readonly resolveWatchPaths: (
     project: WatchedProject
   ) => Promise<ProjectWatchPaths>;
+  private readonly lifecycleQueues = new Map<string, Promise<void>>();
   private readonly sequences = new Map<string, number>();
+  private readonly stopRequestSerials = new Map<string, number>();
   private readonly watcherGenerations = new Map<string, number>();
 
   constructor(options: ProjectWatchServiceOptions) {
     this.createWatcher = options.createWatcher;
     this.debounceMs = options.debounceMs ?? defaultDebounceMs;
     this.emitProjectChange = options.emitProjectChange;
+    this.isProjectOpen = options.isProjectOpen ?? (() => true);
     this.maxWaitMs = options.maxWaitMs ?? defaultMaxWaitMs;
     this.resolveWatchPaths = options.resolveWatchPaths;
   }
 
   async watchProject(project: WatchedProject): Promise<void> {
-    if (this.isClosed) {
-      return;
-    }
-
     const normalizedProject = {
       id: project.id,
       path: path.resolve(project.path)
     };
+    const stopRequestSerial = this.stopRequestSerials.get(normalizedProject.id) ?? 0;
+
+    return this.enqueueProjectLifecycle(normalizedProject.id, async () => {
+      await this.watchProjectState(normalizedProject, stopRequestSerial);
+    });
+  }
+
+  private async watchProjectState(
+    normalizedProject: WatchedProject,
+    stopRequestSerial: number
+  ): Promise<void> {
+    if (
+      this.isClosed ||
+      !this.isProjectOpen(normalizedProject.id) ||
+      (this.stopRequestSerials.get(normalizedProject.id) ?? 0) !== stopRequestSerial
+    ) {
+      this.nextWatcherGeneration(normalizedProject.id);
+      await this.cleanupProjectResources(normalizedProject.id);
+      return;
+    }
+
     const existing = this.projects.get(normalizedProject.id);
 
     if (existing?.project.path === normalizedProject.path) {
@@ -154,6 +178,9 @@ export class ProjectWatchService {
 
     const watcherGeneration = this.nextWatcherGeneration(normalizedProject.id);
     await this.stopProjectState(normalizedProject.id);
+    if (this.failedWatcherClosures.has(normalizedProject.id)) {
+      await this.retryFailedWatcherClosures(normalizedProject.id);
+    }
 
     let watchPaths: ProjectWatchPaths;
 
@@ -183,11 +210,13 @@ export class ProjectWatchService {
       ...watchPaths.gitMetadataPaths
     ]);
 
+    let watcher: ProjectWatcher | undefined;
+
     try {
-      const watcher = await this.createWatcher({
+      watcher = await this.createWatcher({
         ignored,
         onEvent: (event) => {
-          this.handleRawEvent(normalizedProject.id, event);
+          this.handleRawEvent(normalizedProject.id, watcherGeneration, watcher, event);
         },
         projectId: normalizedProject.id,
         projectPath: normalizedProject.path,
@@ -195,7 +224,11 @@ export class ProjectWatchService {
       });
 
       if (this.shouldCancelWatcherStartup(normalizedProject.id, watcherGeneration)) {
-        await watcher.close();
+        try {
+          await watcher.close();
+        } catch {
+          this.retainFailedWatcherClosure(normalizedProject.id, watcher);
+        }
         return;
       }
 
@@ -207,9 +240,18 @@ export class ProjectWatchService {
         pendingReasons: new Set(),
         project: normalizedProject,
         watcher,
+        watcherGeneration,
         watchPaths
       });
     } catch (caughtError) {
+      if (
+        watcher &&
+        this.shouldCancelWatcherStartup(normalizedProject.id, watcherGeneration)
+      ) {
+        this.retainFailedWatcherClosure(normalizedProject.id, watcher);
+        return;
+      }
+
       if (!this.shouldCancelWatcherStartup(normalizedProject.id, watcherGeneration)) {
         this.emitWatcherStartupError(normalizedProject, caughtError);
       }
@@ -217,22 +259,94 @@ export class ProjectWatchService {
   }
 
   async syncProjects(projects: readonly WatchedProject[]): Promise<void> {
-    const nextProjectIds = new Set(projects.map((project) => project.id));
+    const openProjects = projects.filter((project) => this.isProjectOpen(project.id));
+    const nextProjectIds = new Set(openProjects.map((project) => project.id));
+    const watchedProjectIds = new Set([
+      ...this.projects.keys(),
+      ...this.failedWatcherClosures.keys(),
+      ...this.lifecycleQueues.keys()
+    ]);
 
     await Promise.all(
-      [...this.projects.keys()]
+      [...watchedProjectIds]
         .filter((projectId) => !nextProjectIds.has(projectId))
         .map(async (projectId) => this.stopProject(projectId))
     );
 
-    for (const project of projects) {
+    for (const project of openProjects) {
       await this.watchProject(project);
     }
   }
 
   async stopProject(projectId: string): Promise<void> {
+    this.stopRequestSerials.set(
+      projectId,
+      (this.stopRequestSerials.get(projectId) ?? 0) + 1
+    );
     this.nextWatcherGeneration(projectId);
-    await this.stopProjectState(projectId);
+    await this.enqueueProjectLifecycle(projectId, () =>
+      this.cleanupProjectResources(projectId)
+    );
+  }
+
+  private enqueueProjectLifecycle(
+    projectId: string,
+    operation: () => Promise<void>
+  ): Promise<void> {
+    const previous = this.lifecycleQueues.get(projectId) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(operation);
+    this.lifecycleQueues.set(projectId, queued);
+    void queued.then(
+      () => {
+        this.clearLifecycleQueue(projectId, queued);
+      },
+      () => {
+        this.clearLifecycleQueue(projectId, queued);
+      }
+    );
+    return queued;
+  }
+
+  private clearLifecycleQueue(projectId: string, queued: Promise<void>): void {
+    if (this.lifecycleQueues.get(projectId) === queued) {
+      this.lifecycleQueues.delete(projectId);
+      this.pruneInactiveProjectBookkeeping(projectId);
+    }
+  }
+
+  private pruneInactiveProjectBookkeeping(projectId: string): void {
+    if (
+      this.lifecycleQueues.has(projectId) ||
+      this.projects.has(projectId) ||
+      this.failedWatcherClosures.has(projectId)
+    ) {
+      return;
+    }
+
+    this.sequences.delete(projectId);
+    this.stopRequestSerials.delete(projectId);
+    this.watcherGenerations.delete(projectId);
+  }
+
+  private async cleanupProjectResources(projectId: string): Promise<void> {
+    let stopError: Error | undefined;
+
+    try {
+      await this.stopProjectState(projectId);
+    } catch (caughtError) {
+      stopError = watcherCloseError(caughtError);
+    }
+
+    try {
+      await this.retryFailedWatcherClosures(projectId);
+      stopError = undefined;
+    } catch (caughtError) {
+      stopError = watcherCloseError(caughtError);
+    }
+
+    if (stopError) {
+      throw stopError;
+    }
   }
 
   private async stopProjectState(projectId: string): Promise<void> {
@@ -244,7 +358,45 @@ export class ProjectWatchService {
 
     this.projects.delete(projectId);
     this.clearStateTimers(state);
-    await state.watcher.close();
+    try {
+      await state.watcher.close();
+    } catch (caughtError) {
+      this.retainFailedWatcherClosure(projectId, state.watcher);
+      throw watcherCloseError(caughtError);
+    }
+  }
+
+  private retainFailedWatcherClosure(projectId: string, watcher: ProjectWatcher): void {
+    const failedClosures = this.failedWatcherClosures.get(projectId) ?? new Set();
+    failedClosures.add(watcher);
+    this.failedWatcherClosures.set(projectId, failedClosures);
+  }
+
+  private async retryFailedWatcherClosures(projectId: string): Promise<void> {
+    const failedClosures = this.failedWatcherClosures.get(projectId);
+
+    if (!failedClosures) {
+      return;
+    }
+
+    let closeError: Error | undefined;
+
+    for (const watcher of [...failedClosures]) {
+      try {
+        await watcher.close();
+        failedClosures.delete(watcher);
+      } catch (caughtError) {
+        closeError ??= watcherCloseError(caughtError);
+      }
+    }
+
+    if (failedClosures.size === 0) {
+      this.failedWatcherClosures.delete(projectId);
+    }
+
+    if (closeError) {
+      throw closeError;
+    }
   }
 
   private nextWatcherGeneration(projectId: string): number {
@@ -254,21 +406,40 @@ export class ProjectWatchService {
   }
 
   private shouldCancelWatcherStartup(projectId: string, generation: number): boolean {
-    return this.isClosed || this.watcherGenerations.get(projectId) !== generation;
+    return (
+      this.isClosed ||
+      !this.isProjectOpen(projectId) ||
+      this.watcherGenerations.get(projectId) !== generation
+    );
   }
 
   async close(): Promise<void> {
     this.isClosed = true;
+    const watchedProjectIds = new Set([
+      ...this.projects.keys(),
+      ...this.failedWatcherClosures.keys(),
+      ...this.lifecycleQueues.keys()
+    ]);
 
     await Promise.all(
-      [...this.projects.keys()].map((projectId) => this.stopProject(projectId))
+      [...watchedProjectIds].map((projectId) => this.stopProject(projectId))
     );
   }
 
-  private handleRawEvent(projectId: string, event: ProjectRawWatchEvent): void {
+  private handleRawEvent(
+    projectId: string,
+    watcherGeneration: number,
+    watcher: ProjectWatcher | undefined,
+    event: ProjectRawWatchEvent
+  ): void {
     const state = this.projects.get(projectId);
 
-    if (!state) {
+    if (
+      !state ||
+      !watcher ||
+      state.watcher !== watcher ||
+      state.watcherGeneration !== watcherGeneration
+    ) {
       return;
     }
 
@@ -547,4 +718,8 @@ function boundedErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
 
   return message.slice(0, maxErrorMessageLength);
+}
+
+function watcherCloseError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(boundedErrorMessage(error));
 }

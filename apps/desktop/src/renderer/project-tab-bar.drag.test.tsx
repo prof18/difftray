@@ -279,6 +279,48 @@ describe("ProjectTabBar drag", () => {
     expect(container.querySelector('[data-dragging="true"]')).toBeNull();
     expect(onReorderProjects).not.toHaveBeenCalled();
   });
+
+  it("drops from the reconciled tab list after a project removal cancels a drag", () => {
+    const onCommitProjectOrder = vi.fn();
+    const projects = [
+      project("repo-one", "Repo One"),
+      project("repo-two", "Repo Two"),
+      project("repo-three", "Repo Three")
+    ];
+    const props = projectTabBarProps({ onCommitProjectOrder, projects });
+    const dataTransfer = new MockDataTransfer();
+
+    act(() => {
+      root.render(<ProjectTabBar {...props} tabDragCancelKey={0} />);
+    });
+
+    const draggedTab = container.querySelector('[data-project-tab-name="Repo Two"]');
+
+    act(() => {
+      draggedTab?.dispatchEvent(
+        new MockDragEvent("dragstart", { bubbles: true, dataTransfer })
+      );
+    });
+
+    act(() => {
+      root.render(
+        <ProjectTabBar {...props} projects={projects.slice(0, 2)} tabDragCancelKey={1} />
+      );
+    });
+
+    const tabScroller = container.querySelector('[data-project-tab-strip="true"] > div');
+
+    act(() => {
+      tabScroller?.dispatchEvent(
+        new MockDragEvent("drop", { bubbles: true, dataTransfer })
+      );
+    });
+
+    expect(onCommitProjectOrder).toHaveBeenCalledOnce();
+    expect(onCommitProjectOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ nextProjects: projects.slice(0, 2) })
+    );
+  });
 });
 
 function project(id: string, name: string): RecentProjectView {

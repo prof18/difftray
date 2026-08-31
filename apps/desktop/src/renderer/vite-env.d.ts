@@ -66,6 +66,9 @@ declare global {
       options?: LoadProjectOptions
     ) => Promise<ReviewWorkspaceView | null>;
     readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
+    readonly onProjectClosed: (
+      listener: (event: ProjectClosedEvent) => void
+    ) => () => void;
     readonly onProjectsOpened: (
       listener: (event: ProjectsOpenedEvent) => void
     ) => () => void;
@@ -334,6 +337,10 @@ declare global {
   type ProjectsOpenedEvent = {
     readonly focusProjectId: string;
     readonly projectIds: readonly string[];
+  };
+
+  type ProjectClosedEvent = {
+    readonly projectId: string;
   };
 
   type WorktreeChangeCountEvent = {

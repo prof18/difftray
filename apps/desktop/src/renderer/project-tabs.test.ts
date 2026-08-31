@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createProjectTabOrderSaveQueue,
   mergeProjectTabs,
+  reconcileProjectTabOrderRollback,
   prepareProjectTabReorderUpdate,
   projectTabOrdersMatch,
   projectTabOrderIndexAfterInsert,
@@ -56,6 +57,24 @@ describe("mergeProjectTabs", () => {
 
     expect(mergeProjectTabs(currentProjects, nextProjects)).toEqual([
       { id: "reader-flow", name: "reader-flow", reviewSummary: summary }
+    ]);
+  });
+});
+
+describe("reconcileProjectTabOrderRollback", () => {
+  it("keeps live tab metadata and excludes a tab closed while the save was pending", () => {
+    const currentProjects = [
+      { id: "kept", name: "New name" },
+      { id: "opened", name: "Opened" }
+    ];
+    const rollbackProjects = [
+      { id: "closed", name: "Closed" },
+      { id: "kept", name: "Old name" }
+    ];
+
+    expect(reconcileProjectTabOrderRollback(currentProjects, rollbackProjects)).toEqual([
+      { id: "kept", name: "New name" },
+      { id: "opened", name: "Opened" }
     ]);
   });
 });
