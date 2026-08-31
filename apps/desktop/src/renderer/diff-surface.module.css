@@ -25,6 +25,46 @@
   background: var(--diff-bg);
 }
 
+.horizontalScrollbars {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  height: 10px;
+  background: var(--diff-bg);
+}
+
+.horizontalScrollbarTrack {
+  position: relative;
+  height: 10px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.horizontalScrollbarTrack:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.horizontalScrollbarThumb {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 4px;
+  min-width: 44px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  cursor: grab;
+  will-change: transform;
+}
+
+.horizontalScrollbarTrack:active .horizontalScrollbarThumb {
+  cursor: grabbing;
+}
+
 .diffPreparingState {
   display: flex;
   height: 100%;

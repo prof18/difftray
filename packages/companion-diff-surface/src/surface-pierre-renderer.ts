@@ -100,6 +100,66 @@ const diffSurfaceUnsafeCSS = `
   --diffs-gap-inline: 8px;
 }
 
+[data-overflow="scroll"] {
+  --diffs-scrollbar-gutter: 12px;
+  --difftray-scrollbar-track: color-mix(
+    in srgb,
+    var(--diff-surface-muted),
+    transparent 76%
+  );
+  --difftray-scrollbar-track-border: color-mix(
+    in srgb,
+    var(--diff-surface-muted),
+    transparent 66%
+  );
+  --difftray-scrollbar-thumb: color-mix(
+    in srgb,
+    var(--diff-surface-accent),
+    var(--diff-surface-muted) 28%
+  );
+  --difftray-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--diff-surface-accent),
+    var(--diff-surface-muted) 12%
+  );
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar {
+  height: 12px;
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar-track {
+  background-color: var(--difftray-scrollbar-track);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--difftray-scrollbar-track-border);
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb {
+  background-clip: padding-box;
+  background-color: var(--difftray-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  cursor: grab;
+  min-width: 44px;
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb:hover {
+  background-color: var(--difftray-scrollbar-thumb-hover);
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb:active {
+  background-color: var(--diff-surface-accent);
+  cursor: grabbing;
+}
+
+@supports (-moz-appearance: none) {
+  [data-overflow="scroll"] [data-code] {
+    scrollbar-color:
+      var(--difftray-scrollbar-thumb) var(--difftray-scrollbar-track);
+    scrollbar-width: auto;
+  }
+}
+
 [data-content],
 [data-gutter] {
   background-color: var(--diff-bg, #191a1c);

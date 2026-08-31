@@ -197,6 +197,7 @@ export function DiffSurface({
     <DiffsVirtualizedSurface
       contentReady={Boolean(model)}
       diffLayout={visualDiffLayout}
+      horizontalScrollbarsEnabled={Boolean(focusedFileDiff) && !wrapLines}
       refObject={refObject}
       onScrollPositionChange={onScrollPositionChange}
       scrollKey={scrollKey}
@@ -262,6 +263,7 @@ function DiffsVirtualizedSurface({
   children,
   contentReady,
   diffLayout,
+  horizontalScrollbarsEnabled,
   onScrollPositionChange,
   scrollKey,
   scrollPosition,
@@ -270,6 +272,7 @@ function DiffsVirtualizedSurface({
   readonly children: React.ReactNode;
   readonly contentReady: boolean;
   readonly diffLayout: DiffMode | "single";
+  readonly horizontalScrollbarsEnabled: boolean;
   readonly onScrollPositionChange: (
     scrollKey: string,
     position: DiffScrollPosition
@@ -290,10 +293,12 @@ function DiffsVirtualizedSurface({
   const restoreRunIdRef = useRef(0);
   const scrollPersistenceEnabledRef = useRef(false);
   const surfaceNodeRef = useRef<HTMLDivElement | null>(null);
+  const [surfaceNode, setSurfaceNode] = useState<HTMLDivElement | null>(null);
   const setDiffSurfaceRef = useCallback(
     (node: HTMLDivElement | null) => {
       refObject.current = node;
       surfaceNodeRef.current = node;
+      setSurfaceNode(node);
 
       if (node) {
         virtualizer.setup(node);
@@ -484,9 +489,273 @@ function DiffsVirtualizedSurface({
         ref={setDiffSurfaceRef}
       >
         {children}
+        <DiffHorizontalScrollbars
+          enabled={horizontalScrollbarsEnabled}
+          refreshKey={scrollKey}
+          surface={surfaceNode}
+        />
         <div className={styles.diffEndSpacer} aria-hidden />
       </div>
     </VirtualizerContext.Provider>
+  );
+}
+
+function DiffHorizontalScrollbars({
+  enabled,
+  refreshKey,
+  surface
+}: {
+  readonly enabled: boolean;
+  readonly refreshKey: string;
+  readonly surface: HTMLDivElement | null;
+}): React.JSX.Element | null {
+  const [scrollers, setScrollers] = useState<readonly HTMLElement[]>([]);
+
+  useLayoutEffect(() => {
+    if (!enabled || !surface) {
+      setScrollers([]);
+      return undefined;
+    }
+
+    const activeSurface = surface;
+    let animationFrameId: number | undefined;
+    let retryFrames = 0;
+    const resizeObserver = new ResizeObserver(scheduleDiscovery);
+
+    function scheduleDiscovery(): void {
+      if (animationFrameId !== undefined) {
+        return;
+      }
+
+      animationFrameId = window.requestAnimationFrame(discoverScrollers);
+    }
+
+    function discoverScrollers(): void {
+      animationFrameId = undefined;
+      resizeObserver.disconnect();
+
+      const candidates = Array.from(activeSurface.querySelectorAll("diffs-container"))
+        .flatMap((host) =>
+          Array.from(host.shadowRoot?.querySelectorAll("[data-code]") ?? [])
+        )
+        .filter(
+          (candidate): candidate is HTMLElement => candidate instanceof HTMLElement
+        );
+      const nextScrollers = candidates.filter(
+        (candidate) =>
+          candidate.getBoundingClientRect().width > 0 &&
+          candidate.scrollWidth - candidate.clientWidth > 1
+      );
+
+      setScrollers((current) =>
+        sameElements(current, nextScrollers) ? current : nextScrollers
+      );
+
+      resizeObserver.observe(activeSurface);
+      for (const candidate of candidates) {
+        resizeObserver.observe(candidate);
+      }
+
+      retryFrames += 1;
+      if (retryFrames < 120 && nextScrollers.length === 0) {
+        scheduleDiscovery();
+      }
+    }
+
+    const mutationObserver = new MutationObserver(scheduleDiscovery);
+    mutationObserver.observe(activeSurface, { childList: true, subtree: true });
+    discoverScrollers();
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [enabled, refreshKey, surface]);
+
+  if (scrollers.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={styles.horizontalScrollbars}
+      data-diff-horizontal-scrollbars
+      style={{
+        gridTemplateColumns: `repeat(${String(scrollers.length)}, minmax(0, 1fr))`
+      }}
+    >
+      {scrollers.map((scroller, index) => (
+        <DiffHorizontalScrollbar
+          key={`${refreshKey}:${String(index)}`}
+          label={`Horizontal diff scrollbar ${String(index + 1)} of ${String(scrollers.length)}`}
+          scroller={scroller}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DiffHorizontalScrollbar({
+  label,
+  scroller
+}: {
+  readonly label: string;
+  readonly scroller: HTMLElement;
+}): React.JSX.Element {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLDivElement | null>(null);
+  const dragOffsetRef = useRef<number | undefined>(undefined);
+  const [metrics, setMetrics] = useState(() => horizontalScrollbarMetrics(scroller, 0));
+
+  const updateMetrics = useCallback(() => {
+    setMetrics(horizontalScrollbarMetrics(scroller, trackRef.current?.clientWidth ?? 0));
+  }, [scroller]);
+
+  useLayoutEffect(() => {
+    const resizeObserver = new ResizeObserver(updateMetrics);
+    const track = trackRef.current;
+
+    if (track) {
+      resizeObserver.observe(track);
+    }
+    resizeObserver.observe(scroller);
+    scroller.addEventListener("scroll", updateMetrics, { passive: true });
+    updateMetrics();
+
+    return () => {
+      resizeObserver.disconnect();
+      scroller.removeEventListener("scroll", updateMetrics);
+    };
+  }, [scroller, updateMetrics]);
+
+  const setScrollFromPointer = useCallback(
+    (clientX: number) => {
+      const track = trackRef.current;
+      const dragOffset = dragOffsetRef.current;
+
+      if (!track || dragOffset === undefined || metrics.maxScrollLeft <= 0) {
+        return;
+      }
+
+      const trackRect = track.getBoundingClientRect();
+      const travel = Math.max(1, trackRect.width - metrics.thumbWidth);
+      const thumbLeft = Math.min(
+        travel,
+        Math.max(0, clientX - trackRect.left - dragOffset)
+      );
+
+      scroller.scrollLeft = (thumbLeft / travel) * metrics.maxScrollLeft;
+    },
+    [metrics.maxScrollLeft, metrics.thumbWidth, scroller]
+  );
+
+  return (
+    <div
+      aria-label={label}
+      aria-orientation="horizontal"
+      aria-valuemax={Math.round(metrics.maxScrollLeft)}
+      aria-valuemin={0}
+      aria-valuenow={Math.round(metrics.scrollLeft)}
+      className={styles.horizontalScrollbarTrack}
+      onKeyDown={(event) => {
+        const increment = event.shiftKey ? 160 : 40;
+
+        switch (event.key) {
+          case "ArrowLeft":
+            scroller.scrollLeft -= increment;
+            break;
+          case "ArrowRight":
+            scroller.scrollLeft += increment;
+            break;
+          case "Home":
+            scroller.scrollLeft = 0;
+            break;
+          case "End":
+            scroller.scrollLeft = metrics.maxScrollLeft;
+            break;
+          default:
+            return;
+        }
+
+        event.preventDefault();
+      }}
+      onPointerDown={(event) => {
+        const thumb = thumbRef.current;
+        const thumbRect = thumb?.getBoundingClientRect();
+        const pointerInsideThumb =
+          thumbRect !== undefined &&
+          event.clientX >= thumbRect.left &&
+          event.clientX <= thumbRect.right;
+
+        dragOffsetRef.current = pointerInsideThumb
+          ? event.clientX - thumbRect.left
+          : metrics.thumbWidth / 2;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setScrollFromPointer(event.clientX);
+        event.preventDefault();
+      }}
+      onPointerMove={(event) => {
+        if (dragOffsetRef.current !== undefined) {
+          setScrollFromPointer(event.clientX);
+        }
+      }}
+      onPointerUp={(event) => {
+        dragOffsetRef.current = undefined;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onWheel={(event) => {
+        scroller.scrollLeft += event.deltaX || event.deltaY;
+        event.preventDefault();
+      }}
+      ref={trackRef}
+      role="scrollbar"
+      tabIndex={0}
+    >
+      <div
+        className={styles.horizontalScrollbarThumb}
+        ref={thumbRef}
+        style={{
+          transform: `translateX(${String(metrics.thumbLeft)}px)`,
+          width: `${String(metrics.thumbWidth)}px`
+        }}
+      />
+    </div>
+  );
+}
+
+function horizontalScrollbarMetrics(
+  scroller: HTMLElement,
+  trackWidth: number
+): {
+  readonly maxScrollLeft: number;
+  readonly scrollLeft: number;
+  readonly thumbLeft: number;
+  readonly thumbWidth: number;
+} {
+  const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  const minimumThumbWidth = Math.min(44, trackWidth);
+  const proportionalWidth =
+    scroller.scrollWidth > 0
+      ? (scroller.clientWidth / scroller.scrollWidth) * trackWidth
+      : 0;
+  const thumbWidth = Math.max(minimumThumbWidth, Math.min(trackWidth, proportionalWidth));
+  const travel = Math.max(0, trackWidth - thumbWidth);
+  const scrollLeft = Math.min(maxScrollLeft, Math.max(0, scroller.scrollLeft));
+  const thumbLeft = maxScrollLeft > 0 ? (scrollLeft / maxScrollLeft) * travel : 0;
+
+  return { maxScrollLeft, scrollLeft, thumbLeft, thumbWidth };
+}
+
+function sameElements(
+  current: readonly HTMLElement[],
+  next: readonly HTMLElement[]
+): boolean {
+  return (
+    current.length === next.length &&
+    current.every((element, index) => element === next[index])
   );
 }
 

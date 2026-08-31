@@ -167,6 +167,7 @@ try {
   await companionToggle.check();
   await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
   await expectSettingsScrollable(window);
+  await window.getByLabel("Wrap long lines", { exact: true }).uncheck();
   await window.getByLabel("Show generated files", { exact: true }).check();
   await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
   await window.getByRole("button", { name: /Editor:/ }).click();
@@ -237,6 +238,16 @@ try {
   await expectRenderedDiffText(window, "changed long context line 1");
   await window.waitForTimeout(750);
   await expectDiffScrollTopAtMost(window, 1);
+  await window.locator("[data-diff-layout]").evaluate((surface) => {
+    surface.scrollTop = surface.scrollHeight - surface.clientHeight;
+    surface.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await window.waitForTimeout(250);
+  await expectHorizontalDiffScrollbar(window);
+  await window.waitForTimeout(50);
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-horizontal-scrollbar.png")
+  });
   const restoredContextScrollTop = await setDiffScrollTopFromBottom(window, 900);
   await expectDiffScrollTopBetween(
     window,
@@ -408,6 +419,8 @@ async function createChangedRepository(name = "visual-repo") {
     for (let index = 0; index < 600; index += 1) {
       changedLongContextLines[index] = `changed long context line ${index + 1}`;
     }
+    changedLongContextLines[0] = `changed long context line 1 ${"x".repeat(240)}`;
+    changedLongContextLines[599] = `changed long context line 600 ${"x".repeat(240)}`;
     await writeFile(
       path.join(repo, "long-context.txt"),
       `${changedLongContextLines.join("\n")}\n`,
@@ -969,6 +982,99 @@ async function expectRenderedDiffText(window, expectedText) {
       { cause: error }
     );
   }
+}
+
+async function expectHorizontalDiffScrollbar(window) {
+  const scrollbar = window.getByRole("scrollbar").last();
+  try {
+    await scrollbar.waitFor({ timeout: 10_000 });
+  } catch (error) {
+    const debugState = await window.evaluate(() => {
+      const host = document.querySelector("[data-diff-layout] diffs-container");
+      const codes = Array.from(host?.shadowRoot?.querySelectorAll("[data-code]") ?? []);
+
+      return {
+        codeWidths: codes.map((code) => ({
+          clientWidth: code.clientWidth,
+          scrollWidth: code.scrollWidth
+        })),
+        overflow: host?.shadowRoot?.querySelector("pre")?.getAttribute("data-overflow"),
+        overlays: document.querySelectorAll("[data-diff-horizontal-scrollbars]").length
+      };
+    });
+
+    throw new Error(
+      `Horizontal scrollbar was not visible: ${JSON.stringify(debugState)}`,
+      {
+        cause: error
+      }
+    );
+  }
+  await scrollbar.focus();
+  await window.keyboard.press("ArrowRight");
+  const bounds = await scrollbar.boundingBox();
+  if (!bounds) {
+    throw new Error("Horizontal scrollbar has no pointer target");
+  }
+  await window.mouse.move(bounds.x + 40, bounds.y + bounds.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(bounds.x + 140, bounds.y + bounds.height / 2);
+  await window.mouse.up();
+
+  const state = await window.evaluate(() => {
+    const diffElement = document.querySelector("[data-diff-layout] diffs-container");
+    const pre = diffElement?.shadowRoot?.querySelector("pre");
+    const code = Array.from(
+      diffElement?.shadowRoot?.querySelectorAll("[data-code]") ?? []
+    )
+      .filter((candidate) => candidate instanceof HTMLElement)
+      .sort(
+        (left, right) =>
+          right.scrollWidth - right.clientWidth - (left.scrollWidth - left.clientWidth)
+      )[0];
+
+    if (!(code instanceof HTMLElement)) {
+      return {
+        error: "missing code scroller",
+        overflow: pre?.getAttribute("data-overflow")
+      };
+    }
+
+    const maxScrollLeft = code.scrollWidth - code.clientWidth;
+    const track = document.querySelector('[role="scrollbar"]:focus');
+    const thumb = track?.firstElementChild;
+
+    return {
+      maxScrollLeft,
+      overflow: pre?.getAttribute("data-overflow"),
+      scrollLeft: code.scrollLeft,
+      thumbBackground:
+        thumb instanceof HTMLElement
+          ? getComputedStyle(thumb).backgroundColor
+          : undefined,
+      thumbHeight:
+        thumb instanceof HTMLElement ? thumb.getBoundingClientRect().height : 0,
+      thumbWidth: thumb instanceof HTMLElement ? thumb.getBoundingClientRect().width : 0,
+      trackHeight: track instanceof HTMLElement ? track.getBoundingClientRect().height : 0
+    };
+  });
+
+  if (
+    "error" in state ||
+    state.maxScrollLeft <= 0 ||
+    state.scrollLeft <= 0 ||
+    state.trackHeight !== 10 ||
+    state.thumbHeight !== 4 ||
+    state.thumbWidth < 44 ||
+    !state.thumbBackground ||
+    state.thumbBackground === "rgba(0, 0, 0, 0)"
+  ) {
+    throw new Error(
+      `Expected a visible horizontal diff scrollbar, got ${JSON.stringify(state)}`
+    );
+  }
+
+  await scrollbar.evaluate((element) => element.blur());
 }
 
 async function expectChecked(window, label) {

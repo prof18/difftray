@@ -56,15 +56,24 @@ describe("createDiffsFileDiffOptions", () => {
   });
 
   it("uses horizontal scrolling when line wrapping is disabled", () => {
-    expect(
-      createDiffsFileDiffOptions({
-        diffMode: "split",
-        resolvedTheme: "dark",
-        wrapLines: false
-      })
-    ).toMatchObject({
+    const options = createDiffsFileDiffOptions({
+      diffMode: "split",
+      resolvedTheme: "dark",
+      wrapLines: false
+    });
+
+    expect(options).toMatchObject({
       overflow: "scroll"
     });
+
+    const unsafeCSS = String(options.unsafeCSS);
+
+    expect(unsafeCSS).toContain("--diffs-scrollbar-gutter: 0px;");
+    expect(unsafeCSS).toContain("  scrollbar-width: none;");
+    expect(unsafeCSS).toContain(
+      '[data-overflow="scroll"] [data-code]::-webkit-scrollbar {'
+    );
+    expect(unsafeCSS).toContain("  height: 0;");
   });
 });
 

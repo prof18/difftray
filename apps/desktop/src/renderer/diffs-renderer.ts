@@ -106,6 +106,18 @@ const difftrayDiffUnsafeCSS = `
   --diffs-gap-inline: 8px;
 }
 
+[data-overflow="scroll"] {
+  --diffs-scrollbar-gutter: 0px;
+}
+
+[data-overflow="scroll"] [data-code] {
+  scrollbar-width: none;
+}
+
+[data-overflow="scroll"] [data-code]::-webkit-scrollbar {
+  height: 0;
+}
+
 [data-content],
 [data-gutter] {
   background-color: var(--diff-bg, #191a1c);
