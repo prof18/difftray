@@ -63,6 +63,84 @@ describe("ProjectTabBar scrolling", () => {
       inline: "nearest"
     });
   });
+
+  it("scrolls the tab strip from a mouse wheel without requiring focus", () => {
+    act(() => {
+      root.render(
+        <ProjectTabBar
+          {...projectTabBarProps({
+            projects: [
+              project("repo-one", "Repo One"),
+              project("repo-two", "Repo Two"),
+              project("repo-three", "Repo Three")
+            ]
+          })}
+        />
+      );
+    });
+
+    const tabBar = container.querySelector<HTMLElement>("[data-project-tab-bar]");
+    const tabScroller = container.querySelector<HTMLElement>(
+      "[data-project-tab-scroller]"
+    );
+
+    expect(tabBar).not.toBeNull();
+    expect(tabScroller).not.toBeNull();
+    expect(document.activeElement).toBe(document.body);
+
+    Object.defineProperties(tabScroller, {
+      clientWidth: { configurable: true, value: 240 },
+      scrollWidth: { configurable: true, value: 720 }
+    });
+
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 96
+    });
+
+    act(() => {
+      tabBar?.dispatchEvent(wheelEvent);
+    });
+
+    expect(tabScroller?.scrollLeft).toBe(96);
+    expect(wheelEvent.defaultPrevented).toBe(true);
+  });
+
+  it("scrolls the tab strip from a horizontal touchpad gesture", () => {
+    act(() => {
+      root.render(
+        <ProjectTabBar
+          {...projectTabBarProps({
+            projects: [project("repo-one", "Repo One"), project("repo-two", "Repo Two")]
+          })}
+        />
+      );
+    });
+
+    const tabBar = container.querySelector<HTMLElement>("[data-project-tab-bar]");
+    const tabScroller = container.querySelector<HTMLElement>(
+      "[data-project-tab-scroller]"
+    );
+
+    Object.defineProperties(tabScroller, {
+      clientWidth: { configurable: true, value: 240 },
+      scrollWidth: { configurable: true, value: 720 }
+    });
+
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: 48
+    });
+
+    act(() => {
+      tabBar?.dispatchEvent(wheelEvent);
+    });
+
+    expect(tabScroller?.scrollLeft).toBe(48);
+    expect(wheelEvent.defaultPrevented).toBe(true);
+  });
 });
 
 function project(id: string, name: string): RecentProjectView {

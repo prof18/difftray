@@ -60,6 +60,7 @@ export function ProjectTabBar({
   summaryLoadingProjectIds,
   tabDragCancelKey = 0
 }: ProjectTabBarProps): React.JSX.Element {
+  const projectTabsRef = useRef<HTMLDivElement>(null);
   const tabScrollerRef = useRef<HTMLDivElement>(null);
   const inlineOpenButtonRef = useRef<HTMLButtonElement>(null);
   const repositoryMenuRef = useRef<HTMLDivElement>(null);
@@ -91,6 +92,58 @@ export function ProjectTabBar({
       current.atEnd === next.atEnd && current.atStart === next.atStart ? current : next
     );
   }, []);
+
+  const handleTabWheel = useCallback(
+    (event: WheelEvent): void => {
+      const scroller = tabScrollerRef.current;
+
+      if (!scroller || scroller.scrollWidth <= scroller.clientWidth) {
+        return;
+      }
+
+      const wheelDelta =
+        Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+
+      if (wheelDelta === 0) {
+        return;
+      }
+
+      const deltaScale =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? scroller.clientWidth
+            : 1;
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+      const nextScrollLeft = Math.min(
+        maxScrollLeft,
+        Math.max(0, scroller.scrollLeft + wheelDelta * deltaScale)
+      );
+
+      if (nextScrollLeft === scroller.scrollLeft) {
+        return;
+      }
+
+      scroller.scrollLeft = nextScrollLeft;
+      updateTabScrollEdges(scroller);
+      event.preventDefault();
+    },
+    [updateTabScrollEdges]
+  );
+
+  useEffect(() => {
+    const tabBar = projectTabsRef.current;
+
+    if (!tabBar) {
+      return;
+    }
+
+    tabBar.addEventListener("wheel", handleTabWheel, { passive: false });
+
+    return () => {
+      tabBar.removeEventListener("wheel", handleTabWheel);
+    };
+  }, [handleTabWheel]);
 
   useEffect(() => {
     if (!repositoryMenuOpen) {
@@ -336,7 +389,12 @@ export function ProjectTabBar({
   }
 
   return (
-    <div className={styles.projectTabs} data-open-inline={openButtonInline}>
+    <div
+      className={styles.projectTabs}
+      data-open-inline={openButtonInline}
+      data-project-tab-bar="true"
+      ref={projectTabsRef}
+    >
       <div
         className={styles.tabStrip}
         data-at-end={tabScrollEdges.atEnd}
@@ -345,6 +403,7 @@ export function ProjectTabBar({
       >
         <div
           className={styles.tabScroller}
+          data-project-tab-scroller="true"
           onDragLeave={(event) => {
             const relatedTarget = event.relatedTarget;
 

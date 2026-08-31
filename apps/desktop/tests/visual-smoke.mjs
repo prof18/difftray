@@ -103,6 +103,7 @@ try {
     .locator('[data-project-tab-name="visual-secondary-repo"][data-active="true"]')
     .waitFor({ timeout: 10_000 });
   await expectProjectTabsEnabled(window);
+  await expectProjectTabsScrollable(window);
   await writeFile(
     path.join(repoPath, "tracked.txt"),
     "before\nbranch\nafter\ninactive tab update\n",
@@ -755,6 +756,54 @@ async function expectProjectTabsEnabled(window) {
     return [...document.querySelectorAll("[data-project-tab-name] button")].every(
       (button) => !button.disabled
     );
+  });
+}
+
+async function expectProjectTabsScrollable(window) {
+  const tabBar = window.locator('[data-project-tab-bar="true"]');
+  const tabScroller = window.locator('[data-project-tab-scroller="true"]');
+
+  await expectNoDragRegion(tabBar, "project tab bar");
+  await tabScroller.evaluate((element) => {
+    element.style.flex = "0 0 160px";
+    element.style.maxWidth = "160px";
+    element.scrollLeft = 0;
+  });
+
+  const metrics = await tabScroller.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth
+  }));
+
+  if (metrics.scrollWidth <= metrics.clientWidth) {
+    throw new Error(`Expected overflowing project tabs, got ${JSON.stringify(metrics)}`);
+  }
+
+  await window.locator('[data-project-tab-name="visual-repo"]').hover();
+  await window.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await window.mouse.wheel(0, 120);
+  await window.waitForFunction(() => {
+    const element = document.querySelector('[data-project-tab-scroller="true"]');
+    return element instanceof HTMLElement && element.scrollLeft > 0;
+  });
+
+  await tabScroller.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
+  await window.mouse.wheel(60, 0);
+  await window.waitForFunction(() => {
+    const element = document.querySelector('[data-project-tab-scroller="true"]');
+    return element instanceof HTMLElement && element.scrollLeft > 0;
+  });
+
+  await tabScroller.evaluate((element) => {
+    element.style.removeProperty("flex");
+    element.style.removeProperty("max-width");
+    element.scrollLeft = 0;
   });
 }
 

@@ -1,4 +1,5 @@
 .projectTabs {
+  -webkit-app-region: no-drag;
   position: relative;
   display: flex;
   height: 38px;
