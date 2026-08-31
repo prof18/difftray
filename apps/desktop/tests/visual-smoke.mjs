@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -72,6 +72,16 @@ try {
     },
     { projectIds: [secondaryRepoPath, repoPath] }
   );
+  const expectedRestoredWindowBounds = await setMainWindowBounds(app);
+  await expectWindowBoundsSaved(userDataPath, expectedRestoredWindowBounds);
+  const resizedWindowBounds = await resizeMainWindow(app, -40, -30);
+  await expectWindowBoundsSaved(userDataPath, resizedWindowBounds);
+  const movedWindowBounds = await moveMainWindow(app, 24, 18);
+  await expectWindowBoundsSaved(userDataPath, movedWindowBounds);
+  await maximizeMainWindow(app);
+  await expectWindowPresentationSaved(userDataPath, { isMaximized: true });
+  await closeMainWindowThroughCloseEvent(app);
+  await expectWindowPresentationSaved(userDataPath, { isMaximized: true });
   await app.close();
   app = await electron.launch({
     args: [path.resolve(cwd, "dist/main/index.cjs")],
@@ -86,6 +96,29 @@ try {
   });
   window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded");
+  await expectMainWindowNormalBounds(app, movedWindowBounds);
+  await expectMainWindowMaximized(app);
+  await setMainWindowFullScreen(app, true);
+  await expectWindowPresentationSaved(userDataPath, { isFullScreen: true });
+  await closeMainWindowThroughCloseEvent(app);
+  await expectWindowPresentationSaved(userDataPath, { isFullScreen: true });
+  await app.close();
+  app = await electron.launch({
+    args: [path.resolve(cwd, "dist/main/index.cjs")],
+    cwd,
+    env: {
+      ...process.env,
+      DIFFTRAY_BOOT_PROJECT: repoPath,
+      DIFFTRAY_USER_DATA_DIR: userDataPath,
+      DIFFTRAY_WINDOW_PRESENTATION: process.env.DIFFTRAY_WINDOW_PRESENTATION ?? "inactive"
+    },
+    executablePath
+  });
+  window = await app.firstWindow();
+  await window.waitForLoadState("domcontentloaded");
+  await expectMainWindowFullScreen(app);
+  await setMainWindowFullScreen(app, false);
+  await maximizeMainWindow(app);
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
@@ -1269,6 +1302,216 @@ async function openSettingsFromApplicationMenu(app, window) {
   await window.getByRole("heading", { name: "Settings" }).waitFor({
     timeout: 10_000
   });
+}
+
+async function setMainWindowBounds(app) {
+  return app.evaluate(({ BrowserWindow, screen }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+
+    if (!window) {
+      throw new Error("Expected a main window to resize");
+    }
+
+    const workArea = screen.getDisplayMatching(window.getBounds()).workArea;
+    const height = Math.min(700, workArea.height);
+    const width = Math.min(1_000, workArea.width);
+    const bounds = {
+      height,
+      width,
+      x: workArea.x + Math.max(0, Math.floor((workArea.width - width) / 2)),
+      y: workArea.y + Math.max(0, Math.floor((workArea.height - height) / 2))
+    };
+
+    window.setBounds(bounds);
+    return window.getNormalBounds();
+  });
+}
+
+async function moveMainWindow(app, deltaX, deltaY) {
+  return app.evaluate(
+    ({ BrowserWindow }, offsets) => {
+      const window = BrowserWindow.getAllWindows()[0];
+
+      if (!window) {
+        throw new Error("Expected a main window to move");
+      }
+
+      const bounds = window.getBounds();
+      window.setPosition(bounds.x + offsets.deltaX, bounds.y + offsets.deltaY);
+      return window.getNormalBounds();
+    },
+    { deltaX, deltaY }
+  );
+}
+
+async function resizeMainWindow(app, widthDelta, heightDelta) {
+  return app.evaluate(
+    ({ BrowserWindow }, deltas) => {
+      const window = BrowserWindow.getAllWindows()[0];
+
+      if (!window) {
+        throw new Error("Expected a main window to resize");
+      }
+
+      const bounds = window.getBounds();
+      window.setSize(
+        bounds.width + deltas.widthDelta,
+        bounds.height + deltas.heightDelta
+      );
+      return window.getNormalBounds();
+    },
+    { heightDelta, widthDelta }
+  );
+}
+
+async function closeMainWindowThroughCloseEvent(app) {
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+
+    if (!window) {
+      throw new Error("Expected a main window to close");
+    }
+
+    window.close();
+  });
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const windowCount = await app.evaluate(
+      ({ BrowserWindow }) => BrowserWindow.getAllWindows().length
+    );
+    if (windowCount === 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("Expected the close event to close the main window");
+}
+
+async function setMainWindowFullScreen(app, enabled) {
+  await app.evaluate(({ BrowserWindow }, value) => {
+    const window = BrowserWindow.getAllWindows()[0];
+
+    if (!window) {
+      throw new Error("Expected a main window to change full-screen state");
+    }
+
+    window.setFullScreen(value);
+  }, enabled);
+  await waitForMainWindowState(app, (state) => state.isFullScreen === enabled);
+}
+
+async function expectWindowBoundsSaved(userDataPath, expectedBounds) {
+  const statePath = path.join(userDataPath, "window-state.json");
+  const deadline = Date.now() + 5_000;
+
+  while (Date.now() < deadline) {
+    try {
+      const state = JSON.parse(await readFile(statePath, "utf8"));
+
+      if (JSON.stringify(state.bounds) === JSON.stringify(expectedBounds)) {
+        return;
+      }
+    } catch {
+      // The move or resize event may still be in flight.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(
+    `Expected window bounds to be saved before closing: ${JSON.stringify(expectedBounds)}`
+  );
+}
+
+async function maximizeMainWindow(app) {
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+
+    if (!window) {
+      throw new Error("Expected a main window to maximize");
+    }
+
+    window.maximize();
+  });
+  await waitForMainWindowState(app, (state) => state.isMaximized);
+}
+
+async function expectWindowPresentationSaved(userDataPath, expectedPresentation) {
+  const statePath = path.join(userDataPath, "window-state.json");
+  const deadline = Date.now() + 5_000;
+
+  while (Date.now() < deadline) {
+    try {
+      const state = JSON.parse(await readFile(statePath, "utf8"));
+
+      if (
+        Object.entries(expectedPresentation).every(([key, value]) => state[key] === value)
+      ) {
+        return;
+      }
+    } catch {
+      // The presentation event may still be in flight.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(
+    `Expected window presentation to be saved: ${JSON.stringify(expectedPresentation)}`
+  );
+}
+
+async function expectMainWindowNormalBounds(app, expectedBounds) {
+  const actualBounds = await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+
+    if (!window) {
+      throw new Error("Expected a restored main window");
+    }
+
+    return window.getNormalBounds();
+  });
+
+  if (JSON.stringify(actualBounds) !== JSON.stringify(expectedBounds)) {
+    throw new Error(
+      `Expected restored window bounds ${JSON.stringify(expectedBounds)}, got ${JSON.stringify(actualBounds)}`
+    );
+  }
+}
+
+async function expectMainWindowMaximized(app) {
+  await waitForMainWindowState(app, (state) => state.isMaximized);
+}
+
+async function expectMainWindowFullScreen(app) {
+  await waitForMainWindowState(app, (state) => state.isFullScreen);
+}
+
+async function waitForMainWindowState(app, predicate) {
+  const deadline = Date.now() + 5_000;
+
+  while (Date.now() < deadline) {
+    const state = await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+
+      if (!window) {
+        throw new Error("Expected a main window");
+      }
+
+      return {
+        isFullScreen: window.isFullScreen(),
+        isMaximized: window.isMaximized()
+      };
+    });
+
+    if (predicate(state)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error("Expected the main window to reach its presentation state");
 }
 
 async function expectSettingsScrollable(window) {

@@ -5,6 +5,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  screen,
   shell,
   type WebContents,
   type IpcMainInvokeEvent,
@@ -129,6 +130,7 @@ import {
 import { loadAutoUpdater } from "./electron-updater.js";
 import { ApplicationMenuController } from "./application-menu.js";
 import { sendToBrowserWindow } from "./window-messaging.js";
+import { loadWindowState, saveWindowState } from "./window-state.js";
 import {
   createCompanionAuthManager,
   createCompanionEnvelopeVerifier,
@@ -350,21 +352,31 @@ type CopyReviewCommentsReportResult =
 
 const createMainWindow = async (): Promise<void> => {
   const icon = appIconImage();
+  const windowStatePath = path.join(
+    userDataPath ?? app.getPath("userData"),
+    "window-state.json"
+  );
+  const savedWindowState = loadWindowState(
+    windowStatePath,
+    screen.getAllDisplays().map((display) => display.workArea)
+  );
+  const savedBounds = savedWindowState?.bounds;
   const window = new BrowserWindow({
     backgroundColor: "#ffffff",
-    height: 820,
+    height: savedBounds?.height ?? 820,
     ...(icon ? { icon } : {}),
     minHeight: 600,
     minWidth: 900,
     show: false,
     title: "Difftray",
+    ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,
           trafficLightPosition: { x: 16, y: 15 }
         }
       : {}),
-    width: 1220,
+    width: savedBounds?.width ?? 1220,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -392,12 +404,47 @@ const createMainWindow = async (): Promise<void> => {
   window.webContents.on("did-start-loading", () => {
     applicationMenuController?.setSelectedFileAvailable(false);
   });
+  let pendingWindowStateSave: ReturnType<typeof setTimeout> | undefined;
+  const persistWindowState = (): void => {
+    if (pendingWindowStateSave) {
+      clearTimeout(pendingWindowStateSave);
+      pendingWindowStateSave = undefined;
+    }
+
+    if (
+      !saveWindowState(windowStatePath, {
+        bounds: window.getNormalBounds(),
+        isFullScreen: window.isFullScreen(),
+        isMaximized: window.isMaximized()
+      })
+    ) {
+      console.warn("Failed to save the Difftray window state.");
+    }
+  };
+  const scheduleWindowStatePersistence = (): void => {
+    if (pendingWindowStateSave) {
+      clearTimeout(pendingWindowStateSave);
+    }
+    pendingWindowStateSave = setTimeout(persistWindowState, 200);
+  };
+  window.on("enter-full-screen", persistWindowState);
+  window.on("leave-full-screen", persistWindowState);
+  window.on("maximize", persistWindowState);
+  window.on("move", scheduleWindowStatePersistence);
+  window.on("resize", scheduleWindowStatePersistence);
+  window.on("unmaximize", persistWindowState);
+  window.on("close", persistWindowState);
   window.on("closed", () => {
     if (mainWindow === window) {
       applicationMenuController?.setSelectedFileAvailable(false);
       mainWindow = undefined;
     }
   });
+  if (savedWindowState?.isFullScreen) {
+    window.setFullScreen(true);
+  } else if (savedWindowState?.isMaximized) {
+    window.maximize();
+  }
   setTimeout(showWindow, 1_500);
 
   if (bootProjectPath) {
