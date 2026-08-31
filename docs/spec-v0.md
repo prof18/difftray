@@ -166,10 +166,13 @@ Cmd+O            open repository
 Cmd+K            open command palette
 Cmd+P            open file-only command palette
 Cmd+1            collapse or expand the file list
+Cmd/Ctrl+Enter   save the focused review comment
 Cmd+W            close the current repository tab
 Cmd+Shift+W      close the application window
 Escape           dismiss drift notification or close the active overlay
 ```
+
+Plain Enter remains available for line breaks while editing a review comment.
 
 Command palette shortcuts:
 

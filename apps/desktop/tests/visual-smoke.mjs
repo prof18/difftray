@@ -292,13 +292,22 @@ try {
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
   await clickDiffLineNumber(window, "additions", 3);
-  await window
-    .locator('textarea[aria-label="Review comment"]')
-    .fill("Please tighten the added line.");
-  await window.getByRole("button", { name: "Save" }).click();
-  await window
-    .getByText("Please tighten the added line.", { exact: true })
-    .waitFor({ timeout: 10_000 });
+  const reviewCommentEditor = window.locator('textarea[aria-label="Review comment"]');
+  const multilineReviewComment = "Please tighten the added line.\nKeep the context.";
+  await reviewCommentEditor.fill("Please tighten the added line.");
+  await reviewCommentEditor.press("Enter");
+  await reviewCommentEditor.pressSequentially("Keep the context.");
+  if ((await reviewCommentEditor.inputValue()) !== multilineReviewComment) {
+    throw new Error("Plain Enter did not add a review-comment line break.");
+  }
+  await window.keyboard.press("Meta+Enter");
+  const savedReviewComment = window.locator("p").filter({
+    hasText: "Please tighten the added line."
+  });
+  await savedReviewComment.waitFor({ timeout: 10_000 });
+  if ((await savedReviewComment.textContent()) !== multilineReviewComment) {
+    throw new Error("Command+Enter did not save the multiline review comment.");
+  }
   await expectFileCommentCount(window, "tracked.txt", "1");
   await window.getByRole("button", { name: "Copy comments report" }).click();
   await window
@@ -310,7 +319,8 @@ try {
     "New line 3",
     "Diff context:",
     "+ 3 after",
-    "Please tighten the added line."
+    "Please tighten the added line.",
+    "Keep the context."
   ]);
   await window.screenshot({
     fullPage: true,

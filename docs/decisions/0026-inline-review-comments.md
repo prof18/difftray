@@ -17,6 +17,10 @@ The renderer uses `@pierre/diffs` line annotations and line-number interaction
 hooks. Difftray owns the comment records, invalidation policy, report text, and
 clipboard handoff.
 
+While a review-comment editor is focused, Command+Enter or Control+Enter saves
+the comment. Plain Enter remains available for multiline comment text, and a
+save shortcut is ignored while an input method is composing text.
+
 The report export copies a ready-made prompt to the system clipboard. It
 contains a short header with project and target context, then groups comments by
 file with side-aware line numbers, reviewer text, and a small fenced diff

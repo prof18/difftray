@@ -36,6 +36,23 @@ export function ReviewCommentAnnotation({
       ? metadata.draft.body
       : (editingBody ?? metadata.comment.body);
 
+  function saveComment(): void {
+    if (saving || body.trim().length === 0) {
+      return;
+    }
+
+    if (metadata.kind === "draft") {
+      void onSaveDraft();
+      return;
+    }
+
+    void onUpdateComment(metadata.comment.id, body).then((saved) => {
+      if (saved) {
+        setEditingBody(undefined);
+      }
+    });
+  }
+
   useEffect(() => {
     if (isDraft || editingBody !== undefined) {
       window.setTimeout(() => textareaRef.current?.focus(), 0);
@@ -62,6 +79,18 @@ export function ReviewCommentAnnotation({
               setEditingBody(event.target.value);
             }
           }}
+          onKeyDown={(event) => {
+            if (
+              event.nativeEvent.isComposing ||
+              event.key !== "Enter" ||
+              (!event.metaKey && !event.ctrlKey)
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            saveComment();
+          }}
           ref={textareaRef}
           rows={3}
           value={body}
@@ -84,17 +113,7 @@ export function ReviewCommentAnnotation({
           <button
             className={styles.primaryButton}
             disabled={saving || body.trim().length === 0}
-            onClick={() => {
-              if (metadata.kind === "draft") {
-                void onSaveDraft();
-              } else {
-                void onUpdateComment(metadata.comment.id, body).then((saved) => {
-                  if (saved) {
-                    setEditingBody(undefined);
-                  }
-                });
-              }
-            }}
+            onClick={saveComment}
             type="button"
           >
             {showSaving ? (
