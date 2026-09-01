@@ -4,6 +4,9 @@
 
 Accepted
 
+Amended by [Decision 0036](0036-full-window-settings-navigation.md) for the
+settings presentation and navigation model.
+
 ## Date
 
 2026-05-24
@@ -35,13 +38,15 @@ implemented end to end:
 Keep the other app-level review fields persisted for compatibility and future use,
 but do not show controls for behavior that is not active yet.
 
-Because the first visible settings surface is small, show all settings in one dialog
-with General, Editor, and Review sections instead of using separate tabs.
+Because the first visible settings surface was small, the original implementation
+showed all settings in one dialog with General, Editor, and Review sections instead
+of using separate tabs. The current presentation and navigation model supersedes
+that arrangement; see [Decision 0036](0036-full-window-settings-navigation.md).
 
 For existing databases, if no app-level review settings have been saved yet,
 Difftray reads the most recently updated legacy `project_settings` row as the
-runtime fallback. Once the user saves settings, app-level values become the source of
-truth.
+runtime fallback. Once the user changes a setting, the app persists it immediately
+and app-level values become the source of truth.
 
 ## Context
 

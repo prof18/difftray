@@ -24,6 +24,163 @@ describe("SettingsPanel", () => {
     container.remove();
   });
 
+  function renderSettingsPage(
+    page: "general" | "review" | "repositories" | "companion",
+    input: Partial<Parameters<typeof SettingsPanel>[0]> = {}
+  ): HTMLElement {
+    act(() => {
+      root.render(<SettingsPanel {...settingsPanelProps(input)} />);
+    });
+
+    if (page !== "general") {
+      const navigationButton = [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          'nav[aria-label="Settings sections"] button'
+        )
+      ].find((button) => button.textContent.trim() === settingsPageLabel(page));
+
+      act(() => {
+        navigationButton?.click();
+      });
+    }
+
+    const detail = container.querySelector<HTMLElement>(
+      '[role="region"][aria-labelledby="settings-page-title"]'
+    );
+
+    expect(detail?.querySelector("#settings-page-title")?.textContent).toBe(
+      settingsPageLabel(page)
+    );
+
+    if (!detail) {
+      throw new Error(`Missing settings detail for ${page}`);
+    }
+
+    return detail;
+  }
+
+  it("renders a full-window master-detail workspace and changes settings pages", () => {
+    act(() => {
+      root.render(
+        <SettingsPanel
+          {...settingsPanelProps({
+            appSettings: appSettings({ companionEnabled: true }),
+            companionState: companionState({
+              enabled: true,
+              port: 48620,
+              status: "running"
+            })
+          })}
+        />
+      );
+    });
+
+    const navigation = container.querySelector<HTMLElement>(
+      'nav[aria-label="Settings sections"]'
+    );
+    const detail = container.querySelector<HTMLElement>(
+      '[role="region"][aria-labelledby="settings-page-title"]'
+    );
+    const sidebar = container.querySelector<HTMLElement>("aside");
+    const sidebarLabels = [
+      ...(sidebar?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    ].map((button) => button.textContent.trim());
+    const navigationLabels = [
+      ...(navigation?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    ].map((button) => button.textContent.trim());
+    const navigationAccessibleLabels = [
+      ...(navigation?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    ].map((button) => button.getAttribute("aria-label"));
+
+    expect(sidebarLabels).toEqual([
+      "Back to review",
+      "General",
+      "Review",
+      "Repositories",
+      "Phone companion"
+    ]);
+    expect(navigationLabels).toEqual([
+      "General",
+      "Review",
+      "Repositories",
+      "Phone companion"
+    ]);
+    expect(navigationAccessibleLabels).toEqual([
+      "General",
+      "Review",
+      "Repositories",
+      "Phone companion"
+    ]);
+    expect(sidebar?.contains(container.querySelector("#settings-title"))).toBe(false);
+    expect(
+      navigation?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.textContent
+    ).toContain("General");
+    expect(detail?.querySelector("#settings-page-title")?.textContent).toBe("General");
+    expect(detail?.textContent).toContain("Appearance");
+    expect(detail?.textContent).not.toContain("Default diff view");
+
+    act(() => {
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(2)")?.click();
+    });
+
+    expect(detail?.querySelector("#settings-page-title")?.textContent).toBe("Review");
+    expect(detail?.textContent).toContain("Default diff view");
+    expect(detail?.textContent).not.toContain("Appearance");
+
+    act(() => {
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(4)")?.click();
+    });
+
+    expect(detail?.querySelector("#settings-page-title")?.textContent).toBe(
+      "Phone companion"
+    );
+    expect(detail?.textContent).toContain("Server running");
+  });
+
+  it("resets the detail scroll position when changing settings pages", () => {
+    act(() => {
+      root.render(
+        <SettingsPanel
+          {...settingsPanelProps({
+            appSettings: appSettings({ companionEnabled: true }),
+            companionState: companionState({
+              devices: [
+                {
+                  createdAt: "2026-07-02T10:00:00.000Z",
+                  id: "device-1",
+                  lastSeenAt: "2026-07-02T11:00:00.000Z",
+                  name: "Marco iPhone",
+                  platform: "ios",
+                  publicKey: "device-public-key"
+                }
+              ],
+              enabled: true,
+              status: "running"
+            })
+          })}
+        />
+      );
+    });
+
+    const navigation = container.querySelector<HTMLElement>(
+      'nav[aria-label="Settings sections"]'
+    );
+    const scrollRegion = container.querySelector<HTMLElement>('[tabindex="0"]');
+
+    expect(scrollRegion).not.toBeNull();
+    if (!scrollRegion) return;
+
+    act(() => {
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(4)")?.click();
+    });
+    scrollRegion.scrollTop = 240;
+    act(() => {
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(1)")?.click();
+    });
+
+    expect(scrollRegion.scrollTop).toBe(0);
+  });
+
   it("focuses the dialog, traps Tab, and restores the opener", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
@@ -35,11 +192,11 @@ describe("SettingsPanel", () => {
 
     const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
     const buttons = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-    const closeButton = dialog?.querySelector<HTMLButtonElement>(
-      '[aria-label="Close settings"]'
+    const backButton = dialog?.querySelector<HTMLButtonElement>(
+      '[aria-label="Back to review"]'
     );
 
-    expect(document.activeElement).toBe(closeButton);
+    expect(document.activeElement).toBe(backButton);
     expect(buttons.length).toBeGreaterThan(1);
 
     const lastButton = buttons.at(-1);
@@ -55,7 +212,7 @@ describe("SettingsPanel", () => {
     });
 
     expect(tab.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(closeButton);
+    expect(document.activeElement).toBe(backButton);
 
     act(() => root.unmount());
 
@@ -63,327 +220,302 @@ describe("SettingsPanel", () => {
     opener.remove();
   });
 
-  it("renders app settings sections, active values, and actions", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({
-          companionEnabled: true,
-          companionPort: 48620,
-          defaultDiffMode: "unified",
-          editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
-          editorArgs: "-b com.microsoft.VSCode {path}",
-          editorCommand: "open",
-          editorMode: "preset",
-          notifyOnDrift: false,
-          showGeneratedFiles: true,
-          themeMode: "dark",
-          wrapDiffLines: false
-        })}
-        companionPairing={null}
-        companionState={companionState({
-          addresses: [
-            {
-              address: "192.168.1.24:48620",
-              host: "192.168.1.24",
-              isTailscale: false
-            }
-          ],
-          devices: [
-            {
-              createdAt: "2026-07-02T10:00:00.000Z",
-              id: "device-1",
-              lastSeenAt: "2026-07-02T11:00:00.000Z",
-              name: "Marco iPhone",
-              platform: "ios",
-              publicKey: "device-public-key"
-            }
-          ],
+  it("renders app settings sections and active values without form actions", () => {
+    const input = settingsPanelProps({
+      appSettings: appSettings({
+        companionEnabled: true,
+        companionPort: 48620,
+        defaultDiffMode: "unified",
+        editorArgList: ["-b", "com.microsoft.VSCode", "{path}"],
+        editorArgs: "-b com.microsoft.VSCode {path}",
+        editorCommand: "open",
+        editorMode: "preset",
+        notifyOnDrift: false,
+        showGeneratedFiles: true,
+        themeMode: "dark",
+        wrapDiffLines: false
+      }),
+      companionState: companionState({
+        addresses: [
+          {
+            address: "192.168.1.24:48620",
+            host: "192.168.1.24",
+            isTailscale: false
+          }
+        ],
+        devices: [
+          {
+            createdAt: "2026-07-02T10:00:00.000Z",
+            id: "device-1",
+            lastSeenAt: "2026-07-02T11:00:00.000Z",
+            name: "Marco iPhone",
+            platform: "ios",
+            publicKey: "device-public-key"
+          }
+        ],
+        enabled: true,
+        port: 48620,
+        status: "running"
+      }),
+      editorOptions: [
+        editorOption({
+          args: ["-b", "com.microsoft.VSCode", "{path}"],
+          command: "open",
+          id: "vscode",
+          name: "VS Code"
+        })
+      ],
+      repositorySearchRoots: [
+        {
           enabled: true,
-          port: 48620,
-          status: "running"
-        })}
-        disabled={false}
-        editorOptions={[
-          editorOption({
-            args: ["-b", "com.microsoft.VSCode", "{path}"],
-            command: "open",
-            id: "vscode",
-            name: "VS Code"
-          })
-        ]}
-        onCancel={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onSave={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-        repositorySearchRoots={[
-          {
-            enabled: true,
-            id: "workspace",
-            path: "/Users/example/Workspace",
-            repositoryCount: 2,
-            scanning: false
-          }
-        ]}
-        repositorySearchRootSuggestions={[
-          {
-            id: "projects",
-            name: "Projects",
-            path: "/Users/example/Projects"
-          }
-        ]}
-      />
-    );
+          id: "workspace",
+          path: "/Users/example/Workspace",
+          repositoryCount: 2,
+          scanning: false
+        }
+      ]
+    });
 
-    expect(html).toContain('role="dialog"');
-    expect(html).toContain('aria-label="Settings options"');
-    expect(html).toContain('role="region"');
-    expect(html).toContain('tabindex="0"');
-    expect(html).toContain("Settings");
-    expect(html).toContain("General");
-    expect(html).toContain("Editor");
-    expect(html).toContain("Review");
-    expect(html).toContain("Phone companion");
-    expect(html).toContain("port 48620");
-    expect(html).toContain("Local network");
-    expect(html).toContain("192.168.1.24:48620");
-    expect(html).toContain("Marco iPhone");
-    expect(html).toContain("Last seen");
-    expect(html).toContain("Revoke");
-    expect(html).toContain("Pair new device");
-    expect(html).toContain('value="dark" selected=""');
-    expect(html).toContain('aria-label="Editor: VS Code"');
-    expect(html).toContain("Default diff view");
-    expect(html).toContain("Unified");
-    expect(html).toContain('data-active="true"');
-    expect(html).toContain("Wrap long lines");
-    expect(html).toContain("Show generated files");
-    expect(html).toContain("Notify when reviewed file drifts");
-    expect(html).toContain("Cancel");
-    expect(html).toContain("Save");
-    expect(html).toContain('aria-label="Close settings"');
+    const general = renderSettingsPage("general", input);
+
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Settings sections"]')).not.toBeNull();
+    expect(general.tabIndex).toBe(-1);
+    expect(general.innerHTML).toContain('value="dark"');
+    expect(general.innerHTML).toContain('aria-label="Editor: VS Code"');
+
+    const review = renderSettingsPage("review", input);
+
+    expect(review.textContent).toContain("Default diff view");
+    expect(review.textContent).toContain("Unified");
+    expect(review.textContent).toContain("Wrap long lines");
+    expect(review.textContent).toContain("Show generated files");
+    expect(review.textContent).toContain("Notify when reviewed file drifts");
+
+    const repositories = renderSettingsPage("repositories", input);
+
+    expect(repositories.textContent).toContain("/Users/example/Workspace");
+
+    const companion = renderSettingsPage("companion", input);
+
+    expect(companion.textContent).toContain("port 48620");
+    expect(companion.textContent).toContain("Local network");
+    expect(companion.textContent).toContain("192.168.1.24:48620");
+    expect(companion.textContent).toContain("Marco iPhone");
+    expect(companion.textContent).toContain("Revoke");
+    expect(companion.textContent).toContain("Pair new device");
+    expect(container.textContent).not.toContain("Cancel");
+    expect(container.textContent).not.toContain("Save");
+    expect(container.querySelector('[aria-label="Back to review"]')).not.toBeNull();
   });
 
   it("disables controls while settings are saving", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({})}
-        companionPairing={null}
-        companionState={companionState({})}
-        disabled={true}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onSave={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-        repositorySearchRoots={[
-          {
-            enabled: true,
-            id: "workspace",
-            path: "/Users/example/Workspace",
-            repositoryCount: 2,
-            scanning: false
-          }
-        ]}
-        repositorySearchRootSuggestions={[
-          {
-            id: "projects",
-            name: "Projects",
-            path: "/Users/example/Projects"
-          }
-        ]}
-      />
+    const input = settingsPanelProps({
+      disabled: true,
+      repositorySearchRoots: [
+        {
+          enabled: true,
+          id: "workspace",
+          path: "/Users/example/Workspace",
+          repositoryCount: 2,
+          scanning: false
+        }
+      ],
+      repositorySearchRootSuggestions: [
+        {
+          id: "projects",
+          name: "Projects",
+          path: "/Users/example/Projects"
+        }
+      ]
+    });
+    const general = renderSettingsPage("general", input);
+
+    expect(
+      general.querySelector<HTMLButtonElement>('[aria-label="Editor: System default"]')
+        ?.disabled
+    ).toBe(true);
+
+    const repositories = renderSettingsPage("repositories", input);
+
+    expect(
+      repositories.querySelector<HTMLButtonElement>(
+        '[aria-label="Remove /Users/example/Workspace"]'
+      )?.disabled
+    ).toBe(true);
+    expect(repositories.textContent).not.toContain("Suggestions");
+  });
+
+  it("emits preference changes immediately and closes only from Back to review", () => {
+    const onChangeAppSettings = vi.fn();
+    const onClose = vi.fn();
+    const general = renderSettingsPage("general", {
+      onChangeAppSettings,
+      onClose,
+      platform: "darwin"
+    });
+    const appearance = general.querySelector<HTMLSelectElement>(
+      'select[aria-label="Appearance"]'
     );
 
-    expect(html).toContain('aria-label="Editor: System default"');
-    expect(html).toContain('disabled=""');
-    expect(html).not.toContain(
-      'aria-label="Add suggested folder /Users/example/Projects"'
+    act(() => {
+      if (appearance) {
+        appearance.value = "light";
+        appearance.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    const navigation = container.querySelector<HTMLElement>(
+      'nav[aria-label="Settings sections"]'
     );
-    expect(html).toContain('aria-label="Remove /Users/example/Workspace"');
+    act(() => {
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(2)")?.click();
+    });
+    act(() => {
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent.trim() === "Unified")
+        ?.click();
+    });
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Back to review"]')
+        ?.click();
+    });
+
+    expect(onChangeAppSettings).toHaveBeenNthCalledWith(1, { themeMode: "light" });
+    expect(onChangeAppSettings).toHaveBeenNthCalledWith(2, {
+      defaultDiffMode: "unified"
+    });
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toContain("Cancel");
+    expect(container.textContent).not.toContain("Save");
+    expect(container.querySelector('[data-platform="darwin"]')).not.toBeNull();
   });
 
   it("presents repository folders with the standard settings row hierarchy", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({})}
-        companionPairing={null}
-        companionState={companionState({})}
-        disabled={false}
-        editorOptions={[]}
-        onAddRepositorySearchRoot={vi.fn()}
-        onAddSuggestedRepositorySearchRoot={vi.fn()}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-        repositorySearchRootSuggestions={[
-          {
-            id: "workspace",
-            name: "Workspace",
-            path: "/Users/example/Workspace"
-          }
-        ]}
-      />
-    );
+    const repositories = renderSettingsPage("repositories", {
+      onAddRepositorySearchRoot: vi.fn(),
+      onAddSuggestedRepositorySearchRoot: vi.fn(),
+      repositorySearchRootSuggestions: [
+        {
+          id: "workspace",
+          name: "Workspace",
+          path: "/Users/example/Workspace"
+        }
+      ]
+    });
 
-    expect(html).toContain("Search folders");
-    expect(html).toContain("Suggestions");
-    expect(html).toContain("Choose folder…");
-    expect(html).toContain('aria-label="Add suggested folder /Users/example/Workspace"');
+    expect(repositories.textContent).toContain("Search folders");
+    expect(repositories.textContent).toContain("Suggestions");
+    expect(repositories.textContent).toContain("Choose folder…");
+    expect(
+      repositories.querySelector(
+        '[aria-label="Add suggested folder /Users/example/Workspace"]'
+      )
+    ).not.toBeNull();
   });
 
   it("hides suggested folders after a search folder is attached", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({})}
-        companionPairing={null}
-        companionState={companionState({})}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-        repositorySearchRoots={[
-          {
-            enabled: true,
-            id: "workspace",
-            path: "/Users/example/Workspace",
-            repositoryCount: 2,
-            scanning: false
-          }
-        ]}
-        repositorySearchRootSuggestions={[
-          {
-            id: "projects",
-            name: "Projects",
-            path: "/Users/example/Projects"
-          }
-        ]}
-      />
-    );
+    const repositories = renderSettingsPage("repositories", {
+      repositorySearchRoots: [
+        {
+          enabled: true,
+          id: "workspace",
+          path: "/Users/example/Workspace",
+          repositoryCount: 2,
+          scanning: false
+        }
+      ],
+      repositorySearchRootSuggestions: [
+        {
+          id: "projects",
+          name: "Projects",
+          path: "/Users/example/Projects"
+        }
+      ]
+    });
 
-    expect(html).not.toContain("Suggestions");
-    expect(html).not.toContain(
-      'aria-label="Add suggested folder /Users/example/Projects"'
-    );
+    expect(repositories.textContent).not.toContain("Suggestions");
+    expect(
+      repositories.querySelector(
+        '[aria-label="Add suggested folder /Users/example/Projects"]'
+      )
+    ).toBeNull();
   });
 
   it("shows live scan progress instead of making a new folder look idle", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({})}
-        companionPairing={null}
-        companionState={companionState({})}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-        repositorySearchRoots={[
-          {
-            enabled: true,
-            id: "workspace",
-            path: "/Users/example/Workspace",
-            repositoryCount: 0,
-            scannedDirectories: 12,
-            scanning: true,
-            skippedDirectories: 3
-          }
-        ]}
-      />
-    );
+    const repositories = renderSettingsPage("repositories", {
+      repositorySearchRoots: [
+        {
+          enabled: true,
+          id: "workspace",
+          path: "/Users/example/Workspace",
+          repositoryCount: 0,
+          scannedDirectories: 12,
+          scanning: true,
+          skippedDirectories: 3
+        }
+      ]
+    });
 
-    expect(html).toContain('role="status"');
-    expect(html).toContain("Scanning folders");
-    expect(html).toContain("12 checked");
-    expect(html).toContain("loader-circle");
-    expect(html).not.toContain("Not scanned yet");
+    expect(repositories.querySelector('[role="status"]')).not.toBeNull();
+    expect(repositories.textContent).toContain("Scanning folders");
+    expect(repositories.textContent).toContain("12 checked");
+    expect(repositories.innerHTML).toContain("loader-circle");
+    expect(repositories.textContent).not.toContain("Not scanned yet");
   });
 
   it("collapses the companion section while disabled", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({ companionEnabled: false })}
-        companionPairing={null}
-        companionState={companionState({
-          enabled: false,
-          status: "stopped"
-        })}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-      />
-    );
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: false }),
+      companionState: companionState({
+        enabled: false,
+        status: "stopped"
+      })
+    });
 
-    expect(html).toContain("Phone companion");
-    expect(html).toContain("Companion mode");
-    expect(html).not.toContain("Pair new device");
-    expect(html).not.toContain("Paired devices");
+    expect(companion.textContent).toContain("Phone companion");
+    expect(companion.textContent).toContain("Companion mode");
+    expect(companion.textContent).not.toContain("Pair new device");
+    expect(companion.textContent).not.toContain("Paired devices");
+  });
+
+  it("shows an optimistic companion disable while server state is catching up", () => {
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: false }),
+      companionState: companionState({
+        enabled: true,
+        status: "running"
+      })
+    });
+    const toggle = companion.querySelector<HTMLInputElement>('input[type="checkbox"]');
+
+    expect(toggle?.checked).toBe(false);
+    expect(companion.textContent).not.toContain("Pair new device");
   });
 
   it("teaches first-time users how to install and pair the companion app", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({ companionEnabled: true })}
-        companionPairing={null}
-        companionState={companionState({
-          addresses: [
-            {
-              address: "192.168.1.24:48620",
-              host: "192.168.1.24",
-              isTailscale: false
-            },
-            {
-              address: "100.69.19.43:48620",
-              host: "100.69.19.43",
-              isTailscale: true
-            }
-          ],
-          enabled: true,
-          port: 48620,
-          status: "running"
-        })}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-      />
-    );
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        addresses: [
+          {
+            address: "192.168.1.24:48620",
+            host: "192.168.1.24",
+            isTailscale: false
+          },
+          {
+            address: "100.69.19.43:48620",
+            host: "100.69.19.43",
+            isTailscale: true
+          }
+        ],
+        enabled: true,
+        port: 48620,
+        status: "running"
+      })
+    });
+    const html = companion.innerHTML;
 
     expect(html).toContain("Review your changes from your phone");
     expect(html).toContain("No paired devices yet — install the app and pair below.");
@@ -402,27 +534,15 @@ describe("SettingsPanel", () => {
   });
 
   it("shows App Store references alongside Google Play", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({ companionEnabled: true })}
-        companionPairing={null}
-        companionState={companionState({
-          enabled: true,
-          port: 48620,
-          status: "running"
-        })}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-      />
-    );
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        enabled: true,
+        port: 48620,
+        status: "running"
+      })
+    });
+    const html = companion.innerHTML;
 
     expect(html).toContain("App Store");
     expect(html).toContain("Install <strong>Difftray Companion</strong> on your phone");
@@ -430,36 +550,24 @@ describe("SettingsPanel", () => {
   });
 
   it("keeps paired-device help compact in a closed accordion", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({ companionEnabled: true })}
-        companionPairing={null}
-        companionState={companionState({
-          devices: [
-            {
-              createdAt: "2026-07-02T10:00:00.000Z",
-              id: "device-1",
-              name: "Marco iPhone",
-              platform: "ios",
-              publicKey: "device-public-key"
-            }
-          ],
-          enabled: true,
-          port: 48620,
-          status: "running"
-        })}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-      />
-    );
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        devices: [
+          {
+            createdAt: "2026-07-02T10:00:00.000Z",
+            id: "device-1",
+            name: "Marco iPhone",
+            platform: "ios",
+            publicKey: "device-public-key"
+          }
+        ],
+        enabled: true,
+        port: 48620,
+        status: "running"
+      })
+    });
+    const html = companion.innerHTML;
 
     expect(html).not.toContain("Review your changes from your phone");
     expect(html).toContain("iOS · Last seen never");
@@ -469,38 +577,26 @@ describe("SettingsPanel", () => {
   });
 
   it("renders companion startup errors and pending pair requests", () => {
-    const html = renderToStaticMarkup(
-      <SettingsPanel
-        appSettings={appSettings({ companionEnabled: true })}
-        companionPairing={null}
-        companionState={companionState({
-          enabled: true,
-          errorMessage: "No companion port is available in 48620-48629.",
-          pendingPairRequests: [
-            {
-              deviceId: "phone-1",
-              deviceName: "Marco Pixel",
-              devicePublicKey: "device-public-key",
-              devicePublicKeyFingerprint: "ABCD-1234-EF56",
-              expiresAt: "2026-07-02T12:05:00.000Z",
-              id: "pair-request-1",
-              platform: "android"
-            }
-          ],
-          status: "error"
-        })}
-        disabled={false}
-        editorOptions={[]}
-        onCancel={vi.fn()}
-        onCancelCompanionPairing={vi.fn()}
-        onChangeAppSettings={vi.fn()}
-        onRespondToCompanionPairRequest={vi.fn()}
-        onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
-        onStartCompanionPairing={vi.fn()}
-        onToggleCompanion={vi.fn()}
-      />
-    );
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        enabled: true,
+        errorMessage: "No companion port is available in 48620-48629.",
+        pendingPairRequests: [
+          {
+            deviceId: "phone-1",
+            deviceName: "Marco Pixel",
+            devicePublicKey: "device-public-key",
+            devicePublicKeyFingerprint: "ABCD-1234-EF56",
+            expiresAt: "2026-07-02T12:05:00.000Z",
+            id: "pair-request-1",
+            platform: "android"
+          }
+        ],
+        status: "error"
+      })
+    });
+    const html = companion.innerHTML;
 
     expect(html).toContain("No companion port is available");
     expect(html).toContain("Marco Pixel wants to pair");
@@ -546,14 +642,14 @@ describe("SettingsPanel", () => {
         })}
         disabled={false}
         editorOptions={[]}
-        onCancel={vi.fn()}
+        onClose={vi.fn()}
         onCancelCompanionPairing={vi.fn()}
         onChangeAppSettings={vi.fn()}
         onRespondToCompanionPairRequest={vi.fn()}
         onRevokeCompanionDevice={vi.fn()}
-        onSave={vi.fn()}
         onStartCompanionPairing={vi.fn()}
         onToggleCompanion={vi.fn()}
+        platform="darwin"
       />
     );
 
@@ -569,6 +665,16 @@ describe("SettingsPanel", () => {
     expect(html).toContain("Pairing QR code");
   });
 });
+
+function settingsPageLabel(
+  page: "general" | "review" | "repositories" | "companion"
+): string {
+  if (page === "review") return "Review";
+  if (page === "repositories") return "Repositories";
+  if (page === "companion") return "Phone companion";
+
+  return "General";
+}
 
 function appSettings(input: Partial<AppSettingsView>): AppSettingsView {
   return {
@@ -621,12 +727,12 @@ function settingsPanelProps(
     companionState: companionState({}),
     disabled: false,
     editorOptions: [],
-    onCancel: vi.fn(),
+    onClose: vi.fn(),
     onCancelCompanionPairing: vi.fn(),
     onChangeAppSettings: vi.fn(),
     onRespondToCompanionPairRequest: vi.fn(),
     onRevokeCompanionDevice: vi.fn(),
-    onSave: vi.fn(),
+    platform: "darwin",
     onStartCompanionPairing: vi.fn(),
     onToggleCompanion: vi.fn(),
     ...input

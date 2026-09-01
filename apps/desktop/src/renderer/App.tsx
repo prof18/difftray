@@ -134,14 +134,13 @@ type WorkspaceCacheEntry = {
 type ApplyWorkspaceOptions = {
   readonly appSettings?: AppSettingsView;
   readonly branchRefs?: readonly string[];
+  readonly preserveSettingsOpen?: boolean;
   readonly recentCommits?: readonly RecentCommitView[];
   readonly projectSettings?: ProjectSettingsView;
 };
 
 export function App(): React.JSX.Element {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(defaultAppSettings);
-  const [appSettingsDraft, setAppSettingsDraft] =
-    useState<AppSettingsView>(defaultAppSettings);
   const [baseRefDraft, setBaseRefDraft] = useState("");
   const [branchRefs, setBranchRefs] = useState<readonly string[]>([]);
   const [commitRefDraft, setCommitRefDraft] = useState("");
@@ -217,6 +216,12 @@ export function App(): React.JSX.Element {
   const droppedRepositoryPreviewRequestRef = useRef(0);
   const diffScrollPositionsRef = useRef<Map<string, DiffScrollPosition>>(new Map());
   const activeProjectIdRef = useRef<string | undefined>(undefined);
+  const appSettingsRef = useRef<AppSettingsView>(defaultAppSettings);
+  const appSettingsSaveGenerationRef = useRef(0);
+  const appSettingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const appSettingsWorkspaceReloadPendingRef = useRef(false);
+  const companionToggleGenerationRef = useRef(0);
+  const companionToggleQueueRef = useRef<Promise<void>>(Promise.resolve());
   const applicationCommandHandlerRef = useRef<(command: ApplicationCommand) => void>(
     () => undefined
   );
@@ -366,12 +371,13 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    appSettingsRef.current = appSettings;
     loadStateRef.current = loadState;
     paletteOpenRef.current = paletteOpen;
     selectedPathRef.current = selectedPath;
     settingsOpenRef.current = settingsOpen;
     workspaceRef.current = workspace;
-  }, [loadState, paletteOpen, selectedPath, settingsOpen, workspace]);
+  }, [appSettings, loadState, paletteOpen, selectedPath, settingsOpen, workspace]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1256,7 +1262,7 @@ export function App(): React.JSX.Element {
         ]);
 
       setAppSettings(settings);
-      setAppSettingsDraft(settings);
+      appSettingsRef.current = settings;
       setEditorOptions(installedEditors);
       setCompanionState(nextCompanionState);
       setCompanionPairing(nextCompanionState.activePairing);
@@ -1481,7 +1487,9 @@ export function App(): React.JSX.Element {
       workspaceToApply.project.id,
       projectReviewSummary(workspaceToApply)
     );
-    setSettingsOpen(false);
+    if (!options.preserveSettingsOpen) {
+      setSettingsOpen(false);
+    }
     return true;
   }
 
@@ -2212,6 +2220,21 @@ export function App(): React.JSX.Element {
     await nextPaint();
 
     try {
+      // Do not read settings while an optimistic autosave or companion toggle is
+      // in flight. If a newer write starts while we are waiting or fetching, its
+      // completion owns the state and this request must not install an older
+      // snapshot.
+      const saveGeneration = appSettingsSaveGenerationRef.current;
+      const companionGeneration = companionToggleGenerationRef.current;
+      await appSettingsSaveQueueRef.current;
+      await companionToggleQueueRef.current;
+      if (
+        saveGeneration !== appSettingsSaveGenerationRef.current ||
+        companionGeneration !== companionToggleGenerationRef.current
+      ) {
+        return;
+      }
+
       const [nextAppSettings, nextCompanionState, nextRoots, nextRootSuggestions] =
         await Promise.all([
           window.difftray.getAppSettings(),
@@ -2223,10 +2246,16 @@ export function App(): React.JSX.Element {
         ? await window.difftray.getProjectSettings(workspace.project.id)
         : defaultProjectSettings;
 
-      if (requestId !== settingsRequestRef.current) return;
+      if (
+        requestId !== settingsRequestRef.current ||
+        saveGeneration !== appSettingsSaveGenerationRef.current ||
+        companionGeneration !== companionToggleGenerationRef.current
+      ) {
+        return;
+      }
 
       setAppSettings(nextAppSettings);
-      setAppSettingsDraft(nextAppSettings);
+      appSettingsRef.current = nextAppSettings;
       setProjectSettings(nextProjectSettings);
       setCompanionState(nextCompanionState);
       setCompanionPairing(nextCompanionState.activePairing);
@@ -2249,7 +2278,6 @@ export function App(): React.JSX.Element {
   function closeSettings(): void {
     cancelPendingSettingsOpen();
     setSettingsOpen(false);
-    setAppSettingsDraft(appSettings);
   }
 
   function openPalette(mode: PaletteMode): void {
@@ -2285,41 +2313,51 @@ export function App(): React.JSX.Element {
     setLoadStatus(defaultWorkspaceLoadStatus);
   }
 
-  function updateAppSettingsDraft(patch: Partial<AppSettingsView>): void {
-    setAppSettingsDraft((draft) => ({ ...draft, ...patch }));
-  }
-
-  async function toggleCompanion(enabled: boolean): Promise<void> {
+  function toggleCompanion(enabled: boolean): Promise<void> {
+    const generation = ++companionToggleGenerationRef.current;
     const nextSettings = {
-      ...appSettings,
+      ...appSettingsRef.current,
       companionEnabled: enabled
     };
+    appSettingsRef.current = nextSettings;
     setAppSettings(nextSettings);
-    setAppSettingsDraft((draft) => ({ ...draft, companionEnabled: enabled }));
 
-    try {
-      const nextState = await window.difftray.setCompanionEnabled(enabled);
-      setCompanionState(nextState);
-      setCompanionPairing(nextState.activePairing);
-      setAppSettings((settings) => ({
-        ...settings,
-        companionEnabled: nextState.enabled
-      }));
-      setAppSettingsDraft((draft) => ({
-        ...draft,
-        companionEnabled: nextState.enabled
-      }));
-    } catch (caughtError) {
-      setError(errorMessage(caughtError));
-      const restoredState = await window.difftray.getCompanionState();
-      setCompanionState(restoredState);
-      setCompanionPairing(restoredState.activePairing);
-      setAppSettings(appSettings);
-      setAppSettingsDraft((draft) => ({
-        ...draft,
-        companionEnabled: appSettings.companionEnabled
-      }));
-    }
+    const operation = companionToggleQueueRef.current.then(async () => {
+      try {
+        await appSettingsSaveQueueRef.current;
+        const nextState = await window.difftray.setCompanionEnabled(enabled);
+
+        if (generation !== companionToggleGenerationRef.current) return;
+
+        setCompanionState(nextState);
+        setCompanionPairing(nextState.activePairing);
+        const savedSettings = {
+          ...appSettingsRef.current,
+          companionEnabled: nextState.enabled
+        };
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
+      } catch (caughtError) {
+        if (generation !== companionToggleGenerationRef.current) return;
+
+        setError(errorMessage(caughtError));
+        const restoredState = await window.difftray.getCompanionState();
+
+        if (generation !== companionToggleGenerationRef.current) return;
+
+        setCompanionState(restoredState);
+        setCompanionPairing(restoredState.activePairing);
+        const restoredSettings = {
+          ...appSettingsRef.current,
+          companionEnabled: restoredState.enabled
+        };
+        appSettingsRef.current = restoredSettings;
+        setAppSettings(restoredSettings);
+      }
+    });
+
+    companionToggleQueueRef.current = operation.catch(() => undefined);
+    return operation;
   }
 
   async function startCompanionPairing(): Promise<void> {
@@ -2362,86 +2400,6 @@ export function App(): React.JSX.Element {
       setCompanionPairing(nextState.activePairing);
     } catch (caughtError) {
       setError(errorMessage(caughtError));
-    }
-  }
-
-  async function saveSettings(): Promise<void> {
-    const settingsError = editorSettingsError(appSettingsDraft);
-
-    if (settingsError) {
-      setError(settingsError);
-      return;
-    }
-
-    const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
-    const settingsWorkspace = workspace;
-
-    setError(undefined);
-    invalidatePendingSilentWorkspaceRefreshes();
-    updateLoadState("loading");
-    setLoadStatus({
-      detail: "Refreshing review after preferences change",
-      title: "Saving settings"
-    });
-    await nextPaint();
-
-    try {
-      const savedAppSettings = await window.difftray.updateAppSettings(
-        updateAppSettingsInput(appSettingsDraft)
-      );
-      const savedSettings = settingsWorkspace
-        ? await window.difftray.updateProjectSettings({
-            fileListCollapsed: projectSettings.fileListCollapsed,
-            fileListWidth: projectSettings.fileListWidth,
-            projectId: settingsWorkspace.project.id
-          })
-        : defaultProjectSettings;
-      const nextWorkspace = settingsWorkspace
-        ? await window.difftray.loadProject(settingsWorkspace.project.id)
-        : undefined;
-
-      if (!isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
-        return;
-      }
-
-      setAppSettings(savedAppSettings);
-      setAppSettingsDraft(savedAppSettings);
-      setProjectSettings(savedSettings);
-      setDiffMode(savedAppSettings.defaultDiffMode);
-      setFileListWidth(savedSettings.fileListWidth);
-      setFileListCollapsed(savedSettings.fileListCollapsed);
-      setSettingsOpen(false);
-      if (nextWorkspace) {
-        const applied = await applyWorkspace(
-          nextWorkspace,
-          visiblePathOrFirst(nextWorkspace, selectedPath),
-          {
-            appSettings: savedAppSettings
-          },
-          requestId
-        );
-
-        if (!applied) {
-          return;
-        }
-      } else {
-        setWorkspace(undefined);
-        setSelectedPath(undefined);
-        setBranchRefs([]);
-        setBaseRefDraft("");
-      }
-      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
-        await refreshRecentProjects();
-      }
-    } catch (caughtError) {
-      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
-        setError(errorMessage(caughtError));
-      }
-    } finally {
-      if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
-        updateLoadState("idle");
-        setLoadStatus(defaultWorkspaceLoadStatus);
-      }
     }
   }
 
@@ -2493,24 +2451,98 @@ export function App(): React.JSX.Element {
     }
   }
 
-  async function persistAppSettings(patch: Partial<AppSettingsView>): Promise<void> {
+  function persistAppSettings(patch: Partial<AppSettingsView>): Promise<void> {
     const nextSettings = {
-      ...appSettings,
+      ...appSettingsRef.current,
       ...patch
     };
-    setAppSettings(nextSettings);
-    setAppSettingsDraft(nextSettings);
 
-    try {
-      const savedSettings = await window.difftray.updateAppSettings(
-        updateAppSettingsInput(nextSettings)
-      );
+    const settingsError = editorSettingsError(nextSettings);
 
-      setAppSettings(savedSettings);
-      setAppSettingsDraft(savedSettings);
-    } catch (caughtError) {
-      setError(errorMessage(caughtError));
+    if (settingsError) {
+      setError(settingsError);
+      return Promise.resolve();
     }
+
+    const generation = ++appSettingsSaveGenerationRef.current;
+    appSettingsRef.current = nextSettings;
+    if (patch.showGeneratedFiles !== undefined) {
+      appSettingsWorkspaceReloadPendingRef.current = true;
+    }
+    if (patch.defaultDiffMode !== undefined) {
+      setDiffMode(patch.defaultDiffMode);
+    }
+    setError(undefined);
+    setAppSettings(nextSettings);
+
+    const save = appSettingsSaveQueueRef.current.then(async () => {
+      try {
+        const savedSettings = await window.difftray.updateAppSettings(
+          updateAppSettingsInput(appSettingsRef.current)
+        );
+
+        if (generation !== appSettingsSaveGenerationRef.current) {
+          return;
+        }
+
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
+
+        if (!appSettingsWorkspaceReloadPendingRef.current) {
+          return;
+        }
+
+        const settingsWorkspace = workspaceRef.current;
+
+        if (!settingsWorkspace) {
+          appSettingsWorkspaceReloadPendingRef.current = false;
+          return;
+        }
+
+        const completion = captureWorkspaceScopedCompletion(settingsWorkspace.project.id);
+        const nextWorkspace = await window.difftray.loadProject(
+          settingsWorkspace.project.id
+        );
+
+        if (
+          generation !== appSettingsSaveGenerationRef.current ||
+          !nextWorkspace ||
+          !canApplyWorkspaceScopedCompletion(completion)
+        ) {
+          return;
+        }
+
+        const applied = await applyWorkspace(
+          nextWorkspace,
+          visiblePathOrFirst(nextWorkspace, selectedPathRef.current),
+          { appSettings: savedSettings, preserveSettingsOpen: true }
+        );
+
+        if (applied && generation === appSettingsSaveGenerationRef.current) {
+          appSettingsWorkspaceReloadPendingRef.current = false;
+        }
+      } catch (caughtError) {
+        if (generation !== appSettingsSaveGenerationRef.current) {
+          return;
+        }
+
+        setError(errorMessage(caughtError));
+        try {
+          const restoredSettings = await window.difftray.getAppSettings();
+
+          if (generation === appSettingsSaveGenerationRef.current) {
+            appSettingsRef.current = restoredSettings;
+            setAppSettings(restoredSettings);
+            setDiffMode(restoredSettings.defaultDiffMode);
+          }
+        } catch {
+          // Keep the optimistic state and the original persistence error visible.
+        }
+      }
+    });
+
+    appSettingsSaveQueueRef.current = save.catch(() => undefined);
+    return save;
   }
 
   function setAndPersistDiffMode(mode: DiffMode): void {
@@ -3710,24 +3742,23 @@ export function App(): React.JSX.Element {
 
       {settingsOpen ? (
         <SettingsPanel
-          appSettings={appSettingsDraft}
+          appSettings={appSettings}
           companionPairing={companionPairing}
           companionState={companionState}
           disabled={loadState === "loading"}
           editorOptions={editorOptions}
-          onCancel={closeSettings}
+          onClose={closeSettings}
           onCancelCompanionPairing={() => {
             void cancelCompanionPairing();
           }}
-          onChangeAppSettings={updateAppSettingsDraft}
+          onChangeAppSettings={(patch) => {
+            void persistAppSettings(patch);
+          }}
           onRespondToCompanionPairRequest={(input) => {
             void respondToCompanionPairRequest(input);
           }}
           onRevokeCompanionDevice={(id) => {
             void revokeCompanionDevice(id);
-          }}
-          onSave={() => {
-            void saveSettings();
           }}
           onStartCompanionPairing={() => {
             void startCompanionPairing();
@@ -3735,6 +3766,7 @@ export function App(): React.JSX.Element {
           onToggleCompanion={(enabled) => {
             void toggleCompanion(enabled);
           }}
+          platform={window.difftray.platform}
           repositorySearchRoots={repositorySearchRoots}
           repositorySearchRootSuggestions={repositorySearchRootSuggestions}
           onAddRepositorySearchRoot={() => {

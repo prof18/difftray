@@ -5,6 +5,7 @@ export {};
 declare global {
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly platform: string;
     readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
     readonly checkForUpdates: () => Promise<UpdatePhase>;
     readonly getCompanionState: () => Promise<CompanionStateView>;

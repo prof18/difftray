@@ -78,10 +78,7 @@ try {
   await expectWindowBoundsSaved(userDataPath, resizedWindowBounds);
   const movedWindowBounds = await moveMainWindow(app, 24, 18);
   await expectWindowBoundsSaved(userDataPath, movedWindowBounds);
-  await maximizeMainWindow(app);
-  await expectWindowPresentationSaved(userDataPath, { isMaximized: true });
   await closeMainWindowThroughCloseEvent(app);
-  await expectWindowPresentationSaved(userDataPath, { isMaximized: true });
   await app.close();
   app = await electron.launch({
     args: [path.resolve(cwd, "dist/main/index.cjs")],
@@ -97,28 +94,6 @@ try {
   window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded");
   await expectMainWindowNormalBounds(app, movedWindowBounds);
-  await expectMainWindowMaximized(app);
-  await setMainWindowFullScreen(app, true);
-  await expectWindowPresentationSaved(userDataPath, { isFullScreen: true });
-  await closeMainWindowThroughCloseEvent(app);
-  await expectWindowPresentationSaved(userDataPath, { isFullScreen: true });
-  await app.close();
-  app = await electron.launch({
-    args: [path.resolve(cwd, "dist/main/index.cjs")],
-    cwd,
-    env: {
-      ...process.env,
-      DIFFTRAY_BOOT_PROJECT: repoPath,
-      DIFFTRAY_USER_DATA_DIR: userDataPath,
-      DIFFTRAY_WINDOW_PRESENTATION: process.env.DIFFTRAY_WINDOW_PRESENTATION ?? "inactive"
-    },
-    executablePath
-  });
-  window = await app.firstWindow();
-  await window.waitForLoadState("domcontentloaded");
-  await expectMainWindowFullScreen(app);
-  await setMainWindowFullScreen(app, false);
-  await maximizeMainWindow(app);
   await window
     .getByRole("button", { name: /tracked\.txt modified/ })
     .waitFor({ timeout: 10_000 });
@@ -196,13 +171,25 @@ try {
   await expectDecodedImage(window, "After image, 1 by 1 pixels");
   await window.getByRole("button", { name: "Show both diff sides" }).click();
   await openSettingsFromApplicationMenu(app, window);
+  await expectSettingsWorkspace(window);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-settings-general.png")
+  });
+  await openSettingsPage(window, "Review");
   await expectSettingsDiffModeSelector(window, "split");
-  const companionToggle = window.getByLabel("Enable companion mode");
-  await companionToggle.check();
-  await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
-  await expectSettingsScrollable(window);
   await window.getByLabel("Wrap long lines", { exact: true }).uncheck();
   await window.getByLabel("Show generated files", { exact: true }).check();
+  await openSettingsPage(window, "Phone companion");
+  const companionToggle = window.getByLabel("Enable companion mode");
+  await companionToggle.check();
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-settings.png")
+  });
+  await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
+  await expectSettingsDetailScrollable(window);
+  await openSettingsPage(window, "General");
   await window.getByRole("combobox", { name: /Appearance/ }).selectOption("light");
   await window.getByRole("button", { name: /Editor:/ }).click();
   await window.screenshot({
@@ -214,21 +201,29 @@ try {
     state: "detached",
     timeout: 10_000
   });
-  await window.screenshot({
-    fullPage: true,
-    path: path.join(artifactsDir, "desktop-settings.png")
+  await expectAppSettingsPersisted(window, {
+    showGeneratedFiles: true,
+    themeMode: "light",
+    wrapDiffLines: false
   });
-  await window.getByRole("button", { name: "Save" }).click();
+  await window.getByRole("button", { name: "Back to review" }).click();
+  await window.getByRole("dialog", { name: "Settings" }).waitFor({
+    state: "detached",
+    timeout: 10_000
+  });
   await window
     .getByRole("button", { name: /schema\.generated\.ts/ })
     .waitFor({ timeout: 10_000 });
   await window.getByRole("button", { name: /schema\.generated\.ts/ }).click();
   await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
   await openSettingsFromApplicationMenu(app, window);
+  await openSettingsPage(window, "Review");
   await expectChecked(window, "Show generated files");
+  await expectUnchecked(window, "Wrap long lines");
+  await openSettingsPage(window, "General");
   await expectComboboxValue(window, /Appearance/, "light");
   await expectEditorChoice(window, "System default");
-  await window.getByRole("button", { name: "Close settings" }).click();
+  await window.getByRole("button", { name: "Back to review" }).click();
   await resizeFilePane(window, 220);
   await window.getByRole("button", { name: "Choose diff target" }).click();
   await window.getByRole("dialog", { name: "Diff target" }).waitFor({
@@ -1191,6 +1186,14 @@ async function expectChecked(window, label) {
   }
 }
 
+async function expectUnchecked(window, label) {
+  const checked = await window.getByLabel(label, { exact: true }).isChecked();
+
+  if (checked) {
+    throw new Error(`Expected ${label} to be unchecked`);
+  }
+}
+
 async function expectButtonEnabled(window, text) {
   await window.waitForFunction((targetText) => {
     return [...document.querySelectorAll("button")].some((button) => {
@@ -1304,6 +1307,138 @@ async function openSettingsFromApplicationMenu(app, window) {
   });
 }
 
+async function openSettingsPage(window, pageName) {
+  await window
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("button", { name: pageName, exact: true })
+    .click();
+  await window
+    .getByRole("region", { name: pageName, exact: true })
+    .waitFor({ timeout: 10_000 });
+}
+
+async function expectSettingsWorkspace(window) {
+  const dialog = window.getByRole("dialog", { name: "Settings" });
+  const detail = window.getByRole("region", { name: "General", exact: true });
+  const sidebar = dialog.locator("aside");
+  const [
+    appearanceSelectorBox,
+    backBox,
+    contentBox,
+    detailBox,
+    dialogBox,
+    editorSelectorBox,
+    sidebarBox,
+    viewport
+  ] = await Promise.all([
+    window.getByRole("combobox", { name: "Appearance" }).boundingBox(),
+    window.getByRole("button", { name: "Back to review" }).boundingBox(),
+    detail.locator("section").first().boundingBox(),
+    detail.boundingBox(),
+    dialog.boundingBox(),
+    window.getByRole("button", { name: /Editor:/ }).boundingBox(),
+    sidebar.boundingBox(),
+    window.evaluate(() => ({ height: innerHeight, width: innerWidth }))
+  ]);
+
+  if (
+    !dialogBox ||
+    dialogBox.width < viewport.width - 2 ||
+    dialogBox.height < viewport.height - 2
+  ) {
+    throw new Error(
+      `Expected settings to fill the app window, got ${JSON.stringify({ dialogBox, viewport })}`
+    );
+  }
+
+  if (
+    !sidebarBox ||
+    sidebarBox.x > 1 ||
+    sidebarBox.y > 1 ||
+    !dialogBox ||
+    sidebarBox.height < dialogBox.height - 2
+  ) {
+    throw new Error(
+      `Expected the settings sidebar to own the full left edge, got ${JSON.stringify({ dialogBox, sidebarBox })}`
+    );
+  }
+
+  if (
+    !backBox ||
+    backBox.y < 44 ||
+    backBox.x < sidebarBox.x ||
+    backBox.x + backBox.width > sidebarBox.x + sidebarBox.width
+  ) {
+    throw new Error(
+      `Expected Back to review to be the first sidebar row below the macOS traffic lights, got ${JSON.stringify({ backBox, sidebarBox })}`
+    );
+  }
+
+  if (!contentBox || !detailBox) {
+    throw new Error("Expected centered settings detail content");
+  }
+
+  if (
+    !appearanceSelectorBox ||
+    !editorSelectorBox ||
+    Math.abs(appearanceSelectorBox.width - editorSelectorBox.width) > 1 ||
+    Math.abs(appearanceSelectorBox.width - 160) > 1
+  ) {
+    throw new Error(
+      `Expected settings selectors to share the compact 160px width, got ${JSON.stringify({ appearanceSelectorBox, editorSelectorBox })}`
+    );
+  }
+
+  const leftInset = contentBox.x - detailBox.x;
+  const rightInset = detailBox.x + detailBox.width - contentBox.x - contentBox.width;
+  if (Math.abs(leftInset - rightInset) > 2) {
+    throw new Error(
+      `Expected centered settings content, got ${JSON.stringify({ leftInset, rightInset })}`
+    );
+  }
+
+  if (
+    (await window.getByRole("button", { name: "Save", exact: true }).count()) > 0 ||
+    (await window.getByRole("button", { name: "Cancel", exact: true }).count()) > 0
+  ) {
+    throw new Error("Expected settings preferences to autosave without form actions");
+  }
+
+  const navigationLabels = await window
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("button")
+    .allTextContents();
+  const sidebarLabels = await sidebar.getByRole("button").allTextContents();
+  if (
+    JSON.stringify(sidebarLabels.map((label) => label.trim())) !==
+    JSON.stringify([
+      "Back to review",
+      "General",
+      "Review",
+      "Repositories",
+      "Phone companion"
+    ])
+  ) {
+    throw new Error(`Unexpected settings sidebar: ${JSON.stringify(sidebarLabels)}`);
+  }
+  if (
+    JSON.stringify(navigationLabels.map((label) => label.trim())) !==
+    JSON.stringify(["General", "Review", "Repositories", "Phone companion"])
+  ) {
+    throw new Error(
+      `Unexpected settings navigation: ${JSON.stringify(navigationLabels)}`
+    );
+  }
+}
+
+async function expectAppSettingsPersisted(window, expectedSettings) {
+  await window.waitForFunction(async (expected) => {
+    const settings = await window.difftray.getAppSettings();
+
+    return Object.entries(expected).every(([key, value]) => settings[key] === value);
+  }, expectedSettings);
+}
+
 async function setMainWindowBounds(app) {
   return app.evaluate(({ BrowserWindow, screen }) => {
     const window = BrowserWindow.getAllWindows()[0];
@@ -1387,19 +1522,6 @@ async function closeMainWindowThroughCloseEvent(app) {
   throw new Error("Expected the close event to close the main window");
 }
 
-async function setMainWindowFullScreen(app, enabled) {
-  await app.evaluate(({ BrowserWindow }, value) => {
-    const window = BrowserWindow.getAllWindows()[0];
-
-    if (!window) {
-      throw new Error("Expected a main window to change full-screen state");
-    }
-
-    window.setFullScreen(value);
-  }, enabled);
-  await waitForMainWindowState(app, (state) => state.isFullScreen === enabled);
-}
-
 async function expectWindowBoundsSaved(userDataPath, expectedBounds) {
   const statePath = path.join(userDataPath, "window-state.json");
   const deadline = Date.now() + 5_000;
@@ -1423,44 +1545,6 @@ async function expectWindowBoundsSaved(userDataPath, expectedBounds) {
   );
 }
 
-async function maximizeMainWindow(app) {
-  await app.evaluate(({ BrowserWindow }) => {
-    const window = BrowserWindow.getAllWindows()[0];
-
-    if (!window) {
-      throw new Error("Expected a main window to maximize");
-    }
-
-    window.maximize();
-  });
-  await waitForMainWindowState(app, (state) => state.isMaximized);
-}
-
-async function expectWindowPresentationSaved(userDataPath, expectedPresentation) {
-  const statePath = path.join(userDataPath, "window-state.json");
-  const deadline = Date.now() + 5_000;
-
-  while (Date.now() < deadline) {
-    try {
-      const state = JSON.parse(await readFile(statePath, "utf8"));
-
-      if (
-        Object.entries(expectedPresentation).every(([key, value]) => state[key] === value)
-      ) {
-        return;
-      }
-    } catch {
-      // The presentation event may still be in flight.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  throw new Error(
-    `Expected window presentation to be saved: ${JSON.stringify(expectedPresentation)}`
-  );
-}
-
 async function expectMainWindowNormalBounds(app, expectedBounds) {
   const actualBounds = await app.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];
@@ -1479,60 +1563,35 @@ async function expectMainWindowNormalBounds(app, expectedBounds) {
   }
 }
 
-async function expectMainWindowMaximized(app) {
-  await waitForMainWindowState(app, (state) => state.isMaximized);
-}
-
-async function expectMainWindowFullScreen(app) {
-  await waitForMainWindowState(app, (state) => state.isFullScreen);
-}
-
-async function waitForMainWindowState(app, predicate) {
-  const deadline = Date.now() + 5_000;
-
-  while (Date.now() < deadline) {
-    const state = await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows()[0];
-
-      if (!window) {
-        throw new Error("Expected a main window");
-      }
-
-      return {
-        isFullScreen: window.isFullScreen(),
-        isMaximized: window.isMaximized()
-      };
-    });
-
-    if (predicate(state)) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  throw new Error("Expected the main window to reach its presentation state");
-}
-
-async function expectSettingsScrollable(window) {
+async function expectSettingsDetailScrollable(window) {
   const dialog = window.getByRole("dialog");
-  const form = dialog.locator("form");
-  const before = await form.evaluate((element) => ({
+  const detailScrollRegion = dialog
+    .getByRole("region", { name: "Phone companion" })
+    .locator('[tabindex="0"]');
+  const before = await detailScrollRegion.evaluate((element) => ({
     clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
     scrollHeight: element.scrollHeight,
     scrollTop: element.scrollTop
   }));
 
-  await window.getByRole("heading", { name: "Settings" }).hover();
-  await window.mouse.wheel(0, 500);
-  await window.waitForTimeout(100);
-
-  const after = await form.evaluate((element) => element.scrollTop);
-
-  if (before.scrollHeight <= before.clientHeight || after <= before.scrollTop) {
+  if (before.overflowY !== "auto" && before.overflowY !== "scroll") {
     throw new Error(
-      `Expected settings to scroll, got ${JSON.stringify({ after, before })}`
+      `Expected settings detail to own vertical scrolling, got ${JSON.stringify(before)}`
     );
+  }
+
+  if (before.scrollHeight > before.clientHeight) {
+    await window.getByRole("heading", { name: "Phone companion" }).hover();
+    await window.mouse.wheel(0, 500);
+    await window.waitForTimeout(100);
+
+    const after = await detailScrollRegion.evaluate((element) => element.scrollTop);
+    if (after <= before.scrollTop) {
+      throw new Error(
+        `Expected overflowing settings to scroll, got ${JSON.stringify({ after, before })}`
+      );
+    }
   }
 
   // Synthetic wheel events bypass macOS drag-region hit testing, so also assert

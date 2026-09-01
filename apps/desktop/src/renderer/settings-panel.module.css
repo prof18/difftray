@@ -21,6 +21,39 @@
   color: var(--text-2);
 }
 
+.settingsBackButton {
+  -webkit-app-region: no-drag;
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.settingsBackButton:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.settingsBackButton:disabled {
+  opacity: 0.52;
+}
+
+.settingsBackButton > svg {
+  color: var(--text-dim);
+}
+
 .settingsSegmented {
   display: inline-flex;
   align-items: center;
@@ -133,66 +166,157 @@
   position: fixed;
   z-index: 9;
   inset: 0;
-  display: grid;
-  place-items: center;
-  background: var(--overlay-soft);
-  backdrop-filter: blur(10px);
+  background: var(--panel);
 }
 
 .settingsWindow {
-  width: min(720px, calc(100vw - 48px));
-  max-height: min(720px, calc(100vh - 64px));
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: var(--shadow-pop);
 }
 
 .settingsContent {
-  display: flex;
+  display: grid;
+  height: 100%;
   min-height: 0;
-  max-height: min(720px, calc(100vh - 64px));
+  grid-template-columns: 224px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.settingsSidebar {
+  -webkit-app-region: drag;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border-soft);
+  background: var(--panel-2);
+  padding: 14px 12px 18px;
+}
+
+.settingsWindow[data-platform="darwin"] .settingsSidebar {
+  padding-top: 46px;
+}
+
+.settingsMain {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  background: var(--panel);
 }
 
 .settingsTopline {
-  position: sticky;
-  z-index: 4;
-  top: 0;
-  display: flex;
+  -webkit-app-region: drag;
+  display: grid;
+  min-height: 54px;
   flex: 0 0 auto;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  place-items: center;
+  border-bottom: 1px solid var(--border-soft);
   background: var(--panel);
-  padding: 24px 32px 20px;
+}
+
+.settingsTopline h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settingsNavigation {
+  display: grid;
+  gap: 4px;
+}
+
+.settingsNavigation > button {
+  -webkit-app-region: no-drag;
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.settingsNavigation > button:hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.settingsNavigation > button[data-active="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text);
+}
+
+.settingsNavigation > button > svg:first-child {
+  color: var(--text-dim);
+}
+
+.settingsNavigation > button[data-active="true"] > svg:first-child {
+  color: var(--accent-2);
+}
+
+.settingsNavigationSpinner {
+  animation: repositoryScanSpin 900ms linear infinite;
+  color: var(--accent);
+}
+
+.settingsNavigationStatus {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+
+.settingsDetail {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  background: var(--panel);
 }
 
 .settingsScrollRegion {
   min-height: 0;
-  flex: 0 0 auto;
-  padding: 0 32px 24px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 38px 48px 32px;
 }
 
-.settingsTopline h2 {
+.settingsPageHeader,
+.settingsScrollRegion > .settingsSection {
+  width: min(800px, 100%);
+  margin-inline: auto;
+}
+
+.settingsPageHeader {
+  margin-bottom: 28px;
+}
+
+.settingsPageHeader h2 {
   margin: 0;
   color: var(--text);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
-}
-
-.settingsTopline p {
-  margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
+  letter-spacing: -0.02em;
 }
 
 .settingsSection {
   position: relative;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
 .settingsSection[data-overflow="visible"] {
@@ -200,7 +324,7 @@
 }
 
 .settingsSection > .sectionLabel {
-  margin-bottom: 8px;
+  margin-bottom: 9px;
 }
 
 .settingsCard {
@@ -215,6 +339,8 @@
 }
 
 .settingRow {
+  --settings-selector-width: 160px;
+
   display: flex;
   min-height: 44px;
   align-items: center;
@@ -245,6 +371,10 @@
   background: var(--elev);
   color: var(--text);
   padding: 0 8px;
+}
+
+.settingRow select {
+  width: var(--settings-selector-width);
 }
 
 .srOnly {
@@ -792,8 +922,7 @@
 
 .editorPicker {
   position: relative;
-  width: min(280px, 58%);
-  min-width: 210px;
+  width: var(--settings-selector-width);
 }
 
 .editorPickerButton {
@@ -878,13 +1007,6 @@
 .editorPickerIcon[data-fallback="true"] {
   border: 1px solid var(--border-soft);
   background: var(--panel-2);
-}
-
-.settingsActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-bottom: 6px;
 }
 
 .repositoryRootIntro > div {
@@ -989,5 +1111,16 @@
 @keyframes repositoryScanSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .settingsContent {
+    grid-template-columns: 204px minmax(0, 1fr);
+  }
+
+  .settingsScrollRegion {
+    padding-right: 32px;
+    padding-left: 32px;
   }
 }

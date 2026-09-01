@@ -41,6 +41,7 @@ export type WorktreeChangeCountEvent = {
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly platform: string;
   readonly checkForUpdates: () => Promise<UpdatePhase>;
   readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
   readonly getUpdatePhase: () => Promise<UpdatePhase>;
@@ -594,6 +595,7 @@ export type CompanionStore = "app-store" | "google-play";
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  platform: process.platform,
   cancelCompanionPairing: async () =>
     ipcRenderer.invoke("companion:cancelPairing") as Promise<CompanionStateView>,
   checkForUpdates: async () =>

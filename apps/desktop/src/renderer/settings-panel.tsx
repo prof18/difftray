@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -7,10 +8,12 @@ import {
   Code2,
   Copy,
   ExternalLink,
+  FileDiff,
+  FolderSearch,
   LoaderCircle,
   QrCode,
   RefreshCw,
-  Save,
+  SlidersHorizontal,
   Smartphone,
   Trash2,
   X
@@ -27,20 +30,32 @@ import {
 } from "./editor-settings.js";
 import { classList, themeModeFromValue } from "./review-view-model.js";
 
+type SettingsPage = "general" | "review" | "repositories" | "companion";
+
+const settingsPages: readonly {
+  readonly id: SettingsPage;
+  readonly label: string;
+}[] = [
+  { id: "general", label: "General" },
+  { id: "review", label: "Review" },
+  { id: "repositories", label: "Repositories" },
+  { id: "companion", label: "Phone companion" }
+];
+
 export function SettingsPanel({
   appSettings,
   companionPairing,
   companionState,
   disabled,
   editorOptions,
-  onCancel,
+  onClose,
   onCancelCompanionPairing,
   onChangeAppSettings,
   onRespondToCompanionPairRequest,
   onRevokeCompanionDevice,
-  onSave,
   onStartCompanionPairing,
   onToggleCompanion,
+  platform,
   repositorySearchRoots = [],
   repositorySearchRootSuggestions = [],
   onAddRepositorySearchRoot,
@@ -54,16 +69,16 @@ export function SettingsPanel({
   readonly companionState: CompanionStateView;
   readonly disabled: boolean;
   readonly editorOptions: readonly EditorPresetView[];
-  readonly onCancel: () => void;
+  readonly onClose: () => void;
   readonly onCancelCompanionPairing: () => void;
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
   readonly onRespondToCompanionPairRequest: (
     input: RespondToCompanionPairRequestInput
   ) => void;
   readonly onRevokeCompanionDevice: (id: string) => void;
-  readonly onSave: () => void;
   readonly onStartCompanionPairing: () => void;
   readonly onToggleCompanion: (enabled: boolean) => void;
+  readonly platform: string;
   readonly repositorySearchRoots?: readonly RepositorySearchRootView[];
   readonly repositorySearchRootSuggestions?: readonly RepositorySearchRootSuggestionView[];
   readonly onAddRepositorySearchRoot?: () => void;
@@ -73,269 +88,424 @@ export function SettingsPanel({
   readonly onRemoveRepositorySearchRoot?: (rootId: string) => void;
 }): React.JSX.Element {
   const activePairing = companionPairing ?? companionState.activePairing;
+  const [activePage, setActivePage] = useState<SettingsPage>("general");
   const settingsWindowRef = useRef<HTMLElement>(null);
+  const settingsScrollRegionRef = useRef<HTMLDivElement>(null);
 
   useDialogFocusTrap(settingsWindowRef);
+
+  useEffect(() => {
+    if (settingsScrollRegionRef.current) {
+      settingsScrollRegionRef.current.scrollTop = 0;
+    }
+  }, [activePage]);
 
   return (
     <div className={styles.settingsOverlay}>
       <section
+        aria-labelledby="settings-title"
         aria-modal="true"
         className={styles.settingsWindow}
+        data-platform={platform}
         ref={settingsWindowRef}
         role="dialog"
       >
-        <form
-          className={styles.settingsContent}
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave();
-          }}
-        >
-          <div className={styles.settingsTopline}>
-            <div>
-              <h2>Settings</h2>
-              <p>App appearance, editor launch, and review behavior.</p>
-            </div>
+        <div className={styles.settingsContent}>
+          <aside className={styles.settingsSidebar}>
             <button
-              aria-label="Close settings"
-              className={styles.iconButton}
+              aria-label="Back to review"
+              className={styles.settingsBackButton}
               disabled={disabled}
-              onClick={onCancel}
-              title="Close"
+              onClick={onClose}
               type="button"
             >
-              <X size={14} strokeWidth={1.4} aria-hidden />
+              <ArrowLeft size={15} strokeWidth={1.6} aria-hidden />
+              <span>Back to review</span>
             </button>
-          </div>
-
-          <div
-            aria-label="Settings options"
-            className={styles.settingsScrollRegion}
-            role="region"
-            tabIndex={0}
-          >
-            <SettingsSection title="General">
-              <label className={styles.settingRow}>
-                <span>Appearance</span>
-                <select
-                  onChange={(event) => {
-                    onChangeAppSettings({
-                      themeMode: themeModeFromValue(event.target.value)
-                    });
-                  }}
-                  value={appSettings.themeMode}
-                >
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </label>
-            </SettingsSection>
-
-            <SettingsSection allowOverflow title="Editor">
-              <div className={styles.settingRow}>
-                <span>Editor</span>
-                <EditorPicker
-                  appSettings={appSettings}
-                  disabled={disabled}
-                  editorOptions={editorOptions}
-                  onChangeAppSettings={onChangeAppSettings}
-                />
-              </div>
-            </SettingsSection>
-
-            <CompanionSettingsSection
-              appSettings={appSettings}
-              companionState={companionState}
-              disabled={disabled}
-              onRespondToPairRequest={onRespondToCompanionPairRequest}
-              onRevokeDevice={onRevokeCompanionDevice}
-              onStartPairing={onStartCompanionPairing}
-              onToggle={onToggleCompanion}
-            />
-
-            <SettingsSection title="Repository search folders">
-              <div className={classList(styles.settingRow, styles.repositoryRootIntro)}>
-                <div>
-                  <div className={styles.repositoryRootTitle}>Search folders</div>
-                  <p>
-                    Only folders you approve are scanned. Git metadata, dependencies,
-                    build output, caches, and Trash are skipped automatically.
-                  </p>
-                </div>
+            <nav aria-label="Settings sections" className={styles.settingsNavigation}>
+              {settingsPages.map((page) => (
                 <button
-                  className={styles.secondaryButton}
-                  disabled={disabled}
-                  onClick={onAddRepositorySearchRoot}
+                  aria-current={activePage === page.id ? "page" : undefined}
+                  aria-label={page.label}
+                  data-active={activePage === page.id}
+                  key={page.id}
+                  onClick={() => {
+                    setActivePage(page.id);
+                  }}
                   type="button"
                 >
-                  Choose folder…
+                  <SettingsNavigationIcon page={page.id} />
+                  <span>{page.label}</span>
+                  {page.id === "repositories" &&
+                  repositorySearchRoots.some((root) => root.scanning) ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className={styles.settingsNavigationSpinner}
+                      size={13}
+                      strokeWidth={1.7}
+                    />
+                  ) : null}
+                  {page.id === "companion" && companionState.status === "running" ? (
+                    <span
+                      aria-hidden="true"
+                      className={styles.settingsNavigationStatus}
+                    />
+                  ) : null}
                 </button>
-              </div>
-              {repositorySearchRoots.length === 0 &&
-              repositorySearchRootSuggestions.length > 0 ? (
-                <div className={styles.repositoryRootSuggestions}>
-                  <small>Suggestions</small>
-                  <div>
-                    {repositorySearchRootSuggestions.map((suggestion) => (
-                      <button
-                        aria-label={`Add suggested folder ${suggestion.path}`}
-                        disabled={disabled}
-                        key={suggestion.id}
-                        onClick={() =>
-                          onAddSuggestedRepositorySearchRoot?.(suggestion.id)
-                        }
-                        title={suggestion.path}
-                        type="button"
-                      >
-                        {suggestion.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {repositorySearchRoots.map((root) => (
-                <div
-                  className={classList(styles.settingRow, styles.repositoryRootRow)}
-                  key={root.id}
-                >
-                  <div>
-                    <strong title={root.path}>{root.path}</strong>
-                    {root.scanning ? (
-                      <small className={styles.repositoryScanStatus} role="status">
-                        <LoaderCircle aria-hidden size={13} strokeWidth={1.7} />
-                        <span>
-                          Scanning folders
-                          {root.scannedDirectories
-                            ? ` · ${String(root.scannedDirectories)} checked`
-                            : "…"}
-                        </span>
-                      </small>
-                    ) : (
-                      <small>
-                        {root.repositoryCount} repositories ·{" "}
-                        {root.lastScanCompletedAt
-                          ? `Last scanned ${new Date(root.lastScanCompletedAt).toLocaleString()}`
-                          : "Not scanned yet"}
-                        {root.lastScanError ? ` · ${root.lastScanError}` : ""}
-                      </small>
-                    )}
-                  </div>
-                  <div className={styles.repositoryRootActions}>
-                    <button
-                      className={styles.secondaryButton}
-                      disabled={disabled}
-                      onClick={() =>
-                        root.scanning
-                          ? onCancelRepositoryScan?.(root.id)
-                          : onRefreshRepositorySearchRoot?.(root.id)
-                      }
-                      type="button"
-                    >
-                      {root.scanning ? (
-                        <X aria-hidden size={13} strokeWidth={1.7} />
-                      ) : (
-                        <RefreshCw aria-hidden size={13} strokeWidth={1.7} />
-                      )}
-                      {root.scanning ? "Cancel" : "Refresh"}
-                    </button>
-                    <button
-                      aria-label={`Remove ${root.path}`}
-                      className={classList(
-                        styles.secondaryButton,
-                        styles.repositoryRootIconButton
-                      )}
-                      disabled={disabled}
-                      onClick={() => onRemoveRepositorySearchRoot?.(root.id)}
-                      type="button"
-                    >
-                      <Trash2 size={13} aria-hidden />
-                    </button>
-                  </div>
-                </div>
               ))}
-            </SettingsSection>
+            </nav>
+          </aside>
 
-            {activePairing ? (
-              <CompanionPairingDialog
-                addresses={companionState.addresses}
-                disabled={disabled}
-                pairing={activePairing}
-                onCancel={onCancelCompanionPairing}
-                onGenerateNewCode={onStartCompanionPairing}
-              />
-            ) : null}
-
-            <SettingsSection title="Review">
-              <div className={styles.settingRow}>
-                <span>Default diff view</span>
-                <div
-                  className={styles.settingsSegmented}
-                  role="group"
-                  aria-label="Default diff view"
-                >
-                  <button
-                    data-active={appSettings.defaultDiffMode === "split"}
-                    onClick={() => {
-                      onChangeAppSettings({ defaultDiffMode: "split" });
-                    }}
-                    type="button"
-                  >
-                    Split
-                  </button>
-                  <button
-                    data-active={appSettings.defaultDiffMode === "unified"}
-                    onClick={() => {
-                      onChangeAppSettings({ defaultDiffMode: "unified" });
-                    }}
-                    type="button"
-                  >
-                    Unified
-                  </button>
-                </div>
-              </div>
-              <ToggleRow
-                checked={appSettings.wrapDiffLines}
-                label="Wrap long lines"
-                onChange={(checked) => {
-                  onChangeAppSettings({ wrapDiffLines: checked });
-                }}
-              />
-              <ToggleRow
-                checked={appSettings.showGeneratedFiles}
-                label="Show generated files"
-                onChange={(checked) => {
-                  onChangeAppSettings({ showGeneratedFiles: checked });
-                }}
-              />
-              <ToggleRow
-                checked={appSettings.notifyOnDrift}
-                label="Notify when reviewed file drifts"
-                onChange={(checked) => {
-                  onChangeAppSettings({ notifyOnDrift: checked });
-                }}
-              />
-            </SettingsSection>
-
-            <div className={styles.settingsActions}>
-              <button
-                className={styles.secondaryButton}
-                disabled={disabled}
-                onClick={onCancel}
-                type="button"
+          <div className={styles.settingsMain}>
+            <header className={styles.settingsTopline}>
+              <h1 id="settings-title">Settings</h1>
+            </header>
+            <div
+              aria-labelledby="settings-page-title"
+              className={styles.settingsDetail}
+              role="region"
+            >
+              <div
+                className={styles.settingsScrollRegion}
+                ref={settingsScrollRegionRef}
+                tabIndex={0}
               >
-                Cancel
-              </button>
-              <button className={styles.primaryButton} disabled={disabled} type="submit">
-                <Save size={14} strokeWidth={1.4} aria-hidden />
-                Save
-              </button>
+                <div className={styles.settingsPageHeader}>
+                  <h2 id="settings-page-title">
+                    {settingsPages.find((page) => page.id === activePage)?.label}
+                  </h2>
+                </div>
+
+                {activePage === "general" ? (
+                  <GeneralSettingsPage
+                    appSettings={appSettings}
+                    disabled={disabled}
+                    editorOptions={editorOptions}
+                    onChangeAppSettings={onChangeAppSettings}
+                  />
+                ) : null}
+
+                {activePage === "review" ? (
+                  <ReviewSettingsPage
+                    appSettings={appSettings}
+                    disabled={disabled}
+                    onChangeAppSettings={onChangeAppSettings}
+                  />
+                ) : null}
+
+                {activePage === "repositories" ? (
+                  <RepositorySettingsPage
+                    disabled={disabled}
+                    onAddRepositorySearchRoot={onAddRepositorySearchRoot}
+                    onAddSuggestedRepositorySearchRoot={
+                      onAddSuggestedRepositorySearchRoot
+                    }
+                    onCancelRepositoryScan={onCancelRepositoryScan}
+                    onRefreshRepositorySearchRoot={onRefreshRepositorySearchRoot}
+                    onRemoveRepositorySearchRoot={onRemoveRepositorySearchRoot}
+                    repositorySearchRoots={repositorySearchRoots}
+                    repositorySearchRootSuggestions={repositorySearchRootSuggestions}
+                  />
+                ) : null}
+
+                {activePage === "companion" ? (
+                  <CompanionSettingsSection
+                    appSettings={appSettings}
+                    companionState={companionState}
+                    disabled={disabled}
+                    onRespondToPairRequest={onRespondToCompanionPairRequest}
+                    onRevokeDevice={onRevokeCompanionDevice}
+                    onStartPairing={onStartCompanionPairing}
+                    onToggle={onToggleCompanion}
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
-        </form>
+
+          {activePairing ? (
+            <CompanionPairingDialog
+              addresses={companionState.addresses}
+              disabled={disabled}
+              pairing={activePairing}
+              onCancel={onCancelCompanionPairing}
+              onGenerateNewCode={onStartCompanionPairing}
+            />
+          ) : null}
+        </div>
       </section>
     </div>
+  );
+}
+
+function SettingsNavigationIcon({
+  page
+}: {
+  readonly page: SettingsPage;
+}): React.JSX.Element {
+  const iconProps = {
+    "aria-hidden": true,
+    size: 16,
+    strokeWidth: 1.5
+  } as const;
+
+  if (page === "review") {
+    return <FileDiff {...iconProps} />;
+  }
+
+  if (page === "repositories") {
+    return <FolderSearch {...iconProps} />;
+  }
+
+  if (page === "companion") {
+    return <Smartphone {...iconProps} />;
+  }
+
+  return <SlidersHorizontal {...iconProps} />;
+}
+
+function GeneralSettingsPage({
+  appSettings,
+  disabled,
+  editorOptions,
+  onChangeAppSettings
+}: {
+  readonly appSettings: AppSettingsView;
+  readonly disabled: boolean;
+  readonly editorOptions: readonly EditorPresetView[];
+  readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <SettingsSection title="Appearance">
+        <label className={styles.settingRow}>
+          <span>Appearance</span>
+          <select
+            aria-label="Appearance"
+            disabled={disabled}
+            onChange={(event) => {
+              onChangeAppSettings({
+                themeMode: themeModeFromValue(event.target.value)
+              });
+            }}
+            value={appSettings.themeMode}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </SettingsSection>
+
+      <SettingsSection allowOverflow title="Editor">
+        <div className={styles.settingRow}>
+          <span>Default editor</span>
+          <EditorPicker
+            appSettings={appSettings}
+            disabled={disabled}
+            editorOptions={editorOptions}
+            onChangeAppSettings={onChangeAppSettings}
+          />
+        </div>
+      </SettingsSection>
+    </>
+  );
+}
+
+function ReviewSettingsPage({
+  appSettings,
+  disabled,
+  onChangeAppSettings
+}: {
+  readonly appSettings: AppSettingsView;
+  readonly disabled: boolean;
+  readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <SettingsSection title="Diff display">
+        <div className={styles.settingRow}>
+          <span>Default diff view</span>
+          <div
+            aria-label="Default diff view"
+            className={styles.settingsSegmented}
+            role="group"
+          >
+            <button
+              data-active={appSettings.defaultDiffMode === "split"}
+              disabled={disabled}
+              onClick={() => {
+                onChangeAppSettings({ defaultDiffMode: "split" });
+              }}
+              type="button"
+            >
+              Split
+            </button>
+            <button
+              data-active={appSettings.defaultDiffMode === "unified"}
+              disabled={disabled}
+              onClick={() => {
+                onChangeAppSettings({ defaultDiffMode: "unified" });
+              }}
+              type="button"
+            >
+              Unified
+            </button>
+          </div>
+        </div>
+        <ToggleRow
+          checked={appSettings.wrapDiffLines}
+          disabled={disabled}
+          label="Wrap long lines"
+          onChange={(checked) => {
+            onChangeAppSettings({ wrapDiffLines: checked });
+          }}
+        />
+        <ToggleRow
+          checked={appSettings.showGeneratedFiles}
+          disabled={disabled}
+          label="Show generated files"
+          onChange={(checked) => {
+            onChangeAppSettings({ showGeneratedFiles: checked });
+          }}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Review workflow">
+        <ToggleRow
+          checked={appSettings.notifyOnDrift}
+          disabled={disabled}
+          label="Notify when reviewed file drifts"
+          onChange={(checked) => {
+            onChangeAppSettings({ notifyOnDrift: checked });
+          }}
+        />
+      </SettingsSection>
+    </>
+  );
+}
+
+function RepositorySettingsPage({
+  disabled,
+  onAddRepositorySearchRoot,
+  onAddSuggestedRepositorySearchRoot,
+  onCancelRepositoryScan,
+  onRefreshRepositorySearchRoot,
+  onRemoveRepositorySearchRoot,
+  repositorySearchRoots,
+  repositorySearchRootSuggestions
+}: {
+  readonly disabled: boolean;
+  readonly onAddRepositorySearchRoot: (() => void) | undefined;
+  readonly onAddSuggestedRepositorySearchRoot:
+    | ((suggestionId: string) => void)
+    | undefined;
+  readonly onCancelRepositoryScan: ((rootId: string) => void) | undefined;
+  readonly onRefreshRepositorySearchRoot: ((rootId: string) => void) | undefined;
+  readonly onRemoveRepositorySearchRoot: ((rootId: string) => void) | undefined;
+  readonly repositorySearchRoots: readonly RepositorySearchRootView[];
+  readonly repositorySearchRootSuggestions: readonly RepositorySearchRootSuggestionView[];
+}): React.JSX.Element {
+  return (
+    <SettingsSection title="Search folders">
+      <div className={classList(styles.settingRow, styles.repositoryRootIntro)}>
+        <div>
+          <div className={styles.repositoryRootTitle}>Approved folders</div>
+          <p>
+            Only folders you approve are scanned. Git metadata, dependencies, build
+            output, caches, and Trash are skipped automatically.
+          </p>
+        </div>
+        <button
+          className={styles.secondaryButton}
+          disabled={disabled}
+          onClick={onAddRepositorySearchRoot}
+          type="button"
+        >
+          Choose folder…
+        </button>
+      </div>
+      {repositorySearchRoots.length === 0 &&
+      repositorySearchRootSuggestions.length > 0 ? (
+        <div className={styles.repositoryRootSuggestions}>
+          <small>Suggestions</small>
+          <div>
+            {repositorySearchRootSuggestions.map((suggestion) => (
+              <button
+                aria-label={`Add suggested folder ${suggestion.path}`}
+                disabled={disabled}
+                key={suggestion.id}
+                onClick={() => onAddSuggestedRepositorySearchRoot?.(suggestion.id)}
+                title={suggestion.path}
+                type="button"
+              >
+                {suggestion.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {repositorySearchRoots.map((root) => (
+        <div
+          className={classList(styles.settingRow, styles.repositoryRootRow)}
+          key={root.id}
+        >
+          <div>
+            <strong title={root.path}>{root.path}</strong>
+            {root.scanning ? (
+              <small className={styles.repositoryScanStatus} role="status">
+                <LoaderCircle aria-hidden size={13} strokeWidth={1.7} />
+                <span>
+                  Scanning folders
+                  {root.scannedDirectories
+                    ? ` · ${String(root.scannedDirectories)} checked`
+                    : "…"}
+                </span>
+              </small>
+            ) : (
+              <small>
+                {root.repositoryCount} repositories ·{" "}
+                {root.lastScanCompletedAt
+                  ? `Last scanned ${new Date(root.lastScanCompletedAt).toLocaleString()}`
+                  : "Not scanned yet"}
+                {root.lastScanError ? ` · ${root.lastScanError}` : ""}
+              </small>
+            )}
+          </div>
+          <div className={styles.repositoryRootActions}>
+            <button
+              className={styles.secondaryButton}
+              disabled={disabled}
+              onClick={() =>
+                root.scanning
+                  ? onCancelRepositoryScan?.(root.id)
+                  : onRefreshRepositorySearchRoot?.(root.id)
+              }
+              type="button"
+            >
+              {root.scanning ? (
+                <X aria-hidden size={13} strokeWidth={1.7} />
+              ) : (
+                <RefreshCw aria-hidden size={13} strokeWidth={1.7} />
+              )}
+              {root.scanning ? "Cancel" : "Refresh"}
+            </button>
+            <button
+              aria-label={`Remove ${root.path}`}
+              className={classList(
+                styles.secondaryButton,
+                styles.repositoryRootIconButton
+              )}
+              disabled={disabled}
+              onClick={() => onRemoveRepositorySearchRoot?.(root.id)}
+              type="button"
+            >
+              <Trash2 size={13} aria-hidden />
+            </button>
+          </div>
+        </div>
+      ))}
+    </SettingsSection>
   );
 }
 
@@ -356,12 +526,12 @@ function CompanionSettingsSection({
   readonly onStartPairing: () => void;
   readonly onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
-  const enabled = companionState.enabled || appSettings.companionEnabled;
+  const enabled = appSettings.companionEnabled;
   const companionAddresses = companionAddressLabels(companionState.addresses);
   const hasPairedDevices = companionState.devices.length > 0;
 
   return (
-    <SettingsSection title="Phone companion">
+    <SettingsSection title="Connection">
       <div className={styles.companionIntro}>
         <div>
           <div className={styles.companionTitle}>Companion mode</div>
