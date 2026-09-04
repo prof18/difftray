@@ -21,6 +21,13 @@ import {
   RefreshCw,
   X
 } from "lucide-react";
+import {
+  Content as TooltipContent,
+  Portal as TooltipPortal,
+  Provider as TooltipProvider,
+  Root as TooltipRoot,
+  Trigger as TooltipTrigger
+} from "@radix-ui/react-tooltip";
 
 import styles from "./file-list.module.css";
 import { ContextMenu } from "./context-menu.js";
@@ -439,41 +446,58 @@ export function DiffTargetControl({
                   Use
                 </button>
               </form>
-              <div
-                aria-label="Recent commits"
-                className={styles.diffTargetOptions}
-                role="listbox"
-              >
-                {filteredCommits.map((commit) => (
-                  <button
-                    className={styles.diffTargetOption}
-                    data-active={mode === "commit" && commit.sha === commitRefDraft}
-                    key={commit.sha}
-                    onClick={() => {
-                      selectCommit(commit.sha);
-                    }}
-                    role="option"
-                    type="button"
-                  >
-                    <span className={styles.diffTargetOptionIcon}>
-                      {mode === "commit" && commit.sha === commitRefDraft ? (
-                        <Check size={13} strokeWidth={1.6} aria-hidden />
-                      ) : null}
-                    </span>
-                    <span className={styles.diffTargetCommitText}>
-                      <span className={styles.diffTargetCommitSha}>
-                        {commit.shortSha}
-                      </span>
-                      <span className={styles.diffTargetCommitSubject}>
-                        {commit.subject}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-                {filteredCommits.length === 0 ? (
-                  <div className={styles.diffTargetEmpty}>No recent commits</div>
-                ) : null}
-              </div>
+              <TooltipProvider delayDuration={150} disableHoverableContent>
+                <div
+                  aria-label="Recent commits"
+                  className={styles.diffTargetOptions}
+                  role="listbox"
+                >
+                  {filteredCommits.map((commit) => (
+                    <TooltipRoot key={commit.sha}>
+                      <TooltipTrigger asChild aria-describedby={undefined}>
+                        <button
+                          className={styles.diffTargetOption}
+                          data-active={mode === "commit" && commit.sha === commitRefDraft}
+                          onClick={() => {
+                            selectCommit(commit.sha);
+                          }}
+                          role="option"
+                          type="button"
+                        >
+                          <span className={styles.diffTargetOptionIcon}>
+                            {mode === "commit" && commit.sha === commitRefDraft ? (
+                              <Check size={13} strokeWidth={1.6} aria-hidden />
+                            ) : null}
+                          </span>
+                          <span className={styles.diffTargetCommitText}>
+                            <span className={styles.diffTargetCommitSha}>
+                              {commit.shortSha}
+                            </span>
+                            <span className={styles.diffTargetCommitSubject}>
+                              {commit.subject}
+                            </span>
+                          </span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipPortal>
+                        {/* The row's untruncated text is already its accessible name. */}
+                        <TooltipContent
+                          aria-hidden
+                          className={styles.diffTargetCommitTooltip}
+                          collisionPadding={8}
+                          side="right"
+                          sideOffset={8}
+                        >
+                          {commitOptionLabel(commit)}
+                        </TooltipContent>
+                      </TooltipPortal>
+                    </TooltipRoot>
+                  ))}
+                  {filteredCommits.length === 0 ? (
+                    <div className={styles.diffTargetEmpty}>No recent commits</div>
+                  ) : null}
+                </div>
+              </TooltipProvider>
             </div>
           ) : null}
         </div>

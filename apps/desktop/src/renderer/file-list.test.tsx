@@ -107,6 +107,8 @@ describe("file list components", () => {
   });
 
   it("renders commit mode with a sha entry and recent commits", () => {
+    const commitSubject =
+      "Recent change with a subject that is too long for the commit picker";
     const html = renderToStaticMarkup(
       <DiffTargetControl
         baseRefDraft="main"
@@ -123,7 +125,7 @@ describe("file list components", () => {
         reviewTarget={{
           commitSha: "def456",
           commitShortSha: "def456",
-          commitSubject: "Recent change",
+          commitSubject,
           headSha: "def456",
           id: "target-commit",
           kind: "commit"
@@ -133,7 +135,7 @@ describe("file list components", () => {
             authoredAt: "2026-01-02T00:00:00.000Z",
             sha: "def456",
             shortSha: "def456",
-            subject: "Recent change"
+            subject: commitSubject
           }
         ]}
       />
@@ -143,9 +145,10 @@ describe("file list components", () => {
     expect(html).toContain('<button aria-selected="false"');
     expect(html).toContain('<button aria-selected="true" class="_diffTargetTab_');
     expect(html).toContain("Use");
-    expect(html).toContain("<span>Recent change</span>");
+    expect(html).toContain(`<span>${commitSubject}</span>`);
     expect(html).toContain("def456");
-    expect(html).toContain("Recent change");
+    expect(html).toContain('data-state="closed"');
+    expect(html).not.toContain(`title="def456 ${commitSubject}"`);
   });
 
   it("labels a selected commit outside the recent commit window", () => {

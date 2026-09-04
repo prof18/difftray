@@ -316,6 +316,27 @@
   color: var(--text-muted);
 }
 
+.diffTargetCommitTooltip {
+  z-index: 90;
+  max-width: min(420px, calc(100vw - 24px));
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel-2);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow) 38%, transparent);
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  pointer-events: none;
+}
+
+.diffTargetCommitTooltip[data-state="delayed-open"],
+.diffTargetCommitTooltip[data-state="instant-open"] {
+  animation: tooltipIn 100ms ease-out;
+}
+
 .diffTargetEmpty {
   color: var(--text-dim);
   font-size: 11.5px;
@@ -594,5 +615,24 @@
   50% {
     opacity: 1;
     transform: scale(1.05);
+  }
+}
+
+@keyframes tooltipIn {
+  from {
+    opacity: 0;
+    transform: translateX(-3px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diffTargetCommitTooltip[data-state="delayed-open"],
+  .diffTargetCommitTooltip[data-state="instant-open"] {
+    animation: none;
   }
 }
