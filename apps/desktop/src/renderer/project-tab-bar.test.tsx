@@ -137,7 +137,8 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
   return {
     activeProjectId: "repo-one",
     disabled: false,
-    onCloseActiveProject: vi.fn(),
+    onCloseProject: vi.fn(),
+    onCopyProjectPath: vi.fn(),
     onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
     onOpenActiveProjectWorktrees: vi.fn(),

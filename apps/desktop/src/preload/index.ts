@@ -60,6 +60,7 @@ export type DifftrayApi = {
     input: CopyReviewCommentsReportInput
   ) => Promise<CopyReviewCommentsReportResult>;
   readonly copyCompanionStoreLink: (store: CompanionStore) => Promise<void>;
+  readonly copyProjectPath: (projectId: string) => Promise<void>;
   readonly copyWorktreePath: (projectId: string, worktreeId: string) => Promise<void>;
   readonly createReviewComment: (
     input: CreateReviewCommentInput
@@ -663,6 +664,8 @@ const api: DifftrayApi = {
     ) as Promise<CopyReviewCommentsReportResult>,
   copyCompanionStoreLink: async (store) =>
     ipcRenderer.invoke("external:copyStoreLink", store) as Promise<void>,
+  copyProjectPath: async (projectId) =>
+    ipcRenderer.invoke("projects:copyPath", { projectId }) as Promise<void>,
   copyWorktreePath: async (projectId, worktreeId) =>
     ipcRenderer.invoke("projects:copyWorktreePath", {
       projectId,

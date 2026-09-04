@@ -66,6 +66,23 @@ try {
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
+  await window
+    .locator('[data-project-tab-name="visual-secondary-repo"]')
+    .click({ button: "right" });
+  const tabContextMenu = window.getByRole("menu", {
+    name: "Repository tab actions for visual-secondary-repo"
+  });
+  await tabContextMenu.waitFor({ timeout: 10_000 });
+  const copyTabPathItem = tabContextMenu.getByRole("menuitem", {
+    name: "Copy path"
+  });
+  await expectHoverBackgroundChange(copyTabPathItem, "project tab context menu item");
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-tab-context-menu.png")
+  });
+  await copyTabPathItem.click();
+  await expectClipboardText(app, secondaryRepoPath);
   await window.evaluate(
     ({ projectIds }) => {
       return window.difftray.saveProjectTabOrder(projectIds);
@@ -391,6 +408,21 @@ try {
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
   await expectDismissibleOpenProjectError(app, window, nonGitPath);
+  await window
+    .locator('[data-project-tab-name="visual-secondary-repo"]')
+    .click({ button: "right" });
+  await window
+    .getByRole("menu", {
+      name: "Repository tab actions for visual-secondary-repo"
+    })
+    .getByRole("menuitem", { name: "Close Repository" })
+    .click();
+  await window
+    .locator('[data-project-tab-name="visual-secondary-repo"]')
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await window
+    .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
+    .waitFor({ timeout: 10_000 });
   await app.evaluate(({ Menu }) => {
     const closeRepositoryItem =
       Menu.getApplicationMenu()?.getMenuItemById("repository-close");
@@ -406,14 +438,15 @@ try {
   await window
     .locator('[data-project-tab-name="visual-repo"]')
     .waitFor({ state: "detached", timeout: 10_000 });
-  await window
-    .locator('[data-project-tab-name="visual-secondary-repo"][data-active="true"]')
-    .waitFor({ timeout: 10_000 });
-  await window.getByRole("button", { name: "Close repository" }).click();
   await window.getByRole("heading", { name: "No repository open" }).waitFor({
     timeout: 10_000
   });
   await expectApplicationMenuItemEnabled(app, "file-show-in-finder", false);
+  await openRepositoryFromDialog(app, window, secondaryRepoPath);
+  await window.getByRole("button", { name: "Close repository" }).click();
+  await window.getByRole("heading", { name: "No repository open" }).waitFor({
+    timeout: 10_000
+  });
   await openRepositoryFromDialog(app, window, repoPath);
   await expectApplicationMenuItemEnabled(app, "file-show-in-finder", true);
   await window.close();
@@ -904,6 +937,14 @@ async function expectClipboardReport(app, snippets) {
 
   if (missing.length > 0) {
     throw new Error(`Clipboard report is missing: ${missing.join(", ")}`);
+  }
+}
+
+async function expectClipboardText(app, expectedText) {
+  const text = await app.evaluate(({ clipboard }) => clipboard.readText());
+
+  if (text !== expectedText) {
+    throw new Error(`Expected clipboard text ${expectedText}, got ${text}`);
   }
 }
 

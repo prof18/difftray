@@ -3348,8 +3348,14 @@ export function App(): React.JSX.Element {
           onOpenProject={() => {
             void openRepositoryPicker();
           }}
-          onCloseActiveProject={() => {
-            void closeProject(workspace.project.id);
+          onCloseProject={(projectId) => {
+            void closeProject(projectId);
+          }}
+          onCopyProjectPath={(projectId) => {
+            setError(undefined);
+            void window.difftray
+              .copyProjectPath(projectId)
+              .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
           }}
           onForgetActiveProject={() => {
             void forgetRepository(workspace.project);

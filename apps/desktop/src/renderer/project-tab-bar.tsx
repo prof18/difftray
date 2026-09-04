@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Folder, FolderGit2, MoreHorizontal, Plus, X } from "lucide-react";
+import { Copy, Folder, FolderGit2, MoreHorizontal, Plus, X } from "lucide-react";
 
+import { ContextMenu } from "./context-menu.js";
 import styles from "./project-tab-bar.module.css";
 import { projectIdentityLabel } from "./project-identity.js";
 import {
@@ -24,7 +25,8 @@ export type ProjectTabBarProps = {
   readonly activeProjectHasWorktreeSiblings?: boolean;
   readonly disabled: boolean;
   readonly loadingStatus?: WorkspaceLoadStatus;
-  readonly onCloseActiveProject: () => void;
+  readonly onCloseProject: (projectId: string) => void;
+  readonly onCopyProjectPath: (projectId: string) => void;
   readonly onForgetActiveProject: () => void;
   readonly onOpenActiveProjectInFinder: () => void;
   readonly onOpenActiveProjectWorktrees: () => void;
@@ -47,7 +49,8 @@ export function ProjectTabBar({
   activeReviewSummary,
   disabled,
   loadingStatus,
-  onCloseActiveProject,
+  onCloseProject,
+  onCopyProjectPath,
   onForgetActiveProject,
   onOpenActiveProjectInFinder,
   onOpenActiveProjectWorktrees,
@@ -65,6 +68,7 @@ export function ProjectTabBar({
   const inlineOpenButtonRef = useRef<HTMLButtonElement>(null);
   const repositoryMenuRef = useRef<HTMLDivElement>(null);
   const repositoryMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const tabContextMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dragProjectsRef = useRef(projects);
   const dragStartProjectsRef = useRef(projects);
   const droppedRef = useRef(false);
@@ -74,6 +78,11 @@ export function ProjectTabBar({
   const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | undefined>();
   const [openButtonInline, setOpenButtonInline] = useState(false);
   const [repositoryMenuOpen, setRepositoryMenuOpen] = useState(false);
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    readonly left: number;
+    readonly project: RecentProjectView;
+    readonly top: number;
+  }>();
   const [tabScrollEdges, setTabScrollEdges] = useState({
     atEnd: true,
     atStart: true
@@ -81,6 +90,21 @@ export function ProjectTabBar({
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const activeTabId = activeProject?.id;
   const activeProjectName = activeProject?.repositoryName ?? activeProject?.name;
+
+  const dismissTabContextMenu = useCallback(() => {
+    setTabContextMenu(undefined);
+    tabContextMenuTriggerRef.current = null;
+  }, []);
+
+  const closeTabContextMenu = useCallback(() => {
+    setTabContextMenu(undefined);
+    const trigger = tabContextMenuTriggerRef.current;
+    tabContextMenuTriggerRef.current = null;
+
+    if (trigger?.isConnected) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, []);
 
   const updateTabScrollEdges = useCallback((scroller: HTMLDivElement): void => {
     const next = {
@@ -175,6 +199,15 @@ export function ProjectTabBar({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [repositoryMenuOpen]);
+
+  useEffect(() => {
+    if (
+      tabContextMenu &&
+      (disabled || !projects.some((project) => project.id === tabContextMenu.project.id))
+    ) {
+      dismissTabContextMenu();
+    }
+  }, [disabled, dismissTabContextMenu, projects, tabContextMenu]);
 
   useEffect(() => {
     if (!repositoryMenuOpen) return;
@@ -420,6 +453,7 @@ export function ProjectTabBar({
           onDrop={handleDrop}
           onScroll={(event) => {
             updateTabScrollEdges(event.currentTarget);
+            dismissTabContextMenu();
           }}
           ref={tabScrollerRef}
         >
@@ -458,6 +492,33 @@ export function ProjectTabBar({
                 data-worktree-tab={worktreeLabel ? true : undefined}
                 draggable={!disabled}
                 key={project.id}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+
+                  if (disabled) {
+                    return;
+                  }
+
+                  const invokedByKeyboard = event.clientX === 0 && event.clientY === 0;
+                  const trigger = event.currentTarget.querySelector<HTMLButtonElement>(
+                    '[data-project-tab-select="true"]'
+                  );
+                  const triggerBounds = event.currentTarget.getBoundingClientRect();
+                  const invocationX = invokedByKeyboard
+                    ? triggerBounds.left + 12
+                    : event.clientX;
+                  const invocationY = invokedByKeyboard
+                    ? triggerBounds.bottom
+                    : event.clientY;
+
+                  setRepositoryMenuOpen(false);
+                  tabContextMenuTriggerRef.current = trigger;
+                  setTabContextMenu({
+                    left: Math.max(8, Math.min(invocationX, window.innerWidth - 204)),
+                    project,
+                    top: Math.max(8, Math.min(invocationY, window.innerHeight - 84))
+                  });
+                }}
                 onDragEnd={handleDragEnd}
                 onDragStart={(event) => {
                   if (disabled) {
@@ -465,6 +526,7 @@ export function ProjectTabBar({
                     return;
                   }
 
+                  dismissTabContextMenu();
                   setDraggedProjectId(project.id);
                   dragProjectsRef.current = projects;
                   dragStartProjectsRef.current = projects;
@@ -485,6 +547,7 @@ export function ProjectTabBar({
                     worktreeLabel ? `${identityLabel} · ${tabTitle}` : undefined
                   }
                   className={styles.projectTabSelect}
+                  data-project-tab-select="true"
                   disabled={disabled}
                   onClick={() => {
                     onSelectProject(project.id);
@@ -540,7 +603,7 @@ export function ProjectTabBar({
                     aria-label="Close repository"
                     className={styles.tabCloseButton}
                     disabled={disabled}
-                    onClick={onCloseActiveProject}
+                    onClick={() => onCloseProject(project.id)}
                     title="Close Repository"
                     type="button"
                   >
@@ -598,7 +661,10 @@ export function ProjectTabBar({
             aria-label={`Repository actions for ${activeProjectName ?? "active repository"}`}
             className={styles.tabIconButton}
             disabled={disabled}
-            onClick={() => setRepositoryMenuOpen((open) => !open)}
+            onClick={() => {
+              dismissTabContextMenu();
+              setRepositoryMenuOpen((open) => !open);
+            }}
             ref={repositoryMenuTriggerRef}
             title="Repository actions"
             type="button"
@@ -658,7 +724,9 @@ export function ProjectTabBar({
             </button>
             <div className={styles.repositoryMenuDivider} role="separator" />
             <button
-              onClick={(event) => handleRepositoryMenuAction(event, onCloseActiveProject)}
+              onClick={(event) =>
+                handleRepositoryMenuAction(event, () => onCloseProject(activeProjectId))
+              }
               role="menuitem"
               type="button"
             >
@@ -676,6 +744,29 @@ export function ProjectTabBar({
           </div>
         </div>
       </div>
+      {tabContextMenu ? (
+        <ContextMenu
+          ariaLabel={`Repository tab actions for ${projectIdentityLabel(tabContextMenu.project)}`}
+          items={[
+            {
+              icon: <Copy size={14} strokeWidth={1.4} aria-hidden />,
+              id: "copy-path",
+              label: "Copy path",
+              onSelect: () => onCopyProjectPath(tabContextMenu.project.id)
+            },
+            {
+              icon: <X size={14} strokeWidth={1.4} aria-hidden />,
+              id: "close-repository",
+              label: "Close Repository",
+              onSelect: () => onCloseProject(tabContextMenu.project.id)
+            }
+          ]}
+          left={tabContextMenu.left}
+          onClose={closeTabContextMenu}
+          onDismiss={dismissTabContextMenu}
+          top={tabContextMenu.top}
+        />
+      ) : null}
     </div>
   );
 }

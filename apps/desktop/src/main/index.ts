@@ -116,6 +116,7 @@ import {
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
 import { revealStoredProjectFile } from "./file-finder-open.js";
 import { openStoredProjectDirectory } from "./project-folder-open.js";
+import { copyStoredProjectPath } from "./project-path-copy.js";
 import { closeProjectIfOpen } from "./project-close.js";
 import {
   createRepositoryOpenService,
@@ -1040,6 +1041,12 @@ handleTrusted(
   ): Promise<readonly RepositoryWorktreeView[]> =>
     repositoryWorktreeService().list(readStringProperty(input, "projectId"))
 );
+handleTrusted("projects:copyPath", (_event: IpcMainInvokeEvent, input: unknown): void => {
+  copyStoredProjectPath(readStringProperty(input, "projectId"), {
+    findProject: (projectId) => getStorage().getProject(projectId),
+    writeText: (projectPath) => clipboard.writeText(projectPath)
+  });
+});
 handleTrusted(
   "projects:copyWorktreePath",
   async (event: IpcMainInvokeEvent, input: unknown): Promise<void> => {
