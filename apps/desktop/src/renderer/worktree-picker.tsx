@@ -1,18 +1,21 @@
-import { GitBranch, LockKeyhole, RefreshCw, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { Copy, GitBranch, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
+import { ContextMenu } from "./context-menu.js";
 import styles from "./worktree-picker.module.css";
 import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js";
 
 export function WorktreePicker({
   onClose,
+  onCopyPath,
   onRefresh,
   onSelect,
   projectName,
   worktrees
 }: {
   readonly onClose: () => void;
+  readonly onCopyPath: (worktree: RepositoryWorktreeView) => void;
   readonly onRefresh: () => void;
   readonly onSelect: (worktree: RepositoryWorktreeView) => void;
   readonly projectName: string;
@@ -23,10 +26,29 @@ export function WorktreePicker({
     worktrees.length === 0 ? 0 : Math.min(selectedIndex, worktrees.length - 1);
   const dialogRef = useRef<HTMLElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const contextMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    readonly left: number;
+    readonly top: number;
+    readonly worktree: RepositoryWorktreeView;
+  }>();
   const listboxId = `worktree-picker-listbox-${useId().replaceAll(":", "")}`;
   const activeItemId =
     worktrees.length === 0 ? undefined : `${listboxId}-option-${String(activeIndex)}`;
   useDialogFocusTrap(dialogRef);
+
+  const dismissContextMenu = useCallback(() => {
+    setContextMenu(undefined);
+    contextMenuTriggerRef.current = null;
+  }, []);
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(undefined);
+    const trigger = contextMenuTriggerRef.current;
+    contextMenuTriggerRef.current = null;
+    if (trigger?.isConnected) {
+      trigger.focus({ preventScroll: true });
+    }
+  }, []);
 
   useEffect(() => {
     resultsRef.current?.focus();
@@ -46,6 +68,15 @@ export function WorktreePicker({
       activeOption.scrollIntoView({ block: "nearest" });
     }
   }, [activeIndex, worktrees]);
+
+  useEffect(() => {
+    if (
+      contextMenu &&
+      !worktrees.some((worktree) => worktree.id === contextMenu.worktree.id)
+    ) {
+      dismissContextMenu();
+    }
+  }, [contextMenu, dismissContextMenu, worktrees]);
 
   return (
     <div
@@ -103,6 +134,7 @@ export function WorktreePicker({
           id={listboxId}
           ref={resultsRef}
           role="listbox"
+          onScroll={closeContextMenu}
           tabIndex={0}
         >
           {worktrees.map((worktree, index) => (
@@ -115,6 +147,24 @@ export function WorktreePicker({
               key={worktree.id}
               onClick={() => {
                 onSelect(worktree);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                const invokedByKeyboard = event.clientX === 0 && event.clientY === 0;
+                const triggerBounds = event.currentTarget.getBoundingClientRect();
+                const invocationX = invokedByKeyboard
+                  ? triggerBounds.left + 12
+                  : event.clientX;
+                const invocationY = invokedByKeyboard
+                  ? triggerBounds.bottom
+                  : event.clientY;
+                setSelectedIndex(index);
+                contextMenuTriggerRef.current = event.currentTarget;
+                setContextMenu({
+                  left: Math.max(8, Math.min(invocationX, window.innerWidth - 204)),
+                  top: Math.max(8, Math.min(invocationY, window.innerHeight - 48)),
+                  worktree
+                });
               }}
               onFocus={() => setSelectedIndex(index)}
               onMouseEnter={() => setSelectedIndex(index)}
@@ -145,6 +195,23 @@ export function WorktreePicker({
             </button>
           ))}
         </div>
+        {contextMenu ? (
+          <ContextMenu
+            ariaLabel={`Worktree actions for ${contextMenu.worktree.displayName}`}
+            items={[
+              {
+                icon: <Copy size={14} strokeWidth={1.4} aria-hidden />,
+                id: "copy-path",
+                label: "Copy path",
+                onSelect: () => onCopyPath(contextMenu.worktree)
+              }
+            ]}
+            left={contextMenu.left}
+            onClose={closeContextMenu}
+            onDismiss={dismissContextMenu}
+            top={contextMenu.top}
+          />
+        ) : null}
         <div className={paletteStyles.paletteFooter}>
           Git-recorded siblings · paths distinguish identical folder names
         </div>

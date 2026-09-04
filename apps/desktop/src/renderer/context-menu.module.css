@@ -1,0 +1,49 @@
+.backdrop {
+  position: fixed;
+  z-index: 79;
+  inset: 0;
+}
+
+.menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  min-width: 188px;
+  gap: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-2);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  padding: 5px;
+}
+
+.menu button {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  text-align: left;
+}
+
+.menu button:hover,
+.menu button:focus-visible {
+  background: var(--selected);
+  outline: none;
+}
+
+.menu button:disabled {
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+.menu svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}

@@ -57,6 +57,25 @@ describe("repository worktree service", () => {
     );
   });
 
+  it("resolves only a listed worktree path for clipboard actions", async () => {
+    const dependencies = createDependencies();
+    const service = createRepositoryWorktreeService(dependencies);
+
+    await expect(service.resolvePath("source", "candidate-2")).resolves.toBe(
+      "/workspace/agent-copy"
+    );
+    await expect(service.resolvePath("source", "forged")).rejects.toBeInstanceOf(
+      ExpectedUnavailableWorktreeError
+    );
+
+    dependencies.listWorktrees.mockResolvedValueOnce([
+      { ...worktrees[1], prunable: true }
+    ]);
+    await expect(service.resolvePath("source", "candidate-2")).rejects.toBeInstanceOf(
+      ExpectedUnavailableWorktreeError
+    );
+  });
+
   it("batches availability by shared common Git directory without queuing change counts", async () => {
     const dependencies = createDependencies();
     const service = createRepositoryWorktreeService(dependencies);

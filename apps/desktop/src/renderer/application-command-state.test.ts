@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canRunApplicationCommand,
+  invalidateWorktreePathCopyRequest,
+  isLatestWorktreePathCopyRequest,
   isSelectedFileActionRequestCurrent,
   runApplicationCommandIfAllowed
 } from "./application-command-state.js";
@@ -76,5 +78,18 @@ describe("application command state", () => {
         latestRequestId: 4
       })
     ).toBe(false);
+  });
+
+  it("accepts only the latest worktree-path copy completion", () => {
+    expect(isLatestWorktreePathCopyRequest(3, 3)).toBe(true);
+    expect(isLatestWorktreePathCopyRequest(2, 3)).toBe(false);
+  });
+
+  it("invalidates a pending worktree-path copy when its picker closes", () => {
+    const request = { current: 3 };
+
+    invalidateWorktreePathCopyRequest(request);
+
+    expect(isLatestWorktreePathCopyRequest(3, request.current)).toBe(false);
   });
 });

@@ -122,6 +122,7 @@ import {
   type RepositoryOpenBatchResult
 } from "./repository-open-service.js";
 import { createRepositoryWorktreeService } from "./repository-worktree-service.js";
+import { createWorktreePathCopyHandler } from "./worktree-path-copy.js";
 import {
   resolveAppRuntimeConfig,
   resolveWindowPresentationMode,
@@ -244,6 +245,11 @@ let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
 const companionWorkspaceCache = new BoundedLruCache<string, ReviewWorkspaceView>(3);
 const companionWorkspaceGenerations = new Map<string, number>();
+const copyWorktreePath = createWorktreePathCopyHandler({
+  resolvePath: (projectId, worktreeId) =>
+    repositoryWorktreeService().resolvePath(projectId, worktreeId),
+  writeText: (worktreePath) => clipboard.writeText(worktreePath)
+});
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
 
@@ -1033,6 +1039,16 @@ handleTrusted(
     input: unknown
   ): Promise<readonly RepositoryWorktreeView[]> =>
     repositoryWorktreeService().list(readStringProperty(input, "projectId"))
+);
+handleTrusted(
+  "projects:copyWorktreePath",
+  async (event: IpcMainInvokeEvent, input: unknown): Promise<void> => {
+    await copyWorktreePath(
+      event.sender,
+      readStringProperty(input, "projectId"),
+      readStringProperty(input, "worktreeId")
+    );
+  }
 );
 handleTrusted(
   "projects:openWorktree",

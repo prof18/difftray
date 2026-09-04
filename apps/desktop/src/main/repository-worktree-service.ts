@@ -48,6 +48,7 @@ export type RepositoryWorktreeService = {
   ) => Promise<readonly ProjectWorktreeAvailabilityView[]>;
   readonly list: (projectId: string) => Promise<readonly RepositoryWorktreeView[]>;
   readonly open: (projectId: string, worktreeId: string) => Promise<ProjectRecord>;
+  readonly resolvePath: (projectId: string, worktreeId: string) => Promise<string>;
 };
 
 /** An expected stale or unavailable worktree validation outcome. */
@@ -198,6 +199,21 @@ export function createRepositoryWorktreeService(
       };
       dependencies.persistProject(enrichedProject);
       return enrichedProject;
+    },
+    resolvePath: async (projectId, worktreeId) => {
+      const source = requireProject(dependencies, projectId);
+      const candidates = await dependencies.listWorktrees(source.path);
+      const candidate = candidates.find(
+        ({ bare, id, prunable }) => id === worktreeId && !bare && !prunable
+      );
+
+      if (!candidate) {
+        throw new ExpectedUnavailableWorktreeError(
+          "Worktree is no longer available. Refresh and try again."
+        );
+      }
+
+      return candidate.path;
     }
   };
 }

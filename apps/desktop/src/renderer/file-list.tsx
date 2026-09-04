@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import styles from "./file-list.module.css";
+import { ContextMenu } from "./context-menu.js";
 import {
   fileListRowHeight,
   fileListVisibleWindow,
@@ -860,108 +861,32 @@ export function FileContextMenu({
   readonly onShowInFinder: (path: string) => void;
   readonly top: number;
 }): React.JSX.Element {
-  const menuRef = useRef<HTMLDivElement>(null);
   const filename = splitPath(filePath).filename;
 
-  useEffect(() => {
-    const menu = menuRef.current;
-    const firstEnabledItem = menu?.querySelector<HTMLButtonElement>(
-      "[role='menuitem']:not(:disabled)"
-    );
-    (firstEnabledItem ?? menu)?.focus();
-
-    function closeOnOutsidePointer(event: PointerEvent): void {
-      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
-        onClose();
-      }
-    }
-
-    function closeOnFocusOutside(event: FocusEvent): void {
-      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
-        onDismiss();
-      }
-    }
-
-    function closeOnWindowChange(): void {
-      onClose();
-    }
-
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("focusin", closeOnFocusOutside);
-    window.addEventListener("blur", closeOnWindowChange);
-    window.addEventListener("resize", closeOnWindowChange);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("focusin", closeOnFocusOutside);
-      window.removeEventListener("blur", closeOnWindowChange);
-      window.removeEventListener("resize", closeOnWindowChange);
-    };
-  }, [onClose, onDismiss]);
-
-  function runAction(action: (path: string) => void): void {
-    action(filePath);
-    onClose();
-  }
-
   return (
-    <div
-      aria-label={`File actions for ${filename}`}
-      className={styles.fileContextMenu}
-      onContextMenu={(event) => {
-        event.preventDefault();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          onClose();
-          return;
+    <ContextMenu
+      ariaLabel={`File actions for ${filename}`}
+      items={[
+        {
+          disabled,
+          icon: <ExternalLink size={14} strokeWidth={1.4} aria-hidden />,
+          id: "open-in-editor",
+          label: "Open in Editor",
+          onSelect: () => onOpenInEditor(filePath)
+        },
+        {
+          disabled,
+          icon: <FolderOpen size={14} strokeWidth={1.4} aria-hidden />,
+          id: "show-in-finder",
+          label: "Show in Finder",
+          onSelect: () => onShowInFinder(filePath)
         }
-
-        const items = [
-          ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-            "[role='menuitem']:not(:disabled)"
-          )
-        ];
-        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-        const direction =
-          event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
-
-        if (direction !== 0 && items.length > 0) {
-          event.preventDefault();
-          items[(currentIndex + direction + items.length) % items.length]?.focus();
-        }
-      }}
-      ref={menuRef}
-      role="menu"
-      style={{ left, top }}
-      tabIndex={-1}
-    >
-      <button
-        disabled={disabled}
-        onClick={() => {
-          runAction(onOpenInEditor);
-        }}
-        role="menuitem"
-        tabIndex={-1}
-        type="button"
-      >
-        <ExternalLink size={14} strokeWidth={1.4} aria-hidden />
-        Open in Editor
-      </button>
-      <button
-        disabled={disabled}
-        onClick={() => {
-          runAction(onShowInFinder);
-        }}
-        role="menuitem"
-        tabIndex={-1}
-        type="button"
-      >
-        <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
-        Show in Finder
-      </button>
-    </div>
+      ]}
+      left={left}
+      onClose={onClose}
+      onDismiss={onDismiss}
+      top={top}
+    />
   );
 }
 

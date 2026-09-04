@@ -24,6 +24,7 @@ declare global {
       input: CopyReviewCommentsReportInput
     ) => Promise<CopyReviewCommentsReportResult>;
     readonly copyCompanionStoreLink: (store: CompanionStore) => Promise<void>;
+    readonly copyWorktreePath: (projectId: string, worktreeId: string) => Promise<void>;
     readonly createReviewComment: (
       input: CreateReviewCommentInput
     ) => Promise<CreateReviewCommentResult>;

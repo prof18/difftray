@@ -31,6 +31,7 @@ describe("repository dialog state", () => {
     const renderPicker = (items: readonly RepositoryWorktreeView[]) =>
       createElement(WorktreePicker, {
         onClose: vi.fn(),
+        onCopyPath: vi.fn(),
         onRefresh: vi.fn(),
         onSelect,
         projectName: "Difftray",
@@ -71,6 +72,7 @@ describe("repository dialog state", () => {
       root.render(
         createElement(WorktreePicker, {
           onClose: vi.fn(),
+          onCopyPath: vi.fn(),
           onRefresh,
           onSelect,
           projectName: "Difftray",

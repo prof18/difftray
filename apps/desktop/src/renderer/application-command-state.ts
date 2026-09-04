@@ -33,3 +33,14 @@ export function isSelectedFileActionRequestCurrent(
     request.projectId === current.activeProjectId
   );
 }
+
+export function isLatestWorktreePathCopyRequest(
+  requestId: number,
+  latestRequestId: number
+): boolean {
+  return requestId === latestRequestId;
+}
+
+export function invalidateWorktreePathCopyRequest(request: { current: number }): void {
+  request.current += 1;
+}

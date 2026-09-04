@@ -108,6 +108,8 @@ import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
 import {
   canRunApplicationCommand,
+  invalidateWorktreePathCopyRequest,
+  isLatestWorktreePathCopyRequest,
   isSelectedFileActionRequestCurrent,
   runApplicationCommandIfAllowed
 } from "./application-command-state.js";
@@ -269,6 +271,7 @@ export function App(): React.JSX.Element {
   >(undefined);
   const workspaceRef = useRef<ReviewWorkspaceView | undefined>(undefined);
   const worktreeAvailabilityRequestRef = useRef(0);
+  const worktreePathCopyRequestRef = useRef(0);
   const worktreePickerRequestRef = useRef(0);
   const worktreePickerTargetRef = useRef<
     { readonly projectId: string; readonly requestId: number } | undefined
@@ -1726,6 +1729,7 @@ export function App(): React.JSX.Element {
   }
 
   async function selectWorktree(worktree: RepositoryWorktreeView): Promise<void> {
+    invalidateWorktreePathCopyRequest(worktreePathCopyRequestRef);
     worktreePickerRequestRef.current += 1;
     worktreePickerTargetRef.current = undefined;
     const sourceProject = worktreePickerProject;
@@ -1870,6 +1874,7 @@ export function App(): React.JSX.Element {
     if (
       shouldDismissWorktreePickerForProjectRemoval(worktreePickerProjectId, projectId)
     ) {
+      invalidateWorktreePathCopyRequest(worktreePathCopyRequestRef);
       worktreePickerRequestRef.current += 1;
       worktreePickerTargetRef.current = undefined;
       setWorktreePickerProject(undefined);
@@ -2294,6 +2299,7 @@ export function App(): React.JSX.Element {
 
   function closeTransientOverlays(): void {
     closeRepositoryPicker();
+    invalidateWorktreePathCopyRequest(worktreePathCopyRequestRef);
     worktreePickerRequestRef.current += 1;
     worktreePickerTargetRef.current = undefined;
     cancelPendingSettingsOpen();
@@ -3725,9 +3731,26 @@ export function App(): React.JSX.Element {
       {worktreePickerProject ? (
         <WorktreePicker
           onClose={() => {
+            invalidateWorktreePathCopyRequest(worktreePathCopyRequestRef);
             worktreePickerRequestRef.current += 1;
             worktreePickerTargetRef.current = undefined;
             setWorktreePickerProject(undefined);
+          }}
+          onCopyPath={(worktree) => {
+            const requestId = ++worktreePathCopyRequestRef.current;
+            setError(undefined);
+            void window.difftray
+              .copyWorktreePath(worktreePickerProject.id, worktree.id)
+              .catch((caughtError: unknown) => {
+                if (
+                  isLatestWorktreePathCopyRequest(
+                    requestId,
+                    worktreePathCopyRequestRef.current
+                  )
+                ) {
+                  setError(errorMessage(caughtError));
+                }
+              });
           }}
           onRefresh={() => {
             void openWorktreePicker(worktreePickerProject);
