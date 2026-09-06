@@ -148,6 +148,7 @@ import {
 } from "./companion/lifecycle.js";
 import { CompanionProjectList } from "./companion/project-list.js";
 import { createCompanionServer } from "./companion/server.js";
+import { CompanionWorkspaceCache } from "./companion/workspace-cache.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
 import { ProjectSummaryCoordinator } from "./project-summary-coordinator.js";
@@ -157,7 +158,6 @@ import {
 } from "./repository-discovery-service.js";
 import { previewDroppedRepositoryCandidates } from "./repository-drop-preview.js";
 import { listCompanionRepositoryCatalog as listCompanionRepositoryCatalogView } from "./repository-catalog-service.js";
-import { BoundedLruCache } from "./bounded-lru-cache.js";
 import {
   activeCompanionDeviceRecords,
   appSettingsView,
@@ -244,8 +244,7 @@ let companionProjectList: CompanionProjectList | undefined;
 let companionAuthManager: CompanionAuthManager | undefined;
 let trustedRendererLocation: TrustedRendererLocation | undefined;
 const updateState = new UpdateState();
-const companionWorkspaceCache = new BoundedLruCache<string, ReviewWorkspaceView>(3);
-const companionWorkspaceGenerations = new Map<string, number>();
+const companionWorkspaceCache = new CompanionWorkspaceCache(loadProjectWorkspace);
 const copyWorktreePath = createWorktreePathCopyHandler({
   resolvePath: (projectId, worktreeId) =>
     repositoryWorktreeService().resolvePath(projectId, worktreeId),
@@ -2193,7 +2192,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     loadFileDiff: async (projectId, pathName) => {
       const [diff, workspace] = await Promise.all([
         loadProjectFileDiffForCompanion(projectId, pathName),
-        loadProjectWorkspace(projectId)
+        companionWorkspaceCache.refresh(projectId)
       ]);
 
       if (!diff) {
@@ -2741,14 +2740,7 @@ async function loadProjectReviewSummaryIfAvailable(
 async function loadCompanionProjectWorkspace(
   projectId: string
 ): Promise<ReviewWorkspaceView> {
-  const cached = companionWorkspaceCache.get(projectId);
-  if (cached) return cached;
-  const generation = companionWorkspaceGenerations.get(projectId) ?? 0;
-  const workspace = await loadProjectWorkspace(projectId);
-  if ((companionWorkspaceGenerations.get(projectId) ?? 0) === generation) {
-    companionWorkspaceCache.set(projectId, workspace);
-  }
-  return workspace;
+  return companionWorkspaceCache.load(projectId);
 }
 
 async function loadProjectReviewState(
@@ -3472,11 +3464,7 @@ function closeProjectTab(projectId: string): void {
 }
 
 function invalidateCompanionWorkspace(projectId: string): void {
-  companionWorkspaceCache.delete(projectId);
-  companionWorkspaceGenerations.set(
-    projectId,
-    (companionWorkspaceGenerations.get(projectId) ?? 0) + 1
-  );
+  companionWorkspaceCache.invalidate(projectId);
 }
 
 function assertStoredProject(projectId: string): StoredProjectRecord {
