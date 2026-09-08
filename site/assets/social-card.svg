@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Difftray social preview</title>
-  <desc id="desc">A dark branded social card for Difftray, showing local Git diff review with drift detection.</desc>
+  <desc id="desc">A dark branded social card for Difftray, showing local Git diff review on Mac and mobile with drift detection.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#07070a" />
@@ -69,10 +69,7 @@
     Catch drift fast.
   </text>
   <text x="82" y="392" fill="#b8bac6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="26" font-weight="500" letter-spacing="0">
-    A focused macOS desk for reviewing diffs,
-  </text>
-  <text x="82" y="427" fill="#b8bac6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="26" font-weight="500" letter-spacing="0">
-    tracking reviewed files, and re-flagging drift.
+    Review on your Mac, phone, or tablet.
   </text>
 
   <g transform="translate(80 500)">
@@ -84,7 +81,7 @@
     <text x="236" y="31" fill="#eff3f5" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="17" font-weight="700" letter-spacing="0">Drifted</text>
   </g>
 
-  <g filter="url(#soft-shadow)">
+  <g filter="url(#soft-shadow)" transform="translate(79.2 12.48) scale(0.88)">
     <rect x="660" y="104" width="404" height="374" rx="8" fill="url(#panel)" stroke="#3c3f4f" />
     <g clip-path="url(#card-clip)">
       <rect x="660" y="104" width="404" height="58" fill="#181920" />
@@ -115,7 +112,22 @@
     </g>
   </g>
 
-  <g transform="translate(930 492)">
+  <g filter="url(#tight-shadow)">
+    <rect x="1000" y="265" width="148" height="276" rx="25" fill="#0b0c10" stroke="#626879" stroke-width="3" />
+    <rect x="1010" y="277" width="128" height="251" rx="17" fill="#181b22" />
+    <rect x="1049" y="283" width="50" height="7" rx="3.5" fill="#08090c" />
+    <text x="1023" y="320" fill="#f3f3f6" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="16" font-weight="700">review.diff</text>
+    <rect x="1022" y="341" width="104" height="28" rx="5" fill="#331f25" />
+    <path d="M1031 355h9m9 0h65" stroke="#ee5258" stroke-width="5" stroke-linecap="round" />
+    <rect x="1022" y="377" width="104" height="28" rx="5" fill="#1e3028" />
+    <path d="M1031 391h9m9 0h65" stroke="#5dc28a" stroke-width="5" stroke-linecap="round" />
+    <path d="M1027 426h88m-88 15h64" stroke="#666b7b" stroke-width="5" stroke-linecap="round" />
+    <rect x="1022" y="463" width="104" height="32" rx="6" fill="#254535" />
+    <text x="1074" y="484" text-anchor="middle" fill="#b6efca" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="14" font-weight="700">Reviewed</text>
+    <rect x="1052" y="515" width="44" height="4" rx="2" fill="#666b7b" />
+  </g>
+
+  <g transform="translate(790 554)">
     <rect x="0" y="0" width="184" height="50" rx="8" fill="#111218" stroke="#3a3d4b" opacity="0.95" />
     <text x="22" y="32" fill="#d6d8e1" font-family="'Avenir Next', 'Trebuchet MS', sans-serif" font-size="18" font-weight="700">difftray.app</text>
   </g>

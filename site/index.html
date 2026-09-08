@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Difftray — Local-first Git review for macOS</title>
-<meta name="description" content="Local-first macOS app for reviewing Git changes. Track what you reviewed, get re-flagged on drift, and carry the review to your phone with the companion app.">
+<title>Difftray — Code review on Mac, iOS &amp; Android</title>
+<meta name="description" content="Review local Git changes on your Mac, iPhone, iPad, or Android device. Track reviewed files, catch drift, and send review notes back to your agent.">
 <link rel="canonical" href="https://difftray.app/">
 
 <!-- Favicons (relative paths — work on github.io/<repo>/ project pages and custom domains alike) -->
@@ -19,18 +19,18 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Difftray">
 <meta property="og:locale" content="en_US">
-<meta property="og:title" content="Difftray — Local-first Git review for macOS">
-<meta property="og:description" content="Know what you reviewed. Get re-flagged when a diff drifts. A focused review desk for local Git changes — with a mobile companion for your phone.">
+<meta property="og:title" content="Difftray — Code review on Mac, iOS &amp; Android">
+<meta property="og:description" content="Review on your Mac or paired mobile device. Track reviewed files, catch drift, and turn comments into a prompt for your agent.">
 <meta property="og:url" content="https://difftray.app/">
-<meta property="og:image" content="https://difftray.app/assets/social-card.png">
+<meta property="og:image" content="https://difftray.app/assets/social-card.png?v=mac-mobile-1">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Difftray: review local Git changes and catch drift fast.">
+<meta property="og:image:alt" content="Difftray: review local Git changes on Mac, iOS, and Android. Catch drift fast.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Difftray — Local-first Git review for macOS">
-<meta name="twitter:description" content="Know what you reviewed. Get re-flagged when a diff drifts. Now with a mobile companion for your phone.">
-<meta name="twitter:image" content="https://difftray.app/assets/social-card.png">
-<meta name="twitter:image:alt" content="Difftray: review local Git changes and catch drift fast.">
+<meta name="twitter:title" content="Difftray — Code review on Mac, iOS &amp; Android">
+<meta name="twitter:description" content="Local code review on Mac, with an iOS and Android companion. Track reviewed files, catch drift, and turn comments into an agent prompt.">
+<meta name="twitter:image" content="https://difftray.app/assets/social-card.png?v=mac-mobile-1">
+<meta name="twitter:image:alt" content="Difftray: review local Git changes on Mac, iOS, and Android. Catch drift fast.">
 
 <script type="application/ld+json">
 {
@@ -45,7 +45,7 @@
       "description": "Local-first macOS app for reviewing Git changes across projects. Track what you reviewed, get re-flagged on drift, and export notes as prompts.",
       "url": "https://difftray.app/",
       "downloadUrl": "https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg",
-      "image": "https://difftray.app/assets/social-card.png",
+      "image": "https://difftray.app/assets/social-card.png?v=mac-mobile-1",
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -65,7 +65,7 @@
       "operatingSystem": "Android, iOS",
       "description": "Mobile companion for Difftray. Pairs with the macOS app over Wi-Fi or Tailscale to browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent.",
       "url": "https://difftray.app/#companion",
-      "downloadUrl": "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion",
+      "downloadUrl": ["https://apps.apple.com/app/id6789255782", "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion"],
       "isPartOf": { "@id": "https://difftray.app/#app" },
       "offers": {
         "@type": "Offer",
@@ -211,7 +211,7 @@ img{display:block;max-width:100%}
   padding:6px 13px 6px 8px;border-radius:999px;font-size:13px;color:var(--text-2);
   font-weight:500;margin-bottom:30px;
 }
-.badge-pill .tag{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
+.badge-pill .tag{flex-shrink:0;white-space:nowrap;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
 h1{
   font-size:clamp(38px,6.4vw,72px);line-height:1.02;letter-spacing:-.035em;font-weight:600;
   max-width:16ch;margin:0 auto;text-wrap:balance;
@@ -534,9 +534,9 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
   <div class="hero-glow"></div>
   <div class="hero-grid"></div>
   <div class="wrap">
-    <span class="badge-pill"><span class="tag">macOS</span> A focused review desk for local Git changes</span>
+    <span class="badge-pill"><span class="tag">Mac + mobile</span> A focused review desk for local Git changes</span>
     <h1>Know what you reviewed.<br>Get re-flagged when it <span class="em">drifts</span>.</h1>
-    <p class="sub">Difftray is a local-first desktop app for reviewing Git changes across your projects. Mark a file reviewed — and the moment its diff changes underneath you, Difftray quietly flips it back so you never trust a stale pass.</p>
+    <p class="sub">Review local Git changes on your Mac, or pair Difftray Companion to keep reviewing on iOS and Android. Mark a file reviewed — when its diff changes, Difftray flags it for another look.</p>
     <div class="cta-row">
       <a class="btn btn-primary btn-lg" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
@@ -545,11 +545,11 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
     </div>
     <p class="cta-alt"><a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-x64.dmg" rel="noopener">Download for Intel Mac</a></p>
     <div class="cta-meta">
-      <span>Runs entirely on your machine</span>
+      <span>Local repositories · No cloud backend</span>
     </div>
     <a class="hero-companion" href="#companion">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
-      <span>New — review from your phone with the <b>iOS &amp; Android companion</b></span>
+      <span>Review from your phone with the <b>iOS &amp; Android companion</b></span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </a>
   </div>
@@ -619,7 +619,7 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
       <div class="feat reveal">
         <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg></div>
         <h3>Many repos, one desk</h3>
-        <p>Keep several local repositories open side by side. See which projects still need attention without switching context or losing your place.</p>
+        <p>Find repositories with Quick Open, open linked Git worktrees, and keep several projects side by side. Browse the same repository catalog from your paired mobile device.</p>
       </div>
       <div class="feat reveal">
         <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/></svg></div>
@@ -686,7 +686,7 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
             <span class="sb-txt"><span class="sb-sm">Get it on</span><span class="sb-lg">Google Play</span></span>
           </a>
         </div>
-        <div class="comp-meta"><span>iOS &amp; Android</span><span class="dot"></span><span>Free companion</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
+        <div class="comp-meta"><span>iOS &amp; Android</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
       </div>
       <div class="comp-phones reveal">
         <img class="ph-side ph-a" src="assets/companion-comments.png" alt="Companion comments and generated-prompt screen" width="780" height="1688" loading="lazy" decoding="async">
@@ -698,8 +698,8 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
     <div class="comp-how reveal">
       <div class="comp-how-head">
         <span class="eyebrow" style="justify-content:center">Pair in under a minute</span>
-        <h3>Your Mac does the reviewing. Your phone drives it.</h3>
-        <p>The Mac stays the source of truth — Companion connects to it and reads the same local changes. Nothing leaves your machine.</p>
+        <h3>Your repos stay on your Mac. Review from either screen.</h3>
+        <p>Your Mac stays the source of truth and shares review data with your paired device over Wi-Fi or Tailscale, without a cloud backend. Keep Difftray running on a reachable Mac while you review.</p>
       </div>
       <div class="comp-steps">
         <div class="comp-step-list">
@@ -730,7 +730,7 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
     <div class="final-card reveal">
       <svg class="logo-tile" viewBox="0 0 1024 1024"><use href="#dt-mark"/></svg>
       <h2>Stop losing track of your own reviews.</h2>
-      <p>Difftray is a free download for macOS. Open a repo and start reviewing in seconds.</p>
+      <p>Start with the free Mac app, then pair the iOS or Android companion to review from your phone or tablet.</p>
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
