@@ -31,10 +31,10 @@
     "typecheck": "pnpm -r --stream typecheck"
   },
   "devDependencies": {
-    "@eslint/js": "^9.27.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.15.21",
     "electron-builder": "^26.8.1",
-    "eslint": "^9.27.0",
+    "eslint": "^10.10.0",
     "globals": "^16.5.0",
     "prettier": "^3.5.3",
     "typescript": "^5.9.3",
