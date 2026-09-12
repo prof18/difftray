@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "bonjour-service": "^1.4.4",
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "qrcode": "^1.5.4",
