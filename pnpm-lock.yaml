@@ -98,7 +98,7 @@ importers:
         version: 8.18.1
       '@vitejs/plugin-react':
         specifier: ^4.5.0
-        version: 4.7.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0))
+        version: 4.7.0(vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0))
       electron:
         specifier: ^42.3.0
         version: 42.3.0
@@ -118,8 +118,8 @@ importers:
         specifier: ^19.1.0
         version: 19.2.6(react@19.2.6)
       vite:
-        specifier: ^6.3.5
-        version: 6.4.2(@types/node@24.12.4)(jiti@2.7.0)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@24.12.4)(jiti@2.7.0)
       wait-on:
         specifier: ^8.0.3
         version: 8.0.5
@@ -156,16 +156,16 @@ importers:
         version: 19.2.3(@types/react@19.2.15)
       '@vitejs/plugin-react':
         specifier: ^4.7.0
-        version: 4.7.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0))
+        version: 4.7.0(vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0))
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@24.12.4)(jiti@2.7.0)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@24.12.4)(jiti@2.7.0)
       vite-plugin-singlefile:
         specifier: ^2.3.3
-        version: 2.3.3(rollup@4.60.4)(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0))
+        version: 2.3.3(rollup@4.60.4)(vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0))
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.4)(jiti@2.7.0)(jsdom@26.1.0)
@@ -2850,6 +2850,46 @@ packages:
       yaml:
         optional: true
 
+  vite@6.4.3:
+    resolution: {integrity: sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': ^18.0.0 || ^20.0.0 || >=22.0.0
+      jiti: '>=1.21.0'
+      less: '*'
+      lightningcss: ^1.21.0
+      sass: '*'
+      sass-embedded: '*'
+      stylus: '*'
+      sugarss: '*'
+      terser: ^5.16.0
+      tsx: ^4.8.1
+      yaml: ^2.4.2
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      jiti:
+        optional: true
+      less:
+        optional: true
+      lightningcss:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
+        optional: true
+
   vitest@3.2.4:
     resolution: {integrity: sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
@@ -3984,7 +4024,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.1': {}
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0))':
     dependencies:
       '@babel/core': 7.29.0
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.29.0)
@@ -3992,7 +4032,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.2(@types/node@24.12.4)(jiti@2.7.0)
+      vite: 6.4.3(@types/node@24.12.4)(jiti@2.7.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -5821,10 +5861,10 @@ snapshots:
       - tsx
       - yaml
 
-  vite-plugin-singlefile@2.3.3(rollup@4.60.4)(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)):
+  vite-plugin-singlefile@2.3.3(rollup@4.60.4)(vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0)):
     dependencies:
       micromatch: 4.0.8
-      vite: 6.4.2(@types/node@24.12.4)(jiti@2.7.0)
+      vite: 6.4.3(@types/node@24.12.4)(jiti@2.7.0)
     optionalDependencies:
       rollup: 4.60.4
 
@@ -5842,6 +5882,19 @@ snapshots:
       jiti: 2.7.0
 
   vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
+      postcss: 8.5.15
+      rollup: 4.60.4
+      tinyglobby: 0.2.16
+    optionalDependencies:
+      '@types/node': 24.12.4
+      fsevents: 2.3.3
+      jiti: 2.7.0
+
+  vite@6.4.3(@types/node@24.12.4)(jiti@2.7.0):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
