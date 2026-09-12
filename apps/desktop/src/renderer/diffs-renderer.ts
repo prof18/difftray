@@ -3,9 +3,9 @@ import {
   processFile,
   type FileContents,
   type FileDiffMetadata,
-  type FileDiffOptions,
   type VirtualFileMetrics
 } from "@pierre/diffs";
+import type { FileDiffOptions } from "@pierre/diffs/react";
 import {
   type WorkerInitializationRenderOptions,
   type WorkerPoolOptions
@@ -210,7 +210,7 @@ export function createDiffsFileDiffOptions<LAnnotation = undefined>({
   diffMode,
   resolvedTheme,
   wrapLines
-}: CreateDiffsFileDiffOptionsInput): FileDiffOptions<LAnnotation> {
+}: CreateDiffsFileDiffOptionsInput): FileDiffOptions<LAnnotation, undefined> {
   return {
     collapsedContextThreshold: 1,
     diffIndicators: "bars",

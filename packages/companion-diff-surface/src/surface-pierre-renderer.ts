@@ -5,9 +5,9 @@ import {
   type DiffLineAnnotation,
   type FileContents,
   type FileDiffMetadata,
-  type FileDiffOptions,
   type VirtualFileMetrics
 } from "@pierre/diffs";
+import type { FileDiffOptions } from "@pierre/diffs/react";
 
 import type { DiffSurfaceDraftRange, DiffSurfaceMode } from "./surface-bridge.js";
 import {
@@ -217,11 +217,14 @@ export function createSurfaceFileDiffOptions<LAnnotation = undefined>({
   wrapLines
 }: {
   readonly diffMode: DiffSurfaceMode;
-  readonly onLineNumberClick?: FileDiffOptions<LAnnotation>["onLineNumberClick"];
-  readonly onLineSelected?: FileDiffOptions<LAnnotation>["onLineSelected"];
+  readonly onLineNumberClick?: FileDiffOptions<
+    LAnnotation,
+    undefined
+  >["onLineNumberClick"];
+  readonly onLineSelected?: FileDiffOptions<LAnnotation, undefined>["onLineSelected"];
   readonly resolvedTheme: "dark" | "light";
   readonly wrapLines: boolean;
-}): FileDiffOptions<LAnnotation> {
+}): FileDiffOptions<LAnnotation, undefined> {
   return {
     collapsedContextThreshold: 1,
     diffIndicators: "bars",
