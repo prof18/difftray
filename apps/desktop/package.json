@@ -44,7 +44,7 @@
     "electron": "^42.3.0",
     "jsdom": "^26.1.0",
     "lucide-react": "^0.511.0",
-    "playwright": "^1.52.0",
+    "playwright": "^1.63.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^6.3.5",
