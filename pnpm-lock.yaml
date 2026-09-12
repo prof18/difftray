@@ -121,7 +121,7 @@ importers:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@24.12.4)(jiti@2.7.0)
       wait-on:
-        specifier: ^8.0.3
+        specifier: ^8.0.5
         version: 8.0.5
 
   packages/companion-diff-surface:
