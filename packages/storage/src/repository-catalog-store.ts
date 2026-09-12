@@ -76,8 +76,7 @@ export function removeRepositorySearchRoot(db: DatabaseSync, rootId: string): vo
     const reassign = db.prepare("update repository_catalog set root_id = ? where id = ?");
     for (const repository of owned) {
       const row = alternate.get(repository.id, rootId) as
-        | { readonly root_id: string }
-        | undefined;
+        { readonly root_id: string } | undefined;
       if (row) reassign.run(row.root_id, repository.id);
     }
     db.prepare("delete from repository_roots where id = ?").run(rootId);

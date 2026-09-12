@@ -33,8 +33,7 @@ describe("createBonjourCompanionAdvertiser", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     createBonjourCompanionAdvertiser();
     const errorHandler = bonjourMocks.constructor.mock.calls[0]?.[1] as
-      | ((error: Error) => void)
-      | undefined;
+      ((error: Error) => void) | undefined;
     const error = Object.assign(new Error("send EHOSTUNREACH 224.0.0.251:5353"), {
       code: "EHOSTUNREACH"
     });

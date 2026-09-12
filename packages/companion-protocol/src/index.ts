@@ -51,18 +51,10 @@ export type CompanionErrorBody = {
 };
 
 export type FileDiffStatus =
-  | "added"
-  | "deleted"
-  | "modified"
-  | "mode_changed"
-  | "renamed";
+  "added" | "deleted" | "modified" | "mode_changed" | "renamed";
 
 export type FileDiffContentKind =
-  | "binary"
-  | "mode_only"
-  | "submodule"
-  | "symlink"
-  | "text";
+  "binary" | "mode_only" | "submodule" | "symlink" | "text";
 
 export type ReviewCommentSide = "additions" | "deletions";
 export type FileImageSide = "new" | "old";

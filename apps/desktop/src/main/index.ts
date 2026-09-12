@@ -219,8 +219,7 @@ const windowPresentationMode = resolveWindowPresentationMode(
 let mainWindow: BrowserWindow | undefined;
 let projectWatchService: ProjectWatchService | undefined;
 let projectSummaryCoordinator:
-  | ProjectSummaryCoordinator<ProjectReviewSummaryView>
-  | undefined;
+  ProjectSummaryCoordinator<ProjectReviewSummaryView> | undefined;
 let worktreeChangeCountCoordinator: ProjectSummaryCoordinator<number> | undefined;
 const repositoryScans = new Map<
   string,
@@ -554,13 +553,11 @@ handleTrusted("updates:installAndRelaunch", async (): Promise<void> => {
     console.error("autoUpdater quitAndInstall failed", caughtError);
   }
 });
-handleTrusted(
-  "editors:listInstalled",
-  async (): Promise<readonly EditorPresetView[]> => listInstalledEditorPresetViews()
+handleTrusted("editors:listInstalled", async (): Promise<readonly EditorPresetView[]> =>
+  listInstalledEditorPresetViews()
 );
-handleTrusted(
-  "settings:getApp",
-  (): AppSettingsView => appSettingsView(getStorage().getAppSettings())
+handleTrusted("settings:getApp", (): AppSettingsView =>
+  appSettingsView(getStorage().getAppSettings())
 );
 handleTrusted(
   "settings:updateApp",

@@ -442,8 +442,7 @@ async function createIntegrationHarness(): Promise<{
   const companionAuth = createCompanionAuthManager({ storage });
   const pairSecret = companionAuth.startPairing().secret;
   let mutationListener:
-    | ((projectId: string, reason: "comments" | "review_state") => void)
-    | undefined;
+    ((projectId: string, reason: "comments" | "review_state") => void) | undefined;
   const deps: CompanionDeps = {
     companionAuth,
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),

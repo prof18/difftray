@@ -398,8 +398,7 @@ function RepositorySettingsPage({
   readonly disabled: boolean;
   readonly onAddRepositorySearchRoot: (() => void) | undefined;
   readonly onAddSuggestedRepositorySearchRoot:
-    | ((suggestionId: string) => void)
-    | undefined;
+    ((suggestionId: string) => void) | undefined;
   readonly onCancelRepositoryScan: ((rootId: string) => void) | undefined;
   readonly onRefreshRepositorySearchRoot: ((rootId: string) => void) | undefined;
   readonly onRemoveRepositorySearchRoot: ((rootId: string) => void) | undefined;
