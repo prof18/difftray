@@ -81,9 +81,8 @@ export function reviewSummariesEqual(
 }
 
 export function omitProjectReviewSummary(project: RecentProjectView): RecentProjectView {
-  const { reviewSummary, ...projectWithoutSummary } = project;
-
-  void reviewSummary;
+  const projectWithoutSummary = { ...project };
+  delete projectWithoutSummary.reviewSummary;
 
   return projectWithoutSummary;
 }
