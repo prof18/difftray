@@ -5,7 +5,7 @@
   "description": "Local diff review tool",
   "author": "Marco Gomiero",
   "license": "Apache-2.0",
-  "packageManager": "pnpm@11.3.0",
+  "packageManager": "pnpm@11.27.0",
   "type": "module",
   "scripts": {
     "build": "pnpm -r --stream build",
