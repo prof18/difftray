@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       '@eslint/js':
-        specifier: ^9.27.0
+        specifier: ^9.39.5
         version: 9.39.5
       '@types/node':
         specifier: ^22.20.2
@@ -18,7 +18,7 @@ importers:
         specifier: ^26.8.1
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
       eslint:
-        specifier: ^9.27.0
+        specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)
       globals:
         specifier: ^16.5.0
