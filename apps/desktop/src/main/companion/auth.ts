@@ -720,12 +720,10 @@ export function createCompanionPairingSessionManager(
   const generateCode = input.generateCode ?? randomPairingCode;
   const generateSecret = input.generateSecret ?? randomPairingSecret;
   let activeSession:
-    | (CompanionPairingSessionView & { wrongCodeAttempts: number })
-    | undefined;
+    (CompanionPairingSessionView & { wrongCodeAttempts: number }) | undefined;
 
   function currentSession():
-    | (CompanionPairingSessionView & { wrongCodeAttempts: number })
-    | undefined {
+    (CompanionPairingSessionView & { wrongCodeAttempts: number }) | undefined {
     if (!activeSession) {
       return undefined;
     }

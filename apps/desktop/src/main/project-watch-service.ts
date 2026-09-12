@@ -4,10 +4,7 @@ import { getWorktreeInfo } from "@difftray/git";
 import { watch as chokidarWatch } from "chokidar";
 
 export type ProjectWatchReason =
-  | "deleted"
-  | "git_metadata"
-  | "watcher_error"
-  | "worktree";
+  "deleted" | "git_metadata" | "watcher_error" | "worktree";
 
 export type ProjectWatchChangeEvent = {
   readonly errorMessage?: string;

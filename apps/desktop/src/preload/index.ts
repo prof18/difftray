@@ -387,11 +387,7 @@ export type LoadFileDiffInput = {
 
 export type FileImageSide = "new" | "old";
 export type FileImageStatus =
-  | "added"
-  | "deleted"
-  | "mode_changed"
-  | "modified"
-  | "renamed";
+  "added" | "deleted" | "mode_changed" | "modified" | "renamed";
 
 export type LoadFileImageInput = {
   readonly diffHash: string;

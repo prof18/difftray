@@ -51,16 +51,10 @@ export type CommitReviewTarget = {
 };
 
 export type ReviewTarget =
-  | BranchReviewTarget
-  | CommitReviewTarget
-  | WorkingTreeReviewTarget;
+  BranchReviewTarget | CommitReviewTarget | WorkingTreeReviewTarget;
 
 export type FileDiffStatus =
-  | "added"
-  | "deleted"
-  | "modified"
-  | "mode_changed"
-  | "renamed";
+  "added" | "deleted" | "modified" | "mode_changed" | "renamed";
 
 export type TextDiffContent = {
   readonly kind: "text";

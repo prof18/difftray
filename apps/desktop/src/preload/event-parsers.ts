@@ -43,10 +43,7 @@ export function parseApplicationCommand(
 }
 
 export type ProjectWatchReason =
-  | "deleted"
-  | "git_metadata"
-  | "watcher_error"
-  | "worktree";
+  "deleted" | "git_metadata" | "watcher_error" | "worktree";
 
 export type ProjectChangedEvent = {
   readonly errorMessage?: string;
