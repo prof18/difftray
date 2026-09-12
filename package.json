@@ -33,7 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^9.27.0",
     "@types/node": "^22.15.21",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.27.0",
     "globals": "^16.2.0",
     "prettier": "^3.5.3",
