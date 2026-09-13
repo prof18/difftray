@@ -1,3 +1,4 @@
+import type { ProjectRecord } from "@difftray/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -180,12 +181,12 @@ function createDependencies(
   readonly registerProject: ReturnType<typeof vi.fn>;
 } {
   return {
-    clearProjectWorktreeIdentity: vi.fn(),
+    clearProjectWorktreeIdentity: vi.fn<(projectId: string) => void>(),
     findRepository: async () => ({ root: "/workspace/difftray" }),
     isLinkedWorktree: vi.fn(async () => false),
     isProjectOpen: () => false,
     now: () => new Date("2026-08-10T12:00:00.000Z"),
-    registerProject: vi.fn(),
+    registerProject: vi.fn<(project: ProjectRecord) => void>(),
     ...overrides
   };
 }
