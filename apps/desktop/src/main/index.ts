@@ -247,7 +247,9 @@ const companionWorkspaceCache = new CompanionWorkspaceCache(loadProjectWorkspace
 const copyWorktreePath = createWorktreePathCopyHandler({
   resolvePath: (projectId, worktreeId) =>
     repositoryWorktreeService().resolvePath(projectId, worktreeId),
-  writeText: (worktreePath) => clipboard.writeText(worktreePath)
+  writeText: (worktreePath) => {
+    void clipboard.writeText(worktreePath);
+  }
 });
 
 type ProjectLoadProgressReporter = (progress: ProjectLoadProgressPatch) => void;
@@ -532,7 +534,7 @@ handleTrusted("external:copyStoreLink", (_event, store): void => {
     throw new Error("Unknown external store.");
   }
 
-  clipboard.writeText(url);
+  void clipboard.writeText(url);
 });
 handleTrusted("updates:getPhase", (): UpdatePhase => updateState.phase);
 handleTrusted("updates:checkNow", async (): Promise<UpdatePhase> => {
@@ -1040,7 +1042,9 @@ handleTrusted(
 handleTrusted("projects:copyPath", (_event: IpcMainInvokeEvent, input: unknown): void => {
   copyStoredProjectPath(readStringProperty(input, "projectId"), {
     findProject: (projectId) => getStorage().getProject(projectId),
-    writeText: (projectPath) => clipboard.writeText(projectPath)
+    writeText: (projectPath) => {
+      void clipboard.writeText(projectPath);
+    }
   });
 });
 handleTrusted(
@@ -1257,7 +1261,7 @@ handleTrusted(
       };
     }
 
-    clipboard.writeText(await formatProjectCommentsReport(projectId, workspace));
+    void clipboard.writeText(await formatProjectCommentsReport(projectId, workspace));
 
     return {
       commentCount: workspace.comments.length,

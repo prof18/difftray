@@ -330,8 +330,8 @@ export class ProjectWatchService {
 
     try {
       await this.stopProjectState(projectId);
-    } catch (caughtError) {
-      stopError = watcherCloseError(caughtError);
+    } catch {
+      // Retry failed watcher closures below before surfacing an error.
     }
 
     try {

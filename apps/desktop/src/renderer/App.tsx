@@ -1775,24 +1775,24 @@ export function App(): React.JSX.Element {
       invalidatePendingSilentWorkspaceRefreshes();
       setError(undefined);
       trackWorkspaceLoadTarget(projectId, requestId);
-      let applied = false;
-
       try {
-        applied = await applyWorkspace(
-          cachedWorkspace.workspace,
-          selectedPathByProjectRef.current.get(projectId),
-          {
-            branchRefs: cachedWorkspace.branchRefs,
-            recentCommits: cachedWorkspace.recentCommits,
-            projectSettings: cachedWorkspace.projectSettings
-          },
-          requestId
-        );
+        if (
+          !(await applyWorkspace(
+            cachedWorkspace.workspace,
+            selectedPathByProjectRef.current.get(projectId),
+            {
+              branchRefs: cachedWorkspace.branchRefs,
+              recentCommits: cachedWorkspace.recentCommits,
+              projectSettings: cachedWorkspace.projectSettings
+            },
+            requestId
+          ))
+        ) {
+          return;
+        }
       } finally {
         clearWorkspaceLoadTarget(requestId);
       }
-
-      if (!applied) return;
 
       setPendingLoadingProjectId(undefined);
       setLoadingProject(undefined);
