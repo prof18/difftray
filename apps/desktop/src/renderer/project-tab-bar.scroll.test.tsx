@@ -9,7 +9,9 @@ import { ProjectTabBar, type ProjectTabBarProps } from "./project-tab-bar.js";
 describe("ProjectTabBar scrolling", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let scrollIntoView: ReturnType<typeof vi.fn>;
+  let scrollIntoView: ReturnType<
+    typeof vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>
+  >;
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -19,7 +21,7 @@ describe("ProjectTabBar scrolling", () => {
       observe = vi.fn();
       unobserve = vi.fn();
     };
-    scrollIntoView = vi.fn();
+    scrollIntoView = vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
     container = document.createElement("div");

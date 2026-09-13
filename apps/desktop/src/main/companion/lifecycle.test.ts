@@ -1,4 +1,7 @@
-import { COMPANION_PROTOCOL_VERSION } from "@difftray/companion-protocol";
+import {
+  COMPANION_PROTOCOL_VERSION,
+  type CompanionServerEvent
+} from "@difftray/companion-protocol";
 import type { AppSettingsRecord } from "@difftray/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -250,8 +253,8 @@ function fakeServer(
   readonly stop: ReturnType<typeof vi.fn>;
 } {
   return {
-    broadcast: vi.fn(),
-    revokeDevice: vi.fn(),
+    broadcast: vi.fn<(event: CompanionServerEvent) => void>(),
+    revokeDevice: vi.fn<(deviceId: string) => void>(),
     start: vi.fn(async (port: number) => {
       if (input.error) {
         throw input.error;
