@@ -304,6 +304,22 @@ describe("diff and review file views", () => {
     ).toEqual({ additions: 1, deletions: 1 });
   });
 
+  it("counts plus and minus prefixed content inside real hunks", () => {
+    expect(
+      summarizePatch(
+        [
+          "diff --git a/counter.ts b/counter.ts",
+          "--- a/counter.ts",
+          "+++ b/counter.ts",
+          "@@ -1 +1,2 @@",
+          "--- comment",
+          "+++counter",
+          "+++ comment"
+        ].join("\n")
+      )
+    ).toEqual({ additions: 2, deletions: 1 });
+  });
+
   it("hydrates review file views with detailed text diffs when available", () => {
     const file = reviewFileStateWithSummary();
 
@@ -334,6 +350,33 @@ describe("diff and review file views", () => {
       patch: ["--- a/src/App.tsx", "+++ b/src/App.tsx", "-old", "+new"].join("\n"),
       previousPath: "src/OldApp.tsx"
     });
+  });
+
+  it("uses hunk-aware counts for loaded added text", () => {
+    const file = reviewFileStateWithSummary("counter.ts");
+    const patch = [
+      "diff --git a/counter.ts b/counter.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/counter.ts",
+      "@@ -0,0 +1,3 @@",
+      "+counter",
+      "+++ comment",
+      "+++counter"
+    ].join("\n");
+
+    expect(
+      reviewFileView(file, {
+        content: {
+          kind: "text",
+          newText: "counter\n++ comment\n++counter",
+          oldText: "",
+          patch
+        },
+        newPath: "counter.ts",
+        status: "added"
+      })
+    ).toMatchObject({ additions: 3, deletions: 0 });
   });
 });
 

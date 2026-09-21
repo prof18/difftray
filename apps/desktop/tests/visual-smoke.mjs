@@ -447,10 +447,7 @@ try {
   await window.getByRole("heading", { name: "No repository open" }).waitFor({
     timeout: 10_000
   });
-  await writeFile(
-    path.join(repoPath, "new-file.txt"),
-    "first new line\nsecond new line\n"
-  );
+  await writeFile(path.join(repoPath, "new-file.txt"), "++counter\nsecond new line\n");
   await openRepositoryFromDialog(app, window, repoPath);
   await expectApplicationMenuItemEnabled(app, "file-show-in-finder", true);
   const newFileRow = window.getByRole("button", { name: "new-file.txt added" });
@@ -469,6 +466,7 @@ try {
       ?.shadowRoot?.querySelector("pre");
     return pre?.textContent.includes("second new line");
   });
+  await newFileRow.getByText("+2", { exact: true }).waitFor();
   await window.screenshot({
     path: path.join(artifactsDir, "desktop-new-file-diff.png")
   });

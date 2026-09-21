@@ -490,23 +490,31 @@ export function summarizePatch(patch: string): {
   readonly deletions: number;
 } {
   const lines = patch.split("\n");
+  let additions = 0;
+  let deletions = 0;
+  let inHunk = false;
 
-  return lines.reduce(
-    (summary, line) => {
-      if (line.startsWith("+++") || line.startsWith("---")) {
-        return summary;
-      }
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      inHunk = false;
+      continue;
+    }
 
-      if (line.startsWith("+")) {
-        return { ...summary, additions: summary.additions + 1 };
-      }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
 
-      if (line.startsWith("-")) {
-        return { ...summary, deletions: summary.deletions + 1 };
-      }
+    if (!inHunk && (line.startsWith("+++") || line.startsWith("---"))) {
+      continue;
+    }
 
-      return summary;
-    },
-    { additions: 0, deletions: 0 }
-  );
+    if (line.startsWith("+")) {
+      additions += 1;
+    } else if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+
+  return { additions, deletions };
 }
