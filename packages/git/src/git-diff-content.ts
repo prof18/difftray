@@ -183,11 +183,23 @@ export async function summarizeUntrackedDiff(
     return undefined;
   }
 
+  // Keep summaries fingerprint-only, but count small text files before selection.
+  const bytes =
+    fileStat.size <= maxTextSnapshotBytes ? await readFile(filePath) : undefined;
+  let additions = 0;
+
+  if (bytes && !isBinary(bytes)) {
+    for (const byte of bytes) {
+      if (byte === 10) additions += 1;
+    }
+    if (bytes.length > 0 && bytes.at(-1) !== 10) additions += 1;
+  }
+
   return {
-    additions: 0,
+    additions,
     content: {
       kind: "binary",
-      ...(await fingerprintFile(filePath))
+      ...(bytes ? binaryFingerprint(bytes) : await fingerprintFile(filePath))
     },
     deletions: 0,
     newPath: relativePath,

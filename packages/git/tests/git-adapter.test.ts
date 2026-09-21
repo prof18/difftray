@@ -366,6 +366,36 @@ describe("working tree diff loading", () => {
     );
   });
 
+  it.each([
+    ["", 0],
+    ["one\n", 1],
+    ["one\ntwo", 2],
+    ["one\r\ntwo\r\n", 2],
+    ["\n\n", 2],
+    ["binary\0\n", 0]
+  ])("counts untracked lines before loading details: %j", async (text, additions) => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "new.txt"), text);
+
+    const summaries = await loadWorkingTreeDiffSummaries(repo);
+    const summary = summaries.files.find((file) => file.newPath === "new.txt");
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        additions,
+        deletions: 0,
+        content: {
+          kind: "binary",
+          byteSize: Buffer.byteLength(text),
+          digest: createHash("sha256").update(text).digest("hex")
+        }
+      })
+    );
+    await expect(loadWorkingTreeFileDiffSummary(repo, "new.txt")).resolves.toEqual(
+      summary
+    );
+  });
+
   it("keeps rename metadata when loading selected working tree file details", async () => {
     const repo = await createRepo();
     await git(repo, "mv", "tracked.txt", "renamed.txt");
@@ -720,6 +750,15 @@ describe("working tree diff loading", () => {
     await writeFile(path.join(repo, "large-untracked.txt"), bytes);
 
     const result = await loadWorkingTreeDiffs(repo);
+    const summary = await loadWorkingTreeDiffSummaries(repo);
+
+    expect(summary.files).toEqual([
+      expect.objectContaining({
+        additions: 0,
+        deletions: 0,
+        content: { kind: "binary", byteSize: bytes.byteLength, digest: sha256(bytes) }
+      })
+    ]);
 
     expect(result.files).toEqual([
       expect.objectContaining({

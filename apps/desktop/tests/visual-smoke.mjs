@@ -447,8 +447,31 @@ try {
   await window.getByRole("heading", { name: "No repository open" }).waitFor({
     timeout: 10_000
   });
+  await writeFile(
+    path.join(repoPath, "new-file.txt"),
+    "first new line\nsecond new line\n"
+  );
   await openRepositoryFromDialog(app, window, repoPath);
   await expectApplicationMenuItemEnabled(app, "file-show-in-finder", true);
+  const newFileRow = window.getByRole("button", { name: "new-file.txt added" });
+  await newFileRow.getByText("+2", { exact: true }).waitFor({ timeout: 10_000 });
+  await newFileRow.getByText("-0", { exact: true }).waitFor();
+  if ((await newFileRow.getAttribute("data-selected")) !== "false") {
+    throw new Error("Expected new-file counts to be available before selection.");
+  }
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-new-file-before-selection.png")
+  });
+  await newFileRow.click();
+  await window.waitForFunction(() => {
+    const pre = document
+      .querySelector("diffs-container")
+      ?.shadowRoot?.querySelector("pre");
+    return pre?.textContent.includes("second new line");
+  });
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-new-file-diff.png")
+  });
   await window.close();
   await expectApplicationMenuItemEnabled(app, "file-show-in-finder", false);
 } finally {

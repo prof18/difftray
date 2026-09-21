@@ -32,6 +32,11 @@ Workspace loads use lightweight per-file summaries for review state and file
 list rendering. Full patch bodies and text snapshots are loaded on demand for
 the selected file instead of being sent for every changed file up front.
 
+Untracked text files within the text snapshot limit include their added-line count
+in that initial summary. Counting and fingerprinting use the same bytes without
+building or transferring a patch. Empty, binary, and oversized untracked files
+retain zero line counts; selecting a text file still loads its full diff on demand.
+
 The selected-file diff loading indicator is delayed briefly so fast on-demand
 patch loads can render without flashing a loader. Large file lists are
 virtualized in the renderer; pagination is avoided so review navigation and file
