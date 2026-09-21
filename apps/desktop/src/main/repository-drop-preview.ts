@@ -22,6 +22,32 @@ export type DroppedRepositoryPreviewDependencies = {
   readonly realpath: (pathName: string) => string;
 };
 
+export type RememberDroppedRepositorySearchRootsDependencies = {
+  readonly isDirectory: (pathName: string) => boolean;
+  readonly remember: (pathName: string) => void;
+};
+
+export function rememberDroppedRepositorySearchRoots(
+  candidates: readonly DroppedRepositoryCandidate[],
+  dependencies: RememberDroppedRepositorySearchRootsDependencies
+): void {
+  const rememberedPaths = new Set<string>();
+
+  for (const candidate of candidates) {
+    const rootPath = candidate.searchRootPath;
+    if (!rootPath || rememberedPaths.has(rootPath)) continue;
+    rememberedPaths.add(rootPath);
+
+    let isDirectory = false;
+    try {
+      isDirectory = dependencies.isDirectory(rootPath);
+    } catch {
+      // The folder may have been deleted or replaced after its preview.
+    }
+    if (isDirectory) dependencies.remember(rootPath);
+  }
+}
+
 export async function previewDroppedRepositoryCandidates(
   droppedPaths: readonly string[],
   dependencies: DroppedRepositoryPreviewDependencies
@@ -29,6 +55,13 @@ export async function previewDroppedRepositoryCandidates(
   const candidates = new Map<string, DroppedRepositoryCandidate>();
 
   for (const droppedPath of droppedPaths) {
+    try {
+      if (!dependencies.isDirectory(droppedPath)) continue;
+    } catch {
+      // Only existing folders can be repository drop targets.
+      continue;
+    }
+
     let containingRepository: RepositoryMatch | undefined;
     let exactRepository = false;
     try {
@@ -52,7 +85,6 @@ export async function previewDroppedRepositoryCandidates(
     if (exactRepository) continue;
 
     try {
-      if (!dependencies.isDirectory(droppedPath)) continue;
       const discovery = await dependencies.discoverRepositories({
         findRepository: dependencies.findRepository,
         rootPath: droppedPath

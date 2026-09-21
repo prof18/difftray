@@ -106,6 +106,8 @@ import { elapsedSince, logRendererPerformance } from "./renderer-performance.js"
 import { WorktreePicker } from "./worktree-picker.js";
 import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
+import { createRepositoryDropZone } from "./repository-drop-zone.js";
+import { requestDroppedRepositoryPreview } from "./dropped-repository-preview-request.js";
 import {
   canRunApplicationCommand,
   invalidateWorktreePathCopyRequest,
@@ -502,67 +504,35 @@ export function App(): React.JSX.Element {
   }, [hasBootstrapped, loadState, recentProjects, workspace?.project.id]);
 
   useEffect(() => {
-    let dragDepth = 0;
-    const isFileDrag = (event: DragEvent): boolean =>
-      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const dropZone = createRepositoryDropZone({
+      onFoldersDropped: (files) => {
+        const requestId = ++droppedRepositoryPreviewRequestRef.current;
+        requestDroppedRepositoryPreview(files, {
+          clearPreview: () => setDroppedRepositoryPreview([]),
+          isCurrent: () => requestId === droppedRepositoryPreviewRequestRef.current,
+          onCandidates: (candidates) => {
+            closeTransientOverlays();
+            setDroppedRepositoryPreview(candidates);
+          },
+          onEmpty: () =>
+            setError("No Git repositories were found in the dropped folders."),
+          onError: (caughtError) => setError(errorMessage(caughtError)),
+          previewDroppedRepositories: window.difftray.previewDroppedRepositories
+        });
+      },
+      setActive: setExternalDropActive
+    });
 
-    function onDragEnter(event: DragEvent): void {
-      if (!isFileDrag(event)) return;
-      event.preventDefault();
-      dragDepth += 1;
-      setExternalDropActive(true);
-    }
-
-    function onDragOver(event: DragEvent): void {
-      if (!isFileDrag(event)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    }
-
-    function onDragLeave(event: DragEvent): void {
-      if (!isFileDrag(event)) return;
-      dragDepth = Math.max(0, dragDepth - 1);
-      if (dragDepth === 0) setExternalDropActive(false);
-    }
-
-    function onDrop(event: DragEvent): void {
-      if (!isFileDrag(event)) return;
-      event.preventDefault();
-      dragDepth = 0;
-      setExternalDropActive(false);
-      const files = Array.from(event.dataTransfer?.files ?? []);
-      const requestId = ++droppedRepositoryPreviewRequestRef.current;
-
-      if (files.length > 0) {
-        void window.difftray
-          .previewDroppedRepositories(files)
-          .then((candidates) => {
-            if (requestId !== droppedRepositoryPreviewRequestRef.current) return;
-            if (candidates.length === 0) {
-              setError("No Git repositories were found in the dropped folders.");
-            } else {
-              closeTransientOverlays();
-              setDroppedRepositoryPreview(candidates);
-            }
-          })
-          .catch((caughtError: unknown) => {
-            if (requestId === droppedRepositoryPreviewRequestRef.current) {
-              setError(errorMessage(caughtError));
-            }
-          });
-      }
-    }
-
-    window.addEventListener("dragenter", onDragEnter);
-    window.addEventListener("dragover", onDragOver);
-    window.addEventListener("dragleave", onDragLeave);
-    window.addEventListener("drop", onDrop);
+    window.addEventListener("dragenter", dropZone.onDragEnter);
+    window.addEventListener("dragover", dropZone.onDragOver);
+    window.addEventListener("dragleave", dropZone.onDragLeave);
+    window.addEventListener("drop", dropZone.onDrop);
 
     return () => {
-      window.removeEventListener("dragenter", onDragEnter);
-      window.removeEventListener("dragover", onDragOver);
-      window.removeEventListener("dragleave", onDragLeave);
-      window.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragenter", dropZone.onDragEnter);
+      window.removeEventListener("dragover", dropZone.onDragOver);
+      window.removeEventListener("dragleave", dropZone.onDragLeave);
+      window.removeEventListener("drop", dropZone.onDrop);
     };
   }, []);
 

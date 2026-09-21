@@ -156,7 +156,10 @@ import {
   discoverRepositories,
   isRepositoryScanAbort
 } from "./repository-discovery-service.js";
-import { previewDroppedRepositoryCandidates } from "./repository-drop-preview.js";
+import {
+  previewDroppedRepositoryCandidates,
+  rememberDroppedRepositorySearchRoots
+} from "./repository-drop-preview.js";
 import { listCompanionRepositoryCatalog as listCompanionRepositoryCatalogView } from "./repository-catalog-service.js";
 import {
   activeCompanionDeviceRecords,
@@ -988,13 +991,13 @@ handleTrusted(
       );
     droppedRepositoryCandidates.clear();
     if (rememberSearchFolders) {
-      for (const rootPath of new Set(
-        selected.map((candidate) => candidate.searchRootPath).filter(Boolean)
-      )) {
-        if (!rootPath) continue;
-        const root = getStorage().addRepositorySearchRoot(rootPath);
-        void scanRepositoryRoot(root.id).catch(() => undefined);
-      }
+      rememberDroppedRepositorySearchRoots(selected, {
+        isDirectory: (pathName) => statSync(pathName).isDirectory(),
+        remember: (rootPath) => {
+          const root = getStorage().addRepositorySearchRoot(rootPath);
+          void scanRepositoryRoot(root.id).catch(() => undefined);
+        }
+      });
     }
     const result = await openRepositoryPaths(selected.map((candidate) => candidate.path));
     const first = result.projects[0];
