@@ -11,6 +11,26 @@ body {
   overflow: hidden;
 }
 
+.diff-surface-frame.diff-surface__preview {
+  overflow: auto;
+  height: 100%;
+}
+
+.diff-surface__preview-expand {
+  background: var(--diff-bg-buffer);
+  color: var(--diff-surface-accent);
+  border: 0;
+  border-block: 1px solid var(--diff-bg-separator);
+  font:
+    12px "IBM Plex Sans",
+    sans-serif;
+  text-align: left;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
 .diff-surface {
   box-sizing: border-box;
   height: 100%;

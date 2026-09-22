@@ -23,6 +23,8 @@ import { createDiffSurfaceHostMessageReceiver } from "./surface-host-message-rec
 import { createRenderedMessage, serializeSurfaceMessage } from "./surface-outbound.js";
 import { waitForDiffSurfacePaint } from "./surface-render-signal.js";
 import { diffSurfaceThemeTokens } from "./surface-theme.js";
+import { SurfacePreview } from "./surface-preview.js";
+import type { DiffSurfacePreview } from "./surface-bridge.js";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -51,10 +53,19 @@ const largeFixtureMessage = createLargeFixtureShowFileMessage();
 const isBrowserHarness = window.ReactNativeWebView === undefined;
 let hasRendered = false;
 let renderGeneration = 0;
+let preview: DiffSurfacePreview | null = null;
 let outboundMessages: readonly DiffSurfaceMessage[] = [];
 
 function render(): void {
-  const surface = <DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />;
+  const surface = preview ? (
+    <SurfacePreview
+      key={`${preview.path}:${String(preview.lineStart)}:${preview.text}`}
+      preview={preview}
+      theme={state.theme}
+    />
+  ) : (
+    <DiffSurfaceApp onSurfaceMessage={postMessage} state={state} />
+  );
 
   flushSync(() => {
     root.render(
@@ -95,6 +106,11 @@ window.__difftrayReceive = (rawMessage) => {
     null;
 
   switch (message.kind) {
+    case "show_preview":
+      preview = message;
+      renderGeneration += 1;
+      renderedResult = { generation: renderGeneration, path: message.path };
+      break;
     case "init":
       state = {
         ...state,
@@ -105,6 +121,7 @@ window.__difftrayReceive = (rawMessage) => {
       };
       break;
     case "show_file": {
+      preview = null;
       const stateWithoutScrollTarget = { ...state };
       delete stateWithoutScrollTarget.scrollTo;
       delete stateWithoutScrollTarget.newText;

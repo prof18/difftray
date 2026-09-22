@@ -632,6 +632,51 @@ async function checkTouchComments(browser, url) {
       (await selections())[0].lineEnd === 5,
     "Wrapped unified range must emit once"
   );
+  await page.addInitScript(() => {
+    window.ReactNativeWebView = {
+      postMessage() {
+        return undefined;
+      }
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 180 });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.__difftrayReceive === "function");
+  await page.evaluate(() =>
+    window.__difftrayReceive({
+      kind: "show_preview",
+      path: "Example.tsx",
+      lineStart: 3,
+      side: "additions",
+      text: [
+        "<View>",
+        "  <Text>Pair your first computer</Text>",
+        '  <Button title="Scan QR code" />',
+        '  <Button title="Try demo" />',
+        "</View>",
+        ");",
+        "}"
+      ].join("\n")
+    })
+  );
+  const preview = page.locator(".diff-surface__preview");
+  await preview.locator('[data-column-number="3"]').first().waitFor();
+  assert(
+    (await preview.locator('[data-column-number="6"]').count()) === 0,
+    "Middle preview lines should initially collapse"
+  );
+  await preview.screenshot({ path: "/tmp/difftray-renderer-preview-collapsed.png" });
+  await preview.getByRole("button", { name: "Show 2 more lines" }).click();
+  await preview.locator('[data-column-number="6"]').first().waitFor();
+  assert(
+    (await preview.locator("[data-line]").allTextContents())
+      .join("\n")
+      .includes("Try demo"),
+    "Expanding must restore actual hidden source"
+  );
+  await preview.screenshot({ path: "/tmp/difftray-renderer-preview-expanded.png" });
+  await preview.getByRole("button", { name: "Collapse lines" }).click();
+  await preview.getByRole("button", { name: "Show 2 more lines" }).waitFor();
   assert(errors.length === 0, `Touch browser errors: ${errors.join("; ")}`);
   await context.close();
 }

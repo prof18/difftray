@@ -124,6 +124,26 @@ describe("diff surface outbound messages", () => {
     });
   });
 
+  it("includes all six short-range lines and bounds longer previews", () => {
+    const start = { lineNumber: 4, side: "additions" as const, text: "four" };
+    const end = { lineNumber: 9, side: "additions" as const, text: "nine" };
+    const read = (line: number) => `line ${String(line)}`;
+    expect(createLineRangeSelectedMessage(end, start, read)).toMatchObject({
+      snippet: [4, 5, 6, 7, 8, 9].map((lineNumber) => ({
+        lineNumber,
+        text: read(lineNumber)
+      }))
+    });
+    expect(
+      createLineRangeSelectedMessage(start, { ...end, lineNumber: 20 }, read)
+    ).toMatchObject({
+      snippet: [4, 5, 6, 19, 20].map((lineNumber) => ({
+        lineNumber,
+        text: read(lineNumber)
+      }))
+    });
+  });
+
   it("rejects range selections across different sides", () => {
     expect(
       createLineRangeSelectedMessage(

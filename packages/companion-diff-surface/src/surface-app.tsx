@@ -26,6 +26,7 @@ import {
   createCommentTappedMessage,
   createLineRangeSelectedMessage
 } from "./surface-outbound.js";
+import { createPreviewSnapshot } from "./surface-preview-snapshot.js";
 import {
   surfaceVirtualFileMetrics,
   type SurfaceAnnotationMetadata
@@ -335,6 +336,25 @@ function surfaceTouchTarget(event: Event): TouchLineTarget | null {
   });
 }
 
+export function withPreview(
+  message: DiffSurfaceMessage,
+  model: ReturnType<typeof createSurfacePierreRenderModel>,
+  path: string
+): DiffSurfaceMessage {
+  if (message.kind !== "line_selected" || model.kind !== "diff") return message;
+  const source =
+    message.side === "additions"
+      ? model.fileDiff.additionLines
+      : model.fileDiff.deletionLines;
+  // Partial patches do not contain an addressable full-file snapshot.
+  if (model.fileDiff.isPartial) return message;
+  const text = createPreviewSnapshot(source, message.lineStart, message.lineEnd);
+  if (text === undefined) return message;
+  const previewPath =
+    message.side === "deletions" ? (model.fileDiff.prevName ?? path) : path;
+  return { ...message, preview: { path: previewPath, text } };
+}
+
 function useSurfaceSelection(
   surfaceRef: React.RefObject<HTMLElement | null>,
   state: DiffSurfaceAppState,
@@ -348,8 +368,8 @@ function useSurfaceSelection(
   const mouse = useRef<SurfacePointer | undefined>(undefined);
   const touch = useRef<SurfacePointer | undefined>(undefined);
   const preview = useRef<SelectedLineRange | null>(null);
-  const latest = useRef({ model, onSurfaceMessage });
-  latest.current = { model, onSurfaceMessage };
+  const latest = useRef({ model, onSurfaceMessage, path: state.path });
+  latest.current = { model, onSurfaceMessage, path: state.path };
   const [controller] = useState(() =>
     createSurfaceTouchSelection({
       onRangeChange: setRange,
@@ -365,13 +385,19 @@ function useSurfaceSelection(
           side: selected.side,
           text: lineTextFromFileDiff(latest.current.model, selected.side, selected.end)
         };
-        const message = createLineRangeSelectedMessage(start, end);
-        if (message) latest.current.onSurfaceMessage?.(message);
+        const message = createLineRangeSelectedMessage(start, end, (line) =>
+          lineTextFromFileDiff(latest.current.model, start.side, line)
+        );
+        if (message)
+          latest.current.onSurfaceMessage?.(
+            withPreview(message, latest.current.model, latest.current.path)
+          );
       }
     })
   );
   const emitRange = useCallback((selected: SelectedLineRange) => {
     if (!selected.side) return;
+    const side = selected.side;
     const message = createLineRangeSelectedMessage(
       {
         lineNumber: selected.start,
@@ -382,9 +408,13 @@ function useSurfaceSelection(
         lineNumber: selected.end,
         side: selected.side,
         text: lineTextFromFileDiff(latest.current.model, selected.side, selected.end)
-      }
+      },
+      (line) => lineTextFromFileDiff(latest.current.model, side, line)
     );
-    if (message) latest.current.onSurfaceMessage?.(message);
+    if (message)
+      latest.current.onSurfaceMessage?.(
+        withPreview(message, latest.current.model, latest.current.path)
+      );
   }, []);
   useEffect(() => {
     if (!range || !barRef.current) {

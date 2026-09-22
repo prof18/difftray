@@ -32,6 +32,18 @@ commits the controller's captured coordinates. Programmatic `onLineSelected`
 notifications never create comments: they also fire when the host changes the
 highlight. Preview updates do not persist comments or change review state.
 
+Composer code previews also use Pierre through the shared surface artifact. The
+local WebView bridge carries a snapshot of the selected source and its path and
+original line offset; it does not change companion-server or storage contracts.
+Neutral context excerpts preserve syntax highlighting and gutter numbers without
+inventing added/deleted lines. Ranges above six lines initially show the first
+three and last two, with an accessible button to expand the actual omitted code
+and collapse it again. Snapshot generation is capped at 1,000 lines and 128 KiB
+of UTF-8 text before it allocates the preview payload. The preview disables
+commenting gestures and keeps its own bounded scroll area. When a full source
+snapshot is unavailable or exceeds either cap, the host shows an explicit
+unavailable state rather than presenting incomplete source.
+
 ## Context
 
 Line comments already support side-aware identity and stale-diff invalidation,

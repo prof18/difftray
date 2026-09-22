@@ -92,7 +92,8 @@ export function createLineSelectedMessageForSide(
 
 export function createLineRangeSelectedMessage(
   start: DiffSurfaceLineSelectionTarget,
-  end: DiffSurfaceLineSelectionTarget
+  end: DiffSurfaceLineSelectionTarget,
+  readLine?: (lineNumber: number) => string
 ): DiffSurfaceMessage | null {
   if (start.side !== end.side) {
     return null;
@@ -100,8 +101,13 @@ export function createLineRangeSelectedMessage(
 
   const lineStart = Math.min(start.lineNumber, end.lineNumber);
   const lineEnd = Math.max(start.lineNumber, end.lineNumber);
-  const snippet =
-    start.lineNumber === end.lineNumber
+  const snippetLines =
+    lineEnd - lineStart < 6
+      ? Array.from({ length: lineEnd - lineStart + 1 }, (_, index) => lineStart + index)
+      : [lineStart, lineStart + 1, lineStart + 2, lineEnd - 1, lineEnd];
+  const snippet = readLine
+    ? snippetLines.map((lineNumber) => ({ lineNumber, text: readLine(lineNumber) }))
+    : start.lineNumber === end.lineNumber
       ? [{ lineNumber: start.lineNumber, text: start.text }]
       : [start, end]
           .map(({ lineNumber, text }) => ({ lineNumber, text }))

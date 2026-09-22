@@ -107,6 +107,11 @@ const diffSurfaceUnsafeCSS = `
   --diffs-gap-inline: 8px;
 }
 
+/* The theme provides a finished selection tint, not an accent to dilute to 18%. */
+[data-selected-line] {
+  --mix-selection-light: 15%;
+}
+
 [data-overflow="scroll"] {
   --diffs-scrollbar-gutter: 12px;
   --difftray-scrollbar-track: color-mix(

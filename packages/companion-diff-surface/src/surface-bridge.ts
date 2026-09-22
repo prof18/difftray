@@ -35,6 +35,7 @@ export type DiffSurfaceScrollTarget = {
 };
 
 export type DiffSurfaceHostMessage =
+  | ({ readonly kind: "show_preview" } & DiffSurfacePreview)
   | {
       readonly diffMode: DiffSurfaceMode;
       readonly kind: "init";
@@ -75,6 +76,13 @@ export type DiffSurfaceLineSnippet = {
   readonly text: string;
 };
 
+export type DiffSurfacePreview = {
+  readonly path: string;
+  readonly text: string;
+  readonly lineStart: number;
+  readonly side: DiffSurfaceSide;
+};
+
 export type DiffSurfaceMessage =
   | {
       readonly bridgeVersion: number;
@@ -91,6 +99,7 @@ export type DiffSurfaceMessage =
       readonly lineStart: number;
       readonly side: DiffSurfaceSide;
       readonly snippet: readonly DiffSurfaceLineSnippet[];
+      readonly preview?: { readonly path: string; readonly text: string };
     }
   | {
       readonly commentId: string;
@@ -107,6 +116,24 @@ export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null 
   }
 
   switch (input.kind) {
+    case "show_preview":
+      if (
+        !hasOnlyKeys(input, ["kind", "path", "text", "lineStart", "side"]) ||
+        typeof input.path !== "string" ||
+        typeof input.text !== "string" ||
+        typeof input.lineStart !== "number" ||
+        !Number.isSafeInteger(input.lineStart) ||
+        input.lineStart < 1 ||
+        (input.side !== "additions" && input.side !== "deletions")
+      )
+        return null;
+      return {
+        kind: "show_preview",
+        path: input.path,
+        text: input.text,
+        lineStart: input.lineStart,
+        side: input.side
+      };
     case "init":
       return parseInitMessage(input);
     case "show_file":
