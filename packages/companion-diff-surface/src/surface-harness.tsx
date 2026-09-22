@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 
 import type { DiffSurfaceHostMessage, DiffSurfaceMessage } from "./surface-bridge.js";
+import { DiffSurfaceApp, type DiffSurfaceAppState } from "./surface-app.js";
 import type { DiffSurfaceHarnessAction } from "./surface-harness-fixtures.js";
 import { serializeSurfaceMessage } from "./surface-outbound.js";
 
@@ -10,6 +11,7 @@ type DiffSurfaceBrowserHarnessProps = {
   readonly onClearMessages: () => void;
   readonly onSendHostMessage: (message: DiffSurfaceHostMessage) => void;
   readonly outboundMessages: readonly DiffSurfaceMessage[];
+  readonly initialState: DiffSurfaceAppState;
   readonly surface: ReactElement;
 };
 
@@ -19,8 +21,17 @@ export function DiffSurfaceBrowserHarness({
   onClearMessages,
   onSendHostMessage,
   outboundMessages,
+  initialState,
   surface
 }: DiffSurfaceBrowserHarnessProps): ReactElement {
+  const [showSecondSurface, setShowSecondSurface] = useState(false);
+  const [secondState, setSecondState] = useState(initialState);
+  const [secondMessages, setSecondMessages] = useState<readonly DiffSurfaceMessage[]>([]);
+
+  const recordSecondMessage = (message: DiffSurfaceMessage): void => {
+    setSecondMessages((messages) => [...messages, message].slice(-30));
+  };
+
   return (
     <main className="diff-harness">
       <aside className="diff-harness__panel">
@@ -50,6 +61,21 @@ export function DiffSurfaceBrowserHarness({
             <strong>Load 5k patch</strong>
             <span>Manual smooth-scroll and render timing fixture.</span>
           </button>
+
+          <button
+            className="diff-harness__button"
+            data-testid="show-second-surface"
+            onClick={() => {
+              setSecondState(initialState);
+              setShowSecondSurface((visible) => !visible);
+            }}
+            type="button"
+          >
+            <strong>
+              {showSecondSurface ? "Hide second surface" : "Show second surface"}
+            </strong>
+            <span>Toggle an independent keyed surface and message log.</span>
+          </button>
         </div>
 
         <div className="diff-harness__log-header">
@@ -59,7 +85,7 @@ export function DiffSurfaceBrowserHarness({
           </button>
         </div>
 
-        <ol className="diff-harness__log">
+        <ol className="diff-harness__log" data-testid="diff-harness-primary-log">
           {outboundMessages.length === 0 ? (
             <li>No messages yet.</li>
           ) : (
@@ -72,7 +98,42 @@ export function DiffSurfaceBrowserHarness({
         </ol>
       </aside>
 
-      <section className="diff-harness__surface">{surface}</section>
+      <section
+        className="diff-harness__surface"
+        data-testid="diff-harness-primary-surface"
+        style={
+          showSecondSurface
+            ? {
+                display: "grid",
+                gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)",
+                gap: 16
+              }
+            : undefined
+        }
+      >
+        {surface}
+        {showSecondSurface ? (
+          <section
+            className="diff-harness__surface"
+            data-testid="diff-harness-second-surface"
+            key="second-diff-surface"
+            style={{
+              display: "grid",
+              gridTemplateRows: "minmax(0, 1fr) auto",
+              minHeight: 0
+            }}
+          >
+            <DiffSurfaceApp onSurfaceMessage={recordSecondMessage} state={secondState} />
+            <ol data-testid="diff-harness-second-log">
+              {secondMessages.map((message, index) => (
+                <li key={`${message.kind}-${String(index)}`}>
+                  <code>{serializeSurfaceMessage(message)}</code>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+      </section>
     </main>
   );
 }

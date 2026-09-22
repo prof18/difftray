@@ -4,6 +4,7 @@ import { parseHostMessage, type DiffSurfaceHostMessage } from "./surface-bridge.
 import {
   createDiffSurfaceHarnessActions,
   createLargeFixturePatch,
+  createRangeFixtureShowFileMessage,
   harnessXssFixtureText
 } from "./surface-harness-fixtures.js";
 
@@ -13,9 +14,11 @@ describe("diff surface browser harness fixtures", () => {
     const expectedKinds = [
       "init",
       "init",
+      "init",
       "set_comments",
       "set_diff_mode",
       "set_draft",
+      "show_file",
       "show_file",
       "show_file"
     ] satisfies readonly DiffSurfaceHostMessage["kind"][];
@@ -49,6 +52,20 @@ describe("diff surface browser harness fixtures", () => {
       kind: "show_file",
       scrollTo: { line: 4_800, side: "additions" }
     });
+  });
+
+  it("creates a deterministic mixed range fixture with long wrapped text", () => {
+    const message = createRangeFixtureShowFileMessage();
+
+    expect(message).toMatchObject({
+      diffHash: "harness-range-fixture",
+      kind: "show_file",
+      path: "src/range-fixture.ts"
+    });
+    expect(message.patch).toContain("-  const legacyLabel");
+    expect(message.patch).toContain("+  const hostileLabel");
+    expect(message.patch).toContain(" // Keep this context line stable");
+    expect(message.newText).toContain("deliberately long replacement label");
   });
 
   it("creates a 5000-line fixture patch for manual browser performance checks", () => {

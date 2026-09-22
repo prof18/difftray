@@ -20,6 +20,17 @@ export const harnessXssFixtureText =
 export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAction[] {
   return [
     {
+      detail: "Apply the dark theme with wrapped unified lines.",
+      label: "Dark theme",
+      message: {
+        kind: "init",
+        diffMode: "unified",
+        showFileHeader: true,
+        theme: diffSurfaceThemeTokens("dark"),
+        wrapLines: true
+      }
+    },
+    {
       detail: "Apply light theme, unified mode, and line wrapping.",
       label: "Init",
       message: {
@@ -45,6 +56,12 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       detail: "Load the HTML escaping fixture with one persisted comment.",
       label: "Show file",
       message: createFixtureShowFileMessage()
+    },
+    {
+      detail:
+        "Load a mixed context, deletion, and addition range fixture with hostile wrapping.",
+      label: "Show range fixture",
+      message: createRangeFixtureShowFileMessage()
     },
     {
       detail: "Load the large fixture and reveal additions line 4800.",
@@ -94,6 +111,56 @@ export function createLargeFixtureShowFileAtLineMessage(): DiffSurfaceShowFileMe
     ...createLargeFixtureShowFileMessage(),
     diffHash: "harness-large-5000-scroll",
     scrollTo: { line: 4_800, side: "additions" }
+  };
+}
+
+export function createRangeFixtureShowFileMessage(): DiffSurfaceShowFileMessage {
+  const oldLines = [
+    "export function reviewRange(input: string): string {",
+    "  const normalized = input.trim();",
+    '  const legacyLabel = "legacy";',
+    "  return `${legacyLabel}: ${normalized}`;",
+    "}",
+    "",
+    "// Keep this context line stable for range navigation."
+  ];
+  const newLines = [
+    "export function reviewRange(input: string): string {",
+    "  const normalized = input.trim();",
+    "  const hostileLabel =",
+    '    "a deliberately long replacement label that wraps across narrow browser harness columns without changing its deterministic contents";',
+    "  return `${hostileLabel}: ${normalized}`;",
+    "}",
+    "",
+    "// Keep this context line stable for range navigation.",
+    "export const rangeFixtureReady = true;"
+  ];
+
+  return {
+    comments: [],
+    diffHash: "harness-range-fixture",
+    kind: "show_file",
+    newText: newLines.join("\n"),
+    oldText: oldLines.join("\n"),
+    patch: [
+      "diff --git a/src/range-fixture.ts b/src/range-fixture.ts",
+      "--- a/src/range-fixture.ts",
+      "+++ b/src/range-fixture.ts",
+      "@@ -1,7 +1,9 @@",
+      " export function reviewRange(input: string): string {",
+      "   const normalized = input.trim();",
+      '-  const legacyLabel = "legacy";',
+      "-  return `${legacyLabel}: ${normalized}`;",
+      "+  const hostileLabel =",
+      '+    "a deliberately long replacement label that wraps across narrow browser harness columns without changing its deterministic contents";',
+      "+  return `${hostileLabel}: ${normalized}`;",
+      " }",
+      " ",
+      " // Keep this context line stable for range navigation.",
+      "+export const rangeFixtureReady = true;"
+    ].join("\n"),
+    path: "src/range-fixture.ts",
+    status: "modified"
   };
 }
 

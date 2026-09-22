@@ -261,3 +261,21 @@ No commit or handoff should happen without running `./ci.sh`.
 
 `pnpm bench:performance` is a conditional gate, not part of `./ci.sh`. Run it
 for performance-sensitive work as described above.
+
+## Code range comments
+
+Run `pnpm --filter @difftray/companion-diff-surface test:browser` for mounted
+Pierre mouse and touch behavior. Touch cases use a touch-capable browser and CDP
+touch events, including scrolling from the gutter; programmatic callback calls
+are insufficient evidence. The local harness includes a mixed range fixture, a
+5,000-line fixture and an explicit independent second surface.
+
+Run `pnpm test:visual` for desktop reverse drag, no composer before release,
+typed-body preservation when changing endpoints, and range save/export. Use an
+isolated development profile for manual checks. Compare `pnpm bench:performance`
+before and after surface changes. Check both themes and narrow/wide viewports;
+confirm that the bottom action bar leaves the final line reachable.
+
+Native WebView runs should confirm immediate single-tap commenting, no keyboard
+on hold, scrolling while selecting, confirm/cancel and saved-comment editing.
+Browser tests prove internal gesture behavior; native layout trees alone do not.

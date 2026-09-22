@@ -408,7 +408,7 @@ async function findFreePort() {
 
 async function checkTouchComments(browser, url) {
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
+    viewport: { width: 710, height: 844 },
     hasTouch: true,
     isMobile: true
   });
@@ -423,6 +423,8 @@ async function checkTouchComments(browser, url) {
   await gutters.first().waitFor();
   const cdp = await context.newCDPSession(page);
   async function touch(locator, holdMs = 0) {
+    await locator.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(100);
     const box = await locator.boundingBox();
     assert(box, "Missing touch target");
     await cdp.send("Input.dispatchTouchEvent", {
@@ -474,6 +476,162 @@ async function checkTouchComments(browser, url) {
   await clear();
   await page.getByRole("button", { name: /Set draft/ }).click();
   assert((await selections()).length === 0, "Host highlight must not emit a selection");
+  await page.getByRole("button", { name: /Show file/ }).click();
+  await clear();
+  await touch(gutters.nth(3), 650);
+  await touch(gutters.first());
+  await page.getByRole("button", { name: "Comment", exact: true }).tap();
+  assert(
+    (await selections()).length === 1 &&
+      (await selections())[0].lineStart === 1 &&
+      (await selections())[0].lineEnd === 4,
+    "Reverse touch range must retain both endpoints"
+  );
+  await touch(gutters.first(), 650);
+  await page.getByRole("button", { name: /Set split mode/ }).click();
+  await page
+    .getByRole("button", { name: "Comment", exact: true })
+    .waitFor({ state: "detached" });
+  await touch(gutters.first(), 650);
+  await page.getByRole("button", { name: "Load 5k patch", exact: false }).last().click();
+  await page
+    .getByRole("button", { name: "Comment", exact: true })
+    .waitFor({ state: "detached" });
+  await clear();
+  const surface = page.locator(".diff-surface");
+  const largeGutters = page.locator(
+    ".diff-surface [data-additions] [data-column-number]"
+  );
+  await largeGutters.first().waitFor();
+  const touchAction = await largeGutters
+    .first()
+    .evaluate((node) => getComputedStyle(node).touchAction);
+  assert(
+    touchAction === "pan-y",
+    `Gutter touch action must allow vertical scroll: ${touchAction}`
+  );
+  await touch(largeGutters.first(), 650);
+  const startScroll = await surface.evaluate((node) => node.scrollTop);
+  const viewport = await surface.boundingBox();
+  assert(viewport, "Missing surface viewport");
+  const gutterBox = await largeGutters.nth(5).boundingBox();
+  assert(gutterBox, "Missing scrolling gutter");
+  const x = gutterBox.x + gutterBox.width / 2;
+  const y = Math.min(
+    viewport.y + viewport.height - 90,
+    gutterBox.y + gutterBox.height / 2
+  );
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y }]
+  });
+  for (let step = 1; step <= 8; step++) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x, y: y - step * 12 }]
+    });
+    await page.waitForTimeout(25);
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.waitForTimeout(250);
+  assert(
+    (await surface.evaluate((node) => node.scrollTop)) > startScroll,
+    "Gutter touch must scroll the surface"
+  );
+  assert((await selections()).length === 0, "Scroll must not open a comment");
+  assert(
+    (await page.getByRole("button", { name: "Comment", exact: true }).count()) === 1,
+    "Scroll must retain selected anchor"
+  );
+  await surface.evaluate((node) => {
+    node.scrollTop = 40000;
+  });
+  await page.waitForTimeout(250);
+  const visible = await largeGutters.evaluateAll(
+    (nodes, bounds) =>
+      nodes
+        .filter((node) => {
+          const r = node.getBoundingClientRect();
+          return r.top > bounds.y + 20 && r.bottom < bounds.y + bounds.height - 70;
+        })
+        .map((node) => node.getAttribute("data-column-number")),
+    viewport
+  );
+  assert(visible.length > 0, "No virtualized endpoint visible");
+  const endpoint = Number(visible[0]);
+  await touch(
+    page
+      .locator(`.diff-surface [data-additions] [data-column-number="${endpoint}"]`)
+      .first()
+  );
+  await surface.screenshot({ path: "/tmp/difftray-touch-range-narrow.png" });
+  await page.getByRole("button", { name: "Comment", exact: true }).tap();
+  assert(
+    (await selections()).length === 1 &&
+      (await selections())[0].lineStart === 1 &&
+      (await selections())[0].lineEnd === endpoint,
+    `Virtualized range must preserve original anchor: ${JSON.stringify({ endpoint, selected: await selections() })}`
+  );
+  await page.getByRole("button", { name: /Show range fixture/ }).click();
+  await clear();
+  const oldLine = (n) =>
+    page.locator(`.diff-surface [data-deletions] [data-column-number="${n}"]`).first();
+  const newLine = (n) =>
+    page.locator(`.diff-surface [data-additions] [data-column-number="${n}"]`).first();
+  await touch(oldLine(4), 650);
+  await touch(newLine(5));
+  assert((await selections()).length === 0, "Opposite side must not dispatch");
+  await touch(oldLine(1));
+  await page.getByRole("button", { name: "Comment", exact: true }).tap();
+  const oldRange = (await selections())[0];
+  assert(
+    oldRange.side === "deletions" && oldRange.lineStart === 1 && oldRange.lineEnd === 4,
+    "Split context must retain old-side range"
+  );
+  await clear();
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await page.getByTestId("show-second-surface").click();
+  const primary = page
+    .getByTestId("diff-harness-primary-surface")
+    .locator(".diff-surface")
+    .first();
+  const second = page.getByTestId("diff-harness-second-surface");
+  await touch(primary.locator('[data-additions] [data-column-number="1"]').first(), 650);
+  await touch(second.locator('[data-additions] [data-column-number="2"]').first());
+  assert(
+    (await selections()).length === 0,
+    "Second surface must not emit into first log"
+  );
+  assert(
+    (await page.getByTestId("diff-harness-second-log").locator("code").count()) === 1,
+    "Second surface must emit into its own log once"
+  );
+  await page.screenshot({ path: "/tmp/difftray-touch-range-multiple.png" });
+  await page.getByRole("button", { name: "Cancel", exact: true }).tap();
+  await page.getByTestId("show-second-surface").click();
+  await page.getByRole("button", { name: /Dark theme/ }).click();
+  await clear();
+  await touch(
+    page
+      .locator('.diff-surface [data-column-number="3"][data-line-type="change-addition"]')
+      .first(),
+    650
+  );
+  await touch(
+    page
+      .locator('.diff-surface [data-column-number="5"][data-line-type="change-addition"]')
+      .first()
+  );
+  await page
+    .locator(".diff-surface-frame")
+    .screenshot({ path: "/tmp/difftray-touch-range-dark-wide.png" });
+  await page.getByRole("button", { name: "Comment", exact: true }).tap();
+  assert(
+    (await selections()).length === 1 &&
+      (await selections())[0].lineStart === 3 &&
+      (await selections())[0].lineEnd === 5,
+    "Wrapped unified range must emit once"
+  );
   assert(errors.length === 0, `Touch browser errors: ${errors.join("; ")}`);
   await context.close();
 }

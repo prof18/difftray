@@ -65,6 +65,7 @@ function render(): void {
           onClearMessages={clearHarnessMessages}
           onSendHostMessage={sendHarnessMessage}
           outboundMessages={outboundMessages}
+          initialState={state}
           surface={surface}
         />
       ) : (

@@ -337,7 +337,26 @@ try {
   });
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
-  await clickDiffLineNumber(window, "additions", 3);
+  const dragStart = await window
+    .locator('[data-additions] [data-column-number="3"]')
+    .first()
+    .boundingBox();
+  const dragEnd = await window
+    .locator('[data-additions] [data-column-number="2"]')
+    .first()
+    .boundingBox();
+  if (!dragStart || !dragEnd) throw new Error("Missing review range gutters");
+  await window.mouse.move(
+    dragStart.x + dragStart.width / 2,
+    dragStart.y + dragStart.height / 2
+  );
+  await window.mouse.down();
+  await window.mouse.move(dragEnd.x + dragEnd.width / 2, dragEnd.y + dragEnd.height / 2, {
+    steps: 5
+  });
+  if (await window.locator('textarea[aria-label="Review comment"]').count())
+    throw new Error("Range composer opened before mouse release");
+  await window.mouse.up();
   const reviewCommentEditor = window.locator('textarea[aria-label="Review comment"]');
   const multilineReviewComment = "Please tighten the added line.\nKeep the context.";
   await reviewCommentEditor.fill("Please tighten the added line.");
@@ -346,7 +365,16 @@ try {
   if ((await reviewCommentEditor.inputValue()) !== multilineReviewComment) {
     throw new Error("Plain Enter did not add a review-comment line break.");
   }
-  await window.keyboard.press("Meta+Enter");
+  await clickDiffLineNumber(window, "additions", 1);
+  if ((await reviewCommentEditor.inputValue()) !== multilineReviewComment)
+    throw new Error("Click extension lost the typed body");
+  await clickDiffLineNumber(window, "additions", 2);
+  if ((await reviewCommentEditor.inputValue()) !== multilineReviewComment)
+    throw new Error("Endpoint adjustment lost the typed body");
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-comment-range-draft.png")
+  });
+  await reviewCommentEditor.press("Meta+Enter");
   const savedReviewComment = window.locator("p").filter({
     hasText: "Please tighten the added line."
   });
@@ -362,7 +390,7 @@ try {
   await expectClipboardReport(app, [
     "# Difftray Review Comments",
     "tracked.txt",
-    "New line 3",
+    "New lines 2-3",
     "Diff context:",
     "+ 3 after",
     "Please tighten the added line.",

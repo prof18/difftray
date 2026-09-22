@@ -488,8 +488,10 @@ function useSurfaceSelection(
       const owned = touch.current;
       if (
         owned &&
-        target?.side === owned.target.side &&
-        target.lineNumber === owned.target.lineNumber
+        target &&
+        ((event instanceof PointerEvent && event.pointerId === owned.id) ||
+          (target.side === owned.target.side &&
+            target.lineNumber === owned.target.lineNumber))
       ) {
         event.preventDefault();
         event.stopPropagation();
