@@ -13,7 +13,8 @@ import {
 } from "@pierre/diffs/react";
 import {
   Virtualizer as DiffsVirtualizer,
-  type OnDiffLineClickProps
+  type OnDiffLineClickProps,
+  type SelectedLineRange
 } from "@pierre/diffs";
 
 import styles from "./diff-surface.module.css";
@@ -38,6 +39,7 @@ import {
   commentSavePendingMatchesAnnotation,
   reviewCommentAnnotations,
   type CommentSavePending,
+  type CommentSelection,
   type ReviewCommentAnnotationMetadata,
   type ReviewCommentDraft
 } from "./review-comments.js";
@@ -90,7 +92,7 @@ export function DiffSurface({
     scrollKey: string,
     position: DiffScrollPosition
   ) => void;
-  readonly onStartComment: (side: ReviewCommentSide, lineNumber: number) => void;
+  readonly onStartComment: (selection: CommentSelection) => void;
   readonly onUpdateComment: (commentId: string, body: string) => Promise<boolean>;
   readonly patch: string;
   readonly pendingCommentSave: CommentSavePending | undefined;
@@ -132,6 +134,12 @@ export function DiffSurface({
         : undefined,
     [diffSideFocus, model]
   );
+  const selection = useCommentLineSelection(
+    refObject,
+    parseKey,
+    commentDraft,
+    onStartComment
+  );
   const fileDiffOptions = useMemo(
     () => ({
       ...createDiffsFileDiffOptions<ReviewCommentAnnotationMetadata>({
@@ -141,11 +149,9 @@ export function DiffSurface({
       }),
       enableLineSelection: true,
       lineHoverHighlight: "both" as const,
-      onLineNumberClick: (line: OnDiffLineClickProps) => {
-        onStartComment(line.annotationSide, line.lineNumber);
-      }
+      ...selection.options
     }),
-    [effectiveDiffMode, onStartComment, resolvedTheme, wrapLines]
+    [effectiveDiffMode, resolvedTheme, selection.options, wrapLines]
   );
   const lineAnnotations = useMemo(
     () =>
@@ -234,6 +240,7 @@ export function DiffSurface({
             lineAnnotations={lineAnnotations}
             metrics={diffsVirtualFileMetrics}
             options={fileDiffOptions}
+            selectedLines={selection.lines}
             renderAnnotation={(annotation) => (
               <ReviewCommentAnnotation
                 annotation={annotation}
@@ -776,4 +783,137 @@ function DiffFallback({
 
 function binaryPatch(patch: string): boolean {
   return /^Binary file changed /m.test(patch);
+}
+
+const commentSelectionMoveSlop = 10;
+
+type CommentPointerSession = {
+  pointerId: number;
+  x: number;
+  y: number;
+  moved: boolean;
+  active: boolean;
+  released: boolean;
+  suppressClick: boolean;
+};
+
+function useCommentLineSelection(
+  surfaceRef: React.RefObject<HTMLDivElement | null>,
+  fileKey: string,
+  draft: ReviewCommentDraft | undefined,
+  onSelect: (selection: CommentSelection) => void
+) {
+  const session = useRef<CommentPointerSession | undefined>(undefined);
+  const preview = useRef<SelectedLineRange | null>(null);
+  const [, renderPreview] = useState(0);
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    function cancel() {
+      if (session.current) {
+        session.current.active = false;
+        session.current.suppressClick = true;
+      }
+      preview.current = null;
+      renderPreview((value) => value + 1);
+    }
+    function down(event: PointerEvent) {
+      session.current = undefined;
+      if (
+        event.button !== 0 ||
+        !event
+          .composedPath()
+          .some(
+            (node) => node instanceof Element && node.hasAttribute("data-column-number")
+          )
+      )
+        return;
+      session.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        moved: false,
+        active: true,
+        released: false,
+        suppressClick: false
+      };
+    }
+    function move(event: PointerEvent) {
+      const current = session.current;
+      if (current?.active && current.pointerId === event.pointerId) {
+        current.moved ||=
+          Math.hypot(event.clientX - current.x, event.clientY - current.y) >
+          commentSelectionMoveSlop;
+      }
+    }
+    function up(event: PointerEvent) {
+      move(event);
+      if (session.current?.pointerId === event.pointerId) session.current.released = true;
+    }
+    surface.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", up, true);
+    document.addEventListener("pointercancel", cancel, true);
+    window.addEventListener("blur", cancel);
+    return () => {
+      session.current = undefined;
+      preview.current = null;
+      surface.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", up, true);
+      document.removeEventListener("pointercancel", cancel, true);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [fileKey, surfaceRef]);
+  const options = useMemo(() => {
+    function updatePreview(range: SelectedLineRange | null) {
+      if (!session.current?.active) return;
+      preview.current = range;
+      renderPreview((value) => value + 1);
+    }
+    return {
+      onLineSelectionStart: updatePreview,
+      onLineSelectionChange: updatePreview,
+      onLineSelectionEnd: (range: SelectedLineRange | null) => {
+        const current = session.current;
+        if (!current?.active || !current.released) return;
+        current.active = false;
+        preview.current = null;
+        const multiple = range !== null && range.start !== range.end;
+        const sameSide = range?.side && (!range.endSide || range.endSide === range.side);
+        current.suppressClick =
+          current.moved || multiple || Boolean(range?.endSide && !sameSide);
+        if (multiple && range.side && (!range.endSide || range.endSide === range.side)) {
+          onSelect({
+            kind: "range",
+            start: range.start,
+            end: range.end,
+            side: range.side
+          });
+        }
+        renderPreview((value) => value + 1);
+      },
+      onLineNumberClick: (line: OnDiffLineClickProps) => {
+        if (line.event.detail !== 0 && session.current?.suppressClick) return;
+        onSelect({
+          kind: "click",
+          start: line.lineNumber,
+          end: line.lineNumber,
+          side: line.annotationSide
+        });
+      }
+    };
+  }, [onSelect]);
+  return {
+    options,
+    lines: session.current?.active
+      ? preview.current
+      : draft
+        ? {
+            start: draft.lineStart,
+            end: draft.lineEnd,
+            side: draft.side
+          }
+        : null
+  };
 }

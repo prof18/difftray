@@ -77,6 +77,8 @@ import {
   commentCountsByPath,
   sameCommentSavePending,
   sortReviewComments,
+  updateCommentDraftSelection,
+  type CommentSelection,
   type CommentSavePending,
   type ReviewCommentDraft
 } from "./review-comments.js";
@@ -2979,19 +2981,21 @@ export function App(): React.JSX.Element {
     setWorkspace(nextWorkspace);
   }
 
-  function startComment(side: ReviewCommentSide, lineNumber: number): void {
-    if (!selectedFile?.diffLoaded) {
+  function startComment(selection: CommentSelection): void {
+    if (!selectedFile?.diffLoaded || commentSavePendingRef.current) {
       return;
     }
 
-    setCommentDraft({
-      body: "",
-      diffHash: selectedFile.diffHash,
-      lineEnd: lineNumber,
-      lineStart: lineNumber,
-      path: selectedFile.path,
-      side
-    });
+    setCommentDraft((draft) =>
+      updateCommentDraftSelection(
+        draft,
+        {
+          path: selectedFile.path,
+          diffHash: selectedFile.diffHash
+        },
+        selection
+      )
+    );
   }
 
   async function runWithCommentSavePending(

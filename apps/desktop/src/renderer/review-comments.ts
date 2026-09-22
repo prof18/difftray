@@ -1,6 +1,7 @@
 import type { DiffLineAnnotation } from "@pierre/diffs";
 
 export type ReviewCommentDraft = {
+  readonly anchorLine?: number;
   readonly body: string;
   readonly diffHash: string;
   readonly lineEnd: number;
@@ -8,6 +9,45 @@ export type ReviewCommentDraft = {
   readonly path: string;
   readonly side: ReviewCommentSide;
 };
+
+export type CommentSelection = {
+  readonly side: ReviewCommentSide;
+  readonly start: number;
+  readonly end: number;
+  readonly kind: "click" | "range";
+};
+
+export function updateCommentDraftSelection(
+  draft: ReviewCommentDraft | undefined,
+  identity: { readonly path: string; readonly diffHash: string },
+  selection: CommentSelection
+): ReviewCommentDraft {
+  const sameIdentity =
+    draft?.path === identity.path && draft.diffHash === identity.diffHash;
+
+  if (sameIdentity && draft.side !== selection.side) {
+    return draft;
+  }
+
+  const anchorLine =
+    selection.kind === "range"
+      ? selection.start
+      : sameIdentity
+        ? (draft.anchorLine ?? draft.lineStart)
+        : selection.start;
+  const lineStart = Math.min(anchorLine, selection.end);
+  const lineEnd = Math.max(anchorLine, selection.end);
+
+  return {
+    anchorLine,
+    body: sameIdentity ? draft.body : "",
+    diffHash: identity.diffHash,
+    lineEnd,
+    lineStart,
+    path: identity.path,
+    side: selection.side
+  };
+}
 
 export type CommentSavePending =
   | {

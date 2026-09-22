@@ -7,6 +7,8 @@ import {
   reviewCommentAnnotations,
   sameCommentSavePending,
   sortReviewComments,
+  updateCommentDraftSelection,
+  type CommentSelection,
   type CommentSavePending,
   type ReviewCommentDraft
 } from "./review-comments.js";
@@ -118,6 +120,71 @@ describe("review comment formatting and ordering", () => {
     ]);
   });
 });
+
+describe("updateCommentDraftSelection", () => {
+  const identity = { path: "src/App.tsx", diffHash: "hash-1" };
+
+  it("keeps the anchor and body across clicks, normalizing each range", () => {
+    let draft = updateCommentDraftSelection(
+      undefined,
+      identity,
+      selection("click", 10, 10)
+    );
+    draft = updateCommentDraftSelection(draft, identity, selection("click", 15, 15));
+    expect(draft).toMatchObject({ lineStart: 10, lineEnd: 15, anchorLine: 10, body: "" });
+    draft = { ...draft, body: "Keep me" };
+    draft = updateCommentDraftSelection(draft, identity, selection("click", 8, 8));
+    expect(draft).toMatchObject({
+      lineStart: 8,
+      lineEnd: 10,
+      anchorLine: 10,
+      body: "Keep me"
+    });
+  });
+
+  it("uses the raw range start as the anchor for subsequent clicks", () => {
+    let draft = updateCommentDraftSelection(
+      undefined,
+      identity,
+      selection("range", 15, 10)
+    );
+    expect(draft).toMatchObject({ lineStart: 10, lineEnd: 15, anchorLine: 15 });
+    draft = updateCommentDraftSelection(draft, identity, selection("click", 18, 18));
+    expect(draft).toMatchObject({ lineStart: 15, lineEnd: 18, anchorLine: 15 });
+  });
+
+  it("ignores opposite sides and starts fresh for a new identity", () => {
+    const draft = updateCommentDraftSelection(
+      { ...reviewDraft(), body: "Keep me", anchorLine: 10 },
+      identity,
+      selection("click", 12, 12, "deletions")
+    );
+    expect(draft.body).toBe("Keep me");
+    expect(draft.lineStart).toBe(3);
+    const fresh = updateCommentDraftSelection(
+      draft,
+      { ...identity, path: "other.ts" },
+      selection("click", 20, 20, "deletions")
+    );
+    expect(fresh).toMatchObject({
+      body: "",
+      path: "other.ts",
+      lineStart: 20,
+      lineEnd: 20,
+      side: "deletions",
+      anchorLine: 20
+    });
+  });
+});
+
+function selection(
+  kind: CommentSelection["kind"],
+  start: number,
+  end: number,
+  side: ReviewCommentSide = "additions"
+): CommentSelection {
+  return { kind, start, end, side };
+}
 
 function reviewDraft(patch: Partial<ReviewCommentDraft> = {}): ReviewCommentDraft {
   return {
