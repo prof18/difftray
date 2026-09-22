@@ -579,3 +579,49 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+
+.diff-surface-frame {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.diff-surface__range-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--diff-surface-bg);
+  color: var(--diff-surface-fg);
+  border-top: 1px solid var(--diff-surface-muted);
+  font:
+    14px "IBM Plex Sans",
+    sans-serif;
+}
+
+.diff-surface__range-actions span {
+  flex: 1;
+  min-width: 0;
+}
+.diff-surface__range-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  background: var(--diff-surface-bg);
+  color: var(--diff-surface-fg);
+  border: 1px solid var(--diff-surface-muted);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.diff-surface__range-actions button:first-of-type {
+  border-color: var(--diff-surface-accent);
+  color: var(--diff-surface-accent);
+}

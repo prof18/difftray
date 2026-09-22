@@ -214,6 +214,8 @@ try {
     `Large fixture scroll stalled for ${String(Math.round(scrollProbe.maxFrameDeltaMs))}ms`
   );
 
+  await checkTouchComments(browser, url);
+
   assert(
     browserErrors.length === 0,
     `Browser reported errors:\n${browserErrors.join("\n")}`
@@ -402,4 +404,76 @@ async function findFreePort() {
       });
     });
   });
+}
+
+async function checkTouchComments(browser, url) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(url);
+  await page.getByRole("button", { name: /Show file/ }).click();
+  const gutters = page.locator(
+    '.diff-surface [data-column-number][data-line-type="change-addition"]'
+  );
+  await gutters.first().waitFor();
+  const cdp = await context.newCDPSession(page);
+  async function touch(locator, holdMs = 0) {
+    const box = await locator.boundingBox();
+    assert(box, "Missing touch target");
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }]
+    });
+    if (holdMs) await page.waitForTimeout(holdMs);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(70);
+  }
+  async function clear() {
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
+  }
+  async function selections() {
+    return (await surfaceMessages(page)).filter((m) => m.kind === "line_selected");
+  }
+  await clear();
+  await touch(gutters.first());
+  assert(
+    (await selections()).length === 1,
+    "Short touch must emit one single-line comment"
+  );
+  assert(
+    (await page.getByRole("button", { name: "Comment", exact: true }).count()) === 0,
+    "Short tap must not show a range bar"
+  );
+  await clear();
+  await touch(gutters.first(), 650);
+  await page.getByRole("button", { name: "Comment", exact: true }).waitFor();
+  assert((await selections()).length === 0, "Hold must not open a composer");
+  await touch(gutters.nth(3));
+  assert((await selections()).length === 0, "Endpoint tap must not open a composer");
+  await page.getByRole("button", { name: "Comment", exact: true }).tap();
+  const selected = await selections();
+  assert(
+    selected.length === 1 && selected[0].lineStart === 1 && selected[0].lineEnd === 4,
+    "Confirm must emit one range 1–4"
+  );
+  await clear();
+  await touch(gutters.first(), 650);
+  await page.getByRole("button", { name: "Cancel", exact: true }).tap();
+  assert((await selections()).length === 0, "Cancel must emit nothing");
+  await touch(gutters.first(), 650);
+  await page.locator('[data-comment-id="harness-comment-1"]').tap();
+  assert(
+    (await page.getByRole("button", { name: "Comment", exact: true }).count()) === 0,
+    "Editing a saved comment must clear selection"
+  );
+  await clear();
+  await page.getByRole("button", { name: /Set draft/ }).click();
+  assert((await selections()).length === 0, "Host highlight must not emit a selection");
+  assert(errors.length === 0, `Touch browser errors: ${errors.join("; ")}`);
+  await context.close();
 }

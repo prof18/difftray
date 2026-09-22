@@ -70,6 +70,13 @@ export const surfaceVirtualFileMetrics = {
 } as const satisfies VirtualFileMetrics;
 
 const diffSurfaceUnsafeCSS = `
+[data-interactive-line-numbers] [data-column-number] {
+  touch-action: pan-y !important;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 :host {
   --diffs-font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --diffs-header-font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -212,7 +219,9 @@ export function createSurfacePierreRenderModel(
 export function createSurfaceFileDiffOptions<LAnnotation = undefined>({
   diffMode,
   onLineNumberClick,
-  onLineSelected,
+  onLineSelectionStart,
+  onLineSelectionChange,
+  onLineSelectionEnd,
   resolvedTheme,
   wrapLines
 }: {
@@ -221,7 +230,18 @@ export function createSurfaceFileDiffOptions<LAnnotation = undefined>({
     LAnnotation,
     undefined
   >["onLineNumberClick"];
-  readonly onLineSelected?: FileDiffOptions<LAnnotation, undefined>["onLineSelected"];
+  readonly onLineSelectionStart?: FileDiffOptions<
+    LAnnotation,
+    undefined
+  >["onLineSelectionStart"];
+  readonly onLineSelectionChange?: FileDiffOptions<
+    LAnnotation,
+    undefined
+  >["onLineSelectionChange"];
+  readonly onLineSelectionEnd?: FileDiffOptions<
+    LAnnotation,
+    undefined
+  >["onLineSelectionEnd"];
   readonly resolvedTheme: "dark" | "light";
   readonly wrapLines: boolean;
 }): FileDiffOptions<LAnnotation, undefined> {
@@ -239,7 +259,9 @@ export function createSurfaceFileDiffOptions<LAnnotation = undefined>({
     lineHoverHighlight: "both",
     maxLineDiffLength,
     ...(onLineNumberClick ? { onLineNumberClick } : {}),
-    ...(onLineSelected ? { onLineSelected } : {}),
+    ...(onLineSelectionStart ? { onLineSelectionStart } : {}),
+    ...(onLineSelectionChange ? { onLineSelectionChange } : {}),
+    ...(onLineSelectionEnd ? { onLineSelectionEnd } : {}),
     overflow: wrapLines ? "wrap" : "scroll",
     stickyHeader: false,
     theme: intellijIslandsDiffTheme,
