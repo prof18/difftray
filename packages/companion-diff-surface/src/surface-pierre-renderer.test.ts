@@ -3,6 +3,25 @@ import { describe, expect, it } from "vitest";
 import { createSurfaceFileDiffOptions } from "./surface-pierre-renderer.js";
 
 describe("surface Pierre renderer", () => {
+  it("gives changed-word highlights a high-contrast text color", () => {
+    const unsafeCSS = String(
+      createSurfaceFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark",
+        wrapLines: true
+      }).unsafeCSS
+    );
+
+    expect(unsafeCSS).toContain(
+      '[data-line-type="change-addition"] [data-diff-span] span {'
+    );
+    expect(unsafeCSS).toContain("  color: var(--diff-add-fg-strong, #d4f0d6);");
+    expect(unsafeCSS).toContain(
+      '[data-line-type="change-deletion"] [data-diff-span] span {'
+    );
+    expect(unsafeCSS).toContain("  color: var(--diff-del-fg-strong, #ffd0cb);");
+  });
+
   it("keeps horizontal diff scrollbars visible and easy to grab", () => {
     const options = createSurfaceFileDiffOptions({
       diffMode: "unified",

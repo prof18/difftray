@@ -97,14 +97,26 @@ const diffSurfaceUnsafeCSS = `
   --diffs-bg-selection-override: var(--diff-selection, #264f78);
   --diffs-bg-selection-number-override: var(--diff-selection, #264f78);
   --diffs-addition-color-override: var(--diff-add-fg, #73bd79);
-  --diffs-deletion-color-override: var(--diff-del-fg, #cd3131);
+  --diffs-deletion-color-override: var(--diff-del-fg, #ff7a70);
   --diffs-modified-color-override: var(--diff-modified-fg, #70aeff);
-  --diffs-bg-addition-override: var(--diff-add-bg, rgba(115, 189, 121, 0.14));
-  --diffs-bg-addition-emphasis-override: var(--diff-add-bg-strong, rgba(115, 189, 121, 0.24));
-  --diffs-bg-deletion-override: var(--diff-del-bg, rgba(205, 49, 49, 0.14));
-  --diffs-bg-deletion-emphasis-override: var(--diff-del-bg-strong, rgba(205, 49, 49, 0.24));
+  --diffs-bg-addition-override: var(--diff-add-bg, #73bd79);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-bg-strong, rgba(115, 189, 121, 0.18));
+  --diffs-bg-deletion-override: var(--diff-del-bg, #c6625b);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-bg-strong, rgba(255, 122, 112, 0.18));
   --diffs-gap-block: 6px;
   --diffs-gap-inline: 8px;
+}
+
+/* Syntax colors (a green string on a green highlight) wash out inside changed
+   words, so highlighted text uses a high-contrast shade of the change hue. */
+[data-line-type="change-addition"] [data-diff-span],
+[data-line-type="change-addition"] [data-diff-span] span {
+  color: var(--diff-add-fg-strong, #d4f0d6);
+}
+
+[data-line-type="change-deletion"] [data-diff-span],
+[data-line-type="change-deletion"] [data-diff-span] span {
+  color: var(--diff-del-fg-strong, #ffd0cb);
 }
 
 /* The theme provides a finished selection tint, not an accent to dilute to 18%. */

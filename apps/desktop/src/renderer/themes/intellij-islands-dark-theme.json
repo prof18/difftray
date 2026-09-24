@@ -23,7 +23,7 @@
     "method": "#BCBEC4",
     "macro": "#CF8E6D",
     "label": "#32B8AF",
-    "comment": "#7A7E85",
+    "comment": "#9498A0",
     "string": "#6AAB73",
     "keyword": "#CF8E6D",
     "number": "#2AACB8",
@@ -387,7 +387,7 @@
       "name": "Comments",
       "scope": ["comment", "punctuation.definition.comment"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -400,7 +400,7 @@
         "comment.block.documentation.js"
       ],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -770,7 +770,7 @@
       "name": "XML - Comments",
       "scope": ["comment.block.xml"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -1175,14 +1175,14 @@
         "comment.block.ts"
       ],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "JavaScript/TypeScript - JSDoc",
       "scope": ["comment.block.documentation.js", "comment.block.documentation.ts"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -1357,14 +1357,14 @@
       "name": "Kotlin - Comments",
       "scope": ["comment.line.double-slash.kotlin", "comment.block.kotlin"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Kotlin - KDoc",
       "scope": ["comment.block.documentation.kotlin"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -1501,14 +1501,14 @@
       "name": "Markdown - Code Language",
       "scope": ["fenced_code.block.language.markdown"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Markdown - Blockquotes",
       "scope": ["markup.quote.markdown", "punctuation.definition.quote.begin.markdown"],
       "settings": {
-        "foreground": "#7A7E85",
+        "foreground": "#9498A0",
         "fontStyle": "italic"
       }
     },
@@ -1523,7 +1523,7 @@
       "name": "Markdown - Strikethrough",
       "scope": ["markup.strikethrough.markdown"],
       "settings": {
-        "foreground": "#7A7E85",
+        "foreground": "#9498A0",
         "fontStyle": "strikethrough"
       }
     },
@@ -1601,7 +1601,7 @@
       "name": "YAML - Comments",
       "scope": ["comment.line.number-sign.yaml"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -1665,7 +1665,7 @@
       "name": "SQL - Comments",
       "scope": ["comment.line.double-dash.sql", "comment.block.sql"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -1718,7 +1718,7 @@
       "name": "Dockerfile - Comments",
       "scope": ["comment.line.number-sign.dockerfile"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -1803,14 +1803,14 @@
       "name": "Groovy - Comments",
       "scope": ["comment.line.double-slash.groovy", "comment.block.groovy"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Groovy - GroovyDoc",
       "scope": ["comment.block.documentation.groovy"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -1838,7 +1838,7 @@
       "name": "Properties - Comments",
       "scope": ["comment.line.number-sign.properties", "comment.line.hash.properties"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -1908,7 +1908,7 @@
       "name": "Shell/Bash - Comments",
       "scope": ["comment.line.number-sign.shell"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2009,14 +2009,14 @@
       "name": "Python - Comments",
       "scope": ["comment.line.number-sign.python"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Python - Docstrings",
       "scope": ["string.quoted.docstring.multi.python"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2077,7 +2077,7 @@
       "name": "Go - Comments",
       "scope": ["comment.line.double-slash.go", "comment.block.go"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2165,14 +2165,14 @@
       "name": "Rust - Comments",
       "scope": ["comment.line.double-slash.rust", "comment.block.rust"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Rust - Doc Comments",
       "scope": ["comment.block.documentation.rust", "comment.line.documentation.rust"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2280,14 +2280,14 @@
         "comment.block.cpp"
       ],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "C/C++ - Doc Comments",
       "scope": ["comment.block.documentation.c", "comment.block.documentation.cpp"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2367,14 +2367,14 @@
       "name": "C# - Comments",
       "scope": ["comment.line.double-slash.csharp", "comment.block.csharp"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "C# - XML Doc Comments",
       "scope": ["comment.block.documentation.csharp"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2442,14 +2442,14 @@
       "name": "PHP - Comments",
       "scope": ["comment.line.double-slash.php", "comment.block.php"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "PHP - PHPDoc",
       "scope": ["comment.block.documentation.phpdoc.php"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2526,14 +2526,14 @@
       "name": "Ruby - Comments",
       "scope": ["comment.line.number-sign.ruby", "comment.block.ruby"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
       "name": "Ruby - RDoc",
       "scope": ["comment.block.documentation.ruby"],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2589,7 +2589,7 @@
       "name": "JSON - Comments",
       "scope": ["comment.line.double-slash.json", "comment.block.json"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2635,7 +2635,7 @@
       "name": "TOML - Comments",
       "scope": ["comment.line.number-sign.toml"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2663,7 +2663,7 @@
       "name": "INI - Comments",
       "scope": ["comment.line.semicolon.ini", "comment.line.number-sign.ini"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2691,7 +2691,7 @@
       "name": "Make - Comments",
       "scope": ["comment.line.number-sign.makefile"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2768,7 +2768,7 @@
       "name": "GraphQL - Comments",
       "scope": ["comment.line.graphql"],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {
@@ -2898,7 +2898,7 @@
         "comment.block.javadoc.java punctuation.definition.comment.java"
       ],
       "settings": {
-        "foreground": "#5F826B",
+        "foreground": "#7FA88F",
         "fontStyle": "italic"
       }
     },
@@ -2911,7 +2911,7 @@
         "comment.block.documentation.java"
       ],
       "settings": {
-        "foreground": "#7A7E85"
+        "foreground": "#9498A0"
       }
     },
     {

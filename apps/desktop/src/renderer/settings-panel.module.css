@@ -152,7 +152,7 @@
 }
 
 .sectionLabel {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -534,7 +534,7 @@
 
 .companionEyebrow,
 .companionDevicesHeader {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -670,7 +670,7 @@
 
 .companionOnboardingLabel {
   margin-bottom: 11px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;

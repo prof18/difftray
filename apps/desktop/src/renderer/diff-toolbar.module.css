@@ -86,7 +86,7 @@
 .fileDir,
 .diffDir {
   overflow: hidden;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
   text-overflow: ellipsis;

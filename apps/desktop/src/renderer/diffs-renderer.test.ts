@@ -55,6 +55,25 @@ describe("createDiffsFileDiffOptions", () => {
     });
   });
 
+  it("gives changed-word highlights a high-contrast text color", () => {
+    const unsafeCSS = String(
+      createDiffsFileDiffOptions({
+        diffMode: "split",
+        resolvedTheme: "dark",
+        wrapLines: true
+      }).unsafeCSS
+    );
+
+    expect(unsafeCSS).toContain(
+      '[data-line-type="change-addition"] [data-diff-span] span {'
+    );
+    expect(unsafeCSS).toContain("  color: var(--diff-add-fg-strong, #d4f0d6);");
+    expect(unsafeCSS).toContain(
+      '[data-line-type="change-deletion"] [data-diff-span] span {'
+    );
+    expect(unsafeCSS).toContain("  color: var(--diff-del-fg-strong, #ffd0cb);");
+  });
+
   it("uses horizontal scrolling when line wrapping is disabled", () => {
     const options = createDiffsFileDiffOptions({
       diffMode: "split",
