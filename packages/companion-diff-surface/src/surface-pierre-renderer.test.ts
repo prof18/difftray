@@ -22,7 +22,7 @@ describe("surface Pierre renderer", () => {
     expect(unsafeCSS).toContain("  color: var(--diff-del-fg-strong, #ffd0cb);");
   });
 
-  it("keeps horizontal diff scrollbars visible and easy to grab", () => {
+  it("hides horizontal diff scrollbars", () => {
     const options = createSurfaceFileDiffOptions({
       diffMode: "unified",
       resolvedTheme: "light",
@@ -33,26 +33,11 @@ describe("surface Pierre renderer", () => {
 
     const unsafeCSS = String(options.unsafeCSS);
 
-    expect(unsafeCSS).toContain("--diffs-scrollbar-gutter: 12px;");
+    expect(unsafeCSS).toContain("--diffs-scrollbar-gutter: 0px;");
+    expect(unsafeCSS).toContain("  scrollbar-width: none;");
     expect(unsafeCSS).toContain(
       '[data-overflow="scroll"] [data-code]::-webkit-scrollbar {'
     );
-    expect(unsafeCSS).toContain("  height: 12px;");
-    expect(unsafeCSS).toContain(
-      '[data-overflow="scroll"] [data-code]::-webkit-scrollbar-track {'
-    );
-    expect(unsafeCSS).toContain(
-      '[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb {'
-    );
-    expect(unsafeCSS).toContain("  min-width: 44px;");
-    expect(unsafeCSS).toContain(
-      '[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb:hover {'
-    );
-    expect(unsafeCSS).toContain(
-      '[data-overflow="scroll"] [data-code]::-webkit-scrollbar-thumb:active {'
-    );
-    expect(unsafeCSS).toContain("@supports (-moz-appearance: none)");
-    expect(unsafeCSS).toContain("  scrollbar-color:");
-    expect(unsafeCSS).toContain("  scrollbar-width: auto;");
+    expect(unsafeCSS).toContain("  height: 0;");
   });
 });
