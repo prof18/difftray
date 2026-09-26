@@ -147,7 +147,8 @@ import {
 } from "./companion/server-name.js";
 import {
   CompanionLifecycleController,
-  CompanionWorkspaceChangeBroadcaster
+  CompanionWorkspaceChangeBroadcaster,
+  type CompanionDiscoveryState
 } from "./companion/lifecycle.js";
 import { CompanionProjectList } from "./companion/project-list.js";
 import { createCompanionServer } from "./companion/server.js";
@@ -218,6 +219,8 @@ const bootProjectPath = process.env.DIFFTRAY_BOOT_PROJECT;
 const projectWatchersEnabled = process.env.DIFFTRAY_ENABLE_PROJECT_WATCHERS === "1";
 const userDataPath = process.env.DIFFTRAY_USER_DATA_DIR;
 const importProductionStorage = process.argv.includes("--import-production-storage");
+const macLocalNetworkSettingsUrl =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork";
 const windowPresentationMode = resolveWindowPresentationMode(
   process.env.DIFFTRAY_WINDOW_PRESENTATION
 );
@@ -272,10 +275,16 @@ type CompanionPairingStateView = {
   readonly qrPayload: PairingQrPayload;
 };
 
+type CompanionDiscoveryStateView = Exclude<
+  CompanionDiscoveryState,
+  { readonly status: "stopped" }
+>;
+
 type CompanionStateView = {
   readonly activePairing: CompanionPairingStateView | null;
   readonly addresses: readonly CompanionAddressView[];
   readonly devices: readonly CompanionDeviceView[];
+  readonly discovery?: CompanionDiscoveryStateView;
   readonly enabled: boolean;
   readonly errorMessage?: string;
   readonly pendingPairRequests: readonly PendingPairRequestView[];
@@ -694,6 +703,9 @@ handleTrusted(
     return companionStateView();
   }
 );
+handleTrusted("companion:openLocalNetworkSettings", async (): Promise<void> => {
+  await shell.openExternal(macLocalNetworkSettingsUrl);
+});
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
 handleTrusted("projects:listKnown", () =>
   getStorage()
@@ -1690,6 +1702,7 @@ function getCompanionLifecycleController(): CompanionLifecycleController {
 
   companionLifecycleController = new CompanionLifecycleController({
     createServer: () => createCompanionServer(createDesktopCompanionDeps()),
+    onDiscoveryStateChanged: emitCompanionStateChanged,
     serverIdentity: companionServerIdentity
   });
 
@@ -1754,6 +1767,7 @@ function companionStateView(): CompanionStateView {
       enabled: false,
       status: "stopped"
     } as const);
+  const discoveryState = getCompanionLifecycleController().discoveryState;
   const port = lifecycleState.status === "running" ? lifecycleState.port : undefined;
   const addresses = port ? companionAddressViews(port) : [];
   const activeSession =
@@ -1766,6 +1780,7 @@ function companionStateView(): CompanionStateView {
     devices: activeCompanionDeviceRecords(getStorage().listCompanionDevices()).map(
       companionDeviceView
     ),
+    ...(discoveryState.status === "stopped" ? {} : { discovery: discoveryState }),
     enabled: settings.companionEnabled,
     ...(lifecycleState.status === "error"
       ? { errorMessage: lifecycleState.errorMessage }

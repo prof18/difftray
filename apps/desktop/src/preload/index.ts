@@ -116,6 +116,7 @@ export type DifftrayApi = {
   ) => Promise<MarkReviewedResult>;
   readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
   readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
+  readonly openLocalNetworkSettings: () => Promise<void>;
   readonly openProjectInFinder: (projectId: string) => Promise<void>;
   readonly setSelectedFileAvailable: (available: boolean) => Promise<void>;
   readonly showFileInFinder: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
@@ -219,10 +220,25 @@ export type CompanionPendingPairRequestView = {
   readonly platform: "android" | "ios";
 };
 
+export type CompanionDiscoveryStateView =
+  | { readonly status: "starting"; readonly name: string }
+  | { readonly status: "advertising"; readonly name: string }
+  | {
+      readonly status: "blocked";
+      readonly name: string;
+      readonly errorCode: string;
+    }
+  | {
+      readonly status: "failed";
+      readonly name: string;
+      readonly errorCode: string;
+    };
+
 export type CompanionStateView = {
   readonly activePairing: CompanionPairingStateView | null;
   readonly addresses: readonly CompanionAddressView[];
   readonly devices: readonly CompanionDeviceView[];
+  readonly discovery?: CompanionDiscoveryStateView;
   readonly enabled: boolean;
   readonly errorMessage?: string;
   readonly pendingPairRequests: readonly CompanionPendingPairRequestView[];
@@ -807,6 +823,8 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("files:openInEditor", input) as Promise<OpenFileResult>,
   openCompanionStore: async (store) =>
     ipcRenderer.invoke("external:openStore", store) as Promise<void>,
+  openLocalNetworkSettings: async () =>
+    ipcRenderer.invoke("companion:openLocalNetworkSettings") as Promise<void>,
   openProjectInFinder: async (projectId) =>
     ipcRenderer.invoke("projects:openInFinder", { projectId }) as Promise<void>,
   setSelectedFileAvailable: async (available) =>

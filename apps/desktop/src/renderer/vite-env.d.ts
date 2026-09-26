@@ -84,6 +84,7 @@ declare global {
     ) => Promise<MarkReviewedResult>;
     readonly openFileInEditor: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
     readonly openCompanionStore: (store: CompanionStore) => Promise<void>;
+    readonly openLocalNetworkSettings: () => Promise<void>;
     readonly openProjectInFinder: (projectId: string) => Promise<void>;
     readonly setSelectedFileAvailable: (available: boolean) => Promise<void>;
     readonly showFileInFinder: (input: OpenFileInEditorInput) => Promise<OpenFileResult>;
@@ -202,10 +203,25 @@ declare global {
     readonly platform: "android" | "ios";
   };
 
+  type CompanionDiscoveryStateView =
+    | { readonly status: "starting"; readonly name: string }
+    | { readonly status: "advertising"; readonly name: string }
+    | {
+        readonly status: "blocked";
+        readonly name: string;
+        readonly errorCode: string;
+      }
+    | {
+        readonly status: "failed";
+        readonly name: string;
+        readonly errorCode: string;
+      };
+
   type CompanionStateView = {
     readonly activePairing: CompanionPairingStateView | null;
     readonly addresses: readonly CompanionAddressView[];
     readonly devices: readonly CompanionDeviceView[];
+    readonly discovery?: CompanionDiscoveryStateView;
     readonly enabled: boolean;
     readonly errorMessage?: string;
     readonly pendingPairRequests: readonly CompanionPendingPairRequestView[];

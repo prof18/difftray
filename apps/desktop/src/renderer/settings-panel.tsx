@@ -217,6 +217,7 @@ export function SettingsPanel({
                     onRevokeDevice={onRevokeCompanionDevice}
                     onStartPairing={onStartCompanionPairing}
                     onToggle={onToggleCompanion}
+                    platform={platform}
                   />
                 ) : null}
               </div>
@@ -515,7 +516,8 @@ function CompanionSettingsSection({
   onRespondToPairRequest,
   onRevokeDevice,
   onStartPairing,
-  onToggle
+  onToggle,
+  platform
 }: {
   readonly appSettings: AppSettingsView;
   readonly companionState: CompanionStateView;
@@ -524,6 +526,7 @@ function CompanionSettingsSection({
   readonly onRevokeDevice: (id: string) => void;
   readonly onStartPairing: () => void;
   readonly onToggle: (enabled: boolean) => void;
+  readonly platform: string;
 }): React.JSX.Element {
   const enabled = appSettings.companionEnabled;
   const companionAddresses = companionAddressLabels(companionState.addresses);
@@ -588,6 +591,35 @@ function CompanionSettingsSection({
               Pair new device
             </button>
           </div>
+          {companionState.status === "running" && companionState.discovery ? (
+            <div className={styles.companionStatusRow}>
+              <div>
+                <div className={styles.companionEyebrow}>Discovery</div>
+                <div className={styles.companionStatusLabel}>
+                  {companionDiscoveryLabel(companionState.discovery)}
+                </div>
+                {companionState.discovery.status === "advertising" ? (
+                  <div className={styles.companionDescription}>
+                    {companionState.discovery.name}
+                  </div>
+                ) : null}
+              </div>
+              {(companionState.discovery.status === "blocked" ||
+                companionState.discovery.status === "failed") &&
+              platform === "darwin" ? (
+                <button
+                  className={styles.secondaryButton}
+                  disabled={disabled}
+                  onClick={() => {
+                    void window.difftray.openLocalNetworkSettings();
+                  }}
+                  type="button"
+                >
+                  Open Local Network settings
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {companionState.pendingPairRequests.length > 0 ? (
             <div className={styles.companionStack}>
               {companionState.pendingPairRequests.map((request) => (
@@ -1160,6 +1192,19 @@ function companionStatusLabel(state: CompanionStateView): string {
   }
 
   return "Server stopped";
+}
+
+function companionDiscoveryLabel(state: CompanionDiscoveryStateView): string {
+  switch (state.status) {
+    case "advertising":
+      return "Visible on the local network";
+    case "blocked":
+      return "Not visible on the local network. Local Network access may be off for this app.";
+    case "failed":
+      return "Not visible on the local network.";
+    case "starting":
+      return "Starting…";
+  }
 }
 
 function companionPlatformLabel(platform: string): string {

@@ -494,6 +494,106 @@ describe("SettingsPanel", () => {
     expect(companion.textContent).not.toContain("Pair new device");
   });
 
+  it.each([
+    {
+      discovery: { name: "Marco’s MacBook (Alpha)", status: "advertising" } as const,
+      text: "Visible on the local network"
+    },
+    {
+      discovery: {
+        errorCode: "local_network_probe",
+        name: "Marco’s MacBook (Alpha)",
+        status: "blocked"
+      } as const,
+      text: "Not visible on the local network. Local Network access may be off for this app."
+    },
+    {
+      discovery: {
+        errorCode: "not_published",
+        name: "Marco’s MacBook (Alpha)",
+        status: "failed"
+      } as const,
+      text: "Not visible on the local network."
+    },
+    {
+      discovery: { name: "Marco’s MacBook (Alpha)", status: "starting" } as const,
+      text: "Starting…"
+    }
+  ])("shows $discovery.status companion discovery state", ({ discovery, text }) => {
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        discovery,
+        enabled: true,
+        port: 48620,
+        status: "running"
+      })
+    });
+
+    expect(companion.textContent).toContain("Discovery");
+    expect(companion.textContent).toContain(text);
+    if (discovery.status === "advertising") {
+      expect(companion.textContent).toContain("Marco’s MacBook (Alpha)");
+    }
+  });
+
+  it("opens Local Network settings for blocked discovery on macOS", () => {
+    const openLocalNetworkSettings = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const originalDifftray = window.difftray;
+    Object.defineProperty(window, "difftray", {
+      configurable: true,
+      value: { openLocalNetworkSettings }
+    });
+
+    try {
+      const companion = renderSettingsPage("companion", {
+        appSettings: appSettings({ companionEnabled: true }),
+        companionState: companionState({
+          discovery: {
+            errorCode: "local_network_probe",
+            name: "Marco’s MacBook (Alpha)",
+            status: "blocked"
+          },
+          enabled: true,
+          port: 48620,
+          status: "running"
+        }),
+        platform: "darwin"
+      });
+      const button = [...companion.querySelectorAll<HTMLButtonElement>("button")].find(
+        (candidate) => candidate.textContent.trim() === "Open Local Network settings"
+      );
+
+      expect(button).toBeDefined();
+      act(() => button?.click());
+      expect(openLocalNetworkSettings).toHaveBeenCalledOnce();
+    } finally {
+      Object.defineProperty(window, "difftray", {
+        configurable: true,
+        value: originalDifftray
+      });
+    }
+  });
+
+  it("does not offer Local Network settings outside macOS", () => {
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({
+        discovery: {
+          errorCode: "local_network_probe",
+          name: "Linux workstation (Alpha)",
+          status: "blocked"
+        },
+        enabled: true,
+        port: 48620,
+        status: "running"
+      }),
+      platform: "linux"
+    });
+
+    expect(companion.textContent).not.toContain("Open Local Network settings");
+  });
+
   it("teaches first-time users how to install and pair the companion app", () => {
     const companion = renderSettingsPage("companion", {
       appSettings: appSettings({ companionEnabled: true }),

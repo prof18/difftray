@@ -10,16 +10,22 @@ import {
   CompanionWorkspaceChangeBroadcaster,
   companionAdvertisementServiceConfig,
   type CompanionAdvertisementInput,
-  type CompanionAdvertiser
+  type CompanionAdvertiser,
+  type CompanionDiscoveryState
 } from "./lifecycle.js";
 import type { CompanionServer } from "./server.js";
 
 describe("CompanionLifecycleController", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("starts the server and advertises mDNS when enabled", async () => {
     const server = fakeServer({ port: 48620 });
     const advertisements: CompanionAdvertisementInput[] = [];
     const advertiser = fakeAdvertiser(advertisements);
     const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
       createAdvertiser: () => advertiser,
       createServer: () => server,
       serverIdentity: () => serverIdentity
@@ -35,11 +41,14 @@ describe("CompanionLifecycleController", () => {
         serverName: "Integration Mac"
       }
     ]);
-    expect(advertiser.publish).toHaveBeenCalledWith({
-      port: 48620,
-      serverId: "server-id",
-      serverName: "Integration Mac"
-    });
+    expect(advertiser.publish).toHaveBeenCalledWith(
+      {
+        port: 48620,
+        serverId: "server-id",
+        serverName: "Integration Mac"
+      },
+      expect.any(Function)
+    );
     expect(controller.state).toEqual({
       enabled: true,
       port: 48620,
@@ -59,6 +68,7 @@ describe("CompanionLifecycleController", () => {
       companionPort: 48620
     });
     const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
       createAdvertiser: () => fakeAdvertiser(advertisements),
       createServer: () => {
         const server = servers.shift();
@@ -93,6 +103,7 @@ describe("CompanionLifecycleController", () => {
     const advertiser = fakeAdvertiser([], advertisement);
     const server = fakeServer({ port: 48620 });
     const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
       createAdvertiser: () => advertiser,
       createServer: () => server,
       serverIdentity: () => serverIdentity
@@ -111,9 +122,38 @@ describe("CompanionLifecycleController", () => {
     });
   });
 
+  it("stays stopped when disabled during the initial discovery probe", async () => {
+    let resolveProbe: (result: "allowed") => void = () => {
+      throw new Error("Probe resolver was not initialized");
+    };
+    const probe = new Promise<"allowed">((resolve) => {
+      resolveProbe = resolve;
+    });
+    const probeLocalNetwork = vi.fn(() => probe);
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => fakeAdvertiser([]),
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      probeLocalNetwork,
+      serverIdentity: () => serverIdentity
+    });
+
+    const startup = controller.applySettings(settings({ companionEnabled: true }));
+    await vi.waitFor(() => expect(probeLocalNetwork).toHaveBeenCalledOnce());
+    await controller.applySettings(settings({ companionEnabled: false }));
+    resolveProbe("allowed");
+    await startup;
+
+    expect(controller.state).toEqual({
+      enabled: false,
+      status: "stopped"
+    });
+  });
+
   it("disconnects a revoked device from the active server", async () => {
     const server = fakeServer({ port: 48620 });
     const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
       createAdvertiser: () => fakeAdvertiser([]),
       createServer: () => server,
       serverIdentity: () => serverIdentity
@@ -135,6 +175,7 @@ describe("CompanionLifecycleController", () => {
       })
     );
     const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
       createAdvertiser: () => fakeAdvertiser([]),
       createServer: () => {
         const server = servers.shift();
@@ -155,6 +196,230 @@ describe("CompanionLifecycleController", () => {
       errorMessage: "No companion port is available in 48620-48629.",
       status: "error"
     });
+  });
+
+  it("probes local network access before publishing", async () => {
+    const order: string[] = [];
+    const advertiser = fakeAdvertiser([]);
+    advertiser.publish.mockImplementation((input, onState) => {
+      order.push("publish");
+      onState({ status: "starting", name: input.serverName });
+      return { stop: vi.fn() };
+    });
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => advertiser,
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      probeLocalNetwork: vi.fn(async () => {
+        order.push("probe");
+        return "allowed" as const;
+      }),
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+
+    expect(order).toEqual(["probe", "publish"]);
+  });
+
+  it("reports a blocked probe and retries publication on the next interval", async () => {
+    vi.useFakeTimers();
+    const states: CompanionDiscoveryState[] = [];
+    const advertiser = fakeAdvertiser([]);
+    const probeLocalNetwork = vi
+      .fn<() => Promise<"allowed" | "blocked">>()
+      .mockResolvedValueOnce("blocked")
+      .mockResolvedValueOnce("allowed");
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => advertiser,
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      onDiscoveryStateChanged: (state) => states.push(state),
+      probeLocalNetwork,
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+
+    expect(controller.discoveryState).toEqual({
+      status: "blocked",
+      name: "Integration Mac",
+      errorCode: "local_network_probe"
+    });
+    expect(advertiser.publish).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(advertiser.publish).toHaveBeenCalledOnce();
+    expect(states).toContainEqual({
+      status: "blocked",
+      name: "Integration Mac",
+      errorCode: "local_network_probe"
+    });
+  });
+
+  it("detects permission revocation while advertising", async () => {
+    vi.useFakeTimers();
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const states: CompanionDiscoveryState[] = [];
+    const probeLocalNetwork = vi
+      .fn<() => Promise<"allowed" | "blocked">>()
+      .mockResolvedValueOnce("allowed")
+      .mockResolvedValueOnce("blocked");
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => fakeAdvertiser([], undefined, callbacks),
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      onDiscoveryStateChanged: (state) => states.push(state),
+      probeLocalNetwork,
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({ status: "advertising", name: "Integration Mac" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(controller.discoveryState).toEqual({
+      status: "blocked",
+      name: "Integration Mac",
+      errorCode: "local_network_probe"
+    });
+    expect(states.at(-1)).toEqual(controller.discoveryState);
+  });
+
+  it("discards an in-flight republish when stopped", async () => {
+    vi.useFakeTimers();
+    let resolveRepublishProbe: ((result: "allowed") => void) | undefined;
+    const republishProbe = new Promise<"allowed">((resolve) => {
+      resolveRepublishProbe = resolve;
+    });
+    const probeLocalNetwork = vi
+      .fn<() => Promise<"allowed">>()
+      .mockResolvedValueOnce("allowed")
+      .mockImplementationOnce(() => republishProbe);
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const initialAdvertiser = fakeAdvertiser([], undefined, callbacks);
+    const newAdvertiser = fakeAdvertiser([]);
+    const advertisers = [initialAdvertiser, newAdvertiser];
+    const states: CompanionDiscoveryState[] = [];
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => advertisers.shift() ?? fakeAdvertiser([]),
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      onDiscoveryStateChanged: (state) => states.push(state),
+      probeLocalNetwork,
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({
+      status: "blocked",
+      name: "Integration Mac",
+      errorCode: "EHOSTUNREACH"
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await controller.stop();
+    resolveRepublishProbe?.("allowed");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(newAdvertiser.destroy).toHaveBeenCalledOnce();
+    expect(states.at(-1)).toEqual({ status: "stopped" });
+  });
+
+  it("keeps advertising when network addresses are unchanged", async () => {
+    vi.useFakeTimers();
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const createAdvertiser = vi.fn(() => fakeAdvertiser([], undefined, callbacks));
+    const controller = new CompanionLifecycleController({
+      createAdvertiser,
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      probeLocalNetwork: async () => "allowed",
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({ status: "advertising", name: "Integration Mac" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(createAdvertiser).toHaveBeenCalledOnce();
+  });
+
+  it("re-advertises when network addresses change", async () => {
+    vi.useFakeTimers();
+    let addresses: readonly string[] = ["192.0.2.1"];
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const createAdvertiser = vi.fn(() => fakeAdvertiser([], undefined, callbacks));
+    const controller = new CompanionLifecycleController({
+      createAdvertiser,
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => addresses,
+      probeLocalNetwork: async () => "allowed",
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({ status: "advertising", name: "Integration Mac" });
+    addresses = ["198.51.100.2"];
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(createAdvertiser).toHaveBeenCalledTimes(2);
+  });
+
+  it("increments the Bonjour name after silent publication failures", async () => {
+    vi.useFakeTimers();
+    const advertisements: CompanionAdvertisementInput[] = [];
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const controller = new CompanionLifecycleController({
+      createAdvertiser: () => fakeAdvertiser(advertisements, undefined, callbacks),
+      createServer: () => fakeServer({ port: 48620 }),
+      listNetworkAddresses: () => ["192.0.2.1"],
+      probeLocalNetwork: async () => "allowed",
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({
+      status: "failed",
+      name: "Integration Mac",
+      errorCode: "not_published"
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    callbacks[1]?.({
+      status: "failed",
+      name: "Integration Mac (2)",
+      errorCode: "not_published"
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(advertisements.map((advertisement) => advertisement.serverName)).toEqual([
+      "Integration Mac",
+      "Integration Mac (2)",
+      "Integration Mac (3)"
+    ]);
+  });
+
+  it("clears discovery polling and reports stopped", async () => {
+    vi.useFakeTimers();
+    const states: CompanionDiscoveryState[] = [];
+    const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
+      createAdvertiser: () => fakeAdvertiser([]),
+      createServer: () => fakeServer({ port: 48620 }),
+      onDiscoveryStateChanged: (state) => states.push(state),
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    expect(vi.getTimerCount()).toBe(1);
+
+    await controller.stop();
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(controller.discoveryState).toEqual({ status: "stopped" });
+    expect(states.at(-1)).toEqual({ status: "stopped" });
   });
 
   it("builds the protocol mDNS service config", () => {
@@ -228,6 +493,11 @@ const serverIdentity = {
   serverPublicKey: "server-public-key"
 };
 
+const allowedDiscoveryOptions = {
+  listNetworkAddresses: () => ["192.0.2.1"],
+  probeLocalNetwork: async () => "allowed" as const
+};
+
 function settings(input: Partial<AppSettingsRecord>): AppSettingsRecord {
   return {
     autoCollapseHunksOver: 120,
@@ -268,17 +538,24 @@ function fakeServer(
 
 function fakeAdvertiser(
   advertisements: CompanionAdvertisementInput[],
-  advertisement = { stop: vi.fn() }
+  advertisement = { stop: vi.fn() },
+  discoveryCallbacks: ((state: CompanionDiscoveryState) => void)[] = []
 ): CompanionAdvertiser & {
   readonly destroy: ReturnType<typeof vi.fn>;
   readonly publish: ReturnType<typeof vi.fn>;
 } {
   return {
     destroy: vi.fn(async () => undefined),
-    publish: vi.fn((input: CompanionAdvertisementInput) => {
-      advertisements.push(input);
+    publish: vi.fn(
+      (
+        input: CompanionAdvertisementInput,
+        onState: (state: CompanionDiscoveryState) => void
+      ) => {
+        advertisements.push(input);
+        discoveryCallbacks.push(onState);
 
-      return advertisement;
-    })
+        return advertisement;
+      }
+    )
   };
 }
