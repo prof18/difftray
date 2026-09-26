@@ -816,6 +816,42 @@ describe("storage", () => {
     storage.close();
   });
 
+  it("rolls back all app settings when a mid-write fails", () => {
+    const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
+    const storagePath = path.join(storageDir, "difftray.sqlite");
+
+    try {
+      const storage = openStorage(storagePath);
+      const original = storage.getAppSettings();
+      storage.close();
+
+      const db = new DatabaseSync(storagePath);
+      db.exec(`
+        create trigger fail_companion_port
+        before insert on app_settings
+        when new.key = 'companion_port'
+        begin
+          select raise(abort, 'injected app settings failure');
+        end
+      `);
+      db.close();
+
+      const reopenedStorage = openStorage(storagePath);
+      expect(() =>
+        reopenedStorage.upsertAppSettings({
+          ...original,
+          autoCollapseHunksOver: 200,
+          companionEnabled: true,
+          companionPort: 48627
+        })
+      ).toThrow("injected app settings failure");
+      expect(reopenedStorage.getAppSettings()).toEqual(original);
+      reopenedStorage.close();
+    } finally {
+      rmSync(storageDir, { force: true, recursive: true });
+    }
+  });
+
   it("ignores malformed stored editor launch configs", () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-storage-"));
     const storagePath = path.join(storageDir, "difftray.sqlite");

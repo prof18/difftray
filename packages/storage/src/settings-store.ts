@@ -71,33 +71,40 @@ export function getProjectSettings(
 }
 
 export function upsertAppSettings(db: DatabaseSync, settings: AppSettingsRecord): void {
-  upsertAppSetting(
-    db,
-    "auto_collapse_hunks_over",
-    String(clampAutoCollapseHunks(settings.autoCollapseHunksOver))
-  );
-  upsertAppSetting(db, "companion_enabled", settings.companionEnabled ? "1" : "0");
-  upsertAppSetting(
-    db,
-    "companion_port",
-    String(clampCompanionPort(settings.companionPort))
-  );
-  upsertAppSetting(db, "default_diff_mode", settings.defaultDiffMode);
-  upsertAppSetting(
-    db,
-    "editor_launch_config_json",
-    settings.editorLaunchConfig ? JSON.stringify(settings.editorLaunchConfig) : ""
-  );
-  upsertAppSetting(
-    db,
-    "hide_whitespace_only_changes",
-    settings.hideWhitespaceOnlyChanges ? "1" : "0"
-  );
-  upsertAppSetting(db, "notify_on_drift", settings.notifyOnDrift ? "1" : "0");
-  upsertAppSetting(db, "review_reset_trigger", settings.reviewResetTrigger);
-  upsertAppSetting(db, "show_generated_files", settings.showGeneratedFiles ? "1" : "0");
-  upsertAppSetting(db, "theme_mode", settings.themeMode);
-  upsertAppSetting(db, "wrap_diff_lines", settings.wrapDiffLines ? "1" : "0");
+  db.exec("begin immediate");
+  try {
+    upsertAppSetting(
+      db,
+      "auto_collapse_hunks_over",
+      String(clampAutoCollapseHunks(settings.autoCollapseHunksOver))
+    );
+    upsertAppSetting(db, "companion_enabled", settings.companionEnabled ? "1" : "0");
+    upsertAppSetting(
+      db,
+      "companion_port",
+      String(clampCompanionPort(settings.companionPort))
+    );
+    upsertAppSetting(db, "default_diff_mode", settings.defaultDiffMode);
+    upsertAppSetting(
+      db,
+      "editor_launch_config_json",
+      settings.editorLaunchConfig ? JSON.stringify(settings.editorLaunchConfig) : ""
+    );
+    upsertAppSetting(
+      db,
+      "hide_whitespace_only_changes",
+      settings.hideWhitespaceOnlyChanges ? "1" : "0"
+    );
+    upsertAppSetting(db, "notify_on_drift", settings.notifyOnDrift ? "1" : "0");
+    upsertAppSetting(db, "review_reset_trigger", settings.reviewResetTrigger);
+    upsertAppSetting(db, "show_generated_files", settings.showGeneratedFiles ? "1" : "0");
+    upsertAppSetting(db, "theme_mode", settings.themeMode);
+    upsertAppSetting(db, "wrap_diff_lines", settings.wrapDiffLines ? "1" : "0");
+    db.exec("commit");
+  } catch (error) {
+    db.exec("rollback");
+    throw error;
+  }
 }
 
 export function getAppSettings(db: DatabaseSync): AppSettingsRecord {

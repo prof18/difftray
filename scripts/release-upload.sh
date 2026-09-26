@@ -20,8 +20,8 @@ fi
 fail() { printf '%sFAIL %s%s\n' "$RED" "$1" "$RESET"; exit 1; }
 ok() { printf '%sOK %s%s\n' "$GREEN" "$1" "$RESET"; }
 
-TAG="${1:-}"
-[[ -n "$TAG" ]] || fail "usage: ./scripts/release-upload.sh vX.Y.Z [alpha] [--draft]"
+BASE_TAG="${1:-}"
+[[ -n "$BASE_TAG" ]] || fail "usage: ./scripts/release-upload.sh vX.Y.Z [alpha] [--draft]"
 shift
 
 CHANNEL="production"
@@ -33,10 +33,12 @@ if [[ "${1:-}" == "alpha" ]]; then
   shift
 fi
 
-VERSION="${TAG#v}"
+VERSION="${BASE_TAG#v}"
 DIR="release/${VERSION}"
+TAG="$BASE_TAG"
 if [[ "$CHANNEL" == "alpha" ]]; then
   DIR="${DIR}-alpha"
+  TAG="${BASE_TAG}-alpha"
 fi
 
 [[ -d "$DIR" ]] || fail "no artifacts at $DIR; run ./scripts/release.sh first"
@@ -50,9 +52,9 @@ done < <(find "$DIR" -maxdepth 2 -type f \
 
 [[ ${#FILES[@]} -gt 0 ]] || fail "no shippable artifacts found under $DIR"
 
-TITLE="Difftray $TAG"
+TITLE="Difftray $BASE_TAG"
 if [[ "$CHANNEL" == "alpha" ]]; then
-  TITLE="Difftray Alpha $TAG"
+  TITLE="Difftray Alpha $BASE_TAG"
 fi
 
 printf '%sUploading %d artifact(s) to prof18/difftray @ %s:%s\n' \

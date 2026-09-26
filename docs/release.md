@@ -90,6 +90,11 @@ button.
 ./scripts/release-upload.sh v0.1.0 alpha --draft
 ```
 
+The alpha form reads artifacts from `release/0.1.0-alpha` and publishes them
+under the distinct GitHub tag `v0.1.0-alpha`; production uses `v0.1.0`. This
+allows both channels to publish the same base version without competing for one
+GitHub tag.
+
 Use the script directly for uploads. With pnpm script argument forwarding, the
 `--` separator can be passed through to `release-upload.sh` as the tag value.
 
