@@ -181,22 +181,21 @@ export class CompanionLifecycleController {
 
     this.active = undefined;
 
+    this.bonjourNameAttempt = 1;
+    this.lastPublishedNetworkAddresses = [];
+    this.lockedBonjourName = undefined;
+    this.setDiscoveryState({ status: "stopped" });
+    this.currentState = {
+      enabled: false,
+      status: "stopped"
+    };
+
     if (active) {
       active.server.broadcast({ kind: "server_stopping" });
       await active.advertisement?.stop();
       await active.advertiser.destroy();
       await active.server.stop();
     }
-
-    this.bonjourNameAttempt = 1;
-    this.lastPublishedNetworkAddresses = [];
-    this.lockedBonjourName = undefined;
-    this.setDiscoveryState({ status: "stopped" });
-
-    this.currentState = {
-      enabled: false,
-      status: "stopped"
-    };
   }
 
   broadcastWorkspaceChanged(projectId: string, reason: WorkspaceChangedReason): void {

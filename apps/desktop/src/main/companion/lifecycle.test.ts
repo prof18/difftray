@@ -122,6 +122,43 @@ describe("CompanionLifecycleController", () => {
     });
   });
 
+  it("does not let an older teardown stop the state of a re-enabled server", async () => {
+    let finishTeardown: (() => void) | undefined;
+    const teardown = new Promise<void>((resolve) => {
+      finishTeardown = resolve;
+    });
+    const oldAdvertisement = { stop: vi.fn(() => teardown) };
+    const oldAdvertiser = fakeAdvertiser([], oldAdvertisement);
+    const callbacks: ((state: CompanionDiscoveryState) => void)[] = [];
+    const newAdvertiser = fakeAdvertiser([], undefined, callbacks);
+    const oldServer = fakeServer();
+    const newServer = fakeServer();
+    const servers = [oldServer, newServer];
+    const advertisers = [oldAdvertiser, newAdvertiser];
+    const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
+      createAdvertiser: () => advertisers.shift() ?? fakeAdvertiser([]),
+      createServer: () => servers.shift() ?? fakeServer(),
+      serverIdentity: () => serverIdentity
+    });
+
+    await controller.applySettings(settings({ companionEnabled: true }));
+    const stopping = controller.applySettings(settings({ companionEnabled: false }));
+    await vi.waitFor(() => expect(oldAdvertisement.stop).toHaveBeenCalledOnce());
+    await controller.applySettings(settings({ companionEnabled: true }));
+    callbacks[0]?.({ status: "advertising", name: "Integration Mac" });
+    finishTeardown?.();
+    await stopping;
+
+    expect(oldServer.stop).toHaveBeenCalledOnce();
+    expect(newServer.stop).not.toHaveBeenCalled();
+    expect(controller.state).toEqual({ enabled: true, port: 48620, status: "running" });
+    expect(controller.discoveryState).toEqual({
+      status: "advertising",
+      name: "Integration Mac"
+    });
+  });
+
   it("stays stopped when disabled during the initial discovery probe", async () => {
     let resolveProbe: (result: "allowed") => void = () => {
       throw new Error("Probe resolver was not initialized");
