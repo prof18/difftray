@@ -20,8 +20,8 @@ import {
 } from "@difftray/companion-protocol";
 import { loadWorkingTreeDiffSummaries, loadWorkingTreeFileDiff } from "@difftray/git";
 import { openStorage, type DifftrayStorage, type ProjectRecord } from "@difftray/storage";
-import { afterEach, describe, expect, it } from "vitest";
-import { WebSocket } from "ws";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { WebSocket, type RawData } from "ws";
 
 import { createCompanionApi, type CompanionDeps } from "./api.js";
 import {
@@ -309,6 +309,199 @@ describe("companion server integration", () => {
     }
   }, 15_000);
 
+  it("reports server addresses and lets an authenticated device unpair itself", async () => {
+    const { cleanup, deps, identity, pairSecret } = await createIntegrationHarness();
+    const listServerAddresses = vi.fn(() => [
+      "192.168.178.79:48620",
+      "Integration-Mac.local:48620"
+    ]);
+    const revokeDevice = vi.fn();
+    const server = createCompanionServer({
+      ...deps,
+      listServerAddresses,
+      revokeDevice
+    });
+
+    try {
+      const { port } = await server.start(0);
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const pairResponse = await boxedPairRequest({
+        baseUrl,
+        body: {
+          deviceId: "device-1",
+          deviceName: "Integration Phone",
+          devicePublicKey,
+          platform: "ios",
+          protocolVersion: COMPANION_PROTOCOL_VERSION,
+          secret: pairSecret
+        },
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(pairResponse.body).toMatchObject({ status: "approved" });
+
+      const addresses = await encryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: "/companion/v1/server/addresses",
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(addresses.plain).toMatchObject({
+        body: {
+          addresses: ["192.168.178.79:48620", "Integration-Mac.local:48620"]
+        },
+        status: 200
+      });
+      expect(listServerAddresses).toHaveBeenCalledOnce();
+
+      const unauthenticatedAddresses = await fetch(
+        `${baseUrl}/companion/v1/server/addresses`
+      );
+      expect(unauthenticatedAddresses.status).toBe(401);
+
+      const unauthenticatedUnpair = await fetch(`${baseUrl}/companion/v1/devices/self`, {
+        method: "DELETE"
+      });
+      expect(unauthenticatedUnpair.status).toBe(401);
+      expect(revokeDevice).not.toHaveBeenCalled();
+
+      const unpair = await encryptedRequest({
+        baseUrl,
+        logicalMethod: "DELETE",
+        path: "/companion/v1/devices/self",
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(unpair.plain).toMatchObject({
+        body: { revoked: true },
+        status: 200
+      });
+      expect(revokeDevice).toHaveBeenCalledExactlyOnceWith("device-1");
+    } finally {
+      await server.stop();
+      cleanup();
+    }
+  });
+
+  it("seals self-unpair success before rejecting the revoked device", async () => {
+    const { cleanup, deps, identity, pairSecret } = await createIntegrationHarness();
+    const serverDeps = {
+      ...deps,
+      listServerAddresses: () => ["127.0.0.1:48620"],
+      revokeDevice: (deviceId: string) => {
+        deps.storage.revokeCompanionDevice(deviceId);
+        server.revokeDevice(deviceId);
+      }
+    };
+    const server = createCompanionServer(serverDeps);
+
+    try {
+      const { port } = await server.start(0);
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const pairResponse = await boxedPairRequest({
+        baseUrl,
+        body: {
+          deviceId: "device-1",
+          deviceName: "Integration Phone",
+          devicePublicKey,
+          platform: "ios",
+          protocolVersion: COMPANION_PROTOCOL_VERSION,
+          secret: pairSecret
+        },
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(pairResponse.body).toMatchObject({ status: "approved" });
+
+      const socket = await authenticatedSocket(baseUrl, identity.serverPublicKey);
+      expect(
+        openServerEventEnvelope(
+          await waitForSocketMessage(socket),
+          identity.serverPublicKey
+        )
+      ).toMatchObject({ kind: "hello" });
+      const revocationEvent = waitForServerEvent(
+        socket,
+        identity.serverPublicKey,
+        "device_revoked"
+      );
+      const socketClose = waitForSocketClose(socket);
+
+      const unpair = await encryptedRequest({
+        baseUrl,
+        logicalMethod: "DELETE",
+        path: "/companion/v1/devices/self",
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(unpair.plain).toMatchObject({
+        body: { revoked: true },
+        status: 200
+      });
+      await expect(revocationEvent).resolves.toEqual({ kind: "device_revoked" });
+      expect(await socketClose).toBe(1008);
+
+      const rejected = await rawEncryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: "/companion/v1/server/addresses",
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(rejected.status).toBe(401);
+      await expect(rejected.json()).resolves.toMatchObject({
+        error: { code: "unauthorized" }
+      });
+    } finally {
+      await server.stop();
+      cleanup();
+    }
+  });
+
+  it("terminates idle authenticated sockets while pinging sockets stay connected", async () => {
+    const { cleanup, deps, identity, pairSecret } = await createIntegrationHarness();
+    const server = createCompanionServer(deps, {
+      idleSweepIntervalMs: 50,
+      idleTimeoutMs: 200
+    });
+
+    try {
+      const { port } = await server.start(0);
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const pairResponse = await boxedPairRequest({
+        baseUrl,
+        body: {
+          deviceId: "device-1",
+          deviceName: "Integration Phone",
+          devicePublicKey,
+          platform: "ios",
+          protocolVersion: COMPANION_PROTOCOL_VERSION,
+          secret: pairSecret
+        },
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(pairResponse.body).toMatchObject({ status: "approved" });
+
+      const idleSocket = await authenticatedSocket(baseUrl, identity.serverPublicKey);
+      await waitForSocketMessage(idleSocket);
+      await expect(waitForSocketClose(idleSocket, 1_000)).resolves.toEqual(
+        expect.any(Number)
+      );
+
+      const pingingSocket = await authenticatedSocket(baseUrl, identity.serverPublicKey);
+      await waitForSocketMessage(pingingSocket);
+      const pingTimer = setInterval(() => {
+        sendAuthenticatedPing(pingingSocket, identity.serverPublicKey);
+      }, 100);
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        expect(pingingSocket.readyState).toBe(WebSocket.OPEN);
+      } finally {
+        clearInterval(pingTimer);
+        pingingSocket.close();
+      }
+    } finally {
+      await server.stop();
+      cleanup();
+    }
+  }, 10_000);
+
   it("rejects unauthenticated authenticated routes and guard violations", async () => {
     const { cleanup, deps, identity, pairSecret, project } =
       await createIntegrationHarness();
@@ -487,6 +680,7 @@ async function createIntegrationHarness(): Promise<{
     listRecentCommits: async () => [],
     listRecentProjects: async () =>
       storage.listRecentProjects().map((record) => projectView(record)),
+    listServerAddresses: () => [],
     listRepositoryCatalog: async () => [],
     listProjectWorktreeAvailability: async () => [],
     listProjectWorktrees: async () => [],
@@ -536,6 +730,7 @@ async function createIntegrationHarness(): Promise<{
       };
     },
     notifyDesktopRenderer: () => undefined,
+    revokeDevice: (deviceId) => storage.revokeCompanionDevice(deviceId),
     serverIdentity: () => identity,
     storage,
     unmarkReviewed: async (input) => {
@@ -967,6 +1162,34 @@ async function encryptedRequest(input: {
   };
 }
 
+function rawEncryptedRequest(input: {
+  readonly baseUrl: string;
+  readonly body?: unknown;
+  readonly logicalMethod: string;
+  readonly path: string;
+  readonly serverPublicKey: string;
+}): Promise<Response> {
+  requestCounter += 1;
+  const envelope = sealEnvelope({
+    devicePublicKey,
+    plaintext: {
+      ...(input.body === undefined ? {} : { body: input.body }),
+      method: input.logicalMethod,
+      path: input.path,
+      requestId: `integration-raw-${requestCounter}`,
+      ts: new Date().toISOString()
+    },
+    recipientPublicKey: input.serverPublicKey,
+    senderSecretKey: deviceSecretKey
+  });
+
+  return fetch(`${input.baseUrl}${input.path}`, {
+    body: JSON.stringify(envelope),
+    headers: { "content-type": "application/x-difftray-envelope" },
+    method: "POST"
+  });
+}
+
 async function authenticatedSocket(
   baseUrl: string,
   serverPublicKey: string
@@ -1015,14 +1238,15 @@ async function waitForSocketOpen(socket: WebSocket): Promise<void> {
   });
 }
 
-async function waitForSocketClose(socket: WebSocket): Promise<number> {
+async function waitForSocketClose(socket: WebSocket, timeoutMs = 6_000): Promise<number> {
   return await withTimeout(
     new Promise<number>((resolve) => {
       socket.once("close", (code) => {
         resolve(code);
       });
     }),
-    "Timed out waiting for websocket close"
+    "Timed out waiting for websocket close",
+    timeoutMs
   );
 }
 
@@ -1040,12 +1264,59 @@ async function waitForSocketMessage(socket: WebSocket): Promise<string> {
   );
 }
 
-async function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+async function waitForServerEvent(
+  socket: WebSocket,
+  serverPublicKey: string,
+  kind: string
+): Promise<unknown> {
+  return await withTimeout(
+    new Promise<unknown>((resolve, reject) => {
+      const onClose = (code: number): void => {
+        socket.off("message", onMessage);
+        reject(new Error(`WebSocket closed before ${kind}: ${String(code)}`));
+      };
+      const onMessage = (data: RawData): void => {
+        const event = openServerEventEnvelope(data.toString("utf8"), serverPublicKey);
+
+        if ((event as { readonly kind?: unknown }).kind !== kind) {
+          return;
+        }
+
+        socket.off("close", onClose);
+        socket.off("message", onMessage);
+        resolve(event);
+      };
+
+      socket.on("close", onClose);
+      socket.on("message", onMessage);
+    }),
+    `Timed out waiting for websocket event: ${kind}`
+  );
+}
+
+function sendAuthenticatedPing(socket: WebSocket, serverPublicKey: string): void {
+  socket.send(
+    JSON.stringify(
+      sealEnvelope({
+        devicePublicKey,
+        plaintext: { kind: "ping", ts: new Date().toISOString() },
+        recipientPublicKey: serverPublicKey,
+        senderSecretKey: deviceSecretKey
+      })
+    )
+  );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  message: string,
+  timeoutMs = 6_000
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<T>((_, reject) => {
     timeout = setTimeout(() => {
       reject(new Error(message));
-    }, 6_000);
+    }, timeoutMs);
   });
 
   try {

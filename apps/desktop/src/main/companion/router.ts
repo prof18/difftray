@@ -18,6 +18,7 @@ export type RouteDefinition = {
 };
 
 const bodyLimitBytes = 256 * 1024;
+const HANDSHAKE_RATE_LIMIT_PER_MINUTE = 120;
 const requestWindowMs = 60_000;
 const urlLimitBytes = 4096;
 
@@ -201,7 +202,7 @@ function consumeRateLimit(
 
 function rateLimitFor(method: string, pathname: string): number {
   if (method === "GET" && pathname === "/companion/v1/handshake") {
-    return 30;
+    return HANDSHAKE_RATE_LIMIT_PER_MINUTE;
   }
 
   if (method === "POST" && pathname === "/companion/v1/pair") {

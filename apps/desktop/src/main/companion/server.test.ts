@@ -298,7 +298,7 @@ describe("companion server core", () => {
 
   it("rate limits repeated requests per remote address", async () => {
     const { baseUrl } = await startServer();
-    const handshakeResponses = await sequentialRequests(31, () =>
+    const handshakeResponses = await sequentialRequests(121, () =>
       fetch(`${baseUrl}/companion/v1/handshake`)
     );
     const pairResponses = await sequentialRequests(11, () =>
@@ -309,8 +309,8 @@ describe("companion server core", () => {
       })
     );
 
-    expect(handshakeResponses.at(29)?.status).not.toBe(429);
-    expect(handshakeResponses.at(30)?.status).toBe(429);
+    expect(handshakeResponses.at(119)?.status).not.toBe(429);
+    expect(handshakeResponses.at(120)?.status).toBe(429);
     expect(pairResponses.at(9)?.status).not.toBe(429);
     expect(pairResponses.at(10)?.status).toBe(429);
   });
@@ -1273,6 +1273,7 @@ async function startServer(
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
     listRecentProjects: async () => [],
+    listServerAddresses: () => [],
     listRepositoryCatalog: async () => [],
     listProjectWorktreeAvailability: async () => [],
     listProjectWorktrees: async () => [],
@@ -1295,6 +1296,7 @@ async function startServer(
       }
     }),
     notifyDesktopRenderer: () => undefined,
+    revokeDevice: vi.fn(),
     serverIdentity: () => ({
       appVersion: "0.0.0-test",
       serverId: "server-test",

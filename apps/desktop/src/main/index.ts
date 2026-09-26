@@ -15,7 +15,7 @@ import {
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
-import { homedir, networkInterfaces } from "node:os";
+import { homedir, hostname, networkInterfaces } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -152,6 +152,7 @@ import {
 } from "./companion/lifecycle.js";
 import { CompanionProjectList } from "./companion/project-list.js";
 import { createCompanionServer } from "./companion/server.js";
+import { companionReportedAddresses } from "./companion/server-addresses.js";
 import { CompanionWorkspaceCache } from "./companion/workspace-cache.js";
 import { UpdateCheckScheduler } from "./update-check-scheduler.js";
 import { UpdateState, type UpdateEvent, type UpdatePhase } from "./update-state.js";
@@ -696,9 +697,7 @@ handleTrusted(
   (_event: IpcMainInvokeEvent, input: unknown): CompanionStateView => {
     const id = readStringProperty(input, "id");
 
-    getStorage().revokeCompanionDevice(id);
-    getCompanionLifecycleController().revokeDevice(id);
-    emitCompanionStateChanged();
+    revokeCompanionDeviceEverywhere(id);
 
     return companionStateView();
   }
@@ -1897,6 +1896,12 @@ function emitCompanionStateChanged(): void {
   }
 }
 
+function revokeCompanionDeviceEverywhere(id: string): void {
+  getStorage().revokeCompanionDevice(id);
+  getCompanionLifecycleController().revokeDevice(id);
+  emitCompanionStateChanged();
+}
+
 function getCompanionWorkspaceChangeBroadcaster(): CompanionWorkspaceChangeBroadcaster {
   if (companionWorkspaceChangeBroadcaster) {
     return companionWorkspaceChangeBroadcaster;
@@ -2203,6 +2208,18 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
     listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
+    listServerAddresses: () => {
+      const state = getCompanionLifecycleController().state;
+
+      return state.status === "running"
+        ? companionReportedAddresses({
+            hostname: hostname(),
+            interfaces: networkInterfaces(),
+            platform: process.platform,
+            port: state.port
+          })
+        : [];
+    },
     listRepositoryCatalog: () => Promise.resolve(listCompanionRepositoryCatalog()),
     isRepositoryCatalogScanPending: repositoryCatalogScanPending,
     listProjectWorktreeAvailability: (projectIds) =>
@@ -2248,6 +2265,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       return companionMarkResult(result);
     },
     notifyDesktopRenderer,
+    revokeDevice: revokeCompanionDeviceEverywhere,
     serverIdentity: companionServerIdentity,
     storage,
     unmarkReviewed: async (input) => {

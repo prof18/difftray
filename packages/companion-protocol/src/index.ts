@@ -161,6 +161,14 @@ export type HandshakeResponse = {
   readonly serverPublicKey: string;
 };
 
+export type ServerAddressesResponse = {
+  readonly addresses: readonly string[];
+};
+
+export type UnpairSelfResponse = {
+  readonly revoked: true;
+};
+
 export type PairRequestBody = {
   readonly code?: string;
   readonly deviceId: string;

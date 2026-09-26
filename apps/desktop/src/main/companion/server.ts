@@ -20,19 +20,31 @@ export type CompanionServer = {
 type ConnectedSocket = {
   readonly deviceId: string;
   readonly devicePublicKey: string;
+  lastSeenAt: number;
   readonly socket: WebSocket;
 };
 
+const WS_IDLE_TIMEOUT_MS = 90_000;
+const defaultIdleSweepIntervalMs = 30_000;
 const webSocketAuthTimeoutMs = 5_000;
 const noCurrentProjectId = "__difftray_no_current_project__";
 
-export function createCompanionServer(deps: CompanionDeps): CompanionServer {
+export function createCompanionServer(
+  deps: CompanionDeps,
+  options: {
+    readonly idleTimeoutMs?: number;
+    readonly idleSweepIntervalMs?: number;
+  } = {}
+): CompanionServer {
   const router = createCompanionRouter(createCompanionApi(deps), deps.companionEnvelope);
   const httpServer = createServer((request, response) => {
     void router(request, response);
   });
   const webSocketServer = new WebSocketServer({ noServer: true });
   const sockets = new Set<ConnectedSocket>();
+  const idleTimeoutMs = options.idleTimeoutMs ?? WS_IDLE_TIMEOUT_MS;
+  const idleSweepIntervalMs = options.idleSweepIntervalMs ?? defaultIdleSweepIntervalMs;
+  let idleSweepTimer: ReturnType<typeof setInterval> | undefined;
 
   httpServer.on("upgrade", (request, socket, head) => {
     if (request.url !== "/companion/v1/events") {
@@ -79,6 +91,7 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
         connected = {
           deviceId: verified.device.deviceId,
           devicePublicKey: verified.device.devicePublicKey,
+          lastSeenAt: Date.now(),
           socket: webSocket
         };
         sockets.add(connected);
@@ -93,12 +106,9 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
           verified.device.devicePublicKey
         );
         webSocket.on("message", (message) => {
-          handleAuthenticatedWebSocketMessage(
-            deps,
-            webSocket,
-            verified.device.devicePublicKey,
-            message
-          );
+          if (connected) {
+            handleAuthenticatedWebSocketMessage(deps, connected, message);
+          }
         });
       });
     });
@@ -138,6 +148,19 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
             return;
           }
 
+          idleSweepTimer = setInterval(() => {
+            const now = Date.now();
+
+            for (const connected of sockets) {
+              if (now - connected.lastSeenAt <= idleTimeoutMs) {
+                continue;
+              }
+
+              sockets.delete(connected);
+              connected.socket.terminate();
+            }
+          }, idleSweepIntervalMs);
+          idleSweepTimer.unref();
           resolve({ port: address.port });
         };
 
@@ -146,6 +169,11 @@ export function createCompanionServer(deps: CompanionDeps): CompanionServer {
         httpServer.listen(preferredPort, preferredPort === 0 ? "127.0.0.1" : "0.0.0.0");
       }),
     stop: async () => {
+      if (idleSweepTimer) {
+        clearInterval(idleSweepTimer);
+        idleSweepTimer = undefined;
+      }
+
       for (const { socket } of sockets) {
         socket.close();
       }
@@ -182,29 +210,32 @@ async function replayProjectListInvalidation(
 
 function handleAuthenticatedWebSocketMessage(
   deps: CompanionDeps,
-  socket: WebSocket,
-  devicePublicKey: string,
+  connected: ConnectedSocket,
   data: RawData
 ): void {
   const envelope = readWebSocketEnvelope(data);
 
   if (!envelope.ok) {
-    closeUnauthorized(socket);
+    closeUnauthorized(connected.socket);
     return;
   }
 
   const opened = deps.companionEnvelope.openWebSocketClientEnvelope({
-    devicePublicKey,
+    devicePublicKey: connected.devicePublicKey,
     envelope: envelope.value
   });
 
   if (!opened.ok) {
-    closeUnauthorized(socket);
+    closeUnauthorized(connected.socket);
     return;
   }
 
+  connected.lastSeenAt = Date.now();
+
   if (isWebSocketPing(opened.body)) {
-    sendWebSocketBody(deps, socket, devicePublicKey, { kind: "pong" });
+    sendWebSocketBody(deps, connected.socket, connected.devicePublicKey, {
+      kind: "pong"
+    });
   }
 }
 

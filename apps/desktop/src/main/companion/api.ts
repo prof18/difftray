@@ -106,6 +106,8 @@ export type CompanionDeps = {
   ) => Promise<ReviewCommentView | null>;
   readonly deleteComment: (id: string) => Promise<boolean>;
   readonly commentsReport: (projectId: string) => Promise<string>;
+  readonly listServerAddresses: () => readonly string[];
+  readonly revokeDevice: (deviceId: string) => void;
   readonly listBranchRefs: (projectId: string) => Promise<readonly string[]>;
   readonly listRecentCommits: (projectId: string) => Promise<readonly CommitInfo[]>;
   readonly updateDiffTarget: (
@@ -271,6 +273,35 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       },
       method: "POST",
       path: "/companion/v1/pair"
+    },
+    {
+      handler: () => ({
+        body: { addresses: deps.listServerAddresses() },
+        status: 200
+      }),
+      method: "GET",
+      path: "/companion/v1/server/addresses",
+      requiresAuth: true
+    },
+    {
+      handler: ({ device }) => {
+        if (!device) {
+          return {
+            body: companionError("unauthorized", "Unauthorized"),
+            status: 401
+          };
+        }
+
+        deps.revokeDevice(device.deviceId);
+
+        return {
+          body: { revoked: true },
+          status: 200
+        };
+      },
+      method: "DELETE",
+      path: "/companion/v1/devices/self",
+      requiresAuth: true
     },
     {
       handler: ({ params }) => {
