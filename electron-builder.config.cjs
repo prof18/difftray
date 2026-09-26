@@ -3,17 +3,29 @@ const desktopPackageJson = require("./apps/desktop/package.json");
 const { execFileSync } = require("node:child_process");
 const { join } = require("node:path");
 
-const isDevChannel = process.env.DIFFTRAY_RELEASE_CHANNEL === "dev";
+const releaseChannel = process.env.DIFFTRAY_RELEASE_CHANNEL ?? "production";
+
+if (releaseChannel === "dev") {
+  throw new Error(
+    'Unknown DIFFTRAY_RELEASE_CHANNEL "dev": the dev channel was renamed to "alpha"'
+  );
+}
+
+if (releaseChannel !== "production" && releaseChannel !== "alpha") {
+  throw new Error(`Unknown DIFFTRAY_RELEASE_CHANNEL "${releaseChannel}"`);
+}
+
+const isAlphaChannel = releaseChannel === "alpha";
 const electronVersion = desktopPackageJson.devDependencies.electron.replace(
   /^[^\d]*/,
   ""
 );
-const productName = isDevChannel ? "Difftray Dev" : "Difftray";
-const executableName = isDevChannel ? "Difftray Dev" : "Difftray";
-const artifactPrefix = isDevChannel ? "Difftray-Dev" : "Difftray";
-const appId = isDevChannel ? "com.prof18.difftray.dev" : "com.prof18.difftray";
-const releaseDirectory = `release/${packageJson.version}${isDevChannel ? "-dev" : ""}`;
-const macArchitectures = isDevChannel ? ["arm64"] : ["arm64", "x64"];
+const productName = isAlphaChannel ? "Difftray Alpha" : "Difftray";
+const executableName = isAlphaChannel ? "Difftray Alpha" : "Difftray";
+const artifactPrefix = isAlphaChannel ? "Difftray-Alpha" : "Difftray";
+const appId = isAlphaChannel ? "com.prof18.difftray.dev" : "com.prof18.difftray";
+const releaseDirectory = `release/${packageJson.version}${isAlphaChannel ? "-alpha" : ""}`;
+const macArchitectures = isAlphaChannel ? ["arm64"] : ["arm64", "x64"];
 
 module.exports = {
   appId,
@@ -62,7 +74,7 @@ module.exports = {
   npmRebuild: false,
   mac: {
     category: "public.app-category.developer-tools",
-    icon: isDevChannel ? "resources/icon-dev.icns" : "resources/icon.icns",
+    icon: isAlphaChannel ? "resources/icon-dev.icns" : "resources/icon.icns",
     target: [
       {
         target: "dmg",

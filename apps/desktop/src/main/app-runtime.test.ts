@@ -8,6 +8,7 @@ describe("resolveAppRuntimeConfig", () => {
       resolveAppRuntimeConfig({ isPackaged: true, productName: "Difftray" })
     ).toMatchObject({
       appId: "com.prof18.difftray",
+      flavor: "production",
       name: "Difftray",
       userDataDirectoryName: "Difftray",
       variant: "production"
@@ -19,31 +20,63 @@ describe("resolveAppRuntimeConfig", () => {
       resolveAppRuntimeConfig({ isPackaged: false, productName: "Electron" })
     ).toMatchObject({
       appId: "com.prof18.difftray.dev",
+      flavor: "dev",
       name: "Difftray Dev",
       userDataDirectoryName: "Difftray Dev",
       variant: "dev"
     });
   });
 
-  it("uses the dev app id for packaged dev builds", () => {
+  it("treats the legacy packaged Dev product as the Alpha flavor", () => {
     expect(
       resolveAppRuntimeConfig({ isPackaged: true, productName: "Difftray Dev" })
     ).toMatchObject({
       appId: "com.prof18.difftray.dev",
+      flavor: "alpha",
+      name: "Difftray Alpha",
       userDataDirectoryName: "Difftray Dev",
       variant: "dev"
     });
   });
 
-  it("detects packaged dev builds from the executable path", () => {
+  it("uses the Alpha product name without changing app identity or storage", () => {
+    expect(
+      resolveAppRuntimeConfig({ isPackaged: true, productName: "Difftray Alpha" })
+    ).toEqual({
+      appId: "com.prof18.difftray.dev",
+      flavor: "alpha",
+      name: "Difftray Alpha",
+      userDataDirectoryName: "Difftray Dev",
+      variant: "dev"
+    });
+  });
+
+  it("detects packaged Alpha builds from the executable path", () => {
     expect(
       resolveAppRuntimeConfig({
-        executablePath: "/Applications/Difftray Dev.app/Contents/MacOS/Difftray Dev",
+        executablePath: "/Applications/Difftray Alpha.app/Contents/MacOS/Difftray Alpha",
         isPackaged: true,
         productName: "difftray"
       })
     ).toMatchObject({
       appId: "com.prof18.difftray.dev",
+      flavor: "alpha",
+      variant: "dev"
+    });
+  });
+
+  it("lets scripts force the Alpha flavor", () => {
+    expect(
+      resolveAppRuntimeConfig({
+        envVariant: "alpha",
+        isPackaged: false,
+        productName: "Electron"
+      })
+    ).toEqual({
+      appId: "com.prof18.difftray.dev",
+      flavor: "alpha",
+      name: "Difftray Alpha",
+      userDataDirectoryName: "Difftray Dev",
       variant: "dev"
     });
   });
@@ -57,6 +90,7 @@ describe("resolveAppRuntimeConfig", () => {
       })
     ).toMatchObject({
       appId: "com.prof18.difftray",
+      flavor: "production",
       variant: "production"
     });
   });

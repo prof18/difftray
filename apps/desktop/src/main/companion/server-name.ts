@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 
+import type { AppRuntimeConfig } from "../app-runtime.js";
+
 type CompanionServerNameDependencies = {
   readonly hostname: () => string;
   readonly platform: NodeJS.Platform;
@@ -8,6 +10,20 @@ type CompanionServerNameDependencies = {
 };
 
 const resolvedNames = new WeakMap<CompanionServerNameDependencies, string>();
+
+export function companionServerNameForFlavor(
+  baseName: string,
+  flavor: AppRuntimeConfig["flavor"]
+): string {
+  switch (flavor) {
+    case "alpha":
+      return `${baseName} (Alpha)`;
+    case "dev":
+      return `${baseName} (Dev)`;
+    case "production":
+      return baseName;
+  }
+}
 
 export function resolveCompanionServerName(
   dependencies: CompanionServerNameDependencies = defaultDependencies

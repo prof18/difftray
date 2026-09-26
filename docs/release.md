@@ -1,14 +1,18 @@
 # Release
 
 Difftray uses `electron-builder` for local release builds. Production builds use
-`com.prof18.difftray`; dev/debug builds use `com.prof18.difftray.dev` and the
-`Difftray Dev` product name so a debug app installs side by side instead of
-replacing the production build. Production uses the `Difftray` user-data
-directory; dev/debug uses the distinct `Difftray Dev` directory. On first
-packaged Dev launch, Difftray imports a sanitized copy of the production
-database: review data and preferences are retained, while companion devices and
-companion credentials are removed. Use the explicit import option to replace an
-existing Dev database; Difftray preserves the previous Dev database as a backup.
+`com.prof18.difftray`; Alpha builds use `com.prof18.difftray.dev` and the
+`Difftray Alpha` product name so they install side by side instead of replacing
+the production build. Production uses the `Difftray` user-data directory; Alpha
+uses the distinct `Difftray Dev` directory. On first packaged Alpha launch,
+Difftray imports a sanitized copy of the production database: review data and
+preferences are retained, while companion devices and companion credentials are
+removed. Use the explicit import option to replace an existing Alpha database;
+Difftray preserves the previous Alpha database as a backup.
+
+The Alpha build keeps app id `com.prof18.difftray.dev` and the `Difftray Dev`
+data folder so its companion identity and phone pairings survive the rename.
+Unpackaged `pnpm dev` runs are the Dev flavour.
 
 The App Store Connect bundle IDs have been created under team `Q7CUB3RNAK`:
 
@@ -22,14 +26,14 @@ account. It uses `asc bundle-ids`.
 
 ```sh
 pnpm package:mac
-pnpm package:mac:dev
+pnpm package:mac:alpha
 ```
 
 Release scripts run the full gate first:
 
 ```sh
 pnpm release:mac
-pnpm release:dev:mac
+pnpm release:alpha:mac
 ```
 
 macOS release builds require:
@@ -62,7 +66,7 @@ pnpm release:setup-signing -- install ~/Downloads/developerID_application.cer
 ```
 
 Artifacts are written to `release/<version>/` for production and
-`release/<version>-dev/` for dev/debug builds.
+`release/<version>-alpha/` for Alpha builds.
 
 macOS produces both `arm64` and `x64` `.dmg` + `.zip` files; the dmg name
 encodes the architecture (`Difftray-arm64.dmg`, `Difftray-x64.dmg`). Linux and
@@ -83,7 +87,7 @@ button.
 ```sh
 ./scripts/release-upload.sh v0.1.0
 ./scripts/release-upload.sh v0.1.0 --draft
-./scripts/release-upload.sh v0.1.0 dev --draft
+./scripts/release-upload.sh v0.1.0 alpha --draft
 ```
 
 Use the script directly for uploads. With pnpm script argument forwarding, the

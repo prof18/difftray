@@ -15,15 +15,15 @@ into its own source repository rather than a separate release-only repo —
 since Difftray is open source, the source repo doubles as the user-facing
 download page and the `electron-updater` feed source.
 
-Debug builds also need to avoid colliding with production app identity and local
+Alpha builds also need to avoid colliding with production app identity and local
 state.
 
 ## Decision
 
 Use `electron-builder` from the workspace root for packaging. Production builds
-use app id `com.prof18.difftray` and product name `Difftray`. Dev/debug builds
-set `DIFFTRAY_RELEASE_CHANNEL=dev`, use app id `com.prof18.difftray.dev`, product
-name `Difftray Dev`, and write artifacts to `release/<version>-dev/`.
+use app id `com.prof18.difftray` and product name `Difftray`. Alpha builds set
+`DIFFTRAY_RELEASE_CHANNEL=alpha`, use app id `com.prof18.difftray.dev`, product
+name `Difftray Alpha`, and write artifacts to `release/<version>-alpha/`.
 
 Release builds remain local. `scripts/release.sh` runs the full local gate,
 builds Vite bundles, then calls `electron-builder`. `scripts/release-upload.sh`
@@ -32,15 +32,16 @@ uploads artifacts to the source repo `prof18/difftray` as a GitHub Release;
 releases. `scripts/setup-app-ids.sh` documents and verifies the App Store
 Connect bundle IDs through `asc`.
 
-The app also resolves a runtime variant in the main process so Windows can use
-the dev app model id when needed. Both production and dev variants use the same
-`Difftray` user-data directory; the separate dev identity exists to prevent
-accidentally replacing the production build, not to isolate local data.
+The app also resolves a runtime flavour in the main process so Windows can use
+the Alpha app model id when needed. The Alpha build keeps app id
+`com.prof18.difftray.dev` and the `Difftray Dev` data folder so its companion
+identity and phone pairings survive the rename. Unpackaged `pnpm dev` runs are
+the Dev flavour.
 
 ## Consequences
 
-- Production and dev/debug builds can be installed side by side.
-- Production and dev/debug builds share local Difftray data.
+- Production and Alpha builds can be installed side by side.
+- Production and Alpha builds keep separate local Difftray data.
 - macOS releases depend on the local Developer ID certificate and notarization
   environment, mirroring CueUp.
 - Releases are published to the source repo (`prof18/difftray`). The repo must

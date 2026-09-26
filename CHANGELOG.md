@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Rename the dev build channel to Alpha; companion server names now include
+  (Alpha) or (Dev) outside the store release.
+
 ## 0.0.13 - 2026-09-07
 
 ### Added

@@ -48,11 +48,11 @@ Project commands:
 - `pnpm format`
 - `pnpm format:write`
 - `pnpm package`
-- `pnpm package:dev`
+- `pnpm package:alpha`
 - `pnpm package:mac`
-- `pnpm package:mac:dev`
+- `pnpm package:mac:alpha`
 - `pnpm release:mac`
-- `pnpm release:dev:mac`
+- `pnpm release:alpha:mac`
 - `pnpm release:setup-app-ids`
 - `pnpm release:setup-signing`
 - `pnpm release:upload`
@@ -66,6 +66,12 @@ Project commands:
 Use pnpm for dependency management once the project is scaffolded.
 
 `pnpm check` delegates to `./ci.sh`.
+
+The `alpha` release channel produces `Difftray Alpha` with artifacts under
+`release/<version>-alpha/`. The Alpha build keeps app id
+`com.prof18.difftray.dev` and the `Difftray Dev` data folder so its companion
+identity and phone pairings survive the rename. Unpackaged `pnpm dev` runs are
+the Dev flavour.
 
 ## Before Handoff
 

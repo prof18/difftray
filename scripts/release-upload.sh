@@ -5,7 +5,7 @@
 # Usage:
 #   ./scripts/release-upload.sh v0.1.0
 #   ./scripts/release-upload.sh v0.1.0 --draft
-#   ./scripts/release-upload.sh v0.1.0 dev --draft
+#   ./scripts/release-upload.sh v0.1.0 alpha --draft
 
 set -euo pipefail
 
@@ -21,19 +21,22 @@ fail() { printf '%sFAIL %s%s\n' "$RED" "$1" "$RESET"; exit 1; }
 ok() { printf '%sOK %s%s\n' "$GREEN" "$1" "$RESET"; }
 
 TAG="${1:-}"
-[[ -n "$TAG" ]] || fail "usage: ./scripts/release-upload.sh vX.Y.Z [dev] [--draft]"
+[[ -n "$TAG" ]] || fail "usage: ./scripts/release-upload.sh vX.Y.Z [alpha] [--draft]"
 shift
 
 CHANNEL="production"
 if [[ "${1:-}" == "dev" ]]; then
-  CHANNEL="dev"
+  fail 'Unknown DIFFTRAY_RELEASE_CHANNEL "dev": the dev channel was renamed to "alpha"'
+fi
+if [[ "${1:-}" == "alpha" ]]; then
+  CHANNEL="alpha"
   shift
 fi
 
 VERSION="${TAG#v}"
 DIR="release/${VERSION}"
-if [[ "$CHANNEL" == "dev" ]]; then
-  DIR="${DIR}-dev"
+if [[ "$CHANNEL" == "alpha" ]]; then
+  DIR="${DIR}-alpha"
 fi
 
 [[ -d "$DIR" ]] || fail "no artifacts at $DIR; run ./scripts/release.sh first"
@@ -48,8 +51,8 @@ done < <(find "$DIR" -maxdepth 2 -type f \
 [[ ${#FILES[@]} -gt 0 ]] || fail "no shippable artifacts found under $DIR"
 
 TITLE="Difftray $TAG"
-if [[ "$CHANNEL" == "dev" ]]; then
-  TITLE="Difftray Dev $TAG"
+if [[ "$CHANNEL" == "alpha" ]]; then
+  TITLE="Difftray Alpha $TAG"
 fi
 
 printf '%sUploading %d artifact(s) to prof18/difftray @ %s:%s\n' \

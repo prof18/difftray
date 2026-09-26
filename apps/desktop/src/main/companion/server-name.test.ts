@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveCompanionServerName } from "./server-name.js";
+import {
+  companionServerNameForFlavor,
+  resolveCompanionServerName
+} from "./server-name.js";
+
+describe("companionServerNameForFlavor", () => {
+  it.each([
+    ["production", "Marco’s Mac Studio"],
+    ["alpha", "Marco’s Mac Studio (Alpha)"],
+    ["dev", "Marco’s Mac Studio (Dev)"]
+  ] as const)("uses the %s flavor suffix", (flavor, expectedName) => {
+    expect(companionServerNameForFlavor("Marco’s Mac Studio", flavor)).toBe(expectedName);
+  });
+});
 
 describe("companion server name", () => {
   it("uses the macOS Computer Name instead of the DHCP hostname", () => {

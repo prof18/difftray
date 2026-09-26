@@ -4,7 +4,7 @@
 #
 # Usage:
 #   ./scripts/release.sh mac
-#   ./scripts/release.sh mac dev
+#   ./scripts/release.sh mac alpha
 #   SKIP_CI=1 ./scripts/release.sh mac
 #
 # Required env for signed mac builds:
@@ -35,16 +35,17 @@ case "$TARGET" in
 esac
 
 case "$CHANNEL" in
-  production|dev) ;;
-  *) fail "unknown channel '$CHANNEL' (expected: production | dev)" ;;
+  production|alpha) ;;
+  dev) fail 'Unknown DIFFTRAY_RELEASE_CHANNEL "dev": the dev channel was renamed to "alpha"' ;;
+  *) fail "unknown channel '$CHANNEL' (expected: production | alpha)" ;;
 esac
 
 export DIFFTRAY_RELEASE_CHANNEL="$CHANNEL"
 
 VERSION=$(node -p "require('./package.json').version")
 RELEASE_DIR="release/${VERSION}"
-if [[ "$CHANNEL" == "dev" ]]; then
-  RELEASE_DIR="${RELEASE_DIR}-dev"
+if [[ "$CHANNEL" == "alpha" ]]; then
+  RELEASE_DIR="${RELEASE_DIR}-alpha"
 fi
 
 if [[ "${SKIP_CI:-0}" == "1" ]]; then
@@ -86,8 +87,8 @@ build_mac() {
   ok "electron-builder finished"
 
   local app_name="Difftray"
-  if [[ "$CHANNEL" == "dev" ]]; then
-    app_name="Difftray Dev"
+  if [[ "$CHANNEL" == "alpha" ]]; then
+    app_name="Difftray Alpha"
   fi
 
   for arch_dir in mac-arm64 mac; do
@@ -116,4 +117,8 @@ fi
 
 printf '\n%sRelease build complete%s (target=%s, channel=%s, version=%s)\n' \
   "$GREEN" "$RESET" "$TARGET" "$CHANNEL" "$VERSION"
-printf 'Next: ./scripts/release-upload.sh v%s\n' "$VERSION"
+if [[ "$CHANNEL" == "alpha" ]]; then
+  printf 'Next: ./scripts/release-upload.sh v%s alpha\n' "$VERSION"
+else
+  printf 'Next: ./scripts/release-upload.sh v%s\n' "$VERSION"
+fi

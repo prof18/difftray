@@ -141,7 +141,10 @@ import {
   type CompanionPairingSessionView,
   type PendingPairRequestView
 } from "./companion/auth.js";
-import { resolveCompanionServerName } from "./companion/server-name.js";
+import {
+  companionServerNameForFlavor,
+  resolveCompanionServerName
+} from "./companion/server-name.js";
 import {
   CompanionLifecycleController,
   CompanionWorkspaceChangeBroadcaster
@@ -1727,7 +1730,10 @@ function companionServerIdentity(): ReturnType<
 > {
   return getOrCreateCompanionServerIdentity({
     appVersion: app.getVersion(),
-    serverName: resolveCompanionServerName(),
+    serverName: companionServerNameForFlavor(
+      resolveCompanionServerName(),
+      resolvedAppRuntimeConfig?.flavor ?? "production"
+    ),
     storage: getStorage()
   });
 }
