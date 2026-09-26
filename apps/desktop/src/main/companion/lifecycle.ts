@@ -225,6 +225,10 @@ export class CompanionLifecycleController {
 
       try {
         const started = await server.start(port);
+        if (!this.isCurrentDiscoveryGeneration(generation)) {
+          await server.stop();
+          return null;
+        }
         const identity = this.serverIdentity();
         const advertiser = this.createAdvertiser();
         const active: ActiveCompanionServer = {
@@ -237,6 +241,9 @@ export class CompanionLifecycleController {
         await this.publishAfterProbe(active, generation, identity, identity.serverName);
 
         if (!this.isCurrentDiscoveryGeneration(generation)) {
+          if (this.active === active) {
+            this.active = undefined;
+          }
           await advertiser.destroy();
           await server.stop();
           return null;

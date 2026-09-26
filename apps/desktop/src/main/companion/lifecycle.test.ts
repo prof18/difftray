@@ -150,6 +150,42 @@ describe("CompanionLifecycleController", () => {
     });
   });
 
+  it("starts a fresh server after disabling during a pending server start", async () => {
+    let resolveStart: (result: { port: number }) => void = () => {
+      throw new Error("Start resolver was not initialized");
+    };
+    const pendingStart = new Promise<{ port: number }>((resolve) => {
+      resolveStart = resolve;
+    });
+    const staleServer = fakeServer();
+    staleServer.start.mockImplementationOnce(() => pendingStart);
+    const freshServer = fakeServer();
+    const servers = [staleServer, freshServer];
+    const createAdvertiser = vi.fn(() => fakeAdvertiser([]));
+    const controller = new CompanionLifecycleController({
+      ...allowedDiscoveryOptions,
+      createAdvertiser,
+      createServer: () => {
+        const server = servers.shift();
+        if (!server) throw new Error("Unexpected server start");
+        return server;
+      },
+      serverIdentity: () => serverIdentity
+    });
+
+    const startup = controller.applySettings(settings({ companionEnabled: true }));
+    await vi.waitFor(() => expect(staleServer.start).toHaveBeenCalledOnce());
+    await controller.applySettings(settings({ companionEnabled: false }));
+    resolveStart({ port: 48620 });
+    await startup;
+    await controller.applySettings(settings({ companionEnabled: true }));
+
+    expect(staleServer.stop).toHaveBeenCalledOnce();
+    expect(freshServer.start).toHaveBeenCalledOnce();
+    expect(createAdvertiser).toHaveBeenCalledOnce();
+    expect(controller.state).toEqual({ enabled: true, port: 48620, status: "running" });
+  });
+
   it("disconnects a revoked device from the active server", async () => {
     const server = fakeServer({ port: 48620 });
     const controller = new CompanionLifecycleController({
