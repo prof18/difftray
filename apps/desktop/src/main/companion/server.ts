@@ -192,7 +192,10 @@ async function replayProjectListInvalidation(
 ): Promise<void> {
   try {
     const firstProject = (
-      await deps.listRecentProjects({ summaryMode: "background" })
+      await deps.listRecentProjects({
+        includeCommitSubject: false,
+        summaryMode: "background"
+      })
     )[0];
 
     // Protocol-v1 mobile releases invalidate the complete project list for any

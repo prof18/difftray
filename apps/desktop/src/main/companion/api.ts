@@ -1,6 +1,7 @@
 import { posix as posixPath } from "node:path";
 
 import {
+  COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
@@ -115,6 +116,7 @@ export type CompanionDeps = {
     target: DiffTargetBody
   ) => Promise<ReviewWorkspaceView>;
   readonly listRecentProjects: (options: {
+    readonly includeCommitSubject: boolean;
     readonly summaryMode: "background" | "complete";
   }) => Promise<readonly RecentProjectView[]>;
   readonly areProjectSummariesPending?: (projectIds: readonly string[]) => boolean;
@@ -443,6 +445,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
           COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE
         );
         const projects = await deps.listRecentProjects({
+          includeCommitSubject: capabilities.includes(
+            COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT
+          ),
           summaryMode: supportsBackgroundSummaries ? "background" : "complete"
         });
 
@@ -865,14 +870,15 @@ function projectForCapabilities(
   project: RecentProjectView,
   capabilities: readonly string[]
 ): RecentProjectView {
-  if (capabilities.includes(COMPANION_CAPABILITY_PROJECT_IDENTITY)) {
-    return project;
+  const compatibleProject = { ...project } as Record<string, unknown>;
+  if (!capabilities.includes(COMPANION_CAPABILITY_PROJECT_IDENTITY)) {
+    delete compatibleProject.repositoryName;
+    delete compatibleProject.worktreeName;
   }
-
-  const legacyProject = { ...project } as Record<string, unknown>;
-  delete legacyProject.repositoryName;
-  delete legacyProject.worktreeName;
-  return legacyProject as RecentProjectView;
+  if (!capabilities.includes(COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT)) {
+    delete compatibleProject.defaultCommitSubject;
+  }
+  return compatibleProject as RecentProjectView;
 }
 
 function workspaceForCapabilities(

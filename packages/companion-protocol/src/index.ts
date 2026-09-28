@@ -1,4 +1,5 @@
 export {
+  COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
@@ -63,6 +64,7 @@ export type RasterImageMimeType = "image/jpeg" | "image/png" | "image/webp";
 export type RecentProjectView = {
   readonly defaultBaseRef?: string;
   readonly defaultCommitRef?: string;
+  readonly defaultCommitSubject?: string;
   readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
   readonly id: string;
   readonly lastOpenedAt?: string;

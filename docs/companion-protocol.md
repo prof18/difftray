@@ -96,6 +96,12 @@ clients and after the queue settles, including when a project has no available
 summary. Capable clients must use this explicit state instead of inferring work
 from a missing `reviewSummary` field.
 
+A client that sends `project-commit-subject-v1` may receive the optional
+`defaultCommitSubject` field for commit-targeted projects in the project list.
+The server resolves the selected ref directly, so the field also works for
+commits outside the recent-commit selector window. It omits the field for
+clients without the capability and when the ref cannot be resolved.
+
 ## Authenticated API
 
 Authenticated routes use the real HTTP path, but the logical method and body are

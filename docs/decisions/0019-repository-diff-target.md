@@ -28,6 +28,13 @@ selector keeps it available with a selected label rather than treating it as par
 of the date-ordered recent list. Search or pagination can be added later on top of
 the bounded recent-commit API.
 
+For mobile project rows, the selected commit is identified by its subject on one
+line. The companion project list resolves that subject from the selected ref,
+including when the commit has left the recent list. The `defaultCommitSubject`
+field is sent only when the client advertises `project-commit-subject-v1`; older
+clients keep their existing project shape. If Git cannot resolve the subject,
+mobile shows the first 12 characters of the saved ref.
+
 ## Context
 
 Working-tree review is the safest default for local agent and developer changes,

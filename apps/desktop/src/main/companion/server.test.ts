@@ -2,6 +2,7 @@ import { request, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
@@ -777,6 +778,52 @@ describe("companion server core", () => {
         .project
     ).toEqual({ id: project.id, name: project.name, path: project.path });
     expect(capableWorkspace.plain.body).toMatchObject({ workspace: { project } });
+  });
+
+  it("only exposes the selected commit subject to clients that opt in", async () => {
+    const project = {
+      defaultCommitRef: "abc123",
+      defaultCommitSubject: "Improve feed refresh",
+      defaultDiffTargetMode: "commit" as const,
+      id: "project-1",
+      name: "Difftray",
+      path: "/repo"
+    };
+    const listRecentProjects = vi.fn(async () => [project]);
+    const { baseUrl } = await startServer({ listRecentProjects });
+
+    const legacy = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+    const capable = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+
+    expect(legacy.plain.body).toEqual({
+      projects: [
+        {
+          defaultCommitRef: "abc123",
+          defaultDiffTargetMode: "commit",
+          id: "project-1",
+          name: "Difftray",
+          path: "/repo"
+        }
+      ]
+    });
+    expect(capable.plain.body).toEqual({ projects: [project] });
+    expect(listRecentProjects).toHaveBeenNthCalledWith(1, {
+      includeCommitSubject: false,
+      summaryMode: "complete"
+    });
+    expect(listRecentProjects).toHaveBeenNthCalledWith(2, {
+      includeCommitSubject: true,
+      summaryMode: "complete"
+    });
   });
 
   it("lists the approved repository catalog and opens opaque ids in a batch", async () => {

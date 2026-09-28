@@ -21,6 +21,7 @@ import {
   getWorktreeInfo,
   listBranchRefs,
   listRecentCommits,
+  loadCommitSubject,
   loadBranchDiffs,
   loadBranchDiffSummaries,
   loadBranchFileDiff,
@@ -1008,6 +1009,16 @@ describe("branch diff loading", () => {
 });
 
 describe("commit diff loading", () => {
+  it("loads the subject of a selected commit even when it is no longer recent", async () => {
+    const repo = await createRepo();
+    const selectedSha = await gitOutput(repo, "rev-parse", "HEAD");
+    await writeFile(path.join(repo, "tracked.txt"), "newer\n");
+    await git(repo, "commit", "-am", "newer commit");
+
+    await expect(loadCommitSubject(repo, selectedSha)).resolves.toBe("initial");
+    await expect(loadCommitSubject(repo, "missing-ref")).resolves.toBeNull();
+  });
+
   it("lists recent commits for commit selection with a bounded limit", async () => {
     const repo = await createRepo();
     await writeFile(path.join(repo, "tracked.txt"), "second\n");

@@ -290,6 +290,19 @@ export async function listRecentCommits(
     .filter((commit) => commit.sha.length > 0);
 }
 
+export async function loadCommitSubject(
+  repoPath: string,
+  commitRef: string
+): Promise<string | null> {
+  return gitOutputOrNull(repoPath, [
+    "show",
+    "-s",
+    "--format=%s",
+    "--end-of-options",
+    commitRef
+  ]);
+}
+
 export async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
   readonly diffBaseRef: string;
   readonly reviewTarget: GitWorkingTreeReviewTarget;

@@ -59,6 +59,7 @@ import {
   loadBranchFileDiff,
   listBranchRefs,
   listRecentCommits,
+  loadCommitSubject,
   loadCommitReviewTarget,
   loadCommitDiffSummaries,
   loadCommitFileDiffSummary,
@@ -2061,6 +2062,7 @@ function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
 }
 
 async function listAvailableRecentProjectViewsWithSummaries(options: {
+  readonly includeCommitSubject: boolean;
   readonly summaryMode: "background" | "complete";
 }): Promise<readonly RecentProjectView[]> {
   const projects = listAvailableRecentProjects();
@@ -2069,12 +2071,51 @@ async function listAvailableRecentProjectViewsWithSummaries(options: {
   if (options.summaryMode === "complete") {
     const summaries = await coordinator.loadAll(projects.map((project) => project.id));
 
-    return projects.map((project, index) =>
+    const views = projects.map((project, index) =>
       projectView(project, summaries[index] ?? undefined)
     );
+    return options.includeCommitSubject ? addSelectedCommitSubjects(views) : views;
   }
 
-  return getCompanionProjectList().list();
+  const views = getCompanionProjectList().list();
+  return options.includeCommitSubject ? addSelectedCommitSubjects(views) : views;
+}
+
+async function addSelectedCommitSubjects(
+  projects: readonly RecentProjectView[]
+): Promise<readonly RecentProjectView[]> {
+  return Promise.all(
+    projects.map(async (project) => {
+      if (project.defaultDiffTargetMode !== "commit" || !project.defaultCommitRef) {
+        return project;
+      }
+
+      const subject = await selectedCommitSubject(project.path, project.defaultCommitRef);
+      return subject ? { ...project, defaultCommitSubject: subject } : project;
+    })
+  );
+}
+
+const selectedCommitSubjects = new Map<string, string>();
+
+async function selectedCommitSubject(path: string, ref: string): Promise<string | null> {
+  const cacheKey = /^[0-9a-f]{7,64}$/i.test(ref) ? `${path}\0${ref}` : null;
+  const cached = cacheKey ? selectedCommitSubjects.get(cacheKey) : undefined;
+  if (cached) {
+    return cached;
+  }
+
+  const subject = await loadCommitSubject(path, ref);
+  if (subject && cacheKey) {
+    if (selectedCommitSubjects.size >= 100) {
+      const oldestKey = selectedCommitSubjects.keys().next().value;
+      if (oldestKey !== undefined) {
+        selectedCommitSubjects.delete(oldestKey);
+      }
+    }
+    selectedCommitSubjects.set(cacheKey, subject);
+  }
+  return subject;
 }
 
 function getProjectSummaryCoordinator(): ProjectSummaryCoordinator<ProjectReviewSummaryView> {
