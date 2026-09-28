@@ -197,6 +197,7 @@ export function DiffTargetControl({
     pickerModeForReviewMode(mode)
   );
   const [query, setQuery] = useState("");
+  const [triggerTooltipOpen, setTriggerTooltipOpen] = useState(false);
   const selectBranchRefs = [
     ...new Set([...(baseRefDraft.length > 0 ? [baseRefDraft] : []), ...branchRefs])
   ];
@@ -216,6 +217,12 @@ export function DiffTargetControl({
     mode,
     reviewTarget
   });
+  const triggerTooltip =
+    mode === "commit" &&
+    reviewTarget.commitShortSha !== undefined &&
+    triggerLabel === reviewTarget.commitSubject?.trim()
+      ? `${reviewTarget.commitShortSha} ${triggerLabel}`
+      : triggerLabel;
 
   useEffect(() => {
     if (disabled) {
@@ -311,20 +318,38 @@ export function DiffTargetControl({
         )}
         {mode === "commit" ? "Commit" : "Against"}
       </span>
-      <button
-        aria-label="Choose diff target"
-        aria-controls={open ? pickerId : undefined}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className={styles.diffTargetTrigger}
-        disabled={disabled}
-        onClick={openPicker}
-        title="Choose diff target"
-        type="button"
-      >
-        <span>{triggerLabel}</span>
-        <ChevronDown size={13} strokeWidth={1.5} aria-hidden />
-      </button>
+      <TooltipProvider delayDuration={150} disableHoverableContent>
+        <TooltipRoot
+          onOpenChange={setTriggerTooltipOpen}
+          open={triggerTooltipOpen && !open}
+        >
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Choose diff target"
+              aria-controls={open ? pickerId : undefined}
+              aria-expanded={open}
+              aria-haspopup="dialog"
+              className={styles.diffTargetTrigger}
+              disabled={disabled}
+              onClick={openPicker}
+              type="button"
+            >
+              <span>{triggerLabel}</span>
+              <ChevronDown size={13} strokeWidth={1.5} aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipPortal>
+            <TooltipContent
+              className={styles.diffTargetCommitTooltip}
+              collisionPadding={8}
+              side="bottom"
+              sideOffset={6}
+            >
+              {triggerTooltip}
+            </TooltipContent>
+          </TooltipPortal>
+        </TooltipRoot>
+      </TooltipProvider>
       {hasReset ? (
         <button
           aria-label="Reset to Git changes"

@@ -143,6 +143,59 @@ describe("DiffTargetControl commit tooltip", () => {
     expect(focusedTooltip?.closest('[aria-hidden="true"]')).not.toBeNull();
     expect(commitOption?.getAttribute("aria-describedby")).toBeNull();
   });
+
+  it("shows the full selected commit when hovering the closed trigger", () => {
+    const commitSubject =
+      "Add cloud sync success handling with a subject too long for the trigger";
+
+    act(() => {
+      root.render(
+        <DiffTargetControl
+          baseRefDraft="main"
+          branchRefs={["main"]}
+          commitRefDraft="def456"
+          disabled={false}
+          mode="commit"
+          onBaseRefDraftChange={vi.fn()}
+          onCommitRefDraftChange={vi.fn()}
+          onUseBranchDiff={vi.fn()}
+          onUseCommitDiff={vi.fn()}
+          onUseWorkingTreeDiff={vi.fn()}
+          recentCommits={[]}
+          reviewTarget={{
+            commitSha: "def456",
+            commitShortSha: "def456",
+            commitSubject,
+            headSha: "def456",
+            id: "target-commit",
+            kind: "commit"
+          }}
+        />
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Choose diff target"]'
+    );
+
+    expect(trigger?.getAttribute("title")).toBeNull();
+
+    act(() => {
+      trigger?.dispatchEvent(mousePointerEvent("pointermove"));
+      vi.advanceTimersByTime(150);
+    });
+
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toBe(
+      `def456 ${commitSubject}`
+    );
+
+    act(() => {
+      trigger?.click();
+    });
+
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+  });
 });
 
 function mousePointerEvent(
