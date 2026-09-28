@@ -2,10 +2,22 @@
 
 ## Unreleased
 
-### Changed
+## 0.0.14 - 2026-09-28
 
-- Rename the dev build channel to Alpha; companion server names now include
-  (Alpha) or (Dev) outside the store release.
+### Added
+
+- Draft multiline comments anchored to a range of diff lines on desktop.
+- Show code previews for comment drafts with the shared diff surface.
+- Show the selected commit subject in the desktop target list and its full title
+  in a tooltip.
+
+### Improved
+
+- Recover companion connections more reliably after server restarts, network
+  changes, and discovery failures.
+- Improve diff text contrast and file change counts.
+- Rename the development build channel to Alpha; companion server names now
+  include (Alpha) or (Dev) outside the store release.
 
 ## 0.0.13 - 2026-09-07
 
