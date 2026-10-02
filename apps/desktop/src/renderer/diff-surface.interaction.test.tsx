@@ -2,23 +2,42 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { FileDiffOptions } from "@pierre/diffs/react";
-import type { SelectedLineRange } from "@pierre/diffs";
+import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiffSurface } from "./diff-surface.js";
+import type {
+  ReviewCommentAnnotationMetadata,
+  ReviewCommentDraft
+} from "./review-comments.js";
 
 let options: FileDiffOptions<undefined, undefined> | undefined;
 let selectedLines: SelectedLineRange | null | undefined;
+let lineAnnotations: DiffLineAnnotation<ReviewCommentAnnotationMetadata>[] | undefined;
 vi.mock("@pierre/diffs/react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@pierre/diffs/react")>()),
   WorkerPoolContextProvider: ({ children }: { children: React.ReactNode }) => children,
   FileDiff: (props: {
     options: FileDiffOptions<undefined, undefined>;
     selectedLines?: SelectedLineRange | null;
+    lineAnnotations: DiffLineAnnotation<ReviewCommentAnnotationMetadata>[];
+    renderAnnotation: (
+      annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>
+    ) => React.ReactNode;
   }) => {
     options = props.options;
     selectedLines = props.selectedLines;
-    return <div data-column-number="10">10</div>;
+    lineAnnotations = props.lineAnnotations;
+    return (
+      <>
+        <div data-column-number="10">10</div>
+        {props.lineAnnotations.map((annotation) => (
+          <div key={`${annotation.side}:${String(annotation.lineNumber)}`}>
+            {props.renderAnnotation(annotation)}
+          </div>
+        ))}
+      </>
+    );
   }
 }));
 vi.mock("@pierre/diffs", async (importOriginal) => ({
@@ -121,6 +140,46 @@ describe("desktop comment selection", () => {
       });
     });
   }
+
+  it("updates draft text without invalidating the diff layout or selection callbacks", () => {
+    const draft: ReviewCommentDraft = {
+      body: "",
+      diffHash: "hash",
+      lineEnd: 1,
+      lineStart: 1,
+      path: "a.ts",
+      side: "additions"
+    };
+    props = {
+      ...props,
+      commentDraft: draft
+    };
+    render();
+    const initialAnnotations = lineAnnotations;
+    const initialOptions = options;
+    const onStartComment = vi.fn();
+    const typedDraft = { ...draft, body: "Keep this clear." };
+    props = {
+      ...props,
+      commentDraft: typedDraft,
+      onStartComment
+    };
+    render();
+
+    expect(lineAnnotations).toBe(initialAnnotations);
+    expect(options).toBe(initialOptions);
+    expect(container.querySelector("textarea")?.value).toBe("Keep this clear.");
+    pointer("pointerdown");
+    pointer("pointerup");
+    click(1);
+    expect(onStartComment).toHaveBeenCalledOnce();
+
+    props = { ...props, commentDraft: { ...typedDraft, lineEnd: 2 } };
+    render();
+    expect(lineAnnotations).not.toBe(initialAnnotations);
+    expect(container.textContent).toContain("New lines 1-2");
+    expect(container.querySelector("textarea")?.value).toBe("Keep this clear.");
+  });
 
   it("dispatches a click once and never creates a comment from a controlled highlight", () => {
     pointer("pointerdown");

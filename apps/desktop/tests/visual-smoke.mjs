@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { openStorage } from "@difftray/storage";
 import { _electron as electron } from "playwright";
+import { expectStableCommentTyping } from "./review-comment-typing.mjs";
 
 const require = createRequire(import.meta.url);
 const cwd = path.resolve(import.meta.dirname, "..");
@@ -294,6 +295,17 @@ try {
   await window.screenshot({
     path: path.join(artifactsDir, "desktop-horizontal-scrollbar.png")
   });
+  await clickDiffLineNumber(window, "additions", 600);
+  await expectStableCommentTyping(window, artifactsDir);
+  await window.getByRole("button", { name: "Cancel", exact: true }).click();
+  await runCommand(window, "unified", /Switch to unified diff/);
+  await window.locator('[data-diff-layout="unified"]').waitFor();
+  await setDiffScrollTopFromBottom(window, 0);
+  await window.locator('[data-unified] [data-column-number="600"]').last().click();
+  await expectStableCommentTyping(window, artifactsDir);
+  await window.getByRole("button", { name: "Cancel", exact: true }).click();
+  await runCommand(window, "split", /Switch to split diff/);
+  await window.locator('[data-diff-layout="split"]').waitFor();
   const restoredContextScrollTop = await setDiffScrollTopFromBottom(window, 900);
   await expectDiffScrollTopBetween(
     window,

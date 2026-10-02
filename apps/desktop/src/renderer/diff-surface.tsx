@@ -153,13 +153,40 @@ export function DiffSurface({
     }),
     [effectiveDiffMode, resolvedTheme, selection.options, wrapLines]
   );
+  const {
+    diffHash: draftDiffHash,
+    lineEnd: draftLineEnd,
+    lineStart: draftLineStart,
+    path: draftPath,
+    side: draftSide
+  } = commentDraft ?? {};
+  // Pierre rebuilds the diff when annotations change. Text belongs to the editor;
+  // only a change in placement should invalidate the draft annotation's layout.
+  const annotationDraft = useMemo(
+    () =>
+      draftDiffHash !== undefined &&
+      draftLineEnd !== undefined &&
+      draftLineStart !== undefined &&
+      draftPath !== undefined &&
+      draftSide !== undefined
+        ? {
+            body: "",
+            diffHash: draftDiffHash,
+            lineEnd: draftLineEnd,
+            lineStart: draftLineStart,
+            path: draftPath,
+            side: draftSide
+          }
+        : undefined,
+    [draftDiffHash, draftLineEnd, draftLineStart, draftPath, draftSide]
+  );
   const lineAnnotations = useMemo(
     () =>
       reviewCommentAnnotations({
         comments,
-        draft: commentDraft
+        draft: annotationDraft
       }),
-    [commentDraft, comments]
+    [annotationDraft, comments]
   );
   const workerPoolOptions = useMemo(() => createDiffsWorkerPoolOptions(), []);
 
@@ -243,7 +270,11 @@ export function DiffSurface({
             selectedLines={selection.lines}
             renderAnnotation={(annotation) => (
               <ReviewCommentAnnotation
-                annotation={annotation}
+                annotation={
+                  annotation.metadata.kind === "draft" && commentDraft
+                    ? { ...annotation, metadata: { kind: "draft", draft: commentDraft } }
+                    : annotation
+                }
                 onCancelDraft={onCancelComment}
                 onDeleteComment={onDeleteComment}
                 onDraftBodyChange={onCommentDraftBodyChange}
@@ -803,6 +834,10 @@ function useCommentLineSelection(
   draft: ReviewCommentDraft | undefined,
   onSelect: (selection: CommentSelection) => void
 ) {
+  const onSelectRef = useRef(onSelect);
+  useLayoutEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
   const session = useRef<CommentPointerSession | undefined>(undefined);
   const preview = useRef<SelectedLineRange | null>(null);
   const [, renderPreview] = useState(0);
@@ -884,7 +919,7 @@ function useCommentLineSelection(
         current.suppressClick =
           current.moved || multiple || Boolean(range?.endSide && !sameSide);
         if (multiple && range.side && (!range.endSide || range.endSide === range.side)) {
-          onSelect({
+          onSelectRef.current({
             kind: "range",
             start: range.start,
             end: range.end,
@@ -895,7 +930,7 @@ function useCommentLineSelection(
       },
       onLineNumberClick: (line: OnDiffLineClickProps) => {
         if (line.event.detail !== 0 && session.current?.suppressClick) return;
-        onSelect({
+        onSelectRef.current({
           kind: "click",
           start: line.lineNumber,
           end: line.lineNumber,
@@ -903,7 +938,7 @@ function useCommentLineSelection(
         });
       }
     };
-  }, [onSelect]);
+  }, []);
   return {
     options,
     lines: session.current?.active
