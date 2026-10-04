@@ -1,4 +1,6 @@
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
+import { COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES } from "../src/index.js";
 
 import type {
   FileDiffStatus,
@@ -34,5 +36,13 @@ describe("view model types", () => {
       readonly headSha: string;
       readonly kind: "branch" | "commit" | "working_tree";
     }>();
+  });
+});
+
+describe("capabilities", () => {
+  it("names the file comments and review notes capability", () => {
+    expect(COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES).toBe(
+      "file-comments-review-notes-v1"
+    );
   });
 });

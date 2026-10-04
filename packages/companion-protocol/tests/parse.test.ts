@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseCompanionServerEvent,
   parseCreateCommentBody,
+  parseCreateFileCommentBody,
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
@@ -10,6 +11,9 @@ import {
   parseOpenWorktreeBody,
   parseOpenRepositoriesBody,
   parsePairRequestBody,
+  parseReviewNoteTargetBody,
+  parseSaveReviewNoteBody,
+  parseSetReviewNoteDismissedBody,
   parseUpdateCommentBody
 } from "../src/index.js";
 
@@ -252,6 +256,117 @@ describe("parseCompanionServerEvent", () => {
     });
     expect(parseCompanionServerEvent({ kind: "hello", protocolVersion: 1.5 })).toEqual({
       error: "missing protocolVersion",
+      ok: false
+    });
+  });
+});
+
+describe("file comment and review note bodies", () => {
+  it("parses file comment bodies and keeps previousPath only when present", () => {
+    expect(
+      parseCreateFileCommentBody({
+        body: "Split this file.",
+        diffHash: "hash",
+        path: "src/App.tsx",
+        reviewTargetId: "target"
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        body: "Split this file.",
+        diffHash: "hash",
+        path: "src/App.tsx",
+        reviewTargetId: "target"
+      }
+    });
+    expect(
+      parseCreateFileCommentBody({
+        body: "Split this file.",
+        diffHash: "hash",
+        path: "src/App.tsx",
+        previousPath: "src/Old.tsx",
+        reviewTargetId: "target"
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        body: "Split this file.",
+        diffHash: "hash",
+        path: "src/App.tsx",
+        previousPath: "src/Old.tsx",
+        reviewTargetId: "target"
+      }
+    });
+    expect(
+      parseCreateFileCommentBody({
+        body: "x",
+        diffHash: "hash",
+        reviewTargetId: "target"
+      })
+    ).toEqual({ error: "missing path", ok: false });
+    expect(
+      parseCreateFileCommentBody({
+        body: "x",
+        diffHash: 1,
+        path: "src/App.tsx",
+        reviewTargetId: "target"
+      })
+    ).toEqual({ error: "missing diffHash", ok: false });
+    expect(
+      parseCreateFileCommentBody({
+        body: "x",
+        diffHash: "hash",
+        path: "src/App.tsx",
+        previousPath: 3,
+        reviewTargetId: "target"
+      })
+    ).toEqual({ error: "previousPath must be a string", ok: false });
+  });
+
+  it("parses review note save bodies", () => {
+    expect(
+      parseSaveReviewNoteBody({ body: "Overall.", reviewTargetId: "target" })
+    ).toEqual({
+      ok: true,
+      value: { body: "Overall.", reviewTargetId: "target" }
+    });
+    expect(parseSaveReviewNoteBody({ reviewTargetId: "target" })).toEqual({
+      error: "missing body",
+      ok: false
+    });
+    expect(parseSaveReviewNoteBody({ body: "Overall.", reviewTargetId: 4 })).toEqual({
+      error: "missing reviewTargetId",
+      ok: false
+    });
+  });
+
+  it("parses review note dismissal bodies and rejects non-boolean flags", () => {
+    expect(
+      parseSetReviewNoteDismissedBody({ dismissed: true, reviewTargetId: "target" })
+    ).toEqual({ ok: true, value: { dismissed: true, reviewTargetId: "target" } });
+    expect(
+      parseSetReviewNoteDismissedBody({ dismissed: false, reviewTargetId: "target" })
+    ).toEqual({ ok: true, value: { dismissed: false, reviewTargetId: "target" } });
+    expect(
+      parseSetReviewNoteDismissedBody({ dismissed: "yes", reviewTargetId: "target" })
+    ).toEqual({ error: "missing dismissed", ok: false });
+    expect(parseSetReviewNoteDismissedBody({ reviewTargetId: "target" })).toEqual({
+      error: "missing dismissed",
+      ok: false
+    });
+    expect(parseSetReviewNoteDismissedBody({ dismissed: true })).toEqual({
+      error: "missing reviewTargetId",
+      ok: false
+    });
+  });
+
+  it("parses review note target bodies", () => {
+    expect(parseReviewNoteTargetBody({ reviewTargetId: "target" })).toEqual({
+      ok: true,
+      value: { reviewTargetId: "target" }
+    });
+    expect(parseReviewNoteTargetBody({})).toEqual({
+      error: "missing reviewTargetId",
       ok: false
     });
   });

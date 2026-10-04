@@ -71,6 +71,36 @@ export type ReviewCommentRecord = CreateReviewCommentInput & {
   readonly updatedAt: string;
 };
 
+export type CreateReviewFileCommentInput = {
+  readonly body: string;
+  readonly diffHash: string;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+};
+
+export type ReviewFileCommentRecord = CreateReviewFileCommentInput & {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly updatedAt: string;
+};
+
+export type SaveReviewNoteInput = {
+  readonly body: string;
+  readonly projectId: string;
+  readonly scopeId: string;
+};
+
+export type ReviewNoteRecord = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly dismissedAt?: string;
+  readonly projectId: string;
+  readonly scopeId: string;
+  readonly updatedAt: string;
+};
+
 export type CompanionDeviceInput = {
   readonly id: string;
   readonly name: string;

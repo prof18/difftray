@@ -1,6 +1,7 @@
 import type {
   CompanionServerEvent,
   CreateCommentBody,
+  CreateFileCommentBody,
   DiffTargetBody,
   FileImageBody,
   MarkReviewedBody,
@@ -8,6 +9,9 @@ import type {
   ProjectWorktreeAvailabilityBody,
   OpenRepositoriesBody,
   PairRequestBody,
+  ReviewNoteTargetBody,
+  SaveReviewNoteBody,
+  SetReviewNoteDismissedBody,
   UpdateCommentBody
 } from "./index.js";
 
@@ -179,6 +183,64 @@ export function parseUpdateCommentBody(input: unknown): ParseResult<UpdateCommen
   return { ok: true, value: { body: body.value } };
 }
 
+export function parseCreateFileCommentBody(
+  input: unknown
+): ParseResult<CreateFileCommentBody> {
+  const body = readString(input, "body");
+  if (!body.ok) return body;
+  const diffHash = readString(input, "diffHash");
+  if (!diffHash.ok) return diffHash;
+  const path = readString(input, "path");
+  if (!path.ok) return path;
+  const previousPath = readOptionalString(input, "previousPath");
+  if (!previousPath.ok) return previousPath;
+  const reviewTargetId = readString(input, "reviewTargetId");
+  if (!reviewTargetId.ok) return reviewTargetId;
+
+  return {
+    ok: true,
+    value: {
+      body: body.value,
+      diffHash: diffHash.value,
+      path: path.value,
+      ...(previousPath.value !== undefined ? { previousPath: previousPath.value } : {}),
+      reviewTargetId: reviewTargetId.value
+    }
+  };
+}
+
+export function parseSaveReviewNoteBody(input: unknown): ParseResult<SaveReviewNoteBody> {
+  const body = readString(input, "body");
+  if (!body.ok) return body;
+  const reviewTargetId = readString(input, "reviewTargetId");
+  if (!reviewTargetId.ok) return reviewTargetId;
+
+  return { ok: true, value: { body: body.value, reviewTargetId: reviewTargetId.value } };
+}
+
+export function parseSetReviewNoteDismissedBody(
+  input: unknown
+): ParseResult<SetReviewNoteDismissedBody> {
+  const dismissed = readBoolean(input, "dismissed");
+  if (!dismissed.ok) return dismissed;
+  const reviewTargetId = readString(input, "reviewTargetId");
+  if (!reviewTargetId.ok) return reviewTargetId;
+
+  return {
+    ok: true,
+    value: { dismissed: dismissed.value, reviewTargetId: reviewTargetId.value }
+  };
+}
+
+export function parseReviewNoteTargetBody(
+  input: unknown
+): ParseResult<ReviewNoteTargetBody> {
+  const reviewTargetId = readString(input, "reviewTargetId");
+  if (!reviewTargetId.ok) return reviewTargetId;
+
+  return { ok: true, value: { reviewTargetId: reviewTargetId.value } };
+}
+
 export function parseDiffTargetBody(input: unknown): ParseResult<DiffTargetBody> {
   const mode = readEnum(input, "mode", ["branch", "commit", "working_tree"] as const);
   if (!mode.ok) return mode;
@@ -276,6 +338,16 @@ function readNumber(input: unknown, property: string): ParseResult<number> {
   const value = readUnknown(input, property);
 
   if (typeof value !== "number" || !Number.isFinite(value)) {
+    return { error: `missing ${property}`, ok: false };
+  }
+
+  return { ok: true, value };
+}
+
+function readBoolean(input: unknown, property: string): ParseResult<boolean> {
+  const value = readUnknown(input, property);
+
+  if (typeof value !== "boolean") {
     return { error: `missing ${property}`, ok: false };
   }
 

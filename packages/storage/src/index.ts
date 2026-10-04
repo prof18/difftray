@@ -18,9 +18,13 @@ import {
   type CompanionDeviceInput,
   type CompanionDeviceRecord,
   type CreateReviewCommentInput,
+  type CreateReviewFileCommentInput,
   type ReviewCommentRecord,
+  type ReviewFileCommentRecord,
   type ReviewMarkInput,
-  type ReviewMarkRecord
+  type ReviewMarkRecord,
+  type ReviewNoteRecord,
+  type SaveReviewNoteInput
 } from "./records.js";
 import {
   findCompanionDeviceByPublicKey,
@@ -31,14 +35,23 @@ import {
 } from "./companion-device-store.js";
 import {
   createReviewComment,
+  createReviewFileComment,
   deleteReviewComment,
+  deleteReviewFileComment,
+  deleteReviewNote,
   getReviewComment,
+  getReviewFileComment,
+  getReviewNote,
   isReviewed,
   listReviewComments,
+  listReviewFileComments,
   listReviewMarks,
   markReviewed,
+  saveReviewNote,
+  setReviewNoteDismissed,
   unmarkReviewed,
-  updateReviewComment
+  updateReviewComment,
+  updateReviewFileComment
 } from "./review-store.js";
 import { runMigrations } from "./schema.js";
 import {
@@ -90,12 +103,16 @@ export {
   type CompanionDeviceInput,
   type CompanionDeviceRecord,
   type CreateReviewCommentInput,
+  type CreateReviewFileCommentInput,
   type ProjectRecord,
   type ReviewCommentRecord,
   type ReviewCommentSide,
+  type ReviewFileCommentRecord,
   type ReviewMarkInput,
   type ReviewMarkRecord,
+  type ReviewNoteRecord,
   type ReviewTargetRecord,
+  type SaveReviewNoteInput,
   type StoredProjectRecord,
   type StoredReviewTargetRecord
 } from "./records.js";
@@ -159,6 +176,11 @@ export type DifftrayStorage = {
   readonly countAvailableRepositoriesForRoot: (rootId: string) => number;
   readonly createReviewComment: (input: CreateReviewCommentInput) => ReviewCommentRecord;
   readonly deleteReviewComment: (id: string) => boolean;
+  readonly createReviewFileComment: (
+    input: CreateReviewFileCommentInput
+  ) => ReviewFileCommentRecord;
+  readonly deleteReviewFileComment: (id: string) => boolean;
+  readonly deleteReviewNote: (scopeId: string) => boolean;
   readonly findCompanionDeviceByPublicKey: (
     publicKey: string
   ) => CompanionDeviceRecord | null;
@@ -169,6 +191,8 @@ export type DifftrayStorage = {
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
   readonly getProjectTabOrder: () => readonly string[];
   readonly getReviewComment: (id: string) => ReviewCommentRecord | null;
+  readonly getReviewFileComment: (id: string) => ReviewFileCommentRecord | null;
+  readonly getReviewNote: (scopeId: string) => ReviewNoteRecord | null;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
   readonly forgetProject: (id: string) => void;
   readonly failRepositoryRootScan: (rootId: string, message: string) => void;
@@ -184,9 +208,17 @@ export type DifftrayStorage = {
   readonly listRepositoryCatalog: () => readonly RepositoryCatalogRecord[];
   readonly listRepositorySearchRoots: () => readonly RepositorySearchRootRecord[];
   readonly listReviewComments: (reviewTargetId: string) => readonly ReviewCommentRecord[];
+  readonly listReviewFileComments: (
+    reviewTargetId: string
+  ) => readonly ReviewFileCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
   readonly markReviewed: (input: ReviewMarkInput) => void;
+  readonly saveReviewNote: (input: SaveReviewNoteInput) => ReviewNoteRecord;
+  readonly setReviewNoteDismissed: (
+    scopeId: string,
+    dismissed: boolean
+  ) => ReviewNoteRecord | null;
   readonly unmarkReviewed: (
     reviewTargetId: string,
     path: string,
@@ -208,6 +240,10 @@ export type DifftrayStorage = {
         }
   ) => void;
   readonly updateReviewComment: (id: string, body: string) => ReviewCommentRecord | null;
+  readonly updateReviewFileComment: (
+    id: string,
+    body: string
+  ) => ReviewFileCommentRecord | null;
   readonly appendProjectToTabOrder: (projectId: string) => void;
   readonly removeProjectFromTabOrder: (projectId: string) => void;
   readonly removeRepositorySearchRoot: (rootId: string) => void;
@@ -254,6 +290,9 @@ export function openStorage(filename: string): DifftrayStorage {
       countAvailableRepositoriesForRoot(db, rootId),
     createReviewComment: (input) => createReviewComment(db, input),
     deleteReviewComment: (id) => deleteReviewComment(db, id),
+    createReviewFileComment: (input) => createReviewFileComment(db, input),
+    deleteReviewFileComment: (id) => deleteReviewFileComment(db, id),
+    deleteReviewNote: (scopeId) => deleteReviewNote(db, scopeId),
     findCompanionDeviceByPublicKey: (publicKey) =>
       findCompanionDeviceByPublicKey(db, publicKey),
     getAppSettings: () => getAppSettings(db),
@@ -263,6 +302,8 @@ export function openStorage(filename: string): DifftrayStorage {
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
     getProjectTabOrder: () => getProjectTabOrder(db),
     getReviewComment: (id) => getReviewComment(db, id),
+    getReviewFileComment: (id) => getReviewFileComment(db, id),
+    getReviewNote: (scopeId) => getReviewNote(db, scopeId),
     getReviewTarget: (id) => getReviewTarget(db, id),
     forgetProject: (id) => {
       db.exec("begin immediate");
@@ -288,11 +329,16 @@ export function openStorage(filename: string): DifftrayStorage {
     listRepositoryCatalog: () => listRepositoryCatalog(db),
     listRepositorySearchRoots: () => listRepositorySearchRoots(db),
     listReviewComments: (reviewTargetId) => listReviewComments(db, reviewTargetId),
+    listReviewFileComments: (reviewTargetId) =>
+      listReviewFileComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
     markReviewed: (input) => {
       markReviewed(db, input);
     },
+    saveReviewNote: (input) => saveReviewNote(db, input),
+    setReviewNoteDismissed: (scopeId, dismissed) =>
+      setReviewNoteDismissed(db, scopeId, dismissed),
     unmarkReviewed: (reviewTargetId, filePath, reviewedDiffHash) => {
       unmarkReviewed(db, reviewTargetId, filePath, reviewedDiffHash);
     },
@@ -300,6 +346,7 @@ export function openStorage(filename: string): DifftrayStorage {
       updateProjectDefaultDiffTarget(db, projectId, target);
     },
     updateReviewComment: (id, body) => updateReviewComment(db, id, body),
+    updateReviewFileComment: (id, body) => updateReviewFileComment(db, id, body),
     appendProjectToTabOrder: (projectId) => {
       appendProjectToTabOrder(db, projectId);
     },

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import {
   reviewCommentReportItemTemplate,
   reviewCommentsEmptyReportTemplate,
-  reviewCommentsReportTemplate
+  reviewCommentsReportTemplate,
+  reviewFileCommentReportItemTemplate
 } from "./review-comments-report-templates.js";
 
 export {
@@ -21,6 +22,7 @@ export {
 } from "./repository-discovery.js";
 
 const reviewTargetFingerprintVersion = "difftray-review-target-v1";
+const reviewNoteScopeVersion = "note-scope-v1";
 const fileDiffFingerprintVersion = "difftray-file-diff-v1";
 
 export type WorkingTreeReviewTarget = {
@@ -147,9 +149,16 @@ export type ReviewCommentReportItem = {
   readonly side: ReviewCommentSide;
 };
 
+export type ReviewFileCommentReportItem = {
+  readonly body: string;
+  readonly path: string;
+};
+
 export type FormatReviewCommentsReportInput = {
   readonly comments: readonly ReviewCommentReportItem[];
+  readonly fileComments?: readonly ReviewFileCommentReportItem[];
   readonly projectName: string;
+  readonly reviewNote?: string;
   readonly targetLabel?: string;
 };
 
@@ -172,6 +181,10 @@ export type ResolveReviewStatesInput = {
 
 export function createReviewTargetId(target: ReviewTarget): string {
   return `${reviewTargetFingerprintVersion}:${sha256(canonicalReviewTarget(target))}`;
+}
+
+export function createReviewNoteScopeId(target: ReviewTarget): string {
+  return `${reviewNoteScopeVersion}:${sha256(canonicalReviewNoteScope(target))}`;
 }
 
 export function createDiffHash(target: ReviewTarget, diff: FileDiff): string {
@@ -269,21 +282,56 @@ export function calculateProgress(states: readonly FileReviewState[]): ReviewPro
 export function formatReviewCommentsReport(
   input: FormatReviewCommentsReportInput
 ): string {
+  const fileComments = input.fileComments ?? [];
+  const note = input.reviewNote?.trim() ?? "";
+  const commentCount = input.comments.length + fileComments.length;
+  const paths = [
+    ...new Set([
+      ...fileComments.map((comment) => comment.path),
+      ...input.comments.map((comment) => comment.path)
+    ])
+  ].sort((left, right) => left.localeCompare(right));
+  const items = paths.flatMap((path) => [
+    ...fileComments
+      .filter((comment) => comment.path === path)
+      .map(
+        (comment) => (index: number) => formatReviewFileCommentReportItem(comment, index)
+      ),
+    ...input.comments
+      .filter((comment) => comment.path === path)
+      .map((comment) => (index: number) => formatReviewCommentReportItem(comment, index))
+  ]);
   const values = {
-    commentCount: String(input.comments.length),
-    comments: input.comments
-      .map((comment, index) => formatReviewCommentReportItem(comment, index + 1))
-      .join("\n"),
+    commentCount: String(commentCount),
+    comments:
+      items.length === 0
+        ? "No file or line comments."
+        : items.map((formatItem, index) => formatItem(index + 1)).join("\n"),
     projectName: input.projectName,
+    reviewNoteSection:
+      note.length === 0
+        ? ""
+        : `\n## Overall review notes\n\n${formatCommentBody(note)}\n`,
     targetLabel: input.targetLabel ?? "current local git diff"
   };
 
   return renderTemplate(
-    input.comments.length === 0
+    commentCount === 0 && note.length === 0
       ? reviewCommentsEmptyReportTemplate
       : reviewCommentsReportTemplate,
     values
   );
+}
+
+function formatReviewFileCommentReportItem(
+  comment: ReviewFileCommentReportItem,
+  index: number
+): string {
+  return renderTemplate(reviewFileCommentReportItemTemplate, {
+    commentBody: formatCommentBody(comment.body),
+    index: String(index),
+    path: comment.path
+  });
 }
 
 function formatReviewCommentReportItem(
@@ -335,7 +383,7 @@ function formatCommentBody(body: string): string {
 
   return normalizedBody
     .split("\n")
-    .map((line) => `> ${line}`)
+    .map((line) => (line.trim().length === 0 ? ">" : `> ${line}`))
     .join("\n");
 }
 
@@ -413,6 +461,28 @@ function canonicalReviewTarget(target: ReviewTarget): readonly unknown[] {
         target.kind,
         target.headRefName ?? null,
         target.headSha
+      ];
+  }
+}
+
+function canonicalReviewNoteScope(target: ReviewTarget): readonly unknown[] {
+  switch (target.kind) {
+    case "branch":
+      return [
+        reviewNoteScopeVersion,
+        target.projectId,
+        target.kind,
+        target.baseRefName,
+        target.headRefName ?? target.headSha
+      ];
+    case "commit":
+      return [reviewNoteScopeVersion, target.projectId, target.kind, target.commitSha];
+    case "working_tree":
+      return [
+        reviewNoteScopeVersion,
+        target.projectId,
+        target.kind,
+        target.headRefName ?? target.headSha
       ];
   }
 }

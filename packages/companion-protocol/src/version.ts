@@ -3,3 +3,5 @@ export const COMPANION_CAPABILITY_PROJECT_IDENTITY = "project-identity-v1";
 export const COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT = "project-commit-subject-v1";
 export const COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE = "project-summary-state-v1";
 export const COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE = "repository-scan-state-v1";
+export const COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES =
+  "file-comments-review-notes-v1";

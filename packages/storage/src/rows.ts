@@ -2,7 +2,9 @@ import { clampFileListWidth, type ProjectSettingsRecord } from "./settings.js";
 import type {
   ReviewCommentRecord,
   ReviewCommentSide,
+  ReviewFileCommentRecord,
   ReviewMarkRecord,
+  ReviewNoteRecord,
   StoredProjectRecord,
   StoredReviewTargetRecord
 } from "./index.js";
@@ -74,6 +76,27 @@ export type ReviewCommentRow = {
   readonly updated_at: string;
 };
 
+export type ReviewFileCommentRow = {
+  readonly body: string;
+  readonly created_at: string;
+  readonly diff_hash: string;
+  readonly id: string;
+  readonly path: string;
+  readonly previous_path: null | string;
+  readonly project_id: string;
+  readonly review_target_id: string;
+  readonly updated_at: string;
+};
+
+export type ReviewNoteRow = {
+  readonly body: string;
+  readonly created_at: string;
+  readonly dismissed_at: null | string;
+  readonly project_id: string;
+  readonly scope_id: string;
+  readonly updated_at: string;
+};
+
 export function projectFromRow(row: ProjectRow): StoredProjectRecord {
   return {
     createdAt: row.created_at,
@@ -140,6 +163,33 @@ export function reviewCommentFromRow(row: ReviewCommentRow): ReviewCommentRecord
     projectId: row.project_id,
     reviewTargetId: row.review_target_id,
     side: row.side,
+    updatedAt: row.updated_at
+  };
+}
+
+export function reviewFileCommentFromRow(
+  row: ReviewFileCommentRow
+): ReviewFileCommentRecord {
+  return {
+    body: row.body,
+    createdAt: row.created_at,
+    diffHash: row.diff_hash,
+    id: row.id,
+    path: row.path,
+    ...(row.previous_path ? { previousPath: row.previous_path } : {}),
+    projectId: row.project_id,
+    reviewTargetId: row.review_target_id,
+    updatedAt: row.updated_at
+  };
+}
+
+export function reviewNoteFromRow(row: ReviewNoteRow): ReviewNoteRecord {
+  return {
+    body: row.body,
+    createdAt: row.created_at,
+    ...(row.dismissed_at ? { dismissedAt: row.dismissed_at } : {}),
+    projectId: row.project_id,
+    scopeId: row.scope_id,
     updatedAt: row.updated_at
   };
 }

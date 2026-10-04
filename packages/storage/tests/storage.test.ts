@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   openStorage,
@@ -1102,5 +1102,189 @@ describe("storage", () => {
     } finally {
       rmSync(storageDir, { force: true, recursive: true });
     }
+  });
+});
+
+describe("file comments and review notes", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function openSeededStorage() {
+    const storage = openStorage(":memory:");
+    storage.upsertProject(project);
+    storage.upsertReviewTarget(reviewTarget);
+    return storage;
+  }
+
+  it("creates and lists file comments with previousPath only when given", () => {
+    const storage = openSeededStorage();
+
+    const renamed = storage.createReviewFileComment({
+      body: "Split this module.",
+      diffHash: "hash-a",
+      path: "src/app.ts",
+      previousPath: "src/old-app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id
+    });
+    const plain = storage.createReviewFileComment({
+      body: "Needs docs.",
+      diffHash: "hash-b",
+      path: "README.md",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id
+    });
+
+    expect(renamed).toEqual({
+      body: "Split this module.",
+      createdAt: expect.any(String),
+      diffHash: "hash-a",
+      id: expect.any(String),
+      path: "src/app.ts",
+      previousPath: "src/old-app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id,
+      updatedAt: renamed.createdAt
+    });
+    expect(plain).not.toHaveProperty("previousPath");
+    expect(plain.id).not.toBe(renamed.id);
+    expect(storage.getReviewFileComment(renamed.id)).toEqual(renamed);
+    expect(storage.listReviewFileComments(reviewTarget.id)).toEqual([plain, renamed]);
+    storage.close();
+  });
+
+  it("updates and deletes file comments", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const storage = openSeededStorage();
+    const comment = storage.createReviewFileComment({
+      body: "Original.",
+      diffHash: "hash-a",
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id
+    });
+
+    vi.setSystemTime(new Date("2026-01-02T00:00:00.000Z"));
+    const updated = storage.updateReviewFileComment(comment.id, "new");
+
+    expect(updated).toEqual({
+      ...comment,
+      body: "new",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(storage.updateReviewFileComment("missing", "No-op")).toBeNull();
+    expect(storage.deleteReviewFileComment(comment.id)).toBe(true);
+    expect(storage.deleteReviewFileComment(comment.id)).toBe(false);
+    expect(storage.listReviewFileComments(reviewTarget.id)).toEqual([]);
+    storage.close();
+  });
+
+  it("saves one review note per scope and updates it in place", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const storage = openSeededStorage();
+
+    const first = storage.saveReviewNote({
+      body: "First pass.",
+      projectId: project.id,
+      scopeId: "scope-1"
+    });
+
+    expect(first).toEqual({
+      body: "First pass.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: project.id,
+      scopeId: "scope-1",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    vi.setSystemTime(new Date("2026-01-02T00:00:00.000Z"));
+    const second = storage.saveReviewNote({
+      body: "Second pass.",
+      projectId: project.id,
+      scopeId: "scope-1"
+    });
+
+    expect(second).toEqual({
+      ...first,
+      body: "Second pass.",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(storage.getReviewNote("scope-1")).toEqual(second);
+    expect(storage.getReviewNote("scope-2")).toBeNull();
+    storage.close();
+  });
+
+  it("dismisses and restores review notes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const storage = openSeededStorage();
+    const note = storage.saveReviewNote({
+      body: "Note.",
+      projectId: project.id,
+      scopeId: "scope-1"
+    });
+
+    vi.setSystemTime(new Date("2026-01-02T00:00:00.000Z"));
+    expect(storage.setReviewNoteDismissed("scope-1", true)).toEqual({
+      ...note,
+      dismissedAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+
+    vi.setSystemTime(new Date("2026-01-03T00:00:00.000Z"));
+    const restored = storage.setReviewNoteDismissed("scope-1", false);
+
+    expect(restored).toEqual({ ...note, updatedAt: "2026-01-03T00:00:00.000Z" });
+    expect(restored).not.toHaveProperty("dismissedAt");
+    expect(storage.setReviewNoteDismissed("missing", true)).toBeNull();
+    storage.close();
+  });
+
+  it("clears dismissedAt when a dismissed note body is saved", () => {
+    const storage = openSeededStorage();
+    storage.saveReviewNote({ body: "Note.", projectId: project.id, scopeId: "scope-1" });
+    storage.setReviewNoteDismissed("scope-1", true);
+
+    const saved = storage.saveReviewNote({
+      body: "Relevant again.",
+      projectId: project.id,
+      scopeId: "scope-1"
+    });
+
+    expect(saved.body).toBe("Relevant again.");
+    expect(saved).not.toHaveProperty("dismissedAt");
+    storage.close();
+  });
+
+  it("deletes review notes", () => {
+    const storage = openSeededStorage();
+    storage.saveReviewNote({ body: "Note.", projectId: project.id, scopeId: "scope-1" });
+
+    expect(storage.deleteReviewNote("scope-1")).toBe(true);
+    expect(storage.deleteReviewNote("scope-1")).toBe(false);
+    expect(storage.getReviewNote("scope-1")).toBeNull();
+    storage.close();
+  });
+
+  it("cascades file comments and review notes when a project is forgotten", () => {
+    const storage = openSeededStorage();
+    const comment = storage.createReviewFileComment({
+      body: "Gone with the project.",
+      diffHash: "hash-a",
+      path: "src/app.ts",
+      projectId: project.id,
+      reviewTargetId: reviewTarget.id
+    });
+    storage.saveReviewNote({ body: "Note.", projectId: project.id, scopeId: "scope-1" });
+
+    storage.forgetProject(project.id);
+
+    expect(storage.getReviewFileComment(comment.id)).toBeNull();
+    expect(storage.listReviewFileComments(reviewTarget.id)).toEqual([]);
+    expect(storage.getReviewNote("scope-1")).toBeNull();
+    storage.close();
   });
 });

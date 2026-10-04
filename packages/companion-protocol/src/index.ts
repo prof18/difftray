@@ -1,4 +1,5 @@
 export {
+  COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
   COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
@@ -22,6 +23,7 @@ export {
 export {
   parseCompanionServerEvent,
   parseCreateCommentBody,
+  parseCreateFileCommentBody,
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
@@ -29,6 +31,9 @@ export {
   parseProjectWorktreeAvailabilityBody,
   parseOpenRepositoriesBody,
   parsePairRequestBody,
+  parseReviewNoteTargetBody,
+  parseSaveReviewNoteBody,
+  parseSetReviewNoteDismissedBody,
   parseUpdateCommentBody,
   type ParseResult
 } from "./parse.js";
@@ -126,8 +131,27 @@ export type ReviewCommentView = {
   readonly updatedAt: string;
 };
 
+export type ReviewFileCommentView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly diffHash: string;
+  readonly id: string;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly updatedAt: string;
+};
+
+export type ReviewNoteView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly dismissedAt?: string;
+  readonly updatedAt: string;
+};
+
 export type ReviewWorkspaceView = {
   readonly comments: readonly ReviewCommentView[];
+  readonly fileComments?: readonly ReviewFileCommentView[];
+  readonly reviewNote?: ReviewNoteView | null;
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
@@ -212,6 +236,28 @@ export type CreateCommentBody = {
 
 export type UpdateCommentBody = {
   readonly body: string;
+};
+
+export type CreateFileCommentBody = {
+  readonly body: string;
+  readonly diffHash: string;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly reviewTargetId: string;
+};
+
+export type SaveReviewNoteBody = {
+  readonly body: string;
+  readonly reviewTargetId: string;
+};
+
+export type SetReviewNoteDismissedBody = {
+  readonly dismissed: boolean;
+  readonly reviewTargetId: string;
+};
+
+export type ReviewNoteTargetBody = {
+  readonly reviewTargetId: string;
 };
 
 export type FileImageBody = {
@@ -345,6 +391,14 @@ export type CommentResponse = {
 
 export type DeleteCommentResponse = {
   readonly deleted: boolean;
+};
+
+export type FileCommentResponse = {
+  readonly fileComment: ReviewFileCommentView;
+};
+
+export type ReviewNoteResponse = {
+  readonly reviewNote: ReviewNoteView;
 };
 
 export type CommentReportResponse = {

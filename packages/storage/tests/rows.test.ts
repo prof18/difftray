@@ -4,7 +4,9 @@ import {
   projectFromRow,
   projectSettingsFromRow,
   reviewCommentFromRow,
+  reviewFileCommentFromRow,
   reviewMarkFromRow,
+  reviewNoteFromRow,
   reviewTargetFromRow
 } from "../src/rows.js";
 
@@ -142,5 +144,57 @@ describe("storage row mappers", () => {
       side: "additions",
       updatedAt: "2026-01-02T00:00:00.000Z"
     });
+  });
+});
+
+describe("file comment and review note row mappers", () => {
+  it("maps file comment rows and omits a null previous path", () => {
+    const row = {
+      body: "Split this.",
+      created_at: "2026-01-01T00:00:00.000Z",
+      diff_hash: "hash-a",
+      id: "file-comment-1",
+      path: "src/app.ts",
+      previous_path: null,
+      project_id: "project-1",
+      review_target_id: "target-1",
+      updated_at: "2026-01-02T00:00:00.000Z"
+    };
+
+    expect(reviewFileCommentFromRow(row)).toEqual({
+      body: "Split this.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      diffHash: "hash-a",
+      id: "file-comment-1",
+      path: "src/app.ts",
+      projectId: "project-1",
+      reviewTargetId: "target-1",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(
+      reviewFileCommentFromRow({ ...row, previous_path: "src/old.ts" })
+    ).toMatchObject({ previousPath: "src/old.ts" });
+  });
+
+  it("maps review note rows and omits a null dismissed time", () => {
+    const row = {
+      body: "Overall.",
+      created_at: "2026-01-01T00:00:00.000Z",
+      dismissed_at: null,
+      project_id: "project-1",
+      scope_id: "scope-1",
+      updated_at: "2026-01-02T00:00:00.000Z"
+    };
+
+    expect(reviewNoteFromRow(row)).toEqual({
+      body: "Overall.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      projectId: "project-1",
+      scopeId: "scope-1",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(
+      reviewNoteFromRow({ ...row, dismissed_at: "2026-01-03T00:00:00.000Z" })
+    ).toMatchObject({ dismissedAt: "2026-01-03T00:00:00.000Z" });
   });
 });

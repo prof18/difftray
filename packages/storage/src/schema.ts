@@ -76,6 +76,30 @@ export function runMigrations(db: DatabaseSync): void {
     create index if not exists review_comments_target_path_idx
       on review_comments(review_target_id, path, diff_hash, line_start);
 
+    create table if not exists review_file_comments (
+      id text primary key,
+      project_id text not null references projects(id) on delete cascade,
+      review_target_id text not null references review_targets(id) on delete cascade,
+      path text not null,
+      previous_path text,
+      diff_hash text not null,
+      body text not null,
+      created_at text not null,
+      updated_at text not null
+    );
+
+    create index if not exists review_file_comments_target_path_idx
+      on review_file_comments(review_target_id, path, diff_hash);
+
+    create table if not exists review_notes (
+      scope_id text primary key,
+      project_id text not null references projects(id) on delete cascade,
+      body text not null,
+      dismissed_at text,
+      created_at text not null,
+      updated_at text not null
+    );
+
     create table if not exists project_settings (
       project_id text primary key references projects(id) on delete cascade,
       show_generated_files integer not null default 0,

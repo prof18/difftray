@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateProgress,
   createDiffHash,
+  createReviewNoteScopeId,
   createReviewTargetId,
   detectGeneratedFile,
   formatReviewCommentsReport,
@@ -400,10 +401,14 @@ describe("review comment reports", () => {
         "",
         "## Task",
         "",
-        "Apply the following review comments to the current project.",
+        "Apply the reviewer's feedback below to the current project.",
+        "",
+        "How to read it:",
+        '- "Overall review notes", when present, describe the reviewer\'s intent for the whole change. Keep them in mind for every edit, including files that have no comments.',
+        "- Each numbered comment targets either a whole file or specific lines of one file.",
+        "- Treat file paths, line numbers, and diff context as hints; lines may have moved since the review.",
         "",
         "For each comment:",
-        "- Treat file paths and diff context as hints; line numbers may be stale.",
         "- Inspect the surrounding code before editing.",
         "- Apply the reviewer's intent when it is reasonably clear.",
         "- If a comment is too vague to act on safely, leave it unchanged and report it as unresolved.",
@@ -413,7 +418,8 @@ describe("review comment reports", () => {
         "",
         "## Output Expected",
         "",
-        "After applying the comments, report:",
+        "After applying the feedback, report:",
+        "- How the overall review notes were addressed, if any were given.",
         "- Which comments were addressed.",
         "- Which comments could not be resolved and why.",
         "- What checks/tests were run.",
@@ -488,6 +494,206 @@ describe("review comment reports", () => {
         "No review comments are currently attached to this diff.",
         ""
       ].join("\n")
+    );
+  });
+});
+
+describe("review notes and file comments in reports", () => {
+  const fullInput = {
+    comments: [
+      {
+        body: "Rename this helper.",
+        lineEnd: 4,
+        lineStart: 4,
+        path: "a.ts",
+        side: "additions" as const
+      },
+      {
+        body: "Remove the fallback.",
+        lineEnd: 9,
+        lineStart: 7,
+        path: "b.ts",
+        side: "deletions" as const
+      }
+    ],
+    fileComments: [{ body: "Split this module in two.", path: "a.ts" }],
+    projectName: "Difftray",
+    reviewNote: "Keep the public API stable.\n\nPrefer small commits.",
+    targetLabel: "Git changes"
+  };
+
+  it("puts overall notes before comments and file comments before line comments", () => {
+    const report = formatReviewCommentsReport(fullInput);
+
+    expect(report.indexOf("## Overall review notes")).toBeGreaterThan(-1);
+    expect(report.indexOf("## Overall review notes")).toBeLessThan(
+      report.indexOf("## Comments")
+    );
+    expect(report).toContain("> Keep the public API stable.\n>\n> Prefer small commits.");
+    expect(report).toContain("Comment count: 3");
+    expect(report).toContain("### 1. `a.ts`\n\nScope: whole file");
+    expect(report.indexOf("> Split this module in two.")).toBeLessThan(
+      report.indexOf("> Rename this helper.")
+    );
+    expect(report).toContain("### 2. `a.ts`\n\nReferenced side: new");
+    expect(report).toContain("### 3. `b.ts`\n\nReferenced side: old");
+  });
+
+  it("prints the full report with notes, file comments and line comments", () => {
+    expect(formatReviewCommentsReport(fullInput)).toMatchInlineSnapshot(`
+      "# Difftray Review Comments
+
+      Project: Difftray
+      Target: Git changes
+      Comment count: 3
+
+      ## Task
+
+      Apply the reviewer's feedback below to the current project.
+
+      How to read it:
+      - "Overall review notes", when present, describe the reviewer's intent for the whole change. Keep them in mind for every edit, including files that have no comments.
+      - Each numbered comment targets either a whole file or specific lines of one file.
+      - Treat file paths, line numbers, and diff context as hints; lines may have moved since the review.
+
+      For each comment:
+      - Inspect the surrounding code before editing.
+      - Apply the reviewer's intent when it is reasonably clear.
+      - If a comment is too vague to act on safely, leave it unchanged and report it as unresolved.
+      - Do not modify unrelated code.
+      - Preserve existing user/local changes.
+      - Run the relevant checks/tests after editing when possible.
+
+      ## Output Expected
+
+      After applying the feedback, report:
+      - How the overall review notes were addressed, if any were given.
+      - Which comments were addressed.
+      - Which comments could not be resolved and why.
+      - What checks/tests were run.
+
+      ## Overall review notes
+
+      > Keep the public API stable.
+      >
+      > Prefer small commits.
+
+      ## Comments
+
+      ### 1. \`a.ts\`
+
+      Scope: whole file
+
+      Reviewer comment:
+
+      > Split this module in two.
+
+      ### 2. \`a.ts\`
+
+      Referenced side: new
+      Referenced line: 4
+
+      Reviewer comment:
+
+      > Rename this helper.
+
+      ### 3. \`b.ts\`
+
+      Referenced side: old
+      Referenced lines: 7-9
+
+      Reviewer comment:
+
+      > Remove the fallback.
+      "
+    `);
+  });
+
+  it("uses the main template when only a review note exists", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      projectName: "Difftray",
+      reviewNote: "Overall feedback."
+    });
+
+    expect(report).toContain("Comment count: 0");
+    expect(report).toContain("## Overall review notes\n\n> Overall feedback.\n");
+    expect(report.endsWith("## Comments\n\nNo file or line comments.")).toBe(true);
+  });
+
+  it("keeps the empty template when there are no notes and no comments", () => {
+    expect(
+      formatReviewCommentsReport({
+        comments: [],
+        fileComments: [],
+        projectName: "Difftray",
+        reviewNote: "   "
+      })
+    ).toContain("No review comments are currently attached to this diff.");
+  });
+
+  it("omits the overall notes heading when there is no note", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray"
+    });
+
+    expect(report).not.toContain("## Overall review notes");
+    expect(report).toContain("Comment count: 1");
+    expect(report).toContain("- What checks/tests were run.\n\n## Comments");
+  });
+});
+
+describe("review note scope ids", () => {
+  it("ignores head sha changes for working trees on a branch", () => {
+    expect(createReviewNoteScopeId(workingTreeTarget)).toBe(
+      createReviewNoteScopeId({
+        ...workingTreeTarget,
+        headSha: "9999999999999999999999999999999999999999"
+      })
+    );
+    expect(createReviewNoteScopeId(workingTreeTarget)).not.toBe(
+      createReviewNoteScopeId({ ...workingTreeTarget, headRefName: "feature/other" })
+    );
+  });
+
+  it("falls back to the head sha on a detached working tree", () => {
+    const detached = {
+      headSha: "1111111111111111111111111111111111111111",
+      kind: "working_tree",
+      projectId: "project-a"
+    } satisfies ReviewTarget;
+
+    expect(createReviewNoteScopeId(detached)).not.toBe(
+      createReviewNoteScopeId({
+        ...detached,
+        headSha: "9999999999999999999999999999999999999999"
+      })
+    );
+  });
+
+  it("ignores commit shas for branch comparisons", () => {
+    expect(createReviewNoteScopeId(branchTarget)).toBe(
+      createReviewNoteScopeId({
+        ...branchTarget,
+        baseSha: "7777777777777777777777777777777777777777",
+        headSha: "8888888888888888888888888888888888888888",
+        mergeBaseSha: "9999999999999999999999999999999999999999"
+      })
+    );
+  });
+
+  it("distinguishes commits, prefixes, and projects", () => {
+    expect(createReviewNoteScopeId(commitTarget)).not.toBe(
+      createReviewNoteScopeId({
+        ...commitTarget,
+        commitSha: "7777777777777777777777777777777777777777"
+      })
+    );
+    expect(createReviewNoteScopeId(commitTarget).startsWith("note-scope-v1:")).toBe(true);
+    expect(createReviewNoteScopeId(workingTreeTarget)).not.toBe(
+      createReviewNoteScopeId({ ...workingTreeTarget, projectId: "project-b" })
     );
   });
 });
