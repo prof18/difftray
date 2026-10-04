@@ -285,3 +285,20 @@ export function growingTextareaRows(
 ): number {
   return Math.min(maxRows, Math.max(minRows, body.split("\n").length));
 }
+
+/** Mirrors core's note scope: commit SHAs are ignored unless HEAD is detached. */
+export function reviewNoteScopeKey(
+  projectId: string,
+  target: ReviewWorkspaceView["reviewTarget"]
+): string {
+  const head = target.headRefName ?? `detached:${target.headSha}`;
+
+  switch (target.kind) {
+    case "branch":
+      return JSON.stringify([projectId, target.kind, target.baseRefName ?? null, head]);
+    case "commit":
+      return JSON.stringify([projectId, target.kind, target.commitSha ?? target.headSha]);
+    case "working_tree":
+      return JSON.stringify([projectId, target.kind, head]);
+  }
+}

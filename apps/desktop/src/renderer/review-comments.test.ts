@@ -6,6 +6,7 @@ import {
   copyReportExpectation,
   copyReportToast,
   reportItemCount,
+  reviewNoteScopeKey,
   sortReviewFileComments,
   commentSavePendingMatchesAnnotation,
   formatReviewCommentLocation,
@@ -291,6 +292,58 @@ describe("file comments and review notes", () => {
     );
     expect(copyReportToast({ commentCount: 3, hasReviewNote: false })).toBe(
       "Copied 3 review comments"
+    );
+  });
+});
+
+describe("reviewNoteScopeKey", () => {
+  const workingTree = {
+    headRefName: "main",
+    headSha: "aaa",
+    id: "target-1",
+    kind: "working_tree" as const
+  };
+
+  it("ignores commit SHAs for branch-backed scopes", () => {
+    expect(reviewNoteScopeKey("p", workingTree)).toBe(
+      reviewNoteScopeKey("p", { ...workingTree, headSha: "bbb", id: "target-2" })
+    );
+    expect(
+      reviewNoteScopeKey("p", {
+        ...workingTree,
+        baseRefName: "origin/main",
+        kind: "branch"
+      })
+    ).toBe(
+      reviewNoteScopeKey("p", {
+        ...workingTree,
+        baseRefName: "origin/main",
+        headSha: "ccc",
+        id: "target-3",
+        kind: "branch"
+      })
+    );
+  });
+
+  it("changes with the branch, project, mode, detached head and commit", () => {
+    const base = reviewNoteScopeKey("p", workingTree);
+
+    expect(reviewNoteScopeKey("p", { ...workingTree, headRefName: "feature" })).not.toBe(
+      base
+    );
+    expect(reviewNoteScopeKey("q", workingTree)).not.toBe(base);
+    expect(
+      reviewNoteScopeKey("p", { ...workingTree, baseRefName: "main", kind: "branch" })
+    ).not.toBe(base);
+    expect(
+      reviewNoteScopeKey("p", { headSha: "aaa", id: "t", kind: "working_tree" })
+    ).not.toBe(
+      reviewNoteScopeKey("p", { headSha: "bbb", id: "t", kind: "working_tree" })
+    );
+    expect(
+      reviewNoteScopeKey("p", { commitSha: "c1", headSha: "c1", id: "t", kind: "commit" })
+    ).not.toBe(
+      reviewNoteScopeKey("p", { commitSha: "c2", headSha: "c2", id: "t", kind: "commit" })
     );
   });
 });

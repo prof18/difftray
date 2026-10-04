@@ -80,6 +80,7 @@ import {
   copyReportExpectation,
   copyReportToast,
   reportItemCount,
+  reviewNoteScopeKey,
   sameCommentSavePending,
   sortReviewComments,
   sortReviewFileComments,
@@ -837,9 +838,13 @@ export function App(): React.JSX.Element {
     );
   }, [selectedFile]);
 
+  const reviewNoteScope = workspace
+    ? reviewNoteScopeKey(workspace.project.id, workspace.reviewTarget)
+    : undefined;
+
   useEffect(() => {
     setReviewNoteEditing(false);
-  }, [workspace?.project.id, workspace?.reviewTarget.id]);
+  }, [reviewNoteScope]);
 
   useEffect(() => {
     const action = reviewNavigationPerformanceRef.current;
