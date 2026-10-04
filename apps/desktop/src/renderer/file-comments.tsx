@@ -78,7 +78,7 @@ function FileCommentCard({
 
   useEffect(() => {
     if (wasEditing.current && editingBody === undefined && isFocusLost()) {
-      editButtonRef.current?.focus();
+      editButtonRef.current?.focus({ preventScroll: true });
     }
     wasEditing.current = editingBody !== undefined;
   }, [editingBody]);

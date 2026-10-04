@@ -42,6 +42,8 @@ export function ReviewNotesPanel({
         ? "dismissed"
         : "active";
   const previousMode = useRef(mode);
+  // Only the user's own action here moves focus; outside changes leave it alone.
+  const restoreFocusAfterAction = useRef(false);
 
   // Seed the draft once per edit session so live note updates never clobber typing.
   if (editing !== draftStarted) {
@@ -59,8 +61,11 @@ export function ReviewNotesPanel({
 
   // The control that had focus (editor, Dismiss, Restore) unmounts on a mode change.
   useEffect(() => {
-    if (previousMode.current !== mode && mode !== "editing" && isFocusLost()) {
-      primaryActionRef.current?.focus();
+    if (previousMode.current !== mode) {
+      if (mode !== "editing" && restoreFocusAfterAction.current && isFocusLost()) {
+        primaryActionRef.current?.focus({ preventScroll: true });
+      }
+      restoreFocusAfterAction.current = false;
     }
     previousMode.current = mode;
   }, [mode]);
@@ -70,11 +75,23 @@ export function ReviewNotesPanel({
       return;
     }
 
+    restoreFocusAfterAction.current = true;
     onSave(draft);
+  }
+
+  function cancelEdit(): void {
+    restoreFocusAfterAction.current = true;
+    onCancelEdit();
+  }
+
+  function setDismissed(dismissed: boolean): void {
+    restoreFocusAfterAction.current = true;
+    onSetDismissed(dismissed);
   }
 
   function confirmDelete(): void {
     if (window.confirm("Delete review notes? This can't be undone.")) {
+      restoreFocusAfterAction.current = true;
       onDelete();
     }
   }
@@ -111,7 +128,7 @@ export function ReviewNotesPanel({
               save();
             } else if (shortcut === "cancel") {
               event.preventDefault();
-              onCancelEdit();
+              cancelEdit();
             }
           }}
           placeholder="Overall feedback for the whole change. Use new lines for separate points."
@@ -123,7 +140,7 @@ export function ReviewNotesPanel({
           <button
             className={styles.secondaryButton}
             disabled={pending}
-            onClick={onCancelEdit}
+            onClick={cancelEdit}
             type="button"
           >
             Cancel
@@ -168,7 +185,7 @@ export function ReviewNotesPanel({
             className={styles.secondaryButton}
             disabled={pending}
             onClick={() => {
-              onSetDismissed(false);
+              setDismissed(false);
             }}
             ref={primaryActionRef}
             type="button"
@@ -203,7 +220,7 @@ export function ReviewNotesPanel({
             className={styles.iconButton}
             disabled={pending}
             onClick={() => {
-              onSetDismissed(true);
+              setDismissed(true);
             }}
             title="Dismiss review notes"
             type="button"
