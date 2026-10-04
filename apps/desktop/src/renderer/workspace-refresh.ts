@@ -135,6 +135,21 @@ export function isWorkspaceScopedCompletionCurrent(
   );
 }
 
+/**
+ * A request finished after its workspace changed. A reload of the same project
+ * still shows the request's effects after a refresh; another project discards them.
+ */
+export function workspaceCompletionOutcome(
+  request: WorkspaceScopedCompletion,
+  state: WorkspaceScopedCompletionState
+): "apply" | "discard" | "refresh" {
+  if (isWorkspaceScopedCompletionCurrent(request, state)) {
+    return "apply";
+  }
+
+  return request.projectId === state.projectId ? "refresh" : "discard";
+}
+
 export function shouldInvalidateWorkspaceLoadForTabRemoval(
   activeProjectId: string | undefined,
   removedProjectId: string,

@@ -48,6 +48,7 @@ import {
   carryLoadedDiffsForward,
   invalidateWorkspaceLoadRequest,
   isWorkspaceScopedCompletionCurrent,
+  workspaceCompletionOutcome,
   isWorkspaceLoadRequestCurrent,
   isFileDiffLoaded,
   loadReplacementWorkspace,
@@ -3019,6 +3020,35 @@ export function App(): React.JSX.Element {
     setWorkspace(nextWorkspace);
   }
 
+  /**
+   * A reload of the same project landed while a save was in flight. The save
+   * succeeded, so finish it and reload again to show it instead of dropping it.
+   */
+  function refreshAfterSupersededSave(completion: WorkspaceScopedCompletion): boolean {
+    const outcome = workspaceCompletionOutcome(completion, {
+      applyVersion: workspaceApplyVersionRef.current,
+      projectId: workspaceRef.current?.project.id
+    });
+
+    if (outcome !== "refresh") {
+      return false;
+    }
+
+    void refreshWorkspaceSilently(completion.projectId);
+    return true;
+  }
+
+  function clearSavedFileCommentDraft(saved: {
+    readonly diffHash: string;
+    readonly path: string;
+  }): void {
+    setFileCommentDraft((current) =>
+      current?.path === saved.path && current.diffHash === saved.diffHash
+        ? undefined
+        : current
+    );
+  }
+
   function applyWorkspaceFileComments(
     completion: WorkspaceScopedCompletion,
     updateFileComments: (
@@ -3112,6 +3142,10 @@ export function App(): React.JSX.Element {
       });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
+        if (result.status === "created" && refreshAfterSupersededSave(completion)) {
+          clearSavedFileCommentDraft(draft);
+          return true;
+        }
         return false;
       }
 
@@ -3129,11 +3163,7 @@ export function App(): React.JSX.Element {
         ...fileComments,
         result.fileComment
       ]);
-      setFileCommentDraft((current) =>
-        current?.path === draft.path && current.diffHash === draft.diffHash
-          ? undefined
-          : current
-      );
+      clearSavedFileCommentDraft(draft);
       return true;
     });
   }
@@ -3152,7 +3182,7 @@ export function App(): React.JSX.Element {
       });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
-        return false;
+        return result.status === "updated" && refreshAfterSupersededSave(completion);
       }
 
       if (result.status === "rejected") {
@@ -3177,7 +3207,7 @@ export function App(): React.JSX.Element {
       const result = await window.difftray.deleteReviewFileComment({ id: commentId });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
-        return false;
+        return refreshAfterSupersededSave(completion);
       }
 
       if (result.status === "rejected") {
@@ -3245,6 +3275,9 @@ export function App(): React.JSX.Element {
       });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
+        if (result.status === "saved" && refreshAfterSupersededSave(completion)) {
+          setReviewNoteEditing(false);
+        }
         return;
       }
 
@@ -3267,6 +3300,7 @@ export function App(): React.JSX.Element {
       });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
+        refreshAfterSupersededSave(completion);
         return;
       }
 
@@ -3287,6 +3321,7 @@ export function App(): React.JSX.Element {
       });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
+        refreshAfterSupersededSave(completion);
         return;
       }
 
@@ -3395,6 +3430,10 @@ export function App(): React.JSX.Element {
           });
 
           if (!canApplyWorkspaceScopedCompletion(completion)) {
+            if (result.status === "created" && refreshAfterSupersededSave(completion)) {
+              setCommentDraft(undefined);
+              return true;
+            }
             return false;
           }
 
@@ -3452,7 +3491,7 @@ export function App(): React.JSX.Element {
           });
 
           if (!canApplyWorkspaceScopedCompletion(completion)) {
-            return false;
+            return result.status === "updated" && refreshAfterSupersededSave(completion);
           }
 
           if (result.status === "rejected") {
@@ -3520,6 +3559,7 @@ export function App(): React.JSX.Element {
       const result = await window.difftray.deleteReviewComment({ id: commentId });
 
       if (!canApplyWorkspaceScopedCompletion(completion)) {
+        refreshAfterSupersededSave(completion);
         return;
       }
 

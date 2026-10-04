@@ -5,6 +5,7 @@ import {
   carryLoadedDiffsForward,
   invalidateWorkspaceLoadRequest,
   isWorkspaceScopedCompletionCurrent,
+  workspaceCompletionOutcome,
   isWorkspaceLoadRequestCurrent,
   isFileDiffLoaded,
   loadReplacementWorkspace,
@@ -606,3 +607,28 @@ function file(patch: Partial<ReviewFileView> = {}): ReviewFileView {
     ...patch
   };
 }
+
+describe("workspaceCompletionOutcome", () => {
+  const request = { applyVersion: 3, projectId: "project-1" };
+
+  it("applies results for the unchanged workspace", () => {
+    expect(
+      workspaceCompletionOutcome(request, { applyVersion: 3, projectId: "project-1" })
+    ).toBe("apply");
+  });
+
+  it("refreshes when the same project was reloaded during the request", () => {
+    expect(
+      workspaceCompletionOutcome(request, { applyVersion: 4, projectId: "project-1" })
+    ).toBe("refresh");
+  });
+
+  it("discards results after switching to another project", () => {
+    expect(
+      workspaceCompletionOutcome(request, { applyVersion: 4, projectId: "project-2" })
+    ).toBe("discard");
+    expect(
+      workspaceCompletionOutcome(request, { applyVersion: 3, projectId: undefined })
+    ).toBe("discard");
+  });
+});
