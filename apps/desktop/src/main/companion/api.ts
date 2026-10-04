@@ -1,6 +1,7 @@
 import { posix as posixPath } from "node:path";
 
 import {
+  COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
   COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
@@ -8,6 +9,7 @@ import {
   COMPANION_PROTOCOL_VERSION,
   type CompanionServerEvent,
   type CreateCommentBody,
+  type CreateFileCommentBody,
   type DiffTargetBody,
   type FileDiffContentKind,
   type FileDiffStatus,
@@ -21,11 +23,17 @@ import {
   type RepositoryCatalogEntry,
   type RepositoryWorktreeView,
   type ReviewCommentView,
+  type ReviewFileCommentView,
   type ReviewFileDiffContentView,
+  type ReviewNoteTargetBody,
+  type ReviewNoteView,
   type ReviewWorkspaceView,
+  type SaveReviewNoteBody,
+  type SetReviewNoteDismissedBody,
   type UpdateCommentBody,
   type WorkspaceSummary,
   parseCreateCommentBody,
+  parseCreateFileCommentBody,
   parseDiffTargetBody,
   parseFileImageBody,
   parseMarkReviewedBody,
@@ -33,6 +41,9 @@ import {
   parseOpenRepositoriesBody,
   parseProjectWorktreeAvailabilityBody,
   parsePairRequestBody,
+  parseReviewNoteTargetBody,
+  parseSaveReviewNoteBody,
+  parseSetReviewNoteDismissedBody,
   parseUpdateCommentBody
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
@@ -44,6 +55,8 @@ import type {
 } from "./auth.js";
 import type { RouteDefinition } from "./router.js";
 import { ExpectedUnavailableWorktreeError } from "../repository-worktree-service.js";
+
+export class StaleReviewTargetError extends Error {}
 
 export type MarkResult =
   | {
@@ -106,6 +119,22 @@ export type CompanionDeps = {
     input: UpdateCommentBody & { readonly commentId: string }
   ) => Promise<ReviewCommentView | null>;
   readonly deleteComment: (id: string) => Promise<boolean>;
+  readonly createFileComment: (
+    input: CreateFileCommentBody & { readonly projectId: string }
+  ) => Promise<ReviewFileCommentView>;
+  readonly updateFileComment: (
+    input: UpdateCommentBody & { readonly commentId: string }
+  ) => Promise<ReviewFileCommentView | null>;
+  readonly deleteFileComment: (id: string) => Promise<boolean>;
+  readonly saveReviewNote: (
+    input: SaveReviewNoteBody & { readonly projectId: string }
+  ) => Promise<ReviewNoteView>;
+  readonly setReviewNoteDismissed: (
+    input: SetReviewNoteDismissedBody & { readonly projectId: string }
+  ) => Promise<ReviewNoteView | null>;
+  readonly deleteReviewNote: (
+    input: ReviewNoteTargetBody & { readonly projectId: string }
+  ) => Promise<boolean>;
   readonly commentsReport: (projectId: string) => Promise<string>;
   readonly listServerAddresses: () => readonly string[];
   readonly revokeDevice: (deviceId: string) => void;
@@ -781,6 +810,153 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     },
     {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseCreateFileCommentBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+        if (parsed.value.body.length > 20_000) {
+          return badRequest("Comment body is too long");
+        }
+
+        return await staleTargetAsConflict(async () => ({
+          body: {
+            fileComment: await deps.createFileComment({ ...parsed.value, projectId })
+          },
+          status: 200
+        }));
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/file-comments",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const commentId = params.get("commentId");
+        const parsed = parseUpdateCommentBody(body);
+
+        if (!commentId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing commentId" : parsed.error);
+        }
+        if (parsed.value.body.length > 20_000) {
+          return badRequest("Comment body is too long");
+        }
+
+        return await staleTargetAsConflict(async () => {
+          const fileComment = await deps.updateFileComment({
+            ...parsed.value,
+            commentId
+          });
+
+          return fileComment
+            ? { body: { fileComment }, status: 200 }
+            : {
+                body: companionError("not_found", "File comment not found"),
+                status: 404
+              };
+        });
+      },
+      method: "PATCH",
+      path: "/companion/v1/file-comments/:commentId",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ params }) => {
+        const commentId = params.get("commentId");
+
+        if (!commentId) {
+          return {
+            body: companionError("not_found", "File comment not found"),
+            status: 404
+          };
+        }
+
+        return await staleTargetAsConflict(async () =>
+          (await deps.deleteFileComment(commentId))
+            ? { body: { deleted: true }, status: 200 }
+            : {
+                body: companionError("not_found", "File comment not found"),
+                status: 404
+              }
+        );
+      },
+      method: "DELETE",
+      path: "/companion/v1/file-comments/:commentId",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseSaveReviewNoteBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+        if (parsed.value.body.length > 20_000) {
+          return badRequest("Comment body is too long");
+        }
+
+        return await staleTargetAsConflict(async () => ({
+          body: { reviewNote: await deps.saveReviewNote({ ...parsed.value, projectId }) },
+          status: 200
+        }));
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/review-note",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseSetReviewNoteDismissedBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        return await staleTargetAsConflict(async () => {
+          const reviewNote = await deps.setReviewNoteDismissed({
+            ...parsed.value,
+            projectId
+          });
+
+          return reviewNote
+            ? { body: { reviewNote }, status: 200 }
+            : {
+                body: companionError("not_found", "Review note not found"),
+                status: 404
+              };
+        });
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/review-note/dismissal",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ body, params }) => {
+        const projectId = params.get("projectId");
+        const parsed = parseReviewNoteTargetBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        return await staleTargetAsConflict(async () =>
+          (await deps.deleteReviewNote({ ...parsed.value, projectId }))
+            ? { body: { deleted: true }, status: 200 }
+            : {
+                body: companionError("not_found", "Review note not found"),
+                status: 404
+              }
+        );
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/review-note/delete",
+      requiresAuth: true
+    },
+    {
       handler: async ({ params }) => {
         const projectId = params.get("projectId");
 
@@ -885,10 +1061,32 @@ function workspaceForCapabilities(
   workspace: ReviewWorkspaceView,
   capabilities: readonly string[]
 ): ReviewWorkspaceView {
-  return {
+  const compatibleWorkspace = {
     ...workspace,
     project: projectForCapabilities(workspace.project, capabilities)
-  };
+  } as Record<string, unknown>;
+  if (!capabilities.includes(COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES)) {
+    delete compatibleWorkspace.fileComments;
+    delete compatibleWorkspace.reviewNote;
+  }
+  return compatibleWorkspace as ReviewWorkspaceView;
+}
+
+async function staleTargetAsConflict(
+  run: () => Promise<CompanionResponse>
+): Promise<CompanionResponse> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof StaleReviewTargetError)) {
+      throw error;
+    }
+
+    return {
+      body: companionError("stale_diff", "Displayed diff is stale"),
+      status: 409
+    };
+  }
 }
 
 function badRequest(message: string): CompanionResponse {

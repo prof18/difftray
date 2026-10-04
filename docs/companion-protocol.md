@@ -102,6 +102,14 @@ The server resolves the selected ref directly, so the field also works for
 commits outside the recent-commit selector window. It omits the field for
 clients without the capability and when the ref cannot be resolved.
 
+A client that sends `file-comments-review-notes-v1` may receive two optional
+workspace fields from the workspace and diff-target endpoints: `fileComments`
+(active whole-file comments) and `reviewNote` (the current review context's note,
+or `null`; a dismissed note is still returned with `dismissedAt` so the client can
+offer Restore). Both fields are omitted for clients without the capability, so
+already-shipped clients with strict workspace parsing keep working. The legacy
+`GET /companion/v1/projects/:projectId/comments` route stays line-comment only.
+
 ## Authenticated API
 
 Authenticated routes use the real HTTP path, but the logical method and body are
@@ -115,7 +123,26 @@ inside the encrypted envelope. Current routes cover:
   rename metadata.
 - Mark/unmark reviewed with stale-diff rejection when the displayed diff hash no
   longer matches the current workspace.
-- Comment list/create/update/delete and comment report generation.
+- Comment list/create/update/delete and comment report generation. The report
+  includes active file comments and the active review note for every client.
+- File comments and review notes (see `file-comments-review-notes-v1` above).
+  Requests that name a non-current `reviewTargetId` (or a stale file hash on
+  create) return `409 stale_diff` "Displayed diff is stale". Bodies are trimmed,
+  must not be empty, and are limited to 20,000 characters.
+
+  | Route                                                          | Body                                                      | Response                                             |
+  | -------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
+  | `POST /companion/v1/projects/:projectId/file-comments`         | `{ body, diffHash, path, previousPath?, reviewTargetId }` | `{ fileComment }`                                    |
+  | `PATCH /companion/v1/file-comments/:commentId`                 | `{ body }`                                                | `{ fileComment }`, or 404 "File comment not found"   |
+  | `DELETE /companion/v1/file-comments/:commentId`                | none                                                      | `{ deleted: true }`, or 404 "File comment not found" |
+  | `POST /companion/v1/projects/:projectId/review-note`           | `{ body, reviewTargetId }`                                | `{ reviewNote }`                                     |
+  | `POST /companion/v1/projects/:projectId/review-note/dismissal` | `{ dismissed, reviewTargetId }`                           | `{ reviewNote }`, or 404 "Review note not found"     |
+  | `POST /companion/v1/projects/:projectId/review-note/delete`    | `{ reviewTargetId }`                                      | `{ deleted: true }`, or 404 "Review note not found"  |
+
+  `fileComment` is `{ body, createdAt, diffHash, id, path, previousPath?, updatedAt }`
+  and `reviewNote` is `{ body, createdAt, dismissedAt?, updatedAt }`. Every
+  successful mutation sends a `workspace_changed` event with reason `comments`.
+
 - Branch/commit target discovery and diff-target switching.
 - Git-recorded worktree listing and opening by opaque, server-issued worktree id;
   listings may include a cached, best-effort `changeCount` and never wait for Git

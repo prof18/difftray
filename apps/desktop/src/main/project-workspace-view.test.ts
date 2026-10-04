@@ -1,3 +1,4 @@
+import { createReviewNoteScopeId, type ReviewTarget } from "@difftray/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -25,6 +26,7 @@ describe("project workspace views", () => {
           path: "src/App.tsx"
         })
       ],
+      fileComments: [],
       files: [
         reviewFileStateWithSummary("src/App.tsx", {
           diffHash: "hash-1",
@@ -50,6 +52,7 @@ describe("project workspace views", () => {
         mergeBaseSha: "merge-base-sha",
         projectId: "project-1"
       },
+      reviewNote: null,
       reviewTargetId: "target-1"
     });
 
@@ -70,6 +73,68 @@ describe("project workspace views", () => {
       id: "target-1",
       kind: "branch"
     });
+  });
+
+  it("includes active file comments and the review note for the current scope", () => {
+    const reviewTarget = {
+      headRefName: "main",
+      headSha: "head-sha",
+      kind: "working_tree",
+      projectId: "project-1"
+    } satisfies ReviewTarget;
+    const note = {
+      body: "Overall feedback.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      dismissedAt: "2026-01-02T00:00:00.000Z",
+      projectId: "project-1",
+      scopeId: createReviewNoteScopeId(reviewTarget),
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    };
+    const input = {
+      comments: [],
+      fileComments: [
+        reviewFileCommentRecord({ id: "active", previousPath: "src/Old.tsx" }),
+        reviewFileCommentRecord({ diffHash: "old-hash", id: "stale" }),
+        reviewFileCommentRecord({ id: "other-target", reviewTargetId: "target-2" })
+      ],
+      files: [reviewFileStateWithSummary("src/App.tsx", { diffHash: "hash-1" })],
+      progress: { reviewedVisibleFiles: 0, totalVisibleReviewableFiles: 1 },
+      project: {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "project-1",
+        name: "Difftray",
+        path: "/repo/difftray",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      },
+      reviewNote: note,
+      reviewTarget,
+      reviewTargetId: "target-1"
+    };
+
+    const workspace = reviewWorkspaceView(input);
+
+    expect(workspace.fileComments).toEqual([
+      {
+        body: "Split this file.",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        diffHash: "hash-1",
+        id: "active",
+        path: "src/App.tsx",
+        previousPath: "src/Old.tsx",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+    expect(workspace.reviewNote).toEqual({
+      body: "Overall feedback.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      dismissedAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(reviewWorkspaceView({ ...input, reviewNote: null }).reviewNote).toBeNull();
+    expect(
+      reviewWorkspaceView({ ...input, reviewNote: { ...note, scopeId: "other-scope" } })
+        .reviewNote
+    ).toBeNull();
   });
 
   it("keeps only comments for the active target and current diff hash", () => {
@@ -127,6 +192,27 @@ function reviewCommentRecord(
     projectId: "project-1",
     reviewTargetId: "target-1",
     side: "additions" as const,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...patch
+  };
+}
+
+function reviewFileCommentRecord(
+  patch: Partial<{
+    readonly diffHash: string;
+    readonly id: string;
+    readonly previousPath: string;
+    readonly reviewTargetId: string;
+  }>
+) {
+  return {
+    body: "Split this file.",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    diffHash: "hash-1",
+    id: "file-comment-1",
+    path: "src/App.tsx",
+    projectId: "project-1",
+    reviewTargetId: "target-1",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...patch
   };

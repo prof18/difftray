@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 
 import {
   calculateProgress,
+  createReviewNoteScopeId,
   createReviewTargetId,
   formatReviewCommentsReport,
   resolveReviewStates
@@ -676,6 +677,16 @@ async function createIntegrationHarness(): Promise<{
 
       return deleted;
     },
+    createFileComment: async () => {
+      throw new Error("not implemented in integration test");
+    },
+    updateFileComment: async () => null,
+    deleteFileComment: async () => false,
+    saveReviewNote: async () => {
+      throw new Error("not implemented in integration test");
+    },
+    setReviewNoteDismissed: async () => null,
+    deleteReviewNote: async () => false,
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
     listRecentProjects: async () =>
@@ -843,9 +854,11 @@ async function loadWorkspaceView(
 
   return reviewWorkspaceView({
     comments: storage.listReviewComments(reviewTargetId),
+    fileComments: storage.listReviewFileComments(reviewTargetId),
     files,
     progress: calculateProgress(states),
     project,
+    reviewNote: storage.getReviewNote(createReviewNoteScopeId(reviewTarget)),
     reviewTarget,
     reviewTargetId
   });

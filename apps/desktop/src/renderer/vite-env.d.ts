@@ -32,6 +32,24 @@ declare global {
     readonly deleteReviewComment: (
       input: DeleteReviewCommentInput
     ) => Promise<DeleteReviewCommentResult>;
+    readonly createReviewFileComment: (
+      input: CreateReviewFileCommentInput
+    ) => Promise<CreateReviewFileCommentResult>;
+    readonly deleteReviewFileComment: (
+      input: DeleteReviewFileCommentInput
+    ) => Promise<DeleteReviewFileCommentResult>;
+    readonly deleteReviewNote: (
+      input: ReviewNoteTargetInput
+    ) => Promise<DeleteReviewNoteResult>;
+    readonly saveReviewNote: (
+      input: SaveReviewNoteInput
+    ) => Promise<SaveReviewNoteResult>;
+    readonly setReviewNoteDismissed: (
+      input: SetReviewNoteDismissedInput
+    ) => Promise<SetReviewNoteDismissedResult>;
+    readonly updateReviewFileComment: (
+      input: UpdateReviewFileCommentInput
+    ) => Promise<UpdateReviewFileCommentResult>;
     readonly getAppSettings: () => Promise<AppSettingsView>;
     readonly getProjectReviewSummary: (
       projectId: string
@@ -473,8 +491,115 @@ declare global {
     readonly status: ReviewFileView["status"];
   };
 
+  type ReviewFileCommentView = {
+    readonly body: string;
+    readonly createdAt: string;
+    readonly diffHash: string;
+    readonly id: string;
+    readonly path: string;
+    readonly previousPath?: string;
+    readonly updatedAt: string;
+  };
+
+  type ReviewNoteView = {
+    readonly body: string;
+    readonly createdAt: string;
+    readonly dismissedAt?: string;
+    readonly updatedAt: string;
+  };
+
+  type CreateReviewFileCommentInput = {
+    readonly body: string;
+    readonly displayedDiffHash: string;
+    readonly path: string;
+    readonly projectId: string;
+    readonly reviewTargetId: string;
+  };
+
+  type CreateReviewFileCommentResult =
+    | {
+        readonly fileComment: ReviewFileCommentView;
+        readonly status: "created";
+      }
+    | {
+        readonly reason: "file_missing" | "stale_diff";
+        readonly status: "rejected";
+      };
+
+  type UpdateReviewFileCommentInput = {
+    readonly body: string;
+    readonly id: string;
+  };
+
+  type UpdateReviewFileCommentResult =
+    | {
+        readonly fileComment: ReviewFileCommentView;
+        readonly status: "updated";
+      }
+    | {
+        readonly reason: "comment_missing";
+        readonly status: "rejected";
+      };
+
+  type DeleteReviewFileCommentInput = {
+    readonly id: string;
+  };
+
+  type DeleteReviewFileCommentResult =
+    | {
+        readonly status: "deleted";
+      }
+    | {
+        readonly reason: "comment_missing";
+        readonly status: "rejected";
+      };
+
+  type ReviewNoteTargetInput = {
+    readonly projectId: string;
+    readonly reviewTargetId: string;
+  };
+
+  type SaveReviewNoteInput = ReviewNoteTargetInput & {
+    readonly body: string;
+  };
+
+  type SaveReviewNoteResult =
+    | {
+        readonly reviewNote: ReviewNoteView;
+        readonly status: "saved";
+      }
+    | {
+        readonly reason: "stale_diff";
+        readonly status: "rejected";
+      };
+
+  type SetReviewNoteDismissedInput = ReviewNoteTargetInput & {
+    readonly dismissed: boolean;
+  };
+
+  type SetReviewNoteDismissedResult =
+    | {
+        readonly reviewNote: ReviewNoteView;
+        readonly status: "updated";
+      }
+    | {
+        readonly reason: "note_missing" | "stale_diff";
+        readonly status: "rejected";
+      };
+
+  type DeleteReviewNoteResult =
+    | {
+        readonly status: "deleted";
+      }
+    | {
+        readonly reason: "note_missing" | "stale_diff";
+        readonly status: "rejected";
+      };
+
   type ReviewWorkspaceView = {
     readonly comments: readonly ReviewCommentView[];
+    readonly fileComments?: readonly ReviewFileCommentView[];
+    readonly reviewNote?: ReviewNoteView | null;
     readonly files: readonly ReviewFileView[];
     readonly project: RecentProjectView;
     readonly progress: ReviewProgressView;
@@ -541,6 +666,7 @@ declare global {
 
   type CopyReviewCommentsReportInput = {
     readonly expectedCommentIds: readonly string[];
+    readonly expectedReviewNoteUpdatedAt?: string | null;
     readonly projectId: string;
     readonly reviewTargetId: string;
   };
@@ -548,6 +674,7 @@ declare global {
   type CopyReviewCommentsReportResult =
     | {
         readonly commentCount: number;
+        readonly hasReviewNote: boolean;
         readonly status: "copied";
       }
     | {

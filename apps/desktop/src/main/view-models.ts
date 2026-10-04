@@ -9,8 +9,10 @@ import type {
   ProjectReviewSummaryView,
   RecentProjectView,
   ReviewCommentView,
+  ReviewFileCommentView,
   ReviewFileDiffContentView,
   ReviewFileView,
+  ReviewNoteView,
   ReviewProgressView,
   ReviewWorkspaceView
 } from "@difftray/companion-protocol";
@@ -28,6 +30,8 @@ import type {
   ProjectRecord,
   ProjectSettingsRecord,
   ReviewCommentRecord,
+  ReviewFileCommentRecord,
+  ReviewNoteRecord,
   ReviewTargetRecord,
   StoredProjectRecord
 } from "@difftray/storage";
@@ -38,8 +42,10 @@ export type {
   ProjectReviewSummaryView,
   RecentProjectView,
   ReviewCommentView,
+  ReviewFileCommentView,
   ReviewFileDiffContentView,
   ReviewFileView,
+  ReviewNoteView,
   ReviewProgressView,
   ReviewWorkspaceView
 } from "@difftray/companion-protocol";
@@ -332,6 +338,39 @@ export function reviewCommentView(comment: ReviewCommentRecord): ReviewCommentVi
     side: comment.side,
     updatedAt: comment.updatedAt
   };
+}
+
+export function reviewFileCommentView(
+  comment: ReviewFileCommentRecord
+): ReviewFileCommentView {
+  return {
+    body: comment.body,
+    createdAt: comment.createdAt,
+    diffHash: comment.diffHash,
+    id: comment.id,
+    path: comment.path,
+    ...(comment.previousPath ? { previousPath: comment.previousPath } : {}),
+    updatedAt: comment.updatedAt
+  };
+}
+
+export function reviewNoteView(note: ReviewNoteRecord): ReviewNoteView {
+  return {
+    body: note.body,
+    createdAt: note.createdAt,
+    ...(note.dismissedAt ? { dismissedAt: note.dismissedAt } : {}),
+    updatedAt: note.updatedAt
+  };
+}
+
+export function trimmedNoteBody(body: string): string {
+  const trimmed = body.trim();
+
+  if (trimmed.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  return trimmed;
 }
 
 export function sameCommentIds(

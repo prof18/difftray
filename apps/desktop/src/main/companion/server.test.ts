@@ -2,6 +2,7 @@ import { request, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
   COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
@@ -14,7 +15,7 @@ import {
 } from "@difftray/companion-protocol";
 import { WebSocket } from "ws";
 
-import type { CompanionDeps } from "./api.js";
+import { StaleReviewTargetError, type CompanionDeps } from "./api.js";
 import { createCompanionEnvelopeVerifier } from "./auth.js";
 import { ExpectedUnavailableWorktreeError } from "../repository-worktree-service.js";
 import { createCompanionServer } from "./server.js";
@@ -1271,6 +1272,357 @@ describe("companion server core", () => {
   });
 });
 
+describe("companion file comments and review notes", () => {
+  const fileComment = {
+    body: "Split this file.",
+    createdAt: "2026-07-02T12:00:00.000Z",
+    diffHash: "diff-hash",
+    id: "file-comment-1",
+    path: "src/app.ts",
+    updatedAt: "2026-07-02T12:00:00.000Z"
+  };
+  const reviewNote = {
+    body: "Keep the API stable.",
+    createdAt: "2026-07-02T12:00:00.000Z",
+    updatedAt: "2026-07-02T12:00:00.000Z"
+  };
+  const lineComment = {
+    body: "Rename this.",
+    createdAt: "2026-07-02T12:00:00.000Z",
+    diffHash: "diff-hash",
+    id: "comment-1",
+    lineEnd: 1,
+    lineStart: 1,
+    path: "src/app.ts",
+    side: "additions" as const,
+    updatedAt: "2026-07-02T12:00:00.000Z"
+  };
+  const legacyWorkspaceKeys = [
+    "comments",
+    "files",
+    "progress",
+    "project",
+    "reviewTarget"
+  ];
+
+  function workspaceWithFeedback(projectId: string) {
+    return {
+      ...testWorkspace(projectId),
+      comments: [lineComment],
+      fileComments: [fileComment],
+      reviewNote
+    };
+  }
+
+  it("only exposes file comments and review notes to clients that opt in", async () => {
+    const { baseUrl } = await startServer({
+      loadWorkspaceView: async (projectId) => workspaceWithFeedback(projectId),
+      updateDiffTarget: async (projectId) => workspaceWithFeedback(projectId)
+    });
+    const capabilities = [COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES];
+
+    for (const request of [
+      { logicalMethod: "GET", path: "/companion/v1/projects/project-1/workspace" },
+      {
+        body: { mode: "working_tree" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/diff-target"
+      }
+    ]) {
+      const legacy = await encryptedRequest({ baseUrl, ...request });
+      const capable = await encryptedRequest({ baseUrl, capabilities, ...request });
+      const legacyWorkspace = (legacy.plain.body as { workspace: object }).workspace;
+
+      expect(Object.keys(legacyWorkspace).sort()).toEqual(legacyWorkspaceKeys);
+      expect(Object.keys(legacyWorkspace)).not.toContain("fileComments");
+      expect(Object.keys(legacyWorkspace)).not.toContain("reviewNote");
+      expect(capable.plain.body).toMatchObject({
+        workspace: { fileComments: [fileComment], reviewNote }
+      });
+    }
+  });
+
+  it("keeps the comments route line-only", async () => {
+    const { baseUrl } = await startServer({
+      loadWorkspaceView: async (projectId) => workspaceWithFeedback(projectId)
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/comments"
+    });
+
+    expect(response.plain.body).toEqual({ comments: [lineComment] });
+  });
+
+  it("routes file comment and review note mutations to their deps", async () => {
+    const createFileComment = vi.fn(async () => fileComment);
+    const updateFileComment = vi.fn(async () => fileComment);
+    const deleteFileComment = vi.fn(async () => true);
+    const saveReviewNote = vi.fn(async () => reviewNote);
+    const setReviewNoteDismissed = vi.fn(async () => ({
+      ...reviewNote,
+      dismissedAt: "2026-07-02T12:01:00.000Z"
+    }));
+    const deleteReviewNote = vi.fn(async () => true);
+    const { baseUrl } = await startServer({
+      createFileComment,
+      deleteFileComment,
+      deleteReviewNote,
+      saveReviewNote,
+      setReviewNoteDismissed,
+      updateFileComment
+    });
+
+    const responses = await Promise.all([
+      encryptedRequest({
+        baseUrl,
+        body: {
+          body: "Split this file.",
+          diffHash: "diff-hash",
+          path: "src/app.ts",
+          reviewTargetId: "target-1"
+        },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/file-comments"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: "Updated." },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/file-comments/file-comment-1"
+      }),
+      encryptedRequest({
+        baseUrl,
+        logicalMethod: "DELETE",
+        path: "/companion/v1/file-comments/file-comment-1"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: "Keep the API stable.", reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { dismissed: true, reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/dismissal"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/delete"
+      })
+    ]);
+
+    expect(responses.map((response) => response.plain.status)).toEqual([
+      200, 200, 200, 200, 200, 200
+    ]);
+    expect(responses.map((response) => response.plain.body)).toEqual([
+      { fileComment },
+      { fileComment },
+      { deleted: true },
+      { reviewNote },
+      { reviewNote: { ...reviewNote, dismissedAt: "2026-07-02T12:01:00.000Z" } },
+      { deleted: true }
+    ]);
+    expect(createFileComment).toHaveBeenCalledWith({
+      body: "Split this file.",
+      diffHash: "diff-hash",
+      path: "src/app.ts",
+      projectId: "project-1",
+      reviewTargetId: "target-1"
+    });
+    expect(updateFileComment).toHaveBeenCalledWith({
+      body: "Updated.",
+      commentId: "file-comment-1"
+    });
+    expect(deleteFileComment).toHaveBeenCalledWith("file-comment-1");
+    expect(saveReviewNote).toHaveBeenCalledWith({
+      body: "Keep the API stable.",
+      projectId: "project-1",
+      reviewTargetId: "target-1"
+    });
+    expect(setReviewNoteDismissed).toHaveBeenCalledWith({
+      dismissed: true,
+      projectId: "project-1",
+      reviewTargetId: "target-1"
+    });
+    expect(deleteReviewNote).toHaveBeenCalledWith({
+      projectId: "project-1",
+      reviewTargetId: "target-1"
+    });
+  });
+
+  it("rejects bad and oversized bodies", async () => {
+    const { baseUrl } = await startServer();
+    const longBody = "x".repeat(20_001);
+
+    const responses = await Promise.all([
+      encryptedRequest({
+        baseUrl,
+        body: { body: "x", path: "src/app.ts", reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/file-comments"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { dismissed: "yes", reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/dismissal"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: {},
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/delete"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: {
+          body: longBody,
+          diffHash: "diff-hash",
+          path: "src/app.ts",
+          reviewTargetId: "target-1"
+        },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/file-comments"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: longBody },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/file-comments/file-comment-1"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: longBody, reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note"
+      })
+    ]);
+
+    expect(responses.map((response) => response.plain.status)).toEqual([
+      400, 400, 400, 400, 400, 400
+    ]);
+    for (const response of responses.slice(3)) {
+      expect(response.plain.body).toMatchObject({
+        error: { code: "bad_request", message: "Comment body is too long" }
+      });
+    }
+  });
+
+  it("maps missing file comments and notes to not_found", async () => {
+    const { baseUrl } = await startServer({
+      deleteFileComment: async () => false,
+      deleteReviewNote: async () => false,
+      setReviewNoteDismissed: async () => null,
+      updateFileComment: async () => null
+    });
+
+    const responses = await Promise.all([
+      encryptedRequest({
+        baseUrl,
+        body: { body: "Updated." },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/file-comments/missing"
+      }),
+      encryptedRequest({
+        baseUrl,
+        logicalMethod: "DELETE",
+        path: "/companion/v1/file-comments/missing"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { dismissed: false, reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/dismissal"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/delete"
+      })
+    ]);
+
+    expect(responses.map((response) => response.plain.status)).toEqual([
+      404, 404, 404, 404
+    ]);
+    expect(responses.map((response) => response.plain.body)).toMatchObject([
+      { error: { code: "not_found", message: "File comment not found" } },
+      { error: { code: "not_found", message: "File comment not found" } },
+      { error: { code: "not_found", message: "Review note not found" } },
+      { error: { code: "not_found", message: "Review note not found" } }
+    ]);
+  });
+
+  it("maps stale review targets to stale_diff", async () => {
+    const stale = async () => {
+      throw new StaleReviewTargetError("stale_diff");
+    };
+    const { baseUrl } = await startServer({
+      createFileComment: stale,
+      deleteFileComment: stale,
+      deleteReviewNote: stale,
+      saveReviewNote: stale,
+      setReviewNoteDismissed: stale,
+      updateFileComment: stale
+    });
+
+    const responses = await Promise.all([
+      encryptedRequest({
+        baseUrl,
+        body: { body: "x", diffHash: "old", path: "src/app.ts", reviewTargetId: "old" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/file-comments"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: "x" },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/file-comments/file-comment-1"
+      }),
+      encryptedRequest({
+        baseUrl,
+        logicalMethod: "DELETE",
+        path: "/companion/v1/file-comments/file-comment-1"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { body: "x", reviewTargetId: "old" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { dismissed: true, reviewTargetId: "old" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/dismissal"
+      }),
+      encryptedRequest({
+        baseUrl,
+        body: { reviewTargetId: "old" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note/delete"
+      })
+    ]);
+
+    expect(responses.map((response) => response.plain.status)).toEqual([
+      409, 409, 409, 409, 409, 409
+    ]);
+    for (const response of responses) {
+      expect(response.plain.body).toMatchObject({
+        error: { code: "stale_diff", message: "Displayed diff is stale" }
+      });
+    }
+  });
+});
+
 function deferredProjectList(): {
   readonly promise: Promise<Awaited<ReturnType<CompanionDeps["listRecentProjects"]>>>;
   readonly resolve: (
@@ -1316,7 +1668,12 @@ async function startServer(
     createComment: async () => {
       throw new Error("not implemented in test");
     },
+    createFileComment: async () => {
+      throw new Error("not implemented in test");
+    },
     deleteComment: async () => false,
+    deleteFileComment: async () => false,
+    deleteReviewNote: async () => false,
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
     listRecentProjects: async () => [],
@@ -1344,12 +1701,16 @@ async function startServer(
     }),
     notifyDesktopRenderer: () => undefined,
     revokeDevice: vi.fn(),
+    saveReviewNote: async () => {
+      throw new Error("not implemented in test");
+    },
     serverIdentity: () => ({
       appVersion: "0.0.0-test",
       serverId: "server-test",
       serverName: "Test Mac",
       serverPublicKey
     }),
+    setReviewNoteDismissed: async () => null,
     storage: testCompanionStorage(),
     unmarkReviewed: async () => ({
       unmarked: true,
@@ -1359,6 +1720,7 @@ async function startServer(
       }
     }),
     updateComment: async () => null,
+    updateFileComment: async () => null,
     updateDiffTarget: async () => {
       throw new Error("not implemented in test");
     },

@@ -22,6 +22,7 @@ import { performance } from "node:perf_hooks";
 import {
   calculateProgress,
   createDiffHash,
+  createReviewNoteScopeId,
   createReviewTargetId,
   formatReviewCommentsReport,
   isPathInsideApprovedRoot,
@@ -35,6 +36,7 @@ import {
   COMPANION_PROTOCOL_VERSION,
   type PairingQrPayload,
   CreateCommentBody as CompanionCreateCommentBody,
+  CreateFileCommentBody as CompanionCreateFileCommentBody,
   DiffTargetBody,
   FileDiffStatus,
   FileDiffContentKind,
@@ -176,6 +178,8 @@ import {
   projectProgressFromGit,
   projectView,
   reviewCommentView,
+  reviewFileCommentView,
+  reviewNoteView,
   projectReviewSummaryView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
@@ -184,6 +188,7 @@ import {
   sameCommentIds,
   settingsView,
   summarizePatch,
+  trimmedNoteBody,
   workspaceWithUpdatedReviewState,
   type AppSettingsView,
   type FileReviewStateWithSummary,
@@ -194,6 +199,8 @@ import {
   type RecentProjectView,
   type ReviewFileDiffContentView,
   type ReviewCommentView,
+  type ReviewFileCommentView,
+  type ReviewNoteView,
   type ReviewWorkspaceView
 } from "./view-models.js";
 import {
@@ -210,10 +217,11 @@ import {
   loadValidatedFileImage,
   requiredFileImagePreflightSides
 } from "./file-image-loader.js";
-import type {
-  CompanionDeps,
-  MarkResult as CompanionMarkResult,
-  UnmarkResult as CompanionUnmarkResult
+import {
+  StaleReviewTargetError,
+  type CompanionDeps,
+  type MarkResult as CompanionMarkResult,
+  type UnmarkResult as CompanionUnmarkResult
 } from "./companion/api.js";
 
 const rendererDevUrlFromEnv = process.env.DIFFTRAY_RENDERER_URL;
@@ -364,9 +372,61 @@ type DeleteReviewCommentResult =
       readonly status: "rejected";
     };
 
+type CreateReviewFileCommentResult =
+  | {
+      readonly fileComment: ReviewFileCommentView;
+      readonly status: "created";
+    }
+  | {
+      readonly reason: "file_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+type UpdateReviewFileCommentResult =
+  | {
+      readonly fileComment: ReviewFileCommentView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+type DeleteReviewFileCommentResult = DeleteReviewCommentResult;
+
+type SaveReviewNoteResult =
+  | {
+      readonly reviewNote: ReviewNoteView;
+      readonly status: "saved";
+    }
+  | {
+      readonly reason: "stale_diff";
+      readonly status: "rejected";
+    };
+
+type SetReviewNoteDismissedResult =
+  | {
+      readonly reviewNote: ReviewNoteView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "note_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+type DeleteReviewNoteResult =
+  | {
+      readonly status: "deleted";
+    }
+  | {
+      readonly reason: "note_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
 type CopyReviewCommentsReportResult =
   | {
       readonly commentCount: number;
+      readonly hasReviewNote: boolean;
       readonly status: "copied";
     }
   | {
@@ -1267,11 +1327,16 @@ handleTrusted(
     const reviewTargetId = readStringProperty(input, "reviewTargetId");
     const expectedCommentIds =
       readOptionalStringArrayProperty(input, "expectedCommentIds") ?? [];
+    const expectedReviewNoteUpdatedAt =
+      readOptionalStringProperty(input, "expectedReviewNoteUpdatedAt") ?? null;
     const workspace = await loadProjectWorkspace(projectId);
+    const allComments = [...workspace.comments, ...(workspace.fileComments ?? [])];
+    const activeReviewNote = activeReviewNoteView(workspace);
 
     if (
       workspace.reviewTarget.id !== reviewTargetId ||
-      !sameCommentIds(workspace.comments, expectedCommentIds)
+      !sameCommentIds(allComments, expectedCommentIds) ||
+      (activeReviewNote?.updatedAt ?? null) !== expectedReviewNoteUpdatedAt
     ) {
       return {
         reason: "stale_diff",
@@ -1282,9 +1347,116 @@ handleTrusted(
     void clipboard.writeText(await formatProjectCommentsReport(projectId, workspace));
 
     return {
-      commentCount: workspace.comments.length,
+      commentCount: allComments.length,
+      hasReviewNote: activeReviewNote !== null,
       status: "copied"
     };
+  }
+);
+handleTrusted(
+  "fileComments:create",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<CreateReviewFileCommentResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const result = await createProjectReviewFileComment({
+      body: readStringProperty(input, "body"),
+      diffHash: readStringProperty(input, "displayedDiffHash"),
+      path: readStringProperty(input, "path"),
+      projectId,
+      reviewTargetId: readStringProperty(input, "reviewTargetId")
+    });
+
+    if (result.status === "created") {
+      notifyCompanionWorkspaceChanged(projectId, "comments");
+    }
+
+    return result;
+  }
+);
+handleTrusted(
+  "fileComments:update",
+  (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewFileCommentResult => {
+    const id = readStringProperty(input, "id");
+    const storedComment = getStorage().getReviewFileComment(id);
+    const result = updateProjectReviewFileComment({
+      body: readStringProperty(input, "body"),
+      id
+    });
+
+    if (result.status === "updated" && storedComment) {
+      notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+    }
+
+    return result;
+  }
+);
+handleTrusted(
+  "fileComments:delete",
+  (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewFileCommentResult => {
+    const id = readStringProperty(input, "id");
+    const storedComment = getStorage().getReviewFileComment(id);
+    const result = deleteProjectReviewFileComment(id);
+
+    if (result.status === "deleted" && storedComment) {
+      notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+    }
+
+    return result;
+  }
+);
+handleTrusted(
+  "reviewNote:save",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<SaveReviewNoteResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const result = await saveProjectReviewNote({
+      body: readStringProperty(input, "body"),
+      projectId,
+      reviewTargetId: readStringProperty(input, "reviewTargetId")
+    });
+
+    if (result.status === "saved") {
+      notifyCompanionWorkspaceChanged(projectId, "comments");
+    }
+
+    return result;
+  }
+);
+handleTrusted(
+  "reviewNote:setDismissed",
+  async (
+    _event: IpcMainInvokeEvent,
+    input: unknown
+  ): Promise<SetReviewNoteDismissedResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const result = await setProjectReviewNoteDismissed({
+      dismissed: readBooleanProperty(input, "dismissed"),
+      projectId,
+      reviewTargetId: readStringProperty(input, "reviewTargetId")
+    });
+
+    if (result.status === "updated") {
+      notifyCompanionWorkspaceChanged(projectId, "comments");
+    }
+
+    return result;
+  }
+);
+handleTrusted(
+  "reviewNote:delete",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<DeleteReviewNoteResult> => {
+    const projectId = readStringProperty(input, "projectId");
+    const result = await deleteProjectReviewNote({
+      projectId,
+      reviewTargetId: readStringProperty(input, "reviewTargetId")
+    });
+
+    if (result.status === "deleted") {
+      notifyCompanionWorkspaceChanged(projectId, "comments");
+    }
+
+    return result;
   }
 );
 handleTrusted(
@@ -2246,6 +2418,81 @@ export function createDesktopCompanionDeps(): CompanionDeps {
 
       return Promise.resolve(deleted);
     },
+    createFileComment: async (input) => {
+      const result = await createProjectReviewFileComment(input);
+
+      if (result.status === "rejected") {
+        throw new StaleReviewTargetError(result.reason);
+      }
+
+      notifyReviewFeedbackChanged(input.projectId);
+
+      return result.fileComment;
+    },
+    updateFileComment: (input) => {
+      const storedComment = storage.getReviewFileComment(input.commentId);
+      const result = updateProjectReviewFileComment({
+        body: input.body,
+        id: input.commentId
+      });
+
+      if (result.status === "updated" && storedComment) {
+        notifyReviewFeedbackChanged(storedComment.projectId);
+      }
+
+      return Promise.resolve(result.status === "updated" ? result.fileComment : null);
+    },
+    deleteFileComment: (id) => {
+      const storedComment = storage.getReviewFileComment(id);
+      const deleted = deleteProjectReviewFileComment(id).status === "deleted";
+
+      if (deleted && storedComment) {
+        notifyReviewFeedbackChanged(storedComment.projectId);
+      }
+
+      return Promise.resolve(deleted);
+    },
+    saveReviewNote: async (input) => {
+      const result = await saveProjectReviewNote(input);
+
+      if (result.status === "rejected") {
+        throw new StaleReviewTargetError(result.reason);
+      }
+
+      notifyReviewFeedbackChanged(input.projectId);
+
+      return result.reviewNote;
+    },
+    setReviewNoteDismissed: async (input) => {
+      const result = await setProjectReviewNoteDismissed(input);
+
+      if (result.status === "rejected") {
+        if (result.reason === "note_missing") {
+          return null;
+        }
+
+        throw new StaleReviewTargetError(result.reason);
+      }
+
+      notifyReviewFeedbackChanged(input.projectId);
+
+      return result.reviewNote;
+    },
+    deleteReviewNote: async (input) => {
+      const result = await deleteProjectReviewNote(input);
+
+      if (result.status === "rejected") {
+        if (result.reason === "note_missing") {
+          return false;
+        }
+
+        throw new StaleReviewTargetError(result.reason);
+      }
+
+      notifyReviewFeedbackChanged(input.projectId);
+
+      return true;
+    },
     listBranchRefs: listBranchRefsForProject,
     listRecentCommits: listRecentCommitsForProject,
     listRecentProjects: listAvailableRecentProjectViewsWithSummaries,
@@ -2793,9 +3040,11 @@ async function loadProjectWorkspace(
 
   return reviewWorkspaceView({
     comments: getStorage().listReviewComments(reviewTargetId),
+    fileComments: getStorage().listReviewFileComments(reviewTargetId),
     files,
     progress,
     project,
+    reviewNote: getStorage().getReviewNote(createReviewNoteScopeId(reviewTarget)),
     reviewTarget,
     reviewTargetId
   });
@@ -3152,15 +3401,201 @@ function deleteProjectReviewComment(commentId: string): DeleteReviewCommentResul
   return { status: "deleted" };
 }
 
+async function createProjectReviewFileComment(
+  input: CompanionCreateFileCommentBody & { readonly projectId: string }
+): Promise<CreateReviewFileCommentResult> {
+  const { diffHash, path: pathName, projectId, reviewTargetId } = input;
+  const body = input.body.trim();
+  const project = assertStoredProject(projectId);
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+
+  if (createReviewTargetId(reviewTarget) !== reviewTargetId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
+
+  if (!file) {
+    return {
+      reason: "file_missing",
+      status: "rejected"
+    };
+  }
+
+  if (file.diffHash !== diffHash) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  if (body.length === 0) {
+    throw new Error("Review comment body is required.");
+  }
+
+  const fileComment = getStorage().createReviewFileComment({
+    body,
+    diffHash: file.diffHash,
+    path: pathName,
+    ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+    projectId,
+    reviewTargetId
+  });
+
+  return {
+    fileComment: reviewFileCommentView(fileComment),
+    status: "created"
+  };
+}
+
+function updateProjectReviewFileComment(
+  input: CompanionUpdateCommentBody & { readonly id: string }
+): UpdateReviewFileCommentResult {
+  const fileComment = getStorage().updateReviewFileComment(
+    input.id,
+    trimmedNoteBody(input.body)
+  );
+
+  if (!fileComment) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return {
+    fileComment: reviewFileCommentView(fileComment),
+    status: "updated"
+  };
+}
+
+function deleteProjectReviewFileComment(
+  commentId: string
+): DeleteReviewFileCommentResult {
+  if (!getStorage().deleteReviewFileComment(commentId)) {
+    return {
+      reason: "comment_missing",
+      status: "rejected"
+    };
+  }
+
+  return { status: "deleted" };
+}
+
+type ReviewNoteTargetInput = {
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+};
+
+async function currentReviewNoteScopeId(
+  input: ReviewNoteTargetInput
+): Promise<string | null> {
+  const project = assertStoredProject(input.projectId);
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+
+  return createReviewTargetId(reviewTarget) === input.reviewTargetId
+    ? createReviewNoteScopeId(reviewTarget)
+    : null;
+}
+
+async function saveProjectReviewNote(
+  input: ReviewNoteTargetInput & { readonly body: string }
+): Promise<SaveReviewNoteResult> {
+  const body = trimmedNoteBody(input.body);
+  const scopeId = await currentReviewNoteScopeId(input);
+
+  if (!scopeId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  const reviewNote = getStorage().saveReviewNote({
+    body,
+    projectId: input.projectId,
+    scopeId
+  });
+
+  return {
+    reviewNote: reviewNoteView(reviewNote),
+    status: "saved"
+  };
+}
+
+async function setProjectReviewNoteDismissed(
+  input: ReviewNoteTargetInput & { readonly dismissed: boolean }
+): Promise<SetReviewNoteDismissedResult> {
+  const scopeId = await currentReviewNoteScopeId(input);
+
+  if (!scopeId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  const reviewNote = getStorage().setReviewNoteDismissed(scopeId, input.dismissed);
+
+  if (!reviewNote) {
+    return {
+      reason: "note_missing",
+      status: "rejected"
+    };
+  }
+
+  return {
+    reviewNote: reviewNoteView(reviewNote),
+    status: "updated"
+  };
+}
+
+async function deleteProjectReviewNote(
+  input: ReviewNoteTargetInput
+): Promise<DeleteReviewNoteResult> {
+  const scopeId = await currentReviewNoteScopeId(input);
+
+  if (!scopeId) {
+    return {
+      reason: "stale_diff",
+      status: "rejected"
+    };
+  }
+
+  if (!getStorage().deleteReviewNote(scopeId)) {
+    return {
+      reason: "note_missing",
+      status: "rejected"
+    };
+  }
+
+  return { status: "deleted" };
+}
+
+function activeReviewNoteView(workspace: ReviewWorkspaceView): ReviewNoteView | null {
+  const reviewNote = workspace.reviewNote ?? null;
+
+  return reviewNote && !reviewNote.dismissedAt ? reviewNote : null;
+}
+
 async function formatProjectCommentsReport(
   projectId: string,
   workspace: ReviewWorkspaceView
 ): Promise<string> {
   const comments = await reviewCommentReportItems(projectId, workspace.comments);
+  const reviewNote = activeReviewNoteView(workspace);
 
   return formatReviewCommentsReport({
     comments,
+    fileComments: (workspace.fileComments ?? []).map((comment) => ({
+      body: comment.body,
+      path: comment.path
+    })),
     projectName: workspace.project.name,
+    ...(reviewNote ? { reviewNote: reviewNote.body } : {}),
     targetLabel: reviewTargetLabel(workspace.reviewTarget)
   });
 }
@@ -3198,6 +3633,11 @@ function workspaceSummaryFromWorkspace(workspace: ReviewWorkspaceView): Workspac
     })),
     progress: workspace.progress
   };
+}
+
+function notifyReviewFeedbackChanged(projectId: string): void {
+  notifyDesktopRenderer(projectId);
+  notifyCompanionWorkspaceChanged(projectId, "comments");
 }
 
 function notifyDesktopRenderer(projectId: string): void {

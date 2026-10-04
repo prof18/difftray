@@ -68,6 +68,22 @@ export type DifftrayApi = {
   readonly deleteReviewComment: (
     input: DeleteReviewCommentInput
   ) => Promise<DeleteReviewCommentResult>;
+  readonly createReviewFileComment: (
+    input: CreateReviewFileCommentInput
+  ) => Promise<CreateReviewFileCommentResult>;
+  readonly deleteReviewFileComment: (
+    input: DeleteReviewFileCommentInput
+  ) => Promise<DeleteReviewFileCommentResult>;
+  readonly deleteReviewNote: (
+    input: ReviewNoteTargetInput
+  ) => Promise<DeleteReviewNoteResult>;
+  readonly saveReviewNote: (input: SaveReviewNoteInput) => Promise<SaveReviewNoteResult>;
+  readonly setReviewNoteDismissed: (
+    input: SetReviewNoteDismissedInput
+  ) => Promise<SetReviewNoteDismissedResult>;
+  readonly updateReviewFileComment: (
+    input: UpdateReviewFileCommentInput
+  ) => Promise<UpdateReviewFileCommentResult>;
   readonly getAppSettings: () => Promise<AppSettingsView>;
   readonly getProjectReviewSummary: (
     projectId: string
@@ -435,8 +451,115 @@ export type ReviewFileDiffContentView = {
   readonly status: ReviewFileView["status"];
 };
 
+export type ReviewFileCommentView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly diffHash: string;
+  readonly id: string;
+  readonly path: string;
+  readonly previousPath?: string;
+  readonly updatedAt: string;
+};
+
+export type ReviewNoteView = {
+  readonly body: string;
+  readonly createdAt: string;
+  readonly dismissedAt?: string;
+  readonly updatedAt: string;
+};
+
+export type CreateReviewFileCommentInput = {
+  readonly body: string;
+  readonly displayedDiffHash: string;
+  readonly path: string;
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+};
+
+export type CreateReviewFileCommentResult =
+  | {
+      readonly fileComment: ReviewFileCommentView;
+      readonly status: "created";
+    }
+  | {
+      readonly reason: "file_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+export type UpdateReviewFileCommentInput = {
+  readonly body: string;
+  readonly id: string;
+};
+
+export type UpdateReviewFileCommentResult =
+  | {
+      readonly fileComment: ReviewFileCommentView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+export type DeleteReviewFileCommentInput = {
+  readonly id: string;
+};
+
+export type DeleteReviewFileCommentResult =
+  | {
+      readonly status: "deleted";
+    }
+  | {
+      readonly reason: "comment_missing";
+      readonly status: "rejected";
+    };
+
+export type ReviewNoteTargetInput = {
+  readonly projectId: string;
+  readonly reviewTargetId: string;
+};
+
+export type SaveReviewNoteInput = ReviewNoteTargetInput & {
+  readonly body: string;
+};
+
+export type SaveReviewNoteResult =
+  | {
+      readonly reviewNote: ReviewNoteView;
+      readonly status: "saved";
+    }
+  | {
+      readonly reason: "stale_diff";
+      readonly status: "rejected";
+    };
+
+export type SetReviewNoteDismissedInput = ReviewNoteTargetInput & {
+  readonly dismissed: boolean;
+};
+
+export type SetReviewNoteDismissedResult =
+  | {
+      readonly reviewNote: ReviewNoteView;
+      readonly status: "updated";
+    }
+  | {
+      readonly reason: "note_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
+export type DeleteReviewNoteResult =
+  | {
+      readonly status: "deleted";
+    }
+  | {
+      readonly reason: "note_missing" | "stale_diff";
+      readonly status: "rejected";
+    };
+
 export type ReviewWorkspaceView = {
   readonly comments: readonly ReviewCommentView[];
+  readonly fileComments?: readonly ReviewFileCommentView[];
+  readonly reviewNote?: ReviewNoteView | null;
   readonly files: readonly ReviewFileView[];
   readonly project: RecentProjectView;
   readonly progress: ReviewProgressView;
@@ -503,6 +626,7 @@ export type DeleteReviewCommentResult =
 
 export type CopyReviewCommentsReportInput = {
   readonly expectedCommentIds: readonly string[];
+  readonly expectedReviewNoteUpdatedAt?: string | null;
   readonly projectId: string;
   readonly reviewTargetId: string;
 };
@@ -510,6 +634,7 @@ export type CopyReviewCommentsReportInput = {
 export type CopyReviewCommentsReportResult =
   | {
       readonly commentCount: number;
+      readonly hasReviewNote: boolean;
       readonly status: "copied";
     }
   | {
@@ -687,6 +812,30 @@ const api: DifftrayApi = {
     ipcRenderer.invoke("comments:create", input) as Promise<CreateReviewCommentResult>,
   deleteReviewComment: async (input) =>
     ipcRenderer.invoke("comments:delete", input) as Promise<DeleteReviewCommentResult>,
+  createReviewFileComment: async (input) =>
+    ipcRenderer.invoke(
+      "fileComments:create",
+      input
+    ) as Promise<CreateReviewFileCommentResult>,
+  deleteReviewFileComment: async (input) =>
+    ipcRenderer.invoke(
+      "fileComments:delete",
+      input
+    ) as Promise<DeleteReviewFileCommentResult>,
+  deleteReviewNote: async (input) =>
+    ipcRenderer.invoke("reviewNote:delete", input) as Promise<DeleteReviewNoteResult>,
+  saveReviewNote: async (input) =>
+    ipcRenderer.invoke("reviewNote:save", input) as Promise<SaveReviewNoteResult>,
+  setReviewNoteDismissed: async (input) =>
+    ipcRenderer.invoke(
+      "reviewNote:setDismissed",
+      input
+    ) as Promise<SetReviewNoteDismissedResult>,
+  updateReviewFileComment: async (input) =>
+    ipcRenderer.invoke(
+      "fileComments:update",
+      input
+    ) as Promise<UpdateReviewFileCommentResult>,
   getAppSettings: async () =>
     ipcRenderer.invoke("settings:getApp") as Promise<AppSettingsView>,
   getProjectReviewSummary: async (projectId) =>

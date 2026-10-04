@@ -18,6 +18,7 @@ import {
   reviewTargetRecord,
   sameCommentIds,
   settingsView,
+  trimmedNoteBody,
   summarizePatch,
   workspaceWithUpdatedReviewState,
   type FileReviewStateWithSummary,
@@ -487,6 +488,13 @@ describe("project load progress views", () => {
       message: "Scanning changed files",
       phase: "scanning_files"
     });
+  });
+});
+
+describe("review note bodies", () => {
+  it("trims note bodies and rejects empty ones", () => {
+    expect(trimmedNoteBody("  Keep it small.\n")).toBe("Keep it small.");
+    expect(() => trimmedNoteBody(" \n\t ")).toThrow("Review comment body is required.");
   });
 });
 

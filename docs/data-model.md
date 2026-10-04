@@ -162,6 +162,57 @@ the current file diff. When a diff changes, old comments are kept for auditabili
 but are hidden from the active review UI and omitted from the ready-made agent
 prompt.
 
+### review_file_comments
+
+```sql
+review_file_comments (
+  id text primary key,
+  project_id text not null,
+  review_target_id text not null,
+  path text not null,
+  previous_path text,
+  diff_hash text not null,
+  body text not null,
+  created_at text not null,
+  updated_at text not null
+)
+```
+
+Whole-file comments follow the same active rule as `review_comments`: a file
+comment is active only while its `review_target_id` is the current target and its
+`diff_hash` matches the current file diff. Stale file comments are kept, not
+deleted. Within a file, the agent prompt lists file comments before line comments.
+
+### review_notes
+
+```sql
+review_notes (
+  scope_id text primary key,
+  project_id text not null,
+  body text not null,
+  dismissed_at text,
+  created_at text not null,
+  updated_at text not null
+)
+```
+
+A review note is one multi-line message for the whole change, with at most one
+note per scope. `scope_id` is `note-scope-v1:<sha256>` from
+`createReviewNoteScopeId`, which deliberately ignores commit SHAs so the note
+survives new commits:
+
+- Uncommitted changes: project + head branch name (head SHA only on a detached
+  HEAD).
+- Branch comparison: project + base ref name + head branch name (same detached
+  fallback).
+- Single commit: project + commit SHA.
+
+A note is active when it exists and `dismissed_at` is null. Only an active note
+is included in the agent prompt, under "Overall review notes" before the
+per-file comments. A dismissed note still appears in workspace views so it can be
+restored. Saving a body clears `dismissed_at`. Notes are removed when their
+project is forgotten.
+
 ### project_settings
 
 ```sql
