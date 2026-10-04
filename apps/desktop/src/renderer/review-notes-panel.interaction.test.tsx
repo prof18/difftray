@@ -104,6 +104,26 @@ describe("ReviewNotesPanel interactions", () => {
     expect(onDelete).toHaveBeenCalledOnce();
   });
 
+  it("returns focus to the panel after the editor closes", () => {
+    renderPanel({ editing: true, note });
+    textarea().focus();
+
+    renderPanel({ editing: false, note });
+
+    expect(document.activeElement).toBe(button('[aria-label="Edit review notes"]'));
+  });
+
+  it("moves focus to Restore after dismissing and back after restoring", () => {
+    renderPanel({ note });
+    button('[aria-label="Dismiss review notes"]').focus();
+
+    renderPanel({ note: { ...note, dismissedAt: "2026-01-03T00:00:00.000Z" } });
+    expect(document.activeElement).toBe(buttonWithText("Restore"));
+
+    renderPanel({ note });
+    expect(document.activeElement).toBe(button('[aria-label="Edit review notes"]'));
+  });
+
   function renderPanel(patch: Partial<ReviewNotesPanelProps> = {}): void {
     act(() => {
       root.render(

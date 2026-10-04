@@ -104,6 +104,18 @@ describe("FileCommentStack interactions", () => {
     expect(textarea().value).toBe("Keep this text.");
   });
 
+  it("returns focus to the card after its editor closes", () => {
+    renderStack({ comments: [fileComment()] });
+
+    act(() => {
+      button('[aria-label="Edit file comment"]').click();
+    });
+    textarea().focus();
+    pressKey("Escape");
+
+    expect(document.activeElement).toBe(button('[aria-label="Edit file comment"]'));
+  });
+
   it("deletes a card", () => {
     const onDelete = vi.fn();
     renderStack({ comments: [fileComment()], onDelete });

@@ -302,3 +302,8 @@ export function reviewNoteScopeKey(
       return JSON.stringify([projectId, target.kind, head]);
   }
 }
+
+/** True when focus fell back to the page, e.g. because the focused editor unmounted. */
+export function isFocusLost(): boolean {
+  return document.activeElement === null || document.activeElement === document.body;
+}

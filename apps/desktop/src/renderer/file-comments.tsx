@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { FileText, Pencil, Save, Trash2 } from "lucide-react";
 
 import styles from "./file-comments.module.css";
-import { commentEditorShortcut, growingTextareaRows } from "./review-comments.js";
+import {
+  commentEditorShortcut,
+  growingTextareaRows,
+  isFocusLost
+} from "./review-comments.js";
 
 export type FileCommentStackProps = {
   readonly comments: readonly ReviewFileCommentView[];
@@ -69,6 +73,15 @@ function FileCommentCard({
   readonly pending: boolean;
 }): React.JSX.Element {
   const [editingBody, setEditingBody] = useState<string | undefined>();
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+
+  useEffect(() => {
+    if (wasEditing.current && editingBody === undefined && isFocusLost()) {
+      editButtonRef.current?.focus();
+    }
+    wasEditing.current = editingBody !== undefined;
+  }, [editingBody]);
 
   if (editingBody !== undefined) {
     return (
@@ -106,6 +119,7 @@ function FileCommentCard({
             onClick={() => {
               setEditingBody(comment.body);
             }}
+            ref={editButtonRef}
             title="Edit comment"
             type="button"
           >

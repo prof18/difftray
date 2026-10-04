@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { EyeOff, NotebookPen, Pencil, Save, Trash2, Undo2 } from "lucide-react";
 
 import styles from "./review-notes-panel.module.css";
-import { commentEditorShortcut, growingTextareaRows } from "./review-comments.js";
+import {
+  commentEditorShortcut,
+  growingTextareaRows,
+  isFocusLost
+} from "./review-comments.js";
 
 export type ReviewNotesPanelProps = {
   readonly note: ReviewNoteView | null;
@@ -29,6 +33,15 @@ export function ReviewNotesPanel({
   const [draftStarted, setDraftStarted] = useState(editing);
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
+  const mode = editing
+    ? "editing"
+    : !note
+      ? "none"
+      : note.dismissedAt
+        ? "dismissed"
+        : "active";
+  const previousMode = useRef(mode);
 
   // Seed the draft once per edit session so live note updates never clobber typing.
   if (editing !== draftStarted) {
@@ -43,6 +56,14 @@ export function ReviewNotesPanel({
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     }
   }, [editing]);
+
+  // The control that had focus (editor, Dismiss, Restore) unmounts on a mode change.
+  useEffect(() => {
+    if (previousMode.current !== mode && mode !== "editing" && isFocusLost()) {
+      primaryActionRef.current?.focus();
+    }
+    previousMode.current = mode;
+  }, [mode]);
 
   function save(): void {
     if (pending || draft.trim().length === 0) {
@@ -127,6 +148,7 @@ export function ReviewNotesPanel({
         className={styles.addButton}
         disabled={pending}
         onClick={onStartEdit}
+        ref={primaryActionRef}
         type="button"
       >
         <NotebookPen size={14} strokeWidth={1.4} aria-hidden />
@@ -148,6 +170,7 @@ export function ReviewNotesPanel({
             onClick={() => {
               onSetDismissed(false);
             }}
+            ref={primaryActionRef}
             type="button"
           >
             <Undo2 size={13} strokeWidth={1.4} aria-hidden />
@@ -169,6 +192,7 @@ export function ReviewNotesPanel({
             className={styles.iconButton}
             disabled={pending}
             onClick={onStartEdit}
+            ref={primaryActionRef}
             title="Edit review notes"
             type="button"
           >
