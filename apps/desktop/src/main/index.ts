@@ -1290,7 +1290,7 @@ handleTrusted(
     const lineEnd = readNumberProperty(input, "lineEnd");
     const body = readStringProperty(input, "body");
 
-    return createProjectReviewComment({
+    const result = await createProjectReviewComment({
       body,
       diffHash: displayedDiffHash,
       lineEnd,
@@ -1300,21 +1300,43 @@ handleTrusted(
       reviewTargetId,
       side
     });
+
+    if (result.status === "created") {
+      notifyCompanionWorkspaceChanged(projectId, "comments");
+    }
+
+    return result;
   }
 );
 handleTrusted(
   "comments:update",
   (_event: IpcMainInvokeEvent, input: unknown): UpdateReviewCommentResult => {
-    return updateProjectReviewComment({
+    const id = readStringProperty(input, "id");
+    const storedComment = getStorage().getReviewComment(id);
+    const result = updateProjectReviewComment({
       body: readStringProperty(input, "body"),
-      id: readStringProperty(input, "id")
+      id
     });
+
+    if (result.status === "updated" && storedComment) {
+      notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+    }
+
+    return result;
   }
 );
 handleTrusted(
   "comments:delete",
   (_event: IpcMainInvokeEvent, input: unknown): DeleteReviewCommentResult => {
-    return deleteProjectReviewComment(readStringProperty(input, "id"));
+    const id = readStringProperty(input, "id");
+    const storedComment = getStorage().getReviewComment(id);
+    const result = deleteProjectReviewComment(id);
+
+    if (result.status === "deleted" && storedComment) {
+      notifyCompanionWorkspaceChanged(storedComment.projectId, "comments");
+    }
+
+    return result;
   }
 );
 handleTrusted(
@@ -3328,7 +3350,12 @@ async function createProjectReviewComment(
     };
   }
 
-  const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
+  const file = await loadCurrentReviewFile(
+    project,
+    reviewTarget,
+    pathName,
+    input.previousPath
+  );
 
   if (!file) {
     return {
@@ -3416,7 +3443,12 @@ async function createProjectReviewFileComment(
     };
   }
 
-  const file = await loadCurrentReviewFile(project, reviewTarget, pathName);
+  const file = await loadCurrentReviewFile(
+    project,
+    reviewTarget,
+    pathName,
+    input.previousPath
+  );
 
   if (!file) {
     return {
