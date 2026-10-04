@@ -1,0 +1,193 @@
+.panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent));
+  color: var(--text);
+  margin: 8px 10px 6px;
+  padding: 9px 10px;
+}
+
+.panel[data-state="editing"] {
+  border-color: var(--accent);
+}
+
+.panel[data-state="dismissed"] {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.headerRow,
+.header,
+.iconActions,
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.headerRow {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header {
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.title {
+  color: var(--text-2);
+}
+
+.subtitle {
+  font-weight: 500;
+}
+
+.countPill {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--primary-fg);
+  font-size: 11px;
+  padding: 0 5px;
+}
+
+.iconActions,
+.actions {
+  gap: 6px;
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.body {
+  display: -webkit-box;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 0;
+  text-align: left;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.body[data-expanded="true"] {
+  display: block;
+}
+
+.dismissedText {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.textarea {
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 8px 9px;
+}
+
+.textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.textarea:disabled {
+  opacity: 0.72;
+  resize: none;
+}
+
+.addButton {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 8px 10px 6px;
+  padding: 7px 10px;
+}
+
+.addButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.iconButton {
+  -webkit-app-region: no-drag;
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 10px;
+}
+
+.primaryButton {
+  border: 1px solid var(--accent-2);
+  background: var(--accent);
+  color: var(--primary-fg);
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: var(--elev);
+  color: var(--text-2);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.iconButton:disabled,
+.addButton:disabled {
+  opacity: 0.52;
+}

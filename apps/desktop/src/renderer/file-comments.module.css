@@ -1,0 +1,133 @@
+.stack {
+  display: grid;
+  max-height: 40vh;
+  flex: 0 0 auto;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 8px 12px 4px;
+}
+
+.card {
+  display: grid;
+  max-width: min(760px, calc(100vw - 96px));
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent));
+  color: var(--text);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  padding: 10px;
+}
+
+.card[data-draft="true"] {
+  border-color: var(--accent);
+}
+
+.header,
+.header span,
+.iconActions,
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.header {
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.header span {
+  gap: 6px;
+}
+
+.iconActions,
+.actions {
+  gap: 6px;
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.body {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.textarea {
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+  padding: 9px 10px;
+}
+
+.textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.textarea:disabled {
+  opacity: 0.72;
+  resize: none;
+}
+
+.iconButton {
+  -webkit-app-region: no-drag;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.primaryButton {
+  border: 1px solid var(--accent-2);
+  background: var(--accent);
+  color: var(--primary-fg);
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: var(--elev);
+  color: var(--text-2);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.iconButton:disabled {
+  opacity: 0.52;
+}

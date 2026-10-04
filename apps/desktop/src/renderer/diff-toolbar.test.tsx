@@ -22,6 +22,7 @@ describe("diff toolbar components", () => {
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
+        onStartFileComment={vi.fn()}
         onToggleReviewed={vi.fn()}
         refName="against origin/main"
         reportCommentCount={3}
@@ -41,6 +42,10 @@ describe("diff toolbar components", () => {
     expect(html).toContain('aria-label="Show new version"');
     expect(html).toContain('data-active="true"');
     expect(html).toContain("Mark reviewed");
+    expect(html).toContain('aria-label="Comment on file"');
+    expect(html.indexOf('aria-label="Comment on file"')).toBeLessThan(
+      html.indexOf('aria-label="Copy comments report"')
+    );
   });
 
   it("omits split controls in unified mode and shows pending copy state", () => {
@@ -57,6 +62,7 @@ describe("diff toolbar components", () => {
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
+        onStartFileComment={vi.fn()}
         onToggleReviewed={vi.fn()}
         refName="worktree"
         reportCommentCount={1}
@@ -86,6 +92,7 @@ describe("diff toolbar components", () => {
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
+        onStartFileComment={vi.fn()}
         onToggleReviewed={vi.fn()}
         refName="worktree"
         reportCommentCount={0}

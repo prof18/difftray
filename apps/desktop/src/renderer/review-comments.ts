@@ -173,15 +173,70 @@ export function formatReviewCommentLocation(
 }
 
 export function commentCountsByPath(
-  comments: readonly ReviewCommentView[]
+  comments: readonly ReviewCommentView[],
+  fileComments: readonly ReviewFileCommentView[] = []
 ): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
 
-  for (const comment of comments) {
+  for (const comment of [...comments, ...fileComments]) {
     counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
   }
 
   return counts;
+}
+
+export type ReviewFeedbackWorkspace = Pick<ReviewWorkspaceView, "comments"> &
+  Partial<Pick<ReviewWorkspaceView, "fileComments" | "reviewNote">>;
+
+export function activeReviewNote(
+  workspace: ReviewFeedbackWorkspace
+): ReviewNoteView | null {
+  const note = workspace.reviewNote ?? null;
+
+  return note && !note.dismissedAt ? note : null;
+}
+
+export function reportItemCount(workspace: ReviewFeedbackWorkspace): number {
+  return (
+    workspace.comments.length +
+    (workspace.fileComments?.length ?? 0) +
+    (activeReviewNote(workspace) ? 1 : 0)
+  );
+}
+
+export function copyReportExpectation(workspace: ReviewFeedbackWorkspace): {
+  readonly expectedCommentIds: readonly string[];
+  readonly expectedReviewNoteUpdatedAt: string | null;
+} {
+  return {
+    expectedCommentIds: [
+      ...workspace.comments.map((comment) => comment.id),
+      ...(workspace.fileComments ?? []).map((comment) => comment.id)
+    ],
+    expectedReviewNoteUpdatedAt: activeReviewNote(workspace)?.updatedAt ?? null
+  };
+}
+
+export function copyReportToast(result: {
+  readonly commentCount: number;
+  readonly hasReviewNote: boolean;
+}): string {
+  if (result.commentCount === 0 && result.hasReviewNote) {
+    return "Copied review notes";
+  }
+
+  return result.commentCount === 1
+    ? "Copied 1 review comment"
+    : `Copied ${String(result.commentCount)} review comments`;
+}
+
+export function sortReviewFileComments(
+  comments: readonly ReviewFileCommentView[]
+): readonly ReviewFileCommentView[] {
+  return [...comments].sort(
+    (left, right) =>
+      left.path.localeCompare(right.path) || left.createdAt.localeCompare(right.createdAt)
+  );
 }
 
 export function sortReviewComments(
@@ -204,4 +259,29 @@ export function sortReviewComments(
 
     return left.createdAt.localeCompare(right.createdAt);
   });
+}
+
+export function commentEditorShortcut(event: {
+  readonly ctrlKey: boolean;
+  readonly key: string;
+  readonly metaKey: boolean;
+  readonly nativeEvent: { readonly isComposing: boolean };
+}): "cancel" | "save" | null {
+  if (event.nativeEvent.isComposing) {
+    return null;
+  }
+
+  if (event.key === "Escape") {
+    return "cancel";
+  }
+
+  return event.key === "Enter" && (event.metaKey || event.ctrlKey) ? "save" : null;
+}
+
+export function growingTextareaRows(
+  body: string,
+  minRows: number,
+  maxRows: number
+): number {
+  return Math.min(maxRows, Math.max(minRows, body.split("\n").length));
 }

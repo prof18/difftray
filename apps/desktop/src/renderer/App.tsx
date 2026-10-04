@@ -26,6 +26,7 @@ import {
 } from "./diff-scroll-state.js";
 import { DiffSurface } from "./diff-surface.js";
 import { DiffLoadingState, DiffToolbar } from "./diff-toolbar.js";
+import { FileCommentStack } from "./file-comments.js";
 import { CollapsedRail, FileList, FileListHeader } from "./file-list.js";
 import {
   DriftToast,
@@ -73,10 +74,15 @@ import {
   RepositoryPicker,
   type RepositoryPickerItem
 } from "./repository-picker.js";
+import { ReviewNotesPanel } from "./review-notes-panel.js";
 import {
   commentCountsByPath,
+  copyReportExpectation,
+  copyReportToast,
+  reportItemCount,
   sameCommentSavePending,
   sortReviewComments,
+  sortReviewFileComments,
   updateCommentDraftSelection,
   type CommentSelection,
   type CommentSavePending,
@@ -155,6 +161,13 @@ export function App(): React.JSX.Element {
     CommentSavePending | undefined
   >();
   const [commentReportCopyPending, setCommentReportCopyPending] = useState(false);
+  const [fileCommentDraft, setFileCommentDraft] = useState<
+    | { readonly body: string; readonly diffHash: string; readonly path: string }
+    | undefined
+  >();
+  const [fileCommentPending, setFileCommentPending] = useState(false);
+  const [reviewNoteEditing, setReviewNoteEditing] = useState(false);
+  const [reviewNotePending, setReviewNotePending] = useState(false);
   const [commentToast, setCommentToast] = useState<string | undefined>();
   const [companionPairing, setCompanionPairing] =
     useState<CompanionPairingStateView | null>(null);
@@ -817,7 +830,16 @@ export function App(): React.JSX.Element {
         ? draft
         : undefined
     );
+    setFileCommentDraft((draft) =>
+      draft?.path === selectedFile?.path && draft?.diffHash === selectedFile?.diffHash
+        ? draft
+        : undefined
+    );
   }, [selectedFile]);
+
+  useEffect(() => {
+    setReviewNoteEditing(false);
+  }, [workspace?.project.id, workspace?.reviewTarget.id]);
 
   useEffect(() => {
     const action = reviewNavigationPerformanceRef.current;
@@ -863,9 +885,20 @@ export function App(): React.JSX.Element {
         : [],
     [selectedFile, workspace]
   );
+  const selectedFileComments = useMemo(
+    () =>
+      workspace && selectedFile
+        ? (workspace.fileComments ?? []).filter(
+            (comment) =>
+              comment.path === selectedFile.path &&
+              comment.diffHash === selectedFile.diffHash
+          )
+        : [],
+    [selectedFile, workspace]
+  );
   const commentCountByPath = useMemo(
-    () => commentCountsByPath(workspace?.comments ?? []),
-    [workspace?.comments]
+    () => commentCountsByPath(workspace?.comments ?? [], workspace?.fileComments ?? []),
+    [workspace?.comments, workspace?.fileComments]
   );
   const attentionFiles = visibleFiles.filter((file) => file.invalidated);
   const toastKey =
@@ -2981,6 +3014,286 @@ export function App(): React.JSX.Element {
     setWorkspace(nextWorkspace);
   }
 
+  function applyWorkspaceFileComments(
+    completion: WorkspaceScopedCompletion,
+    updateFileComments: (
+      fileComments: readonly ReviewFileCommentView[]
+    ) => readonly ReviewFileCommentView[]
+  ): void {
+    applyWorkspacePatch(completion, (currentWorkspace) => ({
+      fileComments: sortReviewFileComments(
+        updateFileComments(currentWorkspace.fileComments ?? [])
+      )
+    }));
+  }
+
+  function applyWorkspaceReviewNote(
+    completion: WorkspaceScopedCompletion,
+    reviewNote: ReviewNoteView | null
+  ): void {
+    applyWorkspacePatch(completion, () => ({ reviewNote }));
+  }
+
+  function applyWorkspacePatch(
+    completion: WorkspaceScopedCompletion,
+    patch: (workspace: ReviewWorkspaceView) => Partial<ReviewWorkspaceView>
+  ): void {
+    const currentWorkspace = workspaceRef.current;
+
+    if (
+      !currentWorkspace ||
+      !isWorkspaceScopedCompletionCurrent(completion, {
+        applyVersion: workspaceApplyVersionRef.current,
+        projectId: currentWorkspace.project.id
+      })
+    ) {
+      return;
+    }
+
+    const nextWorkspace = { ...currentWorkspace, ...patch(currentWorkspace) };
+
+    workspaceCacheRef.current.set(nextWorkspace.project.id, {
+      branchRefs,
+      recentCommits,
+      projectSettings,
+      workspace: nextWorkspace
+    });
+    workspaceRef.current = nextWorkspace;
+    setWorkspace(nextWorkspace);
+  }
+
+  async function runFileCommentAction(
+    action: (completion: WorkspaceScopedCompletion) => Promise<boolean>
+  ): Promise<boolean> {
+    const commentWorkspace = workspaceRef.current;
+
+    if (!commentWorkspace || fileCommentPending) {
+      return false;
+    }
+
+    const completion = captureWorkspaceScopedCompletion(commentWorkspace.project.id);
+
+    setError(undefined);
+    setFileCommentPending(true);
+
+    try {
+      return await action(completion);
+    } catch (caughtError) {
+      if (canApplyWorkspaceScopedCompletion(completion)) {
+        setError(errorMessage(caughtError));
+      }
+      return false;
+    } finally {
+      setFileCommentPending(false);
+    }
+  }
+
+  async function saveFileCommentDraft(): Promise<boolean> {
+    const commentWorkspace = workspaceRef.current;
+    const draft = fileCommentDraft;
+    const body = draft?.body.trim() ?? "";
+
+    if (!commentWorkspace || !draft || body.length === 0) {
+      return false;
+    }
+
+    return runFileCommentAction(async (completion) => {
+      const result = await window.difftray.createReviewFileComment({
+        body,
+        displayedDiffHash: draft.diffHash,
+        path: draft.path,
+        projectId: commentWorkspace.project.id,
+        reviewTargetId: commentWorkspace.reviewTarget.id
+      });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return false;
+      }
+
+      if (result.status === "rejected") {
+        setError(
+          result.reason === "stale_diff"
+            ? "The diff changed before the comment could be saved."
+            : "The selected file is no longer present in this review."
+        );
+        await refreshWorkspace();
+        return false;
+      }
+
+      applyWorkspaceFileComments(completion, (fileComments) => [
+        ...fileComments,
+        result.fileComment
+      ]);
+      setFileCommentDraft((current) =>
+        current?.path === draft.path && current.diffHash === draft.diffHash
+          ? undefined
+          : current
+      );
+      return true;
+    });
+  }
+
+  async function updateFileComment(commentId: string, body: string): Promise<boolean> {
+    const trimmedBody = body.trim();
+
+    if (trimmedBody.length === 0) {
+      return false;
+    }
+
+    return runFileCommentAction(async (completion) => {
+      const result = await window.difftray.updateReviewFileComment({
+        body: trimmedBody,
+        id: commentId
+      });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return false;
+      }
+
+      if (result.status === "rejected") {
+        applyWorkspaceFileComments(completion, (fileComments) =>
+          fileComments.filter((comment) => comment.id !== commentId)
+        );
+        setError("That review comment is no longer present.");
+        return true;
+      }
+
+      applyWorkspaceFileComments(completion, (fileComments) =>
+        fileComments.map((comment) =>
+          comment.id === result.fileComment.id ? result.fileComment : comment
+        )
+      );
+      return true;
+    });
+  }
+
+  async function deleteFileComment(commentId: string): Promise<void> {
+    await runFileCommentAction(async (completion) => {
+      const result = await window.difftray.deleteReviewFileComment({ id: commentId });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return false;
+      }
+
+      if (result.status === "rejected") {
+        setError("That review comment is no longer present.");
+      }
+
+      applyWorkspaceFileComments(completion, (fileComments) =>
+        fileComments.filter((comment) => comment.id !== commentId)
+      );
+      return true;
+    });
+  }
+
+  async function runReviewNoteAction(
+    action: (
+      noteWorkspace: ReviewWorkspaceView,
+      completion: WorkspaceScopedCompletion
+    ) => Promise<void>
+  ): Promise<void> {
+    const noteWorkspace = workspaceRef.current;
+
+    if (!noteWorkspace || reviewNotePending) {
+      return;
+    }
+
+    const completion = captureWorkspaceScopedCompletion(noteWorkspace.project.id);
+
+    setError(undefined);
+    setReviewNotePending(true);
+
+    try {
+      await action(noteWorkspace, completion);
+    } catch (caughtError) {
+      if (canApplyWorkspaceScopedCompletion(completion)) {
+        setError(errorMessage(caughtError));
+      }
+    } finally {
+      setReviewNotePending(false);
+    }
+  }
+
+  async function handleReviewNoteRejection(
+    reason: "note_missing" | "stale_diff"
+  ): Promise<void> {
+    setError(
+      reason === "stale_diff"
+        ? "The diff changed before the review notes could be saved."
+        : "Those review notes are no longer present."
+    );
+    await refreshWorkspace();
+  }
+
+  async function saveReviewNote(body: string): Promise<void> {
+    const trimmedBody = body.trim();
+
+    if (trimmedBody.length === 0) {
+      return;
+    }
+
+    await runReviewNoteAction(async (noteWorkspace, completion) => {
+      const result = await window.difftray.saveReviewNote({
+        body: trimmedBody,
+        projectId: noteWorkspace.project.id,
+        reviewTargetId: noteWorkspace.reviewTarget.id
+      });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
+
+      if (result.status === "rejected") {
+        await handleReviewNoteRejection(result.reason);
+        return;
+      }
+
+      applyWorkspaceReviewNote(completion, result.reviewNote);
+      setReviewNoteEditing(false);
+    });
+  }
+
+  async function setReviewNoteDismissed(dismissed: boolean): Promise<void> {
+    await runReviewNoteAction(async (noteWorkspace, completion) => {
+      const result = await window.difftray.setReviewNoteDismissed({
+        dismissed,
+        projectId: noteWorkspace.project.id,
+        reviewTargetId: noteWorkspace.reviewTarget.id
+      });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
+
+      if (result.status === "rejected") {
+        await handleReviewNoteRejection(result.reason);
+        return;
+      }
+
+      applyWorkspaceReviewNote(completion, result.reviewNote);
+    });
+  }
+
+  async function deleteReviewNote(): Promise<void> {
+    await runReviewNoteAction(async (noteWorkspace, completion) => {
+      const result = await window.difftray.deleteReviewNote({
+        projectId: noteWorkspace.project.id,
+        reviewTargetId: noteWorkspace.reviewTarget.id
+      });
+
+      if (!canApplyWorkspaceScopedCompletion(completion)) {
+        return;
+      }
+
+      if (result.status === "rejected") {
+        await handleReviewNoteRejection(result.reason);
+        return;
+      }
+
+      applyWorkspaceReviewNote(completion, null);
+    });
+  }
+
   function startComment(selection: CommentSelection): void {
     if (!selectedFile?.diffLoaded || commentSavePendingRef.current) {
       return;
@@ -3222,7 +3535,7 @@ export function App(): React.JSX.Element {
   async function copyReviewCommentsReport(): Promise<void> {
     if (
       !workspace ||
-      workspace.comments.length === 0 ||
+      reportItemCount(workspace) === 0 ||
       commentReportCopyPendingRef.current
     ) {
       return;
@@ -3237,7 +3550,7 @@ export function App(): React.JSX.Element {
 
     try {
       const result = await window.difftray.copyReviewCommentsReport({
-        expectedCommentIds: reportWorkspace.comments.map((comment) => comment.id),
+        ...copyReportExpectation(reportWorkspace),
         projectId: reportWorkspace.project.id,
         reviewTargetId: reportWorkspace.reviewTarget.id
       });
@@ -3252,11 +3565,7 @@ export function App(): React.JSX.Element {
         return;
       }
 
-      setCommentToast(
-        result.commentCount === 1
-          ? "Copied 1 review comment"
-          : `Copied ${String(result.commentCount)} review comments`
-      );
+      setCommentToast(copyReportToast(result));
     } catch (caughtError) {
       if (canApplyWorkspaceScopedCompletion(completion)) {
         setError(errorMessage(caughtError));
@@ -3448,6 +3757,26 @@ export function App(): React.JSX.Element {
                   recentCommits={recentCommits}
                   reviewTarget={workspace.reviewTarget}
                 />
+                <ReviewNotesPanel
+                  editing={reviewNoteEditing}
+                  note={workspace.reviewNote ?? null}
+                  onCancelEdit={() => {
+                    setReviewNoteEditing(false);
+                  }}
+                  onDelete={() => {
+                    void deleteReviewNote();
+                  }}
+                  onSave={(body) => {
+                    void saveReviewNote(body);
+                  }}
+                  onSetDismissed={(dismissed) => {
+                    void setReviewNoteDismissed(dismissed);
+                  }}
+                  onStartEdit={() => {
+                    setReviewNoteEditing(true);
+                  }}
+                  pending={reviewNotePending || loadState === "loading"}
+                />
                 <FileList
                   commentCountByPath={commentCountByPath}
                   files={visibleFiles}
@@ -3488,7 +3817,7 @@ export function App(): React.JSX.Element {
               {selectedFile ? (
                 <>
                   <DiffToolbar
-                    commentCount={selectedComments.length}
+                    commentCount={selectedComments.length + selectedFileComments.length}
                     copyDisabled={loadState === "loading" || commentReportCopyPending}
                     copyPending={commentReportCopyPending}
                     diffMode={diffMode}
@@ -3508,9 +3837,47 @@ export function App(): React.JSX.Element {
                     onOpenEditor={() => {
                       void openFileInEditor();
                     }}
+                    onStartFileComment={() => {
+                      setFileCommentDraft((draft) =>
+                        draft?.path === selectedFile.path &&
+                        draft.diffHash === selectedFile.diffHash
+                          ? draft
+                          : {
+                              body: "",
+                              diffHash: selectedFile.diffHash,
+                              path: selectedFile.path
+                            }
+                      );
+                    }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
-                    reportCommentCount={workspace.comments.length}
+                    reportCommentCount={reportItemCount(workspace)}
                     updatePhase={updatePhase}
+                  />
+                  <FileCommentStack
+                    comments={selectedFileComments}
+                    draft={
+                      fileCommentDraft?.path === selectedFile.path &&
+                      fileCommentDraft.diffHash === selectedFile.diffHash
+                        ? fileCommentDraft
+                        : undefined
+                    }
+                    key={`${selectedFile.path}:${selectedFile.diffHash}`}
+                    onCancelDraft={() => {
+                      setFileCommentDraft(undefined);
+                    }}
+                    onDelete={(commentId) => {
+                      void deleteFileComment(commentId);
+                    }}
+                    onDraftBodyChange={(body) => {
+                      setFileCommentDraft((draft) =>
+                        draft ? { ...draft, body } : draft
+                      );
+                    }}
+                    onSaveDraft={() => {
+                      void saveFileCommentDraft();
+                    }}
+                    onUpdate={updateFileComment}
+                    pending={fileCommentPending}
                   />
                   {selectedFile.patch ? (
                     <DiffSurface

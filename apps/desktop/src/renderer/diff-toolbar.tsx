@@ -6,6 +6,7 @@ import {
   ExternalLink,
   GitBranch,
   MessageSquare,
+  MessageSquarePlus,
   PanelLeft,
   PanelRight,
   RefreshCw
@@ -27,6 +28,7 @@ export function DiffToolbar({
   onCopyCommentsReport,
   onDiffSideFocusChange,
   onOpenEditor,
+  onStartFileComment,
   onToggleReviewed,
   refName,
   reportCommentCount,
@@ -43,6 +45,7 @@ export function DiffToolbar({
   readonly onCopyCommentsReport: () => void;
   readonly onDiffSideFocusChange: (sideFocus: DiffSideFocus) => void;
   readonly onOpenEditor: () => void;
+  readonly onStartFileComment: () => void;
   readonly onToggleReviewed: () => void;
   readonly refName: string;
   readonly reportCommentCount: number;
@@ -139,6 +142,17 @@ export function DiffToolbar({
             <span className={styles.verticalDivider} />
           </>
         ) : null}
+        <button
+          aria-label="Comment on file"
+          className={styles.secondaryButton}
+          disabled={copyDisabled}
+          onClick={onStartFileComment}
+          title="Comment on the whole file"
+          type="button"
+        >
+          <MessageSquarePlus size={14} strokeWidth={1.4} aria-hidden />
+          <span className={styles.reportButtonLabel}>Comment on file</span>
+        </button>
         {reportCommentCount > 0 ? (
           <button
             aria-busy={copyPending}

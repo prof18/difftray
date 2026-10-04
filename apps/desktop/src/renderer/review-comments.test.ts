@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeReviewNote,
   commentCountsByPath,
+  copyReportExpectation,
+  copyReportToast,
+  reportItemCount,
+  sortReviewFileComments,
   commentSavePendingMatchesAnnotation,
   formatReviewCommentLocation,
   reviewCommentAnnotations,
@@ -209,6 +214,99 @@ function draftSavePending(
     path: "src/App.tsx",
     side: "additions",
     ...patch
+  };
+}
+
+describe("file comments and review notes", () => {
+  const note = {
+    body: "Overall.",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z"
+  };
+  const dismissedNote = { ...note, dismissedAt: "2026-01-03T00:00:00.000Z" };
+  const workspace = {
+    comments: [
+      reviewComment("line-1", "a.ts", 1, 1),
+      reviewComment("line-2", "b.ts", 2, 2)
+    ],
+    fileComments: [fileComment("file-1", "a.ts")],
+    reviewNote: note
+  };
+
+  it("counts line and file comments per path", () => {
+    expect(commentCountsByPath(workspace.comments, workspace.fileComments)).toEqual(
+      new Map([
+        ["a.ts", 2],
+        ["b.ts", 1]
+      ])
+    );
+    expect(commentCountsByPath(workspace.comments)).toEqual(
+      new Map([
+        ["a.ts", 1],
+        ["b.ts", 1]
+      ])
+    );
+  });
+
+  it("counts report items including an active note only", () => {
+    expect(reportItemCount(workspace)).toBe(4);
+    expect(reportItemCount({ ...workspace, reviewNote: dismissedNote })).toBe(3);
+    expect(reportItemCount({ ...workspace, reviewNote: null })).toBe(3);
+    expect(reportItemCount({ comments: [] })).toBe(0);
+  });
+
+  it("returns the review note only while it is not dismissed", () => {
+    expect(activeReviewNote(workspace)).toBe(note);
+    expect(activeReviewNote({ ...workspace, reviewNote: dismissedNote })).toBeNull();
+    expect(activeReviewNote({ comments: [] })).toBeNull();
+  });
+
+  it("sorts file comments by path, then creation time", () => {
+    expect(
+      sortReviewFileComments([
+        fileComment("late", "b.ts", "2026-01-02T00:00:00.000Z"),
+        fileComment("second", "a.ts", "2026-01-02T00:00:00.000Z"),
+        fileComment("first", "a.ts", "2026-01-01T00:00:00.000Z")
+      ]).map((comment) => comment.id)
+    ).toEqual(["first", "second", "late"]);
+  });
+
+  it("builds the copy report expectation from all comments and the active note", () => {
+    expect(copyReportExpectation(workspace)).toEqual({
+      expectedCommentIds: ["line-1", "line-2", "file-1"],
+      expectedReviewNoteUpdatedAt: "2026-01-02T00:00:00.000Z"
+    });
+    expect(
+      copyReportExpectation({ ...workspace, reviewNote: dismissedNote })
+        .expectedReviewNoteUpdatedAt
+    ).toBeNull();
+  });
+
+  it("describes the copied report", () => {
+    expect(copyReportToast({ commentCount: 0, hasReviewNote: true })).toBe(
+      "Copied review notes"
+    );
+    expect(copyReportToast({ commentCount: 1, hasReviewNote: true })).toBe(
+      "Copied 1 review comment"
+    );
+    expect(copyReportToast({ commentCount: 3, hasReviewNote: false })).toBe(
+      "Copied 3 review comments"
+    );
+  });
+});
+
+function fileComment(
+  id: string,
+  path: string,
+  createdAt = "2026-01-01T00:00:00.000Z"
+): ReviewFileCommentView {
+  return {
+    body: "Split this file.",
+    createdAt,
+    diffHash: "hash-1",
+    id,
+    path,
+    updatedAt: createdAt
   };
 }
 
