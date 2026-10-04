@@ -752,6 +752,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         if (parsed.value.body.length > 20_000) {
           return badRequest("Comment body is too long");
         }
+        if (parsed.value.body.trim().length === 0) {
+          return badRequest("Comment body is required");
+        }
 
         return {
           body: { comment: await deps.createComment({ ...parsed.value, projectId }) },
@@ -772,6 +775,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         }
         if (parsed.value.body.length > 20_000) {
           return badRequest("Comment body is too long");
+        }
+        if (parsed.value.body.trim().length === 0) {
+          return badRequest("Comment body is required");
         }
 
         const comment = await deps.updateComment({ ...parsed.value, commentId });
@@ -820,6 +826,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         if (parsed.value.body.length > 20_000) {
           return badRequest("Comment body is too long");
         }
+        if (parsed.value.body.trim().length === 0) {
+          return badRequest("Comment body is required");
+        }
 
         return await staleTargetAsConflict(async () => ({
           body: {
@@ -842,6 +851,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         }
         if (parsed.value.body.length > 20_000) {
           return badRequest("Comment body is too long");
+        }
+        if (parsed.value.body.trim().length === 0) {
+          return badRequest("Comment body is required");
         }
 
         return await staleTargetAsConflict(async () => {
@@ -896,6 +908,9 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
         }
         if (parsed.value.body.length > 20_000) {
           return badRequest("Comment body is too long");
+        }
+        if (parsed.value.body.trim().length === 0) {
+          return badRequest("Comment body is required");
         }
 
         return await staleTargetAsConflict(async () => ({

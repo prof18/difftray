@@ -1516,6 +1516,61 @@ describe("companion file comments and review notes", () => {
     }
   });
 
+  it("rejects empty comment and note bodies with bad_request", async () => {
+    const { baseUrl } = await startServer();
+    const requests = [
+      {
+        body: {
+          body: "   ",
+          diffHash: "diff-hash",
+          path: "src/app.ts",
+          reviewTargetId: "target-1"
+        },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/file-comments"
+      },
+      {
+        body: { body: "\n\t" },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/file-comments/file-comment-1"
+      },
+      {
+        body: { body: "", reviewTargetId: "target-1" },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/review-note"
+      },
+      {
+        body: {
+          body: " ",
+          diffHash: "diff-hash",
+          lineEnd: 1,
+          lineStart: 1,
+          path: "src/app.ts",
+          reviewTargetId: "target-1",
+          side: "additions"
+        },
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/comments"
+      },
+      {
+        body: { body: " " },
+        logicalMethod: "PATCH",
+        path: "/companion/v1/comments/comment-1"
+      }
+    ];
+
+    const responses = await Promise.all(
+      requests.map((request) => encryptedRequest({ baseUrl, ...request }))
+    );
+
+    for (const response of responses) {
+      expect(response.plain.status).toBe(400);
+      expect(response.plain.body).toMatchObject({
+        error: { code: "bad_request", message: "Comment body is required" }
+      });
+    }
+  });
+
   it("maps missing file comments and notes to not_found", async () => {
     const { baseUrl } = await startServer({
       deleteFileComment: async () => false,

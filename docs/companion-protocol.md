@@ -127,8 +127,10 @@ inside the encrypted envelope. Current routes cover:
   includes active file comments and the active review note for every client.
 - File comments and review notes (see `file-comments-review-notes-v1` above).
   Requests that name a non-current `reviewTargetId` (or a stale file hash on
-  create) return `409 stale_diff` "Displayed diff is stale". Bodies are trimmed,
-  must not be empty, and are limited to 20,000 characters.
+  create) return `409 stale_diff` "Displayed diff is stale". Bodies are trimmed;
+  an empty body returns `400 bad_request` "Comment body is required" and a body
+  over 20,000 characters returns `400 bad_request` "Comment body is too long".
+  Line comment create/update follow the same body rules.
 
   | Route                                                          | Body                                                      | Response                                             |
   | -------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
