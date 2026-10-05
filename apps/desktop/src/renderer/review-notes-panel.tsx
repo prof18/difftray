@@ -70,6 +70,15 @@ export function ReviewNotesPanel({
     previousMode.current = mode;
   }, [mode]);
 
+  // An action that settled without changing the mode (it failed) no longer owns focus.
+  const wasPending = useRef(pending);
+  useEffect(() => {
+    if (wasPending.current && !pending) {
+      restoreFocusAfterAction.current = false;
+    }
+    wasPending.current = pending;
+  }, [pending]);
+
   function save(): void {
     if (pending || draft.trim().length === 0) {
       return;

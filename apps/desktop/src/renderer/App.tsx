@@ -3023,7 +3023,8 @@ export function App(): React.JSX.Element {
   /**
    * A reload of the same project landed while a save was in flight. The save
    * succeeded, so finish it and reload again to show it instead of dropping it.
-   * This uses the regular load: silent refreshes are skipped by later state changes.
+   * This uses the regular load (silent refreshes are skipped by later state changes)
+   * with the current selection, and defers to any load already running.
    */
   function refreshAfterSupersededSave(completion: WorkspaceScopedCompletion): boolean {
     const outcome = workspaceCompletionOutcome(completion, {
@@ -3035,7 +3036,20 @@ export function App(): React.JSX.Element {
       return false;
     }
 
-    void refreshWorkspace();
+    if (loadStateRef.current !== "loading") {
+      const projectId = completion.projectId;
+      void runWorkspaceLoad(
+        () => window.difftray.loadProject(projectId),
+        selectedPathRef.current,
+        {
+          detail: workspaceRef.current?.project.name ?? "",
+          title: "Refreshing repository"
+        },
+        undefined,
+        0,
+        projectId
+      );
+    }
     return true;
   }
 

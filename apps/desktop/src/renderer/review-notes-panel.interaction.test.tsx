@@ -133,6 +133,20 @@ describe("ReviewNotesPanel interactions", () => {
     expect(document.activeElement).toBe(button('[aria-label="Edit review notes"]'));
   });
 
+  it("forgets a failed action before an outside change arrives", () => {
+    renderPanel({ note });
+    act(() => {
+      button('[aria-label="Dismiss review notes"]').click();
+    });
+    renderPanel({ note, pending: true });
+    renderPanel({ note, pending: false });
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    renderPanel({ note: { ...note, dismissedAt: "2026-01-03T00:00:00.000Z" } });
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("leaves focus alone when the note changes from elsewhere", () => {
     renderPanel({ note });
 
