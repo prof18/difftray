@@ -70,10 +70,23 @@ function inspectDroppedFolders(
     : undefined;
 }
 
+function isConnected(target: EventTarget): boolean {
+  return !("isConnected" in target) || target.isConnected !== false;
+}
+
 export function createRepositoryDropZone(
   callbacks: RepositoryDropZoneCallbacks
 ): RepositoryDropZone {
-  let dragDepth = 0;
+  // Targets the drag has entered without a matching dragleave. A plain counter
+  // leaks when a re-render detaches the element under the pointer: Chromium
+  // never sends that element's dragleave, so the overlay would stay up after
+  // the drag left the window.
+  const enteredTargets = new Set<EventTarget>();
+
+  function reset(): void {
+    enteredTargets.clear();
+    callbacks.setActive(false);
+  }
 
   function onDragEnter(event: DragEvent): void {
     if (!hasFilePayload(event.dataTransfer)) return;
@@ -81,13 +94,12 @@ export function createRepositoryDropZone(
 
     const folders = inspectDroppedFolders(event.dataTransfer);
     if (folders && !folders.hasDirectoryEntry && !folders.hasUnknownFileEntry) {
-      dragDepth = 0;
-      callbacks.setActive(false);
+      reset();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
       return;
     }
 
-    dragDepth += 1;
+    if (event.target) enteredTargets.add(event.target);
     callbacks.setActive(true);
   }
 
@@ -105,19 +117,21 @@ export function createRepositoryDropZone(
   }
 
   function onDragLeave(event: DragEvent): void {
-    if (dragDepth === 0) return;
+    if (enteredTargets.size === 0) return;
     event.preventDefault();
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) callbacks.setActive(false);
+    if (event.target) enteredTargets.delete(event.target);
+    for (const entered of enteredTargets) {
+      if (!isConnected(entered)) enteredTargets.delete(entered);
+    }
+    if (enteredTargets.size === 0) callbacks.setActive(false);
   }
 
   function onDrop(event: DragEvent): void {
-    const wasActive = dragDepth > 0;
+    const wasActive = enteredTargets.size > 0;
     const hasFiles = hasFilePayload(event.dataTransfer);
     const inspectedFolders = inspectDroppedFolders(event.dataTransfer);
 
-    dragDepth = 0;
-    callbacks.setActive(false);
+    reset();
 
     if (!wasActive && !hasFiles) return;
     event.preventDefault();

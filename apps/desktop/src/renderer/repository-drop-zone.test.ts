@@ -20,7 +20,11 @@ function item(droppedFile: File | null, isDirectory: boolean): DataTransferItem 
   } as DataTransferItem;
 }
 
-function dragEvent(data: DragData): DragEvent {
+function target(): EventTarget & { isConnected: boolean } {
+  return { isConnected: true } as unknown as EventTarget & { isConnected: boolean };
+}
+
+function dragEvent(data: DragData, eventTarget: EventTarget = target()): DragEvent {
   return {
     dataTransfer: {
       dropEffect: "none",
@@ -28,7 +32,8 @@ function dragEvent(data: DragData): DragEvent {
       items: data.items ?? [],
       types: data.types ?? []
     },
-    preventDefault: vi.fn()
+    preventDefault: vi.fn(),
+    target: eventTarget
   } as unknown as DragEvent;
 }
 
@@ -149,5 +154,40 @@ describe("repository drop zone", () => {
     expect(setActive).toHaveBeenCalledWith(true);
     expect(drop.dataTransfer?.dropEffect).toBe("copy");
     expect(onFoldersDropped).toHaveBeenCalledWith([regularFile, folder]);
+  });
+
+  it("closes when the drag leaves after the element it entered was removed", () => {
+    const setActive = vi.fn();
+    const zone = createRepositoryDropZone({ onFoldersDropped: vi.fn(), setActive });
+    const folderDrag: DragData = { items: [item(null, true)], types: ["Files"] };
+    const removedRow = target();
+    const surface = target();
+
+    zone.onDragEnter(dragEvent(folderDrag, removedRow));
+    // A re-render detaches the row under the pointer, so Chromium never sends
+    // its dragleave; the next element is entered directly.
+    removedRow.isConnected = false;
+    zone.onDragEnter(dragEvent(folderDrag, surface));
+    zone.onDragLeave(dragEvent(folderDrag, surface));
+
+    expect(setActive).toHaveBeenLastCalledWith(false);
+  });
+
+  it("stays open while the drag moves between elements", () => {
+    const setActive = vi.fn();
+    const zone = createRepositoryDropZone({ onFoldersDropped: vi.fn(), setActive });
+    const folderDrag: DragData = { items: [item(null, true)], types: ["Files"] };
+    const first = target();
+    const second = target();
+
+    zone.onDragEnter(dragEvent(folderDrag, first));
+    zone.onDragEnter(dragEvent(folderDrag, second));
+    zone.onDragLeave(dragEvent(folderDrag, first));
+
+    expect(setActive).toHaveBeenLastCalledWith(true);
+
+    zone.onDragLeave(dragEvent(folderDrag, second));
+
+    expect(setActive).toHaveBeenLastCalledWith(false);
   });
 });
