@@ -349,14 +349,12 @@ try {
   });
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectSelectedFile(window, "tracked.txt");
-  const dragStart = await window
-    .locator('[data-additions] [data-column-number="3"]')
-    .first()
-    .boundingBox();
-  const dragEnd = await window
-    .locator('[data-additions] [data-column-number="2"]')
-    .first()
-    .boundingBox();
+  // Selection flips before the new file's diff mounts, so wait for tracked.txt's
+  // rows. @pierre/diffs then swaps its plain rows for worker-highlighted ones
+  // with the same layout, so measure both gutters in one snapshot instead of
+  // holding element handles that the swap can detach.
+  await expectRenderedDiffText(window, "inactive tab update");
+  const { dragEnd, dragStart } = await additionGutterBoxes(window, 3, 2);
   if (!dragStart || !dragEnd) throw new Error("Missing review range gutters");
   await window.mouse.move(
     dragStart.x + dragStart.width / 2,
@@ -829,21 +827,45 @@ async function openRepositoryFromDialog(app, window, folderPath) {
 }
 
 async function dragProjectTabBefore(window, draggedProjectName, targetProjectName) {
-  const draggedTab = window.locator(`[data-project-tab-name="${draggedProjectName}"]`);
-  const targetTab = window.locator(`[data-project-tab-name="${targetProjectName}"]`);
-  const targetBox = await targetTab.boundingBox();
+  // Dispatch the HTML5 drag sequence in the page instead of using locator.dragTo.
+  // Playwright intercepts a mouse-driven drag only when its utility-world probe
+  // sees dragstart; when that probe misses (as right after a relaunch), Chromium
+  // starts a real OS drag that synthetic mouse events never finish. That leaves
+  // the order unchanged, and the dragged tab's path can surface as a folder
+  // drop that keeps the repository drop overlay up.
+  await window
+    .locator(`[data-project-tab-name="${draggedProjectName}"][draggable="true"]`)
+    .waitFor({ timeout: 10_000 });
+  await window.evaluate(
+    ({ draggedName, targetName }) => {
+      const draggedTab = document.querySelector(
+        `[data-project-tab-name="${draggedName}"]`
+      );
+      const targetTab = document.querySelector(`[data-project-tab-name="${targetName}"]`);
 
-  if (!targetBox) {
-    throw new Error(`Missing project tab bounds for ${targetProjectName}`);
-  }
+      if (!draggedTab || !targetTab) {
+        throw new Error(`Missing project tabs ${draggedName} or ${targetName}`);
+      }
 
-  await draggedTab.dragTo(targetTab, {
-    force: true,
-    targetPosition: {
-      x: 8,
-      y: Math.max(1, Math.floor(targetBox.height / 2))
-    }
-  });
+      const targetBounds = targetTab.getBoundingClientRect();
+      const dataTransfer = new DataTransfer();
+      const position = {
+        clientX: targetBounds.left + 8,
+        clientY: targetBounds.top + targetBounds.height / 2
+      };
+      const dispatch = (element, type, init = {}) =>
+        element.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, ...init })
+        );
+
+      dispatch(draggedTab, "dragstart");
+      dispatch(targetTab, "dragenter", position);
+      dispatch(targetTab, "dragover", position);
+      dispatch(targetTab, "drop", position);
+      dispatch(draggedTab, "dragend", position);
+    },
+    { draggedName: draggedProjectName, targetName: targetProjectName }
+  );
 }
 
 async function expectProjectTabOrder(window, projectNames) {
@@ -984,6 +1006,26 @@ async function expectSelectedFile(window, filename) {
 
 async function expectWorkspaceIdle(window) {
   await window.locator('section[aria-busy="false"]').waitFor({ timeout: 10_000 });
+}
+
+async function additionGutterBoxes(window, startLine, endLine) {
+  const [dragStart, dragEnd] = await window
+    .locator("[data-additions] [data-column-number]")
+    .evaluateAll(
+      (gutters, lineNumbers) =>
+        lineNumbers.map((lineNumber) => {
+          const gutter = gutters.find(
+            (element) => element.getAttribute("data-column-number") === String(lineNumber)
+          );
+          if (!gutter) return null;
+          const { height, width, x, y } = gutter.getBoundingClientRect();
+
+          return { height, width, x, y };
+        }),
+      [startLine, endLine]
+    );
+
+  return { dragEnd, dragStart };
 }
 
 async function clickDiffLineNumber(window, side, lineNumber) {
