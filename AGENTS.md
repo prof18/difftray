@@ -33,17 +33,18 @@
 - Avoid network calls in the app unless the user explicitly enables a future integration.
 - Write down durable decisions as they are made. If a decision affects product scope, architecture, stack, data model, testing, UX behavior, or release policy, update the relevant doc and add or amend an ADR in `docs/decisions/` before considering the work complete.
 - Keep Electron security defaults strict: no Node integration in the renderer, context isolation on, narrow typed preload APIs, and no shell execution from renderer-originated data.
-- For UI-facing changes, launch the app locally once it is runnable and verify the affected workflow visually before handoff. Use automated app/browser tooling for screenshots and interaction checks where possible. If the app cannot be launched or visually verified, say exactly why in the handoff.
+- For UI-facing changes, launch the app locally and verify the affected workflow visually before handoff. Use automated app/browser tooling for screenshots and interaction checks where possible. If the app cannot be launched or visually verified, say exactly why in the handoff.
 
 ## Commands
 
-When the project is scaffolded, all commands should be documented in `package.json` and mirrored in this file.
+Document every command in `package.json` and mirror it in this file.
 
 Project commands:
 
 - `pnpm install`
 - `pnpm build`
 - `pnpm bench:performance`
+- `pnpm bench:repositories`
 - `pnpm dev`
 - `pnpm format`
 - `pnpm format:write`
@@ -51,6 +52,7 @@ Project commands:
 - `pnpm package:alpha`
 - `pnpm package:mac`
 - `pnpm package:mac:alpha`
+- `pnpm release`
 - `pnpm release:mac`
 - `pnpm release:alpha:mac`
 - `pnpm release:setup-app-ids`
@@ -63,7 +65,7 @@ Project commands:
 - `pnpm check`
 - `./ci.sh`
 
-Use pnpm for dependency management once the project is scaffolded.
+Use pnpm for dependency management.
 
 `pnpm check` delegates to `./ci.sh`.
 
