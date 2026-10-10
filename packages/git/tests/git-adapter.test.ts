@@ -4,6 +4,7 @@ import {
   chmod,
   mkdtemp,
   mkdir,
+  readFile,
   realpath,
   rm,
   symlink,
@@ -242,6 +243,36 @@ describe("Git status parsing", () => {
 });
 
 describe("working tree diff loading", () => {
+  it("reuses committed blob fingerprints when summaries reload an unchanged repository", async () => {
+    const repo = await createRepo();
+    await writeFile(path.join(repo, "tracked.txt"), "changed\n");
+    await git(repo, "mv", "tracked.txt", "renamed.txt");
+    await writeFile(path.join(repo, "renamed.txt"), "changed after rename\n");
+
+    const first = await loadWorkingTreeDiffSummaries(repo);
+    const tracePath = path.join(await createTempRoot(), "git-trace.log");
+    const previousTrace = process.env.GIT_TRACE;
+    process.env.GIT_TRACE = tracePath;
+
+    let second: Awaited<ReturnType<typeof loadWorkingTreeDiffSummaries>>;
+    try {
+      second = await loadWorkingTreeDiffSummaries(repo);
+    } finally {
+      if (previousTrace === undefined) {
+        delete process.env.GIT_TRACE;
+      } else {
+        process.env.GIT_TRACE = previousTrace;
+      }
+    }
+
+    const blobReads = (await readFile(tracePath, "utf8"))
+      .split("\n")
+      .filter((line) => / git (?:-C \S+ )?(?:show|cat-file) /.test(line));
+
+    expect(second.files).toEqual(first.files);
+    expect(blobReads).toEqual([]);
+  });
+
   it("loads added files from a repository before the first commit", async () => {
     const repo = await createUnbornRepo();
     await writeFile(path.join(repo, "staged.txt"), "staged\n");

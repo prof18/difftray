@@ -263,12 +263,59 @@ async function loadSummaryFingerprint(
   };
 }
 
+type CommittedSummaryIdentity = { readonly byteSize: number; readonly id: string };
+
+// A full commit id and a path always name the same blob, so its identity is
+// reused across reloads instead of spawning `cat-file` and `show` per file on
+// every workspace refresh.
+const committedSummaryIdentityCache = new Map<
+  string,
+  Promise<CommittedSummaryIdentity | undefined>
+>();
+const maxCachedCommittedSummaryIdentities = 4_096;
+
 async function committedSummaryIdentity(
   repoPath: string,
   ref: string,
   relativePath: string,
   objectId: string | undefined
-): Promise<{ readonly byteSize: number; readonly id: string } | undefined> {
+): Promise<CommittedSummaryIdentity | undefined> {
+  if (!fullObjectId(ref)) {
+    return loadCommittedSummaryIdentity(repoPath, ref, relativePath, objectId);
+  }
+
+  const key = `${ref}:${objectId ?? ""}:${relativePath}`;
+  const cached = committedSummaryIdentityCache.get(key);
+
+  if (cached) {
+    committedSummaryIdentityCache.delete(key);
+    committedSummaryIdentityCache.set(key, cached);
+    return cached;
+  }
+
+  const identity = loadCommittedSummaryIdentity(repoPath, ref, relativePath, objectId);
+  committedSummaryIdentityCache.set(key, identity);
+  if (committedSummaryIdentityCache.size > maxCachedCommittedSummaryIdentities) {
+    const oldestKey = committedSummaryIdentityCache.keys().next().value;
+    if (oldestKey !== undefined) committedSummaryIdentityCache.delete(oldestKey);
+  }
+
+  try {
+    const resolved = await identity;
+    if (!resolved) committedSummaryIdentityCache.delete(key);
+    return resolved;
+  } catch (error) {
+    committedSummaryIdentityCache.delete(key);
+    throw error;
+  }
+}
+
+async function loadCommittedSummaryIdentity(
+  repoPath: string,
+  ref: string,
+  relativePath: string,
+  objectId: string | undefined
+): Promise<CommittedSummaryIdentity | undefined> {
   const byteSize = await committedSnapshotByteSize(repoPath, ref, relativePath);
 
   if (byteSize === undefined) {
