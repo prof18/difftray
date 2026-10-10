@@ -42,6 +42,7 @@ try {
   await window
     .getByRole("button", { name: "Worktrees for visual-repo" })
     .waitFor({ timeout: 10_000 });
+  await expectRepositoryDropOverlayDismissal(window);
   const repositoryActions = window.locator('[data-repository-actions="true"]');
   await expectNoDragRegion(repositoryActions, "repository action cluster");
   const repositoryActionsButton = window.getByRole("button", {
@@ -866,6 +867,116 @@ async function dragProjectTabBefore(window, draggedProjectName, targetProjectNam
     },
     { draggedName: draggedProjectName, targetName: targetProjectName }
   );
+}
+
+async function expectRepositoryDropOverlayDismissal(window) {
+  if (!(await window.url()).endsWith("/dist/renderer/index.html")) {
+    throw new Error(`Unexpected desktop renderer URL: ${window.url()}`);
+  }
+  if ((await window.title()) !== "Difftray") {
+    throw new Error("Unexpected desktop renderer title");
+  }
+  const runtimeErrors = [];
+  const onConsole = (message) => {
+    if (message.type() === "error") runtimeErrors.push(message.text());
+  };
+  const onPageError = (error) => runtimeErrors.push(error.message);
+  window.on("console", onConsole);
+  window.on("pageerror", onPageError);
+  const overlay = window.getByRole("status").filter({
+    hasText: "Drop repositories to open"
+  });
+
+  async function beginExternalFolderDrag() {
+    await window.evaluate(() => {
+      const file = new File([""], "repository", { type: "application/x-directory" });
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      const event = new DragEvent("dragenter", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer
+      });
+      document.body.dispatchEvent(event);
+    });
+    await overlay.waitFor({ timeout: 10_000 });
+  }
+
+  async function expectOverlayCleared(label) {
+    await overlay.waitFor({ state: "detached", timeout: 10_000 });
+    // Allow any queued React update to settle before beginning the next drag.
+    await window.waitForTimeout(50);
+    if (await overlay.count()) {
+      throw new Error(`Expected repository drop overlay to clear after ${label}`);
+    }
+  }
+
+  await beginExternalFolderDrag();
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-repository-drop-overlay.png")
+  });
+  await window.evaluate(() => {
+    const parent = document.body;
+    const child = document.querySelector("#root") ?? parent.firstElementChild;
+    if (!child) throw new Error("Missing nested target for repository drag transition");
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(
+      new File([""], "repository", { type: "application/x-directory" })
+    );
+    const enterChild = new DragEvent("dragenter", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer
+    });
+    child.dispatchEvent(enterChild);
+    const leaveParent = new DragEvent("dragleave", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer
+    });
+    Object.defineProperty(leaveParent, "relatedTarget", { value: child });
+    parent.dispatchEvent(leaveParent);
+  });
+  await overlay.waitFor({ timeout: 10_000 });
+
+  // The final window exit can omit dragleave events for still-connected nested
+  // targets after Chromium changes the target under an external file drag.
+  await window.evaluate(() => {
+    const event = new DragEvent("dragleave", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "relatedTarget", { value: null });
+    document.body.dispatchEvent(event);
+  });
+  await expectOverlayCleared("a final leave with an unmatched nested target");
+
+  await beginExternalFolderDrag();
+  await window.keyboard.press("Escape");
+  await expectOverlayCleared("Escape");
+
+  await beginExternalFolderDrag();
+  await window.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expectOverlayCleared("window blur");
+
+  await beginExternalFolderDrag();
+  await window.evaluate(() => {
+    document.body.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+  });
+  await expectOverlayCleared("dragend");
+
+  await beginExternalFolderDrag();
+  await window.evaluate(() =>
+    window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }))
+  );
+  await expectOverlayCleared("normal pointer movement");
+  await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
+  await window.getByRole("button", { name: "Mark reviewed" }).waitFor();
+  await window.screenshot({
+    path: path.join(artifactsDir, "desktop-repository-drop-dismissed.png")
+  });
+  window.off("console", onConsole);
+  window.off("pageerror", onPageError);
+  if (runtimeErrors.length > 0) {
+    throw new Error(`Repository drop interaction errors: ${runtimeErrors.join("; ")}`);
+  }
 }
 
 async function expectProjectTabOrder(window, projectNames) {

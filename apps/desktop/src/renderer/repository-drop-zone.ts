@@ -4,10 +4,12 @@ type RepositoryDropZoneCallbacks = {
 };
 
 type RepositoryDropZone = {
+  readonly cancel: () => void;
   readonly onDragEnter: (event: DragEvent) => void;
   readonly onDragLeave: (event: DragEvent) => void;
   readonly onDragOver: (event: DragEvent) => void;
   readonly onDrop: (event: DragEvent) => void;
+  readonly onKeyDown: (event: KeyboardEvent) => void;
 };
 
 function hasFilePayload(dataTransfer: DataTransfer | null): boolean {
@@ -88,6 +90,14 @@ export function createRepositoryDropZone(
     callbacks.setActive(false);
   }
 
+  function cancel(): void {
+    if (enteredTargets.size > 0) reset();
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Escape") cancel();
+  }
+
   function onDragEnter(event: DragEvent): void {
     if (!hasFilePayload(event.dataTransfer)) return;
     event.preventDefault();
@@ -119,6 +129,12 @@ export function createRepositoryDropZone(
   function onDragLeave(event: DragEvent): void {
     if (enteredTargets.size === 0) return;
     event.preventDefault();
+    // Leaving the window ends the whole drag hover, even if Chromium skipped
+    // a leave for an earlier target that is still connected to the document.
+    if (event.relatedTarget === null) {
+      reset();
+      return;
+    }
     if (event.target) enteredTargets.delete(event.target);
     for (const entered of enteredTargets) {
       if (!isConnected(entered)) enteredTargets.delete(entered);
@@ -146,5 +162,5 @@ export function createRepositoryDropZone(
     callbacks.onFoldersDropped(folders);
   }
 
-  return { onDragEnter, onDragLeave, onDragOver, onDrop };
+  return { cancel, onDragEnter, onDragLeave, onDragOver, onDrop, onKeyDown };
 }

@@ -259,6 +259,11 @@ visual test and intentionally interacting with the app window.
 
 No commit or handoff should happen without running `./ci.sh`.
 
+Repository drop tests cover unmatched connected drag targets and cancellation.
+The Electron visual smoke also checks that moving between targets keeps the
+overlay visible, leaving the window clears it, and Escape, blur, drag end and
+resumed mouse movement dismiss stale hover state.
+
 `pnpm bench:performance` is a conditional gate, not part of `./ci.sh`. Run it
 for performance-sensitive work as described above.
 

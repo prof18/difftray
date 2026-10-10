@@ -544,12 +544,22 @@ export function App(): React.JSX.Element {
     window.addEventListener("dragover", dropZone.onDragOver);
     window.addEventListener("dragleave", dropZone.onDragLeave);
     window.addEventListener("drop", dropZone.onDrop);
+    window.addEventListener("dragend", dropZone.cancel);
+    window.addEventListener("blur", dropZone.cancel);
+    window.addEventListener("keydown", dropZone.onKeyDown);
+    // Native drags suppress mouse events. When they resume, any remaining
+    // overlay belongs to a drag that ended without delivering its final event.
+    window.addEventListener("mousemove", dropZone.cancel);
 
     return () => {
       window.removeEventListener("dragenter", dropZone.onDragEnter);
       window.removeEventListener("dragover", dropZone.onDragOver);
       window.removeEventListener("dragleave", dropZone.onDragLeave);
       window.removeEventListener("drop", dropZone.onDrop);
+      window.removeEventListener("dragend", dropZone.cancel);
+      window.removeEventListener("blur", dropZone.cancel);
+      window.removeEventListener("keydown", dropZone.onKeyDown);
+      window.removeEventListener("mousemove", dropZone.cancel);
     };
   }, []);
 

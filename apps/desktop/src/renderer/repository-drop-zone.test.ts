@@ -24,7 +24,11 @@ function target(): EventTarget & { isConnected: boolean } {
   return { isConnected: true } as unknown as EventTarget & { isConnected: boolean };
 }
 
-function dragEvent(data: DragData, eventTarget: EventTarget = target()): DragEvent {
+function dragEvent(
+  data: DragData,
+  eventTarget: EventTarget = target(),
+  relatedTarget: EventTarget | null = target()
+): DragEvent {
   return {
     dataTransfer: {
       dropEffect: "none",
@@ -33,7 +37,8 @@ function dragEvent(data: DragData, eventTarget: EventTarget = target()): DragEve
       types: data.types ?? []
     },
     preventDefault: vi.fn(),
-    target: eventTarget
+    target: eventTarget,
+    relatedTarget
   } as unknown as DragEvent;
 }
 
@@ -188,6 +193,50 @@ describe("repository drop zone", () => {
 
     zone.onDragLeave(dragEvent(folderDrag, second));
 
+    expect(setActive).toHaveBeenLastCalledWith(false);
+  });
+
+  it("clears unmatched connected targets when the drag leaves the window", () => {
+    const setActive = vi.fn();
+    const zone = createRepositoryDropZone({ onFoldersDropped: vi.fn(), setActive });
+    const folderDrag: DragData = { types: ["Files"] };
+    const original = target();
+    const overlay = target();
+
+    zone.onDragEnter(dragEvent(folderDrag, original));
+    zone.onDragEnter(dragEvent(folderDrag, overlay));
+    zone.onDragLeave(dragEvent({}, overlay, null));
+
+    expect(setActive).toHaveBeenLastCalledWith(false);
+    setActive.mockClear();
+    zone.onDragEnter(dragEvent(folderDrag, overlay));
+    zone.onDragLeave(dragEvent({}, overlay));
+    expect(setActive).toHaveBeenLastCalledWith(false);
+  });
+
+  it("cancels a stale drag without opening folders or updating idle state", () => {
+    const setActive = vi.fn();
+    const onFoldersDropped = vi.fn();
+    const zone = createRepositoryDropZone({ onFoldersDropped, setActive });
+
+    zone.onDragEnter(dragEvent({ types: ["Files"] }));
+    zone.cancel();
+
+    expect(setActive).toHaveBeenLastCalledWith(false);
+    expect(onFoldersDropped).not.toHaveBeenCalled();
+    setActive.mockClear();
+    zone.cancel();
+    expect(setActive).not.toHaveBeenCalled();
+  });
+
+  it("dismisses on Escape without intercepting other keys", () => {
+    const setActive = vi.fn();
+    const zone = createRepositoryDropZone({ onFoldersDropped: vi.fn(), setActive });
+
+    zone.onDragEnter(dragEvent({ types: ["Files"] }));
+    zone.onKeyDown({ key: "Enter" } as KeyboardEvent);
+    expect(setActive).toHaveBeenLastCalledWith(true);
+    zone.onKeyDown({ key: "Escape" } as KeyboardEvent);
     expect(setActive).toHaveBeenLastCalledWith(false);
   });
 });

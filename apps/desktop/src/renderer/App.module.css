@@ -11,6 +11,7 @@
 
 .repositoryDropOverlay {
   -webkit-app-region: no-drag;
+  pointer-events: none;
   position: fixed;
   z-index: 20;
   inset: 50px 18px 18px;
