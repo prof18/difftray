@@ -21,7 +21,7 @@ describe("ReviewNotesPanel", () => {
     const html = render({ editing: true, note: null });
 
     expect(html).toContain("Review notes");
-    expect(html).toContain("Whole change");
+    expect(html).not.toContain("Whole change");
     expect(html).toContain(
       'placeholder="Overall feedback for the whole change. Use new lines for separate points."'
     );

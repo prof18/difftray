@@ -211,7 +211,7 @@ export function ReviewNotesPanel({
   return (
     <section className={styles.panel} data-state="active" aria-label="Review notes">
       <div className={styles.headerRow}>
-        <PanelHeader count={1} />
+        <PanelHeader />
         <div className={styles.iconActions}>
           <button
             aria-label="Edit review notes"
@@ -255,13 +255,11 @@ export function ReviewNotesPanel({
   );
 }
 
-function PanelHeader({ count }: { readonly count?: number }): React.JSX.Element {
+function PanelHeader(): React.JSX.Element {
   return (
     <div className={styles.header}>
       <NotebookPen size={13} strokeWidth={1.4} aria-hidden />
       <span className={styles.title}>Review notes</span>
-      <span className={styles.subtitle}>· Whole change</span>
-      {count === undefined ? null : <span className={styles.countPill}>{count}</span>}
     </div>
   );
 }

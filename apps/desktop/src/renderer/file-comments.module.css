@@ -67,6 +67,7 @@
   background: var(--bg);
   color: var(--text);
   font: inherit;
+  font-size: 12.5px;
   line-height: 1.45;
   padding: 9px 10px;
 }

@@ -43,22 +43,6 @@
   color: var(--text-2);
 }
 
-.subtitle {
-  font-weight: 500;
-}
-
-.countPill {
-  display: inline-grid;
-  min-width: 18px;
-  height: 18px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--accent);
-  color: var(--primary-fg);
-  font-size: 11px;
-  padding: 0 5px;
-}
-
 .iconActions,
 .actions {
   gap: 6px;
@@ -123,10 +107,10 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  border: 1px dashed var(--border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--elev);
+  color: var(--text-2);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -135,9 +119,9 @@
 }
 
 .addButton:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   background: var(--hover);
-  color: var(--text-2);
+  color: var(--text);
 }
 
 .iconButton {
