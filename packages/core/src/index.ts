@@ -154,11 +154,34 @@ export type ReviewFileCommentReportItem = {
   readonly path: string;
 };
 
+export type ReviewCommentReportTarget =
+  | {
+      readonly baseRefName: string;
+      readonly headRefName?: string;
+      readonly headSha: string;
+      readonly kind: "branch";
+    }
+  | {
+      readonly commitSha: string;
+      readonly commitShortSha?: string;
+      readonly commitSubject?: string;
+      readonly kind: "commit";
+    }
+  | {
+      readonly headRefName?: string;
+      readonly headSha: string;
+      readonly kind: "working_tree";
+    };
+
 export type FormatReviewCommentsReportInput = {
   readonly comments: readonly ReviewCommentReportItem[];
   readonly fileComments?: readonly ReviewFileCommentReportItem[];
   readonly projectName: string;
+  /** Files in the reviewed change, so overall notes can reach files without comments. */
+  readonly reviewedPaths?: readonly string[];
   readonly reviewNote?: string;
+  /** Tells the agent how to reproduce the reviewed diff; falls back to targetLabel. */
+  readonly target?: ReviewCommentReportTarget;
   readonly targetLabel?: string;
 };
 
@@ -302,17 +325,22 @@ export function formatReviewCommentsReport(
       .map((comment) => (index: number) => formatReviewCommentReportItem(comment, index))
   ]);
   const values = {
-    commentCount: String(commentCount),
     comments:
       items.length === 0
-        ? "No file or line comments."
+        ? "No file or line comments; act on the overall review notes."
         : items.map((formatItem, index) => formatItem(index + 1)).join("\n"),
+    feedbackCounts: formatFeedbackCounts(
+      note.length > 0,
+      fileComments.length,
+      input.comments.length
+    ),
     projectName: input.projectName,
     reviewNoteSection:
       note.length === 0
         ? ""
         : `\n## Overall review notes\n\n${formatCommentBody(note)}\n`,
-    targetLabel: input.targetLabel ?? "current local git diff"
+    reviewedFiles: formatReviewedFiles(input.reviewedPaths ?? []),
+    targetSection: formatTargetSection(input)
   };
 
   return renderTemplate(
@@ -342,14 +370,13 @@ function formatReviewCommentReportItem(
     commentBody: formatCommentBody(comment.body),
     diffContext: formatCommentContext(comment),
     index: String(index),
-    path: comment.path,
-    referencedLines: formatReferencedLines(comment),
-    referencedSide: formatReferencedSide(comment.side)
+    location: formatCommentLocation(comment),
+    path: comment.path
   });
 }
 
 function formatCommentLocation(comment: ReviewCommentReportItem): string {
-  const sideLabel = comment.side === "additions" ? "New" : "Old";
+  const sideLabel = comment.side === "additions" ? "new" : "old";
   const lineLabel = comment.lineStart === comment.lineEnd ? "line" : "lines";
   const range =
     comment.lineStart === comment.lineEnd
@@ -359,19 +386,82 @@ function formatCommentLocation(comment: ReviewCommentReportItem): string {
   return `${sideLabel} ${lineLabel} ${range}`;
 }
 
-function formatReferencedLines(comment: ReviewCommentReportItem): string {
-  const lineLabel =
-    comment.lineStart === comment.lineEnd ? "Referenced line" : "Referenced lines";
-  const range =
-    comment.lineStart === comment.lineEnd
-      ? String(comment.lineStart)
-      : `${String(comment.lineStart)}-${String(comment.lineEnd)}`;
+const maxReportedPaths = 100;
 
-  return `${lineLabel}: ${range}`;
+function formatTargetSection(input: FormatReviewCommentsReportInput): string {
+  const target = input.target;
+
+  if (!target) {
+    return `Reviewed change: ${input.targetLabel ?? "current local git diff"}`;
+  }
+
+  switch (target.kind) {
+    case "branch": {
+      const head = target.headRefName ? `branch \`${target.headRefName}\`` : "`HEAD`";
+
+      return [
+        `Reviewed change: ${head} against \`${target.baseRefName}\` (commits since their merge base)`,
+        `Show it with: \`git diff ${target.baseRefName}...${target.headSha}\``
+      ].join("\n");
+    }
+    case "commit": {
+      const shortSha = target.commitShortSha ?? target.commitSha.slice(0, 12);
+      const subject = target.commitSubject ? ` "${target.commitSubject}"` : "";
+
+      return [
+        `Reviewed change: commit \`${shortSha}\`${subject}`,
+        `Show it with: \`git show ${target.commitSha}\``,
+        "This commit may be behind HEAD: apply the feedback to the current code, and don't amend or rewrite history unless asked."
+      ].join("\n");
+    }
+    case "working_tree": {
+      const base = target.headRefName
+        ? `on branch \`${target.headRefName}\``
+        : `on top of \`${target.headSha.slice(0, 12)}\``;
+
+      return [
+        `Reviewed change: uncommitted changes ${base}`,
+        "Show it with: `git diff HEAD`, plus untracked files from `git status`"
+      ].join("\n");
+    }
+  }
 }
 
-function formatReferencedSide(side: ReviewCommentSide): string {
-  return side === "additions" ? "new" : "old";
+function formatReviewedFiles(paths: readonly string[]): string {
+  if (paths.length === 0) {
+    return "";
+  }
+
+  const listed = paths
+    .slice(0, maxReportedPaths)
+    .map((path) => `\`${path}\``)
+    .join(", ");
+  const remaining = paths.length - maxReportedPaths;
+  const more = remaining > 0 ? `, and ${String(remaining)} more` : "";
+
+  return `\nFiles in the change (${String(paths.length)}): ${listed}${more}`;
+}
+
+function formatFeedbackCounts(
+  hasNote: boolean,
+  fileCommentCount: number,
+  lineCommentCount: number
+): string {
+  const parts = [
+    hasNote ? "1 overall note" : "",
+    countLabel(fileCommentCount, "file comment"),
+    countLabel(lineCommentCount, "line comment")
+  ].filter((part) => part.length > 0);
+
+  return parts.length === 0 ? "none" : parts.join(", ");
+}
+
+function countLabel(count: number, noun: string): string {
+  if (count === 0) {
+    return "";
+  }
+
+  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function formatCommentBody(body: string): string {
@@ -398,21 +488,25 @@ function formatCommentContext(comment: ReviewCommentReportItem): string {
     ...context.lines.map((line) => String(line.lineNumber).length)
   );
 
+  const longestBacktickRun = Math.max(
+    0,
+    ...context.lines.flatMap((line) =>
+      (line.text.match(/`+/g) ?? []).map((run) => run.length)
+    )
+  );
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+
   return [
     "",
     "",
-    "Diff context:",
-    "",
-    "```diff",
-    `@@ ${formatCommentLocation({ ...comment, side: context.side })} @@`,
+    `${fence}text`,
     ...context.lines.map((line) => {
-      const marker =
-        line.kind === "commented" ? (context.side === "additions" ? "+" : "-") : " ";
+      const marker = line.kind === "commented" ? ">" : " ";
       const lineNumber = String(line.lineNumber).padStart(lineNumberWidth, " ");
 
       return `${marker} ${lineNumber} ${line.text}`;
     }),
-    "```"
+    fence
   ].join("\n");
 }
 

@@ -2,6 +2,7 @@ import type {
   FileDiff,
   FileReviewState,
   ReviewCommentReportContext,
+  ReviewCommentReportTarget,
   ReviewProgress,
   ReviewTarget
 } from "@difftray/core";
@@ -491,6 +492,43 @@ export function reviewTargetLabel(
         : "Commit";
     case "working_tree":
       return "Git changes";
+  }
+}
+
+export function reviewCommentReportTarget(
+  reviewTarget: ReviewWorkspaceView["reviewTarget"]
+): ReviewCommentReportTarget | undefined {
+  switch (reviewTarget.kind) {
+    case "branch":
+      return reviewTarget.baseRefName
+        ? {
+            baseRefName: reviewTarget.baseRefName,
+            ...(reviewTarget.headRefName
+              ? { headRefName: reviewTarget.headRefName }
+              : {}),
+            headSha: reviewTarget.headSha,
+            kind: "branch"
+          }
+        : undefined;
+    case "commit":
+      return reviewTarget.commitSha
+        ? {
+            commitSha: reviewTarget.commitSha,
+            ...(reviewTarget.commitShortSha
+              ? { commitShortSha: reviewTarget.commitShortSha }
+              : {}),
+            ...(reviewTarget.commitSubject
+              ? { commitSubject: reviewTarget.commitSubject }
+              : {}),
+            kind: "commit"
+          }
+        : undefined;
+    case "working_tree":
+      return {
+        ...(reviewTarget.headRefName ? { headRefName: reviewTarget.headRefName } : {}),
+        headSha: reviewTarget.headSha,
+        kind: "working_tree"
+      };
   }
 }
 

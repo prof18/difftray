@@ -11,6 +11,7 @@ import {
   reviewCommentView,
   reviewFileView,
   projectReviewSummaryView,
+  reviewCommentReportTarget,
   reviewProgressView,
   reviewTargetFromGit,
   reviewTargetFromRecord,
@@ -214,6 +215,51 @@ describe("project and review target views", () => {
       "Commit abc1234"
     );
     expect(reviewTargetLabel({ kind: "working_tree" })).toBe("Git changes");
+  });
+
+  it("describes review targets for agent reports", () => {
+    expect(
+      reviewCommentReportTarget({
+        baseRefName: "origin/main",
+        headRefName: "feature/x",
+        headSha: "head-sha",
+        id: "target-1",
+        kind: "branch"
+      })
+    ).toEqual({
+      baseRefName: "origin/main",
+      headRefName: "feature/x",
+      headSha: "head-sha",
+      kind: "branch"
+    });
+    expect(
+      reviewCommentReportTarget({
+        commitSha: "commit-sha",
+        commitShortSha: "commit",
+        commitSubject: "Change focused file",
+        headSha: "commit-sha",
+        id: "target-2",
+        kind: "commit"
+      })
+    ).toEqual({
+      commitSha: "commit-sha",
+      commitShortSha: "commit",
+      commitSubject: "Change focused file",
+      kind: "commit"
+    });
+    expect(
+      reviewCommentReportTarget({
+        headSha: "head-sha",
+        id: "target-3",
+        kind: "working_tree"
+      })
+    ).toEqual({ headSha: "head-sha", kind: "working_tree" });
+    expect(
+      reviewCommentReportTarget({ headSha: "head-sha", id: "target-4", kind: "branch" })
+    ).toBeUndefined();
+    expect(
+      reviewCommentReportTarget({ headSha: "head-sha", id: "target-5", kind: "commit" })
+    ).toBeUndefined();
   });
 
   it("maps commit review targets between storage and core", () => {

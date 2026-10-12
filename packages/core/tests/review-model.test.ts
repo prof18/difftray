@@ -312,6 +312,34 @@ describe("review state and progress", () => {
 });
 
 describe("review comment reports", () => {
+  const taskSection = [
+    "## Task",
+    "",
+    "Apply the reviewer's feedback below to this repository's working tree. Don't commit unless asked.",
+    "",
+    "The feedback has three scopes:",
+    "- Overall review notes apply to the whole reviewed change, including files that have no comments. If there are no numbered items, act on the notes themselves.",
+    '- File comments ("whole file") apply to the entire file.',
+    '- Line comments target specific lines. "new" lines are numbered in the changed version of the file. "old" lines are numbered in the base revision and may since have been deleted or moved.',
+    "",
+    "When scopes disagree, the narrower one wins. Code may have moved since the review, so treat paths and line numbers as hints and locate lines by the quoted code. In each code excerpt, lines marked `>` are the ones the reviewer selected; the other lines are surrounding context.",
+    "",
+    "For each item:",
+    "- Apply the reviewer's intent when it is reasonably clear, and state any assumption you make.",
+    "- If an item asks a question instead of requesting a change, answer it in your report and don't edit for it.",
+    "- If an item is still ambiguous after reading the code, don't edit for it: apply the other items, then ask all open questions together in one message. If you can't ask the user, report those items as unresolved.",
+    "- If two items conflict, don't pick one silently; ask, or report the conflict.",
+    "- Change only what the feedback asks for, and don't revert or discard other uncommitted work in the tree.",
+    "- Run the checks and tests relevant to your edits. If you can't run them, say so in your report.",
+    "",
+    "## Report back",
+    "",
+    "After applying the feedback, report:",
+    "- How the overall review notes were addressed, if any were given.",
+    "- For each numbered item: addressed (with any assumptions), answered, or unresolved and why.",
+    "- Which checks and tests you ran."
+  ];
+
   it("formats review comments as an agent-ready report", () => {
     expect(
       formatReviewCommentsReport({
@@ -389,92 +417,162 @@ describe("review comment reports", () => {
           }
         ],
         projectName: "Difftray",
-        targetLabel: "Git changes"
+        reviewedPaths: ["src/auth.ts", "src/session.ts", "src/ui.tsx"],
+        target: { headRefName: "main", headSha: "a".repeat(40), kind: "working_tree" }
       })
     ).toBe(
       [
-        "# Difftray Review Comments",
+        "# Difftray Review Feedback",
         "",
         "Project: Difftray",
-        "Target: Git changes",
-        "Comment count: 3",
+        "Reviewed change: uncommitted changes on branch `main`",
+        "Show it with: `git diff HEAD`, plus untracked files from `git status`",
+        "Files in the change (3): `src/auth.ts`, `src/session.ts`, `src/ui.tsx`",
+        "Feedback: 3 line comments",
         "",
-        "## Task",
+        ...taskSection,
         "",
-        "Apply the reviewer's feedback below to the current project.",
+        "## Items",
         "",
-        "How to read it:",
-        '- "Overall review notes", when present, describe the reviewer\'s intent for the whole change. Keep them in mind for every edit, including files that have no comments.',
-        "- Each numbered comment targets either a whole file or specific lines of one file.",
-        "- Treat file paths, line numbers, and diff context as hints; lines may have moved since the review.",
-        "",
-        "For each comment:",
-        "- Inspect the surrounding code before editing.",
-        "- Apply the reviewer's intent when it is reasonably clear.",
-        "- If a comment is too vague to act on safely, leave it unchanged and report it as unresolved.",
-        "- Do not modify unrelated code.",
-        "- Preserve existing user/local changes.",
-        "- Run the relevant checks/tests after editing when possible.",
-        "",
-        "## Output Expected",
-        "",
-        "After applying the feedback, report:",
-        "- How the overall review notes were addressed, if any were given.",
-        "- Which comments were addressed.",
-        "- Which comments could not be resolved and why.",
-        "- What checks/tests were run.",
-        "",
-        "## Comments",
-        "",
-        "### 1. `src/auth.ts`",
-        "",
-        "Referenced side: new",
-        "Referenced line: 12",
-        "",
-        "Reviewer comment:",
+        "### 1. `src/auth.ts` (new line 12)",
         "",
         "> Validate role before putting it in the token.",
         "",
-        "Diff context:",
-        "",
-        "```diff",
-        "@@ New line 12 @@",
+        "```text",
         "  10 const input = readAuthInput(request);",
         "  11 const token = createToken({",
-        "+ 12   role: input.role",
+        "> 12   role: input.role",
         "  13 });",
         "```",
         "",
-        "### 2. `src/auth.ts`",
-        "",
-        "Referenced side: old",
-        "Referenced lines: 30-32",
-        "",
-        "Reviewer comment:",
+        "### 2. `src/auth.ts` (old lines 30-32)",
         "",
         "> This branch is no longer used; remove the fallback too.",
         "",
-        "Diff context:",
-        "",
-        "```diff",
-        "@@ Old lines 30-32 @@",
+        "```text",
         "  29 if (cachedUser) {",
-        "- 30   return cachedUser;",
-        "- 31 }",
-        "- 32 return anonymousUser;",
+        "> 30   return cachedUser;",
+        "> 31 }",
+        "> 32 return anonymousUser;",
         "```",
         "",
-        "### 3. `src/ui.tsx`",
-        "",
-        "Referenced side: new",
-        "Referenced line: 8",
-        "",
-        "Reviewer comment:",
+        "### 3. `src/ui.tsx` (new line 8)",
         "",
         "> Please add a regression test for the empty state.",
         ""
       ].join("\n")
     );
+  });
+
+  it("tells the agent how to reproduce a branch comparison", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray",
+      target: {
+        baseRefName: "origin/main",
+        headRefName: "feature/x",
+        headSha: "b".repeat(40),
+        kind: "branch"
+      }
+    });
+
+    expect(report).toContain(
+      [
+        "Reviewed change: branch `feature/x` against `origin/main` (commits since their merge base)",
+        `Show it with: \`git diff origin/main...${"b".repeat(40)}\``,
+        "Feedback: 1 file comment"
+      ].join("\n")
+    );
+  });
+
+  it("tells the agent not to rewrite history for a commit review", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray",
+      target: {
+        commitSha: "c".repeat(40),
+        commitShortSha: "ccccccc",
+        commitSubject: "Add login",
+        kind: "commit"
+      }
+    });
+
+    expect(report).toContain(
+      [
+        'Reviewed change: commit `ccccccc` "Add login"',
+        `Show it with: \`git show ${"c".repeat(40)}\``,
+        "This commit may be behind HEAD: apply the feedback to the current code, and don't amend or rewrite history unless asked."
+      ].join("\n")
+    );
+  });
+
+  it("names the base commit of a detached working tree", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray",
+      target: { headSha: "d".repeat(40), kind: "working_tree" }
+    });
+
+    expect(report).toContain(
+      `Reviewed change: uncommitted changes on top of \`${"d".repeat(12)}\``
+    );
+  });
+
+  it("falls back to the target label when no target is given", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray",
+      targetLabel: "Git changes"
+    });
+
+    expect(report).toContain(
+      "Project: Difftray\nReviewed change: Git changes\nFeedback:"
+    );
+    expect(report).not.toContain("Show it with:");
+    expect(report).not.toContain("Files in the change");
+  });
+
+  it("caps the reviewed file list", () => {
+    const report = formatReviewCommentsReport({
+      comments: [],
+      fileComments: [{ body: "Needs docs.", path: "README.md" }],
+      projectName: "Difftray",
+      reviewedPaths: Array.from({ length: 103 }, (_, index) => `f${String(index)}.ts`)
+    });
+
+    expect(report).toContain("Files in the change (103): `f0.ts`, ");
+    expect(report).toContain("`f99.ts`, and 3 more\n");
+    expect(report).not.toContain("`f100.ts`");
+  });
+
+  it("fences diff context with more backticks than any context line contains", () => {
+    const report = formatReviewCommentsReport({
+      comments: [
+        {
+          body: "Close the fence.",
+          context: {
+            lines: [
+              { kind: "context", lineNumber: 1, text: "```ts" },
+              { kind: "commented", lineNumber: 2, text: "const a = 1;" },
+              { kind: "context", lineNumber: 3, text: "````" }
+            ],
+            side: "additions"
+          },
+          lineEnd: 2,
+          lineStart: 2,
+          path: "README.md",
+          side: "additions"
+        }
+      ],
+      projectName: "Difftray"
+    });
+
+    expect(report).toContain("`````text\n  1 ```ts\n> 2 const a = 1;");
+    expect(report).toContain("\n`````\n");
   });
 
   it("returns a useful empty report when no comments exist", () => {
@@ -485,13 +583,13 @@ describe("review comment reports", () => {
       })
     ).toBe(
       [
-        "# Difftray Review Comments",
+        "# Difftray Review Feedback",
         "",
         "Project: Difftray",
-        "Target: current local git diff",
-        "Comment count: 0",
+        "Reviewed change: current local git diff",
+        "Feedback: none",
         "",
-        "No review comments are currently attached to this diff.",
+        "No review feedback is attached to this diff.",
         ""
       ].join("\n")
     );
@@ -522,55 +620,53 @@ describe("review notes and file comments in reports", () => {
     targetLabel: "Git changes"
   };
 
-  it("puts overall notes before comments and file comments before line comments", () => {
+  it("puts overall notes before items and file comments before line comments", () => {
     const report = formatReviewCommentsReport(fullInput);
 
     expect(report.indexOf("## Overall review notes")).toBeGreaterThan(-1);
     expect(report.indexOf("## Overall review notes")).toBeLessThan(
-      report.indexOf("## Comments")
+      report.indexOf("## Items")
     );
     expect(report).toContain("> Keep the public API stable.\n>\n> Prefer small commits.");
-    expect(report).toContain("Comment count: 3");
-    expect(report).toContain("### 1. `a.ts`\n\nScope: whole file");
-    expect(report.indexOf("> Split this module in two.")).toBeLessThan(
-      report.indexOf("> Rename this helper.")
-    );
-    expect(report).toContain("### 2. `a.ts`\n\nReferenced side: new");
-    expect(report).toContain("### 3. `b.ts`\n\nReferenced side: old");
+    expect(report).toContain("Feedback: 1 overall note, 1 file comment, 2 line comments");
+    expect(report).toContain("### 1. `a.ts` (whole file)\n\n> Split this module in two.");
+    expect(report).toContain("### 2. `a.ts` (new line 4)\n\n> Rename this helper.");
+    expect(report).toContain("### 3. `b.ts` (old lines 7-9)\n\n> Remove the fallback.");
   });
 
   it("prints the full report with notes, file comments and line comments", () => {
     expect(formatReviewCommentsReport(fullInput)).toMatchInlineSnapshot(`
-      "# Difftray Review Comments
+      "# Difftray Review Feedback
 
       Project: Difftray
-      Target: Git changes
-      Comment count: 3
+      Reviewed change: Git changes
+      Feedback: 1 overall note, 1 file comment, 2 line comments
 
       ## Task
 
-      Apply the reviewer's feedback below to the current project.
+      Apply the reviewer's feedback below to this repository's working tree. Don't commit unless asked.
 
-      How to read it:
-      - "Overall review notes", when present, describe the reviewer's intent for the whole change. Keep them in mind for every edit, including files that have no comments.
-      - Each numbered comment targets either a whole file or specific lines of one file.
-      - Treat file paths, line numbers, and diff context as hints; lines may have moved since the review.
+      The feedback has three scopes:
+      - Overall review notes apply to the whole reviewed change, including files that have no comments. If there are no numbered items, act on the notes themselves.
+      - File comments ("whole file") apply to the entire file.
+      - Line comments target specific lines. "new" lines are numbered in the changed version of the file. "old" lines are numbered in the base revision and may since have been deleted or moved.
 
-      For each comment:
-      - Inspect the surrounding code before editing.
-      - Apply the reviewer's intent when it is reasonably clear.
-      - If a comment is too vague to act on safely, leave it unchanged and report it as unresolved.
-      - Do not modify unrelated code.
-      - Preserve existing user/local changes.
-      - Run the relevant checks/tests after editing when possible.
+      When scopes disagree, the narrower one wins. Code may have moved since the review, so treat paths and line numbers as hints and locate lines by the quoted code. In each code excerpt, lines marked \`>\` are the ones the reviewer selected; the other lines are surrounding context.
 
-      ## Output Expected
+      For each item:
+      - Apply the reviewer's intent when it is reasonably clear, and state any assumption you make.
+      - If an item asks a question instead of requesting a change, answer it in your report and don't edit for it.
+      - If an item is still ambiguous after reading the code, don't edit for it: apply the other items, then ask all open questions together in one message. If you can't ask the user, report those items as unresolved.
+      - If two items conflict, don't pick one silently; ask, or report the conflict.
+      - Change only what the feedback asks for, and don't revert or discard other uncommitted work in the tree.
+      - Run the checks and tests relevant to your edits. If you can't run them, say so in your report.
+
+      ## Report back
 
       After applying the feedback, report:
       - How the overall review notes were addressed, if any were given.
-      - Which comments were addressed.
-      - Which comments could not be resolved and why.
-      - What checks/tests were run.
+      - For each numbered item: addressed (with any assumptions), answered, or unresolved and why.
+      - Which checks and tests you ran.
 
       ## Overall review notes
 
@@ -578,31 +674,17 @@ describe("review notes and file comments in reports", () => {
       >
       > Prefer small commits.
 
-      ## Comments
+      ## Items
 
-      ### 1. \`a.ts\`
-
-      Scope: whole file
-
-      Reviewer comment:
+      ### 1. \`a.ts\` (whole file)
 
       > Split this module in two.
 
-      ### 2. \`a.ts\`
-
-      Referenced side: new
-      Referenced line: 4
-
-      Reviewer comment:
+      ### 2. \`a.ts\` (new line 4)
 
       > Rename this helper.
 
-      ### 3. \`b.ts\`
-
-      Referenced side: old
-      Referenced lines: 7-9
-
-      Reviewer comment:
+      ### 3. \`b.ts\` (old lines 7-9)
 
       > Remove the fallback.
       "
@@ -616,9 +698,13 @@ describe("review notes and file comments in reports", () => {
       reviewNote: "Overall feedback."
     });
 
-    expect(report).toContain("Comment count: 0");
+    expect(report).toContain("Feedback: 1 overall note");
     expect(report).toContain("## Overall review notes\n\n> Overall feedback.\n");
-    expect(report.endsWith("## Comments\n\nNo file or line comments.")).toBe(true);
+    expect(
+      report.endsWith(
+        "## Items\n\nNo file or line comments; act on the overall review notes."
+      )
+    ).toBe(true);
   });
 
   it("keeps the empty template when there are no notes and no comments", () => {
@@ -629,7 +715,7 @@ describe("review notes and file comments in reports", () => {
         projectName: "Difftray",
         reviewNote: "   "
       })
-    ).toContain("No review comments are currently attached to this diff.");
+    ).toContain("No review feedback is attached to this diff.");
   });
 
   it("omits the overall notes heading when there is no note", () => {
@@ -640,8 +726,8 @@ describe("review notes and file comments in reports", () => {
     });
 
     expect(report).not.toContain("## Overall review notes");
-    expect(report).toContain("Comment count: 1");
-    expect(report).toContain("- What checks/tests were run.\n\n## Comments");
+    expect(report).toContain("Feedback: 1 file comment");
+    expect(report).toContain("- Which checks and tests you ran.\n\n## Items");
   });
 });
 

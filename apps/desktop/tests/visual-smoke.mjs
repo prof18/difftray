@@ -399,11 +399,12 @@ try {
     .getByText("Copied 1 review comment", { exact: true })
     .waitFor({ timeout: 10_000 });
   await expectClipboardReport(app, [
-    "# Difftray Review Comments",
-    "tracked.txt",
-    "New lines 2-3",
-    "Diff context:",
-    "+ 3 after",
+    "# Difftray Review Feedback",
+    "Show it with: `git diff HEAD`",
+    "Files in the change",
+    "`tracked.txt` (new lines 2-3)",
+    "```text",
+    "> 3 after",
     "Please tighten the added line.",
     "Keep the context."
   ]);

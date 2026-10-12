@@ -181,6 +181,7 @@ import {
   reviewFileCommentView,
   reviewNoteView,
   projectReviewSummaryView,
+  reviewCommentReportTarget,
   reviewTargetFromGit,
   reviewTargetFromRecord,
   reviewTargetLabel,
@@ -3619,6 +3620,7 @@ async function formatProjectCommentsReport(
 ): Promise<string> {
   const comments = await reviewCommentReportItems(projectId, workspace.comments);
   const reviewNote = activeReviewNoteView(workspace);
+  const target = reviewCommentReportTarget(workspace.reviewTarget);
 
   return formatReviewCommentsReport({
     comments,
@@ -3627,7 +3629,11 @@ async function formatProjectCommentsReport(
       path: comment.path
     })),
     projectName: workspace.project.name,
+    reviewedPaths: workspace.files
+      .filter((file) => file.visible)
+      .map((file) => file.path),
     ...(reviewNote ? { reviewNote: reviewNote.body } : {}),
+    ...(target ? { target } : {}),
     targetLabel: reviewTargetLabel(workspace.reviewTarget)
   });
 }
