@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.0.15 - 2026-10-12
+
+### Added
+
+- Add file comments and one dismissible review note per change on desktop; paired
+  phones with a matching version see and edit them too.
+- Name the reviewed change and feedback scopes in the copied agent report.
+
+### Improved
+
+- Close the repository drop overlay reliably after detached or cancelled drags.
+- Keep focus and comment saves reliable when a reload overtakes an edit.
+- Reuse committed blob fingerprints across diff summary reloads.
+
 ## 0.0.14 - 2026-09-28
 
 ### Added
