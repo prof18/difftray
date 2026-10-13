@@ -51,6 +51,7 @@ done < <(find "$DIR" -maxdepth 2 -type f \
   \( -name '*.dmg' -o -name '*.zip' -o -name 'latest*.yml' -o -name '*.blockmap' \) | sort)
 
 [[ ${#FILES[@]} -gt 0 ]] || fail "no shippable artifacts found under $DIR"
+./scripts/check-update-feed.sh "$DIR" || fail "latest-mac.yml is not a valid update feed"
 
 TITLE="Difftray $BASE_TAG"
 if [[ "$CHANNEL" == "alpha" ]]; then

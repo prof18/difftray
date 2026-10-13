@@ -72,6 +72,25 @@ macOS produces both `arm64` and `x64` `.dmg` + `.zip` files; the dmg name
 encodes the architecture (`Difftray-arm64.dmg`, `Difftray-x64.dmg`). Linux and
 Windows are not supported targets.
 
+## Rebuilding only the DMGs
+
+If `release:mac` fails only at the DMG step (for example `hdiutil` reports
+`Resource busy` because a wedged `simdiskimaged` blocks every detach; a reboot
+clears it), the signed, notarized apps and the zips are already in
+`release/<version>/`. Rebuild just the DMGs from them:
+
+```sh
+pnpm exec electron-builder --config electron-builder.config.cjs --mac dmg --arm64 \
+  --prepackaged release/<version>/mac-arm64/Difftray.app --publish never
+pnpm exec electron-builder --config electron-builder.config.cjs --mac dmg --x64 \
+  --prepackaged release/<version>/mac/Difftray.app --publish never
+```
+
+Each run rewrites `release/<version>/latest-mac.yml` with only its DMG entry. Rebuild
+the file with all four artifacts (both `-mac.zip` entries first, `path` set to the x64
+zip) in the format of the previous release's `latest-mac.yml`. The upload script runs
+`scripts/check-update-feed.sh` and refuses a feed without both zips.
+
 ## Upload
 
 Uploads target the source repo `prof18/difftray` — the same repo hosts both
