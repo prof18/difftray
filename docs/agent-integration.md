@@ -1,6 +1,6 @@
 # Agent integration
 
-Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review read/write handlers remain a later implementation step.
+Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads and exports use explicit persisted contexts; feedback submission remains a later implementation step.
 
 A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch. Frames are bounded to 1 MiB for requests and 16 MiB for responses. Unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields are rejected.
 
@@ -12,16 +12,49 @@ The protocol error codes are `invalid_request`, `unsupported_version`, `unauthor
 
 The internal context service now persists snapshots without opening a repository tab. It pins commit contexts to a SHA, checks working-tree and branch identities before and after Git loads, and checks the saved file manifest and visibility setting on every context read. The manifest includes hidden generated files. Replacing the repository directory invalidates its contexts even when its Git content is identical. Contexts expire after 24 hours; creating a context purges expired entries and rejects capacity beyond 128 live entries instead of evicting one.
 
-Desktop and companion note mutations now increment a persistent revision in the same SQLite transaction. Deleting a note retains that revision. The snapshot API returns the current note and an opaque version token together, so same-timestamp edits and delete/recreate cycles are distinguishable. Target-aware report excerpts use the report's recorded target and omit mismatched content. These are internal service guarantees; agent command dispatch remains pending.
+Desktop and companion note mutations now increment a persistent revision in the same SQLite transaction. Deleting a note retains that revision. The snapshot API returns the current note and an opaque version token together, so same-timestamp edits and delete/recreate cycles are distinguishable. Target-aware report excerpts use the report's recorded target and omit mismatched content. Agent reads and clipboard reports share the same target-aware formatter.
 
 ## Connecting and opening
 
 Run `Difftray.app/Contents/Resources/bin/difftray doctor --json` to connect quietly and inspect the authenticated bundle/profile identity. `open [PATH] --json` selects the canonical containing worktree and returns only after the renderer commits the requested target. Paths default to the caller’s working directory. Opening defaults to working-tree; branch and commit modes require `--base` and `--commit` respectively. Unknown arguments and invalid selectors fail before startup. Help and version work offline without standalone Node on PATH.
 
-The CLI launches only its own bundle executable, with detached standard streams and Electron runtime injection variables removed. Every profile is canonicalized before Electron acquires its single-instance lock or opens storage. Background second-instance launches do not focus the UI; a normal launch or an explicit open does. Context reads will use the same connection path when their handlers are implemented.
+The CLI launches only its own bundle executable, with detached standard streams and Electron runtime injection variables removed. Every profile is canonicalized before Electron acquires its single-instance lock or opens storage. Background second-instance launches do not focus the UI; a normal launch or an explicit open does. Context reads use this same connection path without opening a window.
 
 The socket lives beneath a per-user, profile-hashed directory with mode 0700. Socket and endpoint metadata must be owned by the current user with mode 0600. Existing unsafe paths are rejected rather than repaired. Endpoint publication follows explicit socket permission verification, independent of the launching shell’s umask. Connections are capped at 16, incomplete requests at five seconds, and authenticated dispatch plus response drain at 120 seconds. Disconnects cancel pending opens; queued expired selections never execute.
 
 Startup waits at most 30 seconds. Authentication failures normally stop immediately. A caller with pre-crash metadata can refresh once after a verified generation change within that same deadline, without launching another process because of an authentication error. A profile, flavor, executable or protocol mismatch requires quitting and restarting the intended bundle; the CLI never kills or substitutes an existing app.
 
 `pnpm --filter @difftray/desktop test:cli:e2e` builds an unsigned temporary bundle and exercises isolated profiles. `--app` can reuse an explicit fixture bundle. The smoke-only `DIFFTRAY_AGENT_SMOKE_DEBUG_PORT` environment variable enables loopback browser inspection only when an explicit `DIFFTRAY_USER_DATA_DIR` is supplied. This fixture evidence does not establish signed-release or real agent-host compatibility.
+
+## Reading and exporting
+
+Run `review inspect [--repo PATH] --json` (selected target by default), then pass its
+`contextId` to `review files --context ID`, `review file --context ID --path PATH`,
+`review feedback --context ID`, or `review export --context ID`. Explicit
+`--target working-tree`, `--target branch --base REF`, and
+`--target commit --commit REF` selectors override the stored selection. Export also supports a `--repo PATH` shorthand. Read commands never
+change the selected tab or feedback.
+
+File reads require an exact manifest path. `diffHash` is the stored review summary
+fingerprint used for comment anchors; `renderDiffHash` identifies the loaded content.
+These can differ for ordinary text. `selectableRanges` lists valid source line spans
+on each side, including unchanged lines available in full snapshots. Nontext and
+oversized content have no selectable line ranges.
+
+File and feedback cursors bind the context, filter and sort. Feedback cursors also
+bind a project feedback revision. Start again after `stale_feedback`; inspect again
+after stale code or context expiry. `--include-inactive` includes historical feedback
+with `target_changed`, `diff_changed`, or `dismissed` reasons. Every feedback page
+reports the current overall note (or explicit null), its independent `noteVersion`,
+and `inactiveCount`. No read marks a finding handled.
+
+`review export --format prompt` writes only the report text to stdout. `--json` or
+`--format json` writes a versioned result envelope. Export metadata reports the
+feedback version, inactive count and reviewed-path cap: reports list up to 100 visible
+paths and disclose any remainder. Feedback itself is never silently truncated. If
+an export exceeds 16 MiB, use paginated feedback JSON with a smaller limit.
+
+Exit codes: 0 success, 1 internal error, 2 invalid input, 3 unavailable app/repository,
+missing or expired context, or incompatible protocol, 4 stale review/feedback or
+write conflict, and 5 transport/timeout/capacity failure. JSON errors preserve the
+typed code. Text and JSON work without a TTY; closed output pipes are handled cleanly.

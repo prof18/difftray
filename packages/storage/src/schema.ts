@@ -109,6 +109,52 @@ export function runMigrations(db: DatabaseSync): void {
     insert or ignore into review_note_revisions(scope_id, project_id, revision)
       select scope_id, project_id, 1 from review_notes;
 
+    create table if not exists project_feedback_revisions (
+      project_id text primary key references projects(id) on delete cascade,
+      revision integer not null default 0
+    );
+    insert or ignore into project_feedback_revisions select id, 0 from projects;
+    create trigger if not exists initialize_project_feedback_revision after insert on projects
+    begin
+      insert into project_feedback_revisions values (new.id, 0);
+    end;
+
+    create trigger if not exists review_comments_feedback_insert after insert on review_comments
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_comments_feedback_update after update on review_comments when old.body is not new.body
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_comments_feedback_delete after delete on review_comments
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = old.project_id;
+    end;
+    create trigger if not exists review_file_comments_feedback_insert after insert on review_file_comments
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_file_comments_feedback_update after update on review_file_comments when old.body is not new.body
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_file_comments_feedback_delete after delete on review_file_comments
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = old.project_id;
+    end;
+    create trigger if not exists review_notes_feedback_insert after insert on review_notes
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_notes_feedback_update after update on review_notes when old.body is not new.body or old.dismissed_at is not new.dismissed_at
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    create trigger if not exists review_notes_feedback_delete after delete on review_notes
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = old.project_id;
+    end;
     create table if not exists agent_review_contexts (
       id text primary key,
       project_id text not null references projects(id) on delete cascade,

@@ -1,10 +1,4 @@
-import {
-  parseDiffFromFile,
-  processFile,
-  type FileContents,
-  type FileDiffMetadata,
-  type VirtualFileMetrics
-} from "@pierre/diffs";
+import { type FileDiffMetadata, type VirtualFileMetrics } from "@pierre/diffs";
 import type { FileDiffOptions } from "@pierre/diffs/react";
 import {
   type WorkerInitializationRenderOptions,
@@ -12,32 +6,21 @@ import {
 } from "@pierre/diffs/worker";
 
 import {
+  createDiffsRenderModel as createSharedDiffsRenderModel,
+  type CreateDiffsRenderModelInput,
+  type DiffsRenderModel
+} from "../shared/review-diff-model.js";
+import {
   intellijIslandsDiffTheme,
   registerIntellijIslandsDiffThemes
 } from "./intellij-islands-diff-theme.js";
 
 export { intellijIslandsDiffTheme };
 
-export type CreateDiffsRenderModelInput = {
-  readonly diffHash: string;
-  readonly filePath: string;
-  readonly newText?: string;
-  readonly oldText?: string;
-  readonly patch: string;
-  readonly previousPath?: string;
-  readonly status: ReviewFileView["status"];
-};
-
-export type DiffsRenderModel =
-  | {
-      readonly fileDiff: FileDiffMetadata;
-      readonly kind: "diff";
-    }
-  | {
-      readonly detail: string;
-      readonly kind: "fallback";
-      readonly title: string;
-    };
+export type {
+  CreateDiffsRenderModelInput,
+  DiffsRenderModel
+} from "../shared/review-diff-model.js";
 
 export type CreateDiffsFileDiffOptionsInput = {
   readonly diffMode: "split" | "unified";
@@ -50,7 +33,6 @@ export type DiffSideFocus = "both" | "new" | "old";
 export const diffFocusNewClassName = "difftrayDiffFocusNew";
 export const diffFocusOldClassName = "difftrayDiffFocusOld";
 
-const fallbackTitle = "No textual diff";
 const maxTokenizedLineLength = 4_000;
 const maxLineDiffLength = 20_000;
 const workerPoolSize = 2;
@@ -188,34 +170,7 @@ const difftrayDiffUnsafeCSS = `
 export function createDiffsRenderModel(
   input: CreateDiffsRenderModelInput
 ): DiffsRenderModel {
-  if (isNonTextSummary(input.patch)) {
-    return fallbackModel(input.patch);
-  }
-
-  const fullSnapshotModel = createFullSnapshotModel(input);
-
-  if (fullSnapshotModel) {
-    return fullSnapshotModel;
-  }
-
-  try {
-    const fileDiff = processFile(input.patch, {
-      cacheKey: input.diffHash,
-      isGitDiff: input.patch.startsWith("diff --git "),
-      throwOnError: true
-    });
-
-    if (fileDiff) {
-      return {
-        fileDiff: withDifftrayMetadata(fileDiff, input),
-        kind: "diff"
-      };
-    }
-  } catch {
-    return fallbackModel(input.patch);
-  }
-
-  return fallbackModel(input.patch);
+  return createSharedDiffsRenderModel(input);
 }
 
 export function createDiffsFileDiffOptions<LAnnotation = undefined>({
@@ -277,94 +232,5 @@ export function createDiffsWorkerPoolOptions(): WorkerPoolOptions {
       new Worker(new URL("@pierre/diffs/worker/worker.js", import.meta.url), {
         type: "module"
       })
-  };
-}
-
-function createFullSnapshotModel(
-  input: CreateDiffsRenderModelInput
-): DiffsRenderModel | undefined {
-  if (!hasFullSnapshotPair(input)) {
-    return undefined;
-  }
-
-  const oldFile = fileContents({
-    cacheKey: `${input.diffHash}:old`,
-    contents: input.oldText ?? "",
-    name: input.previousPath ?? input.filePath
-  });
-  const newFile = fileContents({
-    cacheKey: `${input.diffHash}:new`,
-    contents: input.newText ?? "",
-    name: input.filePath
-  });
-
-  try {
-    return {
-      fileDiff: withDifftrayMetadata(
-        parseDiffFromFile(oldFile, newFile, undefined, true),
-        input
-      ),
-      kind: "diff"
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function hasFullSnapshotPair(input: CreateDiffsRenderModelInput): boolean {
-  const hasOldSide = input.oldText !== undefined || input.status === "added";
-  const hasNewSide = input.newText !== undefined || input.status === "deleted";
-
-  return hasOldSide && hasNewSide;
-}
-
-function fileContents(input: FileContents): FileContents {
-  return input;
-}
-
-function withDifftrayMetadata(
-  fileDiff: FileDiffMetadata,
-  input: CreateDiffsRenderModelInput
-): FileDiffMetadata {
-  return {
-    ...fileDiff,
-    cacheKey: input.diffHash,
-    name: input.filePath,
-    ...(input.previousPath ? { prevName: input.previousPath } : {}),
-    type: changeTypeForStatus(input.status, fileDiff)
-  };
-}
-
-function changeTypeForStatus(
-  status: CreateDiffsRenderModelInput["status"],
-  fileDiff: FileDiffMetadata
-): FileDiffMetadata["type"] {
-  switch (status) {
-    case "added":
-      return "new";
-    case "deleted":
-      return "deleted";
-    case "renamed":
-      return fileDiff.hunks.length === 0 ? "rename-pure" : "rename-changed";
-    case "mode_changed":
-    case "modified":
-      return "change";
-  }
-}
-
-function isNonTextSummary(patch: string): boolean {
-  return (
-    /^Binary file changed /m.test(patch) ||
-    /^Mode changed:/m.test(patch) ||
-    /^Submodule changed:/m.test(patch) ||
-    /^Symlink changed:/m.test(patch)
-  );
-}
-
-function fallbackModel(detail: string): DiffsRenderModel {
-  return {
-    detail,
-    kind: "fallback",
-    title: fallbackTitle
   };
 }

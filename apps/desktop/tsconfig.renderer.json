@@ -6,9 +6,9 @@
     "lib": ["DOM", "DOM.Iterable", "ES2024"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "src/renderer",
+    "rootDir": "src",
     "tsBuildInfoFile": "dist/renderer.tsbuildinfo",
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/shared/**/*.ts"]
 }

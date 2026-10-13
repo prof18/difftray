@@ -21,6 +21,7 @@ import {
   loadTrackedDiffContent,
   loadTrackedDiffSummaryContent,
   oversizedPatchMarker,
+  patchTooLarge,
   summarizeUntrackedDiff,
   synthesizeUntrackedDiff,
   type TrackedDiffSnapshotSource
@@ -104,6 +105,8 @@ export type GitCommitReviewTarget = {
 };
 
 export type GitLoadedFileDiff = {
+  /** Content was fingerprinted because its diff exceeded the adapter's text cap. */
+  readonly oversized?: true;
   readonly content:
     | {
         readonly kind: "text";
@@ -806,6 +809,7 @@ async function loadTrackedDiffs(
 
       const result: GitLoadedFileDiff = {
         content,
+        ...(patchTooLarge(patch) ? { oversized: true as const } : {}),
         ...(nameStatus.newMode ? { newMode: nameStatus.newMode } : {}),
         newPath: nameStatus.newPath,
         ...(nameStatus.oldMode ? { oldMode: nameStatus.oldMode } : {}),

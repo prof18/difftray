@@ -1,3 +1,14 @@
+import {
+  listAgentFeedbackPage,
+  type AgentFeedbackPageInput,
+  type AgentFeedbackPage
+} from "./agent-feedback-read-store.js";
+export {
+  StaleAgentFeedbackError,
+  type AgentFeedbackPageInput,
+  type AgentFeedbackPage,
+  type StoredAgentFeedbackView
+} from "./agent-feedback-read-store.js";
 import { DatabaseSync } from "node:sqlite";
 import {
   getReviewNoteSnapshot,
@@ -185,6 +196,7 @@ export type VerifyAndUnmarkReviewedResult =
     };
 
 export type DifftrayStorage = {
+  readonly listAgentFeedbackPage: (input: AgentFeedbackPageInput) => AgentFeedbackPage;
   readonly createAgentReviewContext: (
     record: AgentReviewContextRecord,
     options: CreateAgentReviewContextOptions
@@ -299,6 +311,7 @@ export function openStorage(filename: string): DifftrayStorage {
   initializeProjectTabs(db, listRecentProjects(db));
 
   return {
+    listAgentFeedbackPage: (input) => listAgentFeedbackPage(db, input),
     createAgentReviewContext: (record, options) =>
       createAgentReviewContext(db, record, options),
     getAgentReviewContext: (id) => getAgentReviewContext(db, id),

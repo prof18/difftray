@@ -6,6 +6,8 @@ import {
   isBackgroundAgentLaunch
 } from "./agent-app-lifecycle.js";
 import { startAgentControlServer } from "./agent-control-server.js";
+import { createAgentReviewService } from "./agent-review-service.js";
+import { createAgentExportService } from "./agent-export-service.js";
 import {
   AgentProtocolError,
   CLI_PROTOCOL_VERSION,
@@ -1658,11 +1660,21 @@ const servicesReady = app.whenReady().then(async () => {
     flavor: runtime.flavor,
     executablePath: realpathSync(process.execPath)
   };
+  const agentReads = createAgentReviewService(getStorage());
+  const agentExports = createAgentExportService(getStorage(), {
+    contexts: agentReads.contexts
+  });
   agentControlServer = await startAgentControlServer({
     identity,
     hasProfileLock: true,
     dispatch: async (request, signal) => {
       if (request.method === "hello") return identity;
+      if (request.method === "review.inspect") return agentReads.inspect(request.params);
+      if (request.method === "review.files") return agentReads.files(request.params);
+      if (request.method === "review.file") return agentReads.file(request.params);
+      if (request.method === "review.feedback")
+        return agentReads.feedback(request.params);
+      if (request.method === "review.export") return agentExports.export(request.params);
       if (request.method === "open") {
         let result:
           { projectId: string; repoPath: string; target: ReviewTarget } | undefined;

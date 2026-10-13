@@ -386,7 +386,7 @@ function formatCommentLocation(comment: ReviewCommentReportItem): string {
   return `${sideLabel} ${lineLabel} ${range}`;
 }
 
-const maxReportedPaths = 100;
+export const maxReportedPaths = 100;
 
 function formatTargetSection(input: FormatReviewCommentsReportInput): string {
   const target = input.target;

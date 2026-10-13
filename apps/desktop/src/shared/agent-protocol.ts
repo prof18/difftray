@@ -254,13 +254,19 @@ export type AgentResultMap = {
     readonly total: number;
     readonly nextCursor: string | null;
     readonly feedbackVersion: string;
+    readonly inactiveCount?: number;
     readonly noteVersion: string;
     readonly note: { readonly body: string; readonly dismissedAt: string | null } | null;
   };
   "review.export":
-    | { readonly format: "prompt"; readonly content: string }
+    | {
+        readonly format: "prompt";
+        readonly content: string;
+        readonly metadata?: AgentExportMetadata;
+      }
     | {
         readonly format: "json";
+        readonly metadata?: AgentExportMetadata;
         readonly content: {
           readonly contextId: string;
           readonly target: ReviewTarget;
@@ -279,7 +285,17 @@ export type AgentResultMap = {
     readonly noteVersion: string;
   };
 };
+export type AgentExportMetadata = {
+  readonly feedbackVersion: string;
+  readonly inactiveCount: number;
+  readonly reviewedPathCount: number;
+  readonly reviewedPathLimit: number;
+  readonly reviewedPathsTruncated: boolean;
+};
 export type AgentFeedbackView = {
+  readonly reviewTargetId?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
   readonly id: string;
   readonly kind: "line" | "file" | "overall";
   readonly body: string;
@@ -633,14 +649,12 @@ function result(value: unknown, method: AgentMethod): void {
       break;
     }
     case "review.feedback": {
-      const x = object(value, [
-        "items",
-        "total",
-        "nextCursor",
-        "feedbackVersion",
-        "noteVersion",
-        "note"
-      ]);
+      const x = object(
+        value,
+        ["items", "total", "nextCursor", "feedbackVersion", "noteVersion", "note"],
+        ["inactiveCount"]
+      );
+      optional(x.inactiveCount, (v) => integer(v, 0, Number.MAX_SAFE_INTEGER));
       if (!Array.isArray(x.items) || x.items.length > PAGE_SIZE_MAX)
         fail("Invalid feedback page");
       (x.items as unknown[]).forEach(feedbackView);
@@ -652,7 +666,8 @@ function result(value: unknown, method: AgentMethod): void {
       break;
     }
     case "review.export": {
-      const x = object(value, ["format", "content"]);
+      const x = object(value, ["format", "content"], ["metadata"]);
+      optional(x.metadata, exportMetadata);
       enumValue(x.format, ["prompt", "json"]);
       if (x.format === "prompt") {
         if (typeof x.content !== "string") fail("Invalid prompt export");
@@ -809,6 +824,20 @@ function fileContent(value: unknown): void {
       fail("Invalid file content kind");
   }
 }
+function exportMetadata(value: unknown): void {
+  const x = object(value, [
+    "feedbackVersion",
+    "inactiveCount",
+    "reviewedPathCount",
+    "reviewedPathLimit",
+    "reviewedPathsTruncated"
+  ]);
+  nonempty(x.feedbackVersion);
+  integer(x.inactiveCount, 0, Number.MAX_SAFE_INTEGER);
+  integer(x.reviewedPathCount, 0, Number.MAX_SAFE_INTEGER);
+  integer(x.reviewedPathLimit, 0, Number.MAX_SAFE_INTEGER);
+  if (typeof x.reviewedPathsTruncated !== "boolean") fail("Invalid truncation flag");
+}
 function feedbackView(value: unknown): void {
   const x = object(
     value,
@@ -821,18 +850,32 @@ function feedbackView(value: unknown): void {
       "lineStart",
       "lineEnd",
       "inactiveReason",
-      "actor"
+      "actor",
+      "reviewTargetId",
+      "createdAt",
+      "updatedAt"
     ]
   );
   nonempty(x.id);
   enumValue(x.kind, FEEDBACK_KINDS);
   if (x.kind === "overall")
-    object(x, ["id", "kind", "body", "active"], ["inactiveReason", "actor"]);
+    object(
+      x,
+      ["id", "kind", "body", "active"],
+      ["inactiveReason", "actor", "reviewTargetId", "createdAt", "updatedAt"]
+    );
   else if (x.kind === "file")
     object(
       x,
       ["id", "kind", "body", "active", "path", "diffHash"],
-      ["previousPath", "inactiveReason", "actor"]
+      [
+        "previousPath",
+        "inactiveReason",
+        "actor",
+        "reviewTargetId",
+        "createdAt",
+        "updatedAt"
+      ]
     );
   else
     object(
@@ -848,7 +891,14 @@ function feedbackView(value: unknown): void {
         "lineStart",
         "lineEnd"
       ],
-      ["previousPath", "inactiveReason", "actor"]
+      [
+        "previousPath",
+        "inactiveReason",
+        "actor",
+        "reviewTargetId",
+        "createdAt",
+        "updatedAt"
+      ]
     );
   responseBody(x.body);
   if (typeof x.active !== "boolean") fail("Invalid active flag");
@@ -863,6 +913,9 @@ function feedbackView(value: unknown): void {
     integer(x.lineEnd, x.lineStart as number, Number.MAX_SAFE_INTEGER);
   }
   optional(x.inactiveReason, nonempty);
+  optional(x.reviewTargetId, nonempty);
+  optional(x.createdAt, nonempty);
+  optional(x.updatedAt, nonempty);
   if (x.actor !== undefined) {
     const actor = object(x.actor, ["kind", "name"], ["runId"]);
     enumValue(actor.kind, ["human", "agent"]);

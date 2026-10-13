@@ -145,7 +145,7 @@ async function createProfile(name) {
   profiles.push(profile);
   return profile;
 }
-async function cli(profile, args, success = true) {
+async function cli(profile, args, success = true, expectedExitCode) {
   let output;
   try {
     output = await runFile(launcher, [...args, "--json"], {
@@ -156,6 +156,7 @@ async function cli(profile, args, success = true) {
     });
   } catch (error) {
     assert.equal(success, false, `CLI failed: ${error.stderr}`);
+    if (expectedExitCode !== undefined) assert.equal(error.code, expectedExitCode);
     output = error;
   }
   const response = JSON.parse(output.stdout);
@@ -170,14 +171,57 @@ async function cli(profile, args, success = true) {
     assert.equal(output.stderr, "", "successful CLI diagnostics must be quiet");
   return response;
 }
+async function promptExport(profile, contextId) {
+  const output = await runFile(
+    launcher,
+    ["review", "export", "--context", contextId, "--format", "prompt"],
+    {
+      cwd: fixture,
+      env: profile.env,
+      timeout: 150_000,
+      maxBuffer: 1024 * 1024
+    }
+  );
+  assert.equal(output.stderr, "", "prompt export must not include startup diagnostics");
+  return output.stdout;
+}
 async function browser(profile) {
+  let lastError;
   const connected = await until(async () => {
     try {
       return await chromium.connectOverCDP(`http://127.0.0.1:${profile.port}`);
-    } catch {
+    } catch (error) {
+      lastError = error.message;
       return undefined;
     }
-  }, "isolated GUI debugging endpoint");
+  }, "isolated GUI debugging endpoint").catch(async (error) => {
+    const listeners = processIds(profile).map((pid) => {
+      try {
+        return execFileSync(
+          "/usr/sbin/lsof",
+          ["-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN", "-n", "-P"],
+          { encoding: "utf8" }
+        );
+      } catch {
+        return "No TCP listener for owned fixture process";
+      }
+    });
+    await writeFile(
+      path.join(evidence, "cli-debug-failure.json"),
+      JSON.stringify(
+        {
+          profile: path.basename(profile.path),
+          port: profile.port,
+          lastError,
+          listeners,
+          completed: results
+        },
+        null,
+        2
+      )
+    );
+    throw error;
+  });
   browsers.push(connected);
   return connected;
 }
@@ -234,6 +278,38 @@ try {
   await mkdir(nested);
   const link = path.join(fixture, "symlinked worktree");
   await symlink(sibling, link);
+  const reads = await createProfile("read-only-cold");
+  const inspected = await cli(reads, ["review", "inspect", "--repo", repo.path]);
+  assert.equal(inspected.result.repoPath, repo.path);
+  assert.equal(inspected.result.target.kind, "working_tree");
+  assert.equal(inspected.result.fileCount, 1);
+  assert.ok(inspected.result.expiresAt > Date.now());
+  assert.equal(typeof inspected.result.noteVersion, "string");
+  const readGui = await browser(reads);
+  assert.equal(
+    readGui.contexts().flatMap((context) => context.pages()).length,
+    0,
+    "cold inspect must not create a window"
+  );
+  await stop(reads);
+  const coldExport = await cli(reads, [
+    "review",
+    "export",
+    "--repo",
+    repo.path,
+    "--format",
+    "json"
+  ]);
+  assert.equal(coldExport.result.content.target.projectId, repo.path);
+  assert.deepEqual(coldExport.result.content.items, []);
+  const restartedReadGui = await browser(reads);
+  assert.equal(
+    restartedReadGui.contexts().flatMap((context) => context.pages()).length,
+    0,
+    "cold export must not create a window"
+  );
+  results.push("cold inspect/export remain quiet and windowless with no Node on PATH");
+
   const quiet = await createProfile("production-like");
   const hello = await cli(quiet, ["doctor"]);
   assert.equal(hello.result.profilePath, quiet.path);
@@ -260,6 +336,153 @@ try {
   );
   results.push(
     "quiet doctor, cold open, exact nested/symlinked linked worktree, concurrent warm opens"
+  );
+
+  await open(quiet, repo.path);
+  const reviewPage = await selected(gui, repo.path, path.basename(repo.path));
+  const review = (await cli(quiet, ["review", "inspect", "--repo", repo.path])).result;
+  const worktreeReview = (await cli(quiet, ["review", "inspect", "--repo", sibling]))
+    .result;
+  assert.notEqual(review.contextId, worktreeReview.contextId);
+  assert.notEqual(review.projectId, worktreeReview.projectId);
+  const files = (
+    await cli(quiet, ["review", "files", "--context", review.contextId, "--limit", "1"])
+  ).result;
+  assert.equal(files.total, 1);
+  assert.equal(files.nextCursor, null);
+  const file = (
+    await cli(quiet, [
+      "review",
+      "file",
+      "--context",
+      review.contextId,
+      "--path",
+      files.files[0].path
+    ])
+  ).result;
+  assert.equal(
+    file.diffHash,
+    files.files[0].diffHash,
+    "file reads must use summary identity"
+  );
+  assert.equal(file.content.kind, "text");
+  assert.match(file.content.patch, /after/);
+  assert.ok(
+    file.selectableRanges.additions.some((range) => range.start <= 1 && range.end >= 1),
+    "packaged Node parser must expose source-line anchors"
+  );
+  const worktreeFile = (
+    await cli(quiet, [
+      "review",
+      "file",
+      "--context",
+      worktreeReview.contextId,
+      "--path",
+      "tracked.txt"
+    ])
+  ).result;
+  assert.match(worktreeFile.content.patch, /worktree/);
+  assert.doesNotMatch(worktreeFile.content.patch, /after/);
+  const commentBody = "Packaged human feedback: Révision 日本語";
+  const created = await reviewPage.evaluate(
+    async (input) => window.difftray.createReviewComment(input),
+    {
+      body: commentBody,
+      displayedDiffHash: file.diffHash,
+      lineStart: 1,
+      lineEnd: 1,
+      path: "tracked.txt",
+      projectId: review.projectId,
+      reviewTargetId: review.targetId,
+      side: "additions"
+    }
+  );
+  assert.equal(created.status, "created", "human UI API must accept summary diffHash");
+  const feedback = (
+    await cli(quiet, ["review", "feedback", "--context", review.contextId])
+  ).result;
+  assert.equal(feedback.total, 1);
+  assert.equal(feedback.items[0].id, created.comment.id);
+  assert.equal(feedback.items[0].body, commentBody);
+  assert.equal(feedback.items[0].active, true);
+  assert.equal(feedback.items[0].diffHash, file.diffHash);
+  assert.equal(typeof feedback.feedbackVersion, "string");
+  assert.equal(typeof feedback.noteVersion, "string");
+  const otherFeedback = (
+    await cli(quiet, ["review", "feedback", "--context", worktreeReview.contextId])
+  ).result;
+  assert.equal(
+    otherFeedback.total,
+    0,
+    "feedback must stay isolated between linked worktrees"
+  );
+  const report = (
+    await cli(quiet, [
+      "review",
+      "export",
+      "--context",
+      review.contextId,
+      "--format",
+      "prompt"
+    ])
+  ).result.content;
+  assert.match(report, /Packaged human feedback: Révision 日本語/);
+  assert.equal(
+    await promptExport(quiet, review.contextId),
+    report,
+    "redirected prompt stdout must preserve exact report bytes"
+  );
+  const jsonReport = (
+    await cli(quiet, [
+      "review",
+      "export",
+      "--context",
+      review.contextId,
+      "--format",
+      "json"
+    ])
+  ).result.content;
+  assert.equal(jsonReport.contextId, review.contextId);
+  assert.equal(jsonReport.items[0].id, created.comment.id);
+  await open(quiet, sibling);
+  await selected(gui, await realpath(sibling), path.basename(sibling));
+  assert.equal(
+    await promptExport(quiet, review.contextId),
+    report,
+    "GUI selection changes must preserve explicit-context export"
+  );
+  const jsonOnly = await runFile(
+    launcher,
+    ["review", "export", "--context", review.contextId, "--format", "json"],
+    { cwd: fixture, env: quiet.env, timeout: 150_000 }
+  );
+  assert.equal(jsonOnly.stderr, "");
+  assert.equal(JSON.parse(jsonOnly.stdout).result.content.contextId, review.contextId);
+  await writeFile(path.join(repo.path, "tracked.txt"), "changed after inspection\n");
+  const stale = await cli(
+    quiet,
+    ["review", "export", "--context", review.contextId, "--format", "json"],
+    false,
+    4
+  );
+  assert.equal(stale.error.code, "stale_review");
+  assert.equal(
+    (
+      await cli(quiet, [
+        "review",
+        "file",
+        "--context",
+        worktreeReview.contextId,
+        "--path",
+        "tracked.txt"
+      ])
+    ).result.content.patch,
+    worktreeFile.content.patch,
+    "changing one worktree must not stale the other context"
+  );
+  await writeFile(path.join(repo.path, "tracked.txt"), "after\n");
+  results.push(
+    "packaged parser/read identities, human comment export, UTF-8 redirected stdout, linked-worktree isolation, GUI target independence, explicit stale-context failure"
   );
 
   const alpha = await createProfile("alpha-like");

@@ -627,3 +627,102 @@ describe("legacy human feedback bodies", () => {
     );
   });
 });
+
+describe("feedback response metadata", () => {
+  const metadata = {
+    feedbackVersion: "f1",
+    inactiveCount: 2,
+    reviewedPathCount: 3,
+    reviewedPathLimit: 100,
+    reviewedPathsTruncated: false
+  };
+  const feedback = (item: Record<string, unknown>, inactiveCount: unknown = 2) => ({
+    items: [item],
+    total: 1,
+    nextCursor: null,
+    feedbackVersion: "f1",
+    noteVersion: "v1",
+    note: null,
+    inactiveCount
+  });
+  const response = (result: unknown) =>
+    frame({ version: 1, id: "transport-1", ok: true, result });
+  const item = {
+    id: "comment",
+    kind: "file",
+    body: "Review",
+    active: true,
+    path: "a.ts",
+    diffHash: "hash"
+  };
+  it.each(["line", "file", "overall"])("accepts provenance for %s feedback", (kind) => {
+    const scoped =
+      kind === "overall"
+        ? { id: "note", kind, body: "Review", active: true }
+        : {
+            ...item,
+            kind,
+            ...(kind === "line" ? { side: "additions", lineStart: 1, lineEnd: 1 } : {})
+          };
+    const result = feedback({
+      ...scoped,
+      reviewTargetId: "target",
+      createdAt: "2026-10-14T10:00:00Z",
+      updatedAt: "2026-10-14T11:00:00Z"
+    });
+    expect(parseAgentResponse(response(result), "review.feedback")).toMatchObject({
+      result
+    });
+  });
+  it.each([-1, 1.5, "2", Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid inactive count %s",
+    (count) => {
+      expect(() =>
+        parseAgentResponse(response(feedback(item, count)), "review.feedback")
+      ).toThrow(AgentProtocolError);
+    }
+  );
+  it.each(["reviewTargetId", "createdAt", "updatedAt"])("rejects invalid %s", (field) => {
+    for (const value of [42, "", "x".repeat(129)]) {
+      expect(() =>
+        parseAgentResponse(
+          response(feedback({ ...item, [field]: value })),
+          "review.feedback"
+        )
+      ).toThrow(AgentProtocolError);
+    }
+  });
+  it.each(["prompt", "json"] as const)(
+    "validates %s export metadata strictly",
+    (format) => {
+      const content =
+        format === "prompt"
+          ? "Review report"
+          : {
+              contextId,
+              target: { kind: "working_tree", projectId: "/repo", headSha: "abc" },
+              items: [],
+              note: null,
+              noteVersion: "v0"
+            };
+      const result = { format, content, metadata };
+      expect(parseAgentResponse(response(result), "review.export")).toMatchObject({
+        result
+      });
+      for (const invalid of [
+        { ...metadata, extra: true },
+        { ...metadata, feedbackVersion: "" },
+        { ...metadata, inactiveCount: -1 },
+        { ...metadata, reviewedPathCount: 1.5 },
+        { ...metadata, reviewedPathLimit: -1 },
+        { ...metadata, reviewedPathLimit: Number.MAX_SAFE_INTEGER + 1 },
+        { ...metadata, reviewedPathsTruncated: "false" },
+        { inactiveCount: 0 }
+      ]) {
+        expect(() =>
+          parseAgentResponse(response({ ...result, metadata: invalid }), "review.export")
+        ).toThrow(AgentProtocolError);
+      }
+    }
+  );
+});

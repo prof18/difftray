@@ -161,7 +161,9 @@ describe("sendAgentRequest", () => {
       requestReader(socket, (request) => writeBadResponse(socket, request.id));
     });
     await expectProtocolCode(
-      sendAgentRequest(endpoint, "hello", {}, { timeoutMs: 100 }),
+      // This tests framing, not latency: serializing and transferring the 16 MiB
+      // oversized fixture can exceed 100 ms under the full concurrent test gate.
+      sendAgentRequest(endpoint, "hello", {}, { timeoutMs: 2_000 }),
       _label === "oversized response" ? "limit_exceeded" : "invalid_request"
     );
   });

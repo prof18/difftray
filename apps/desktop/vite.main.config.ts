@@ -24,6 +24,9 @@ export default defineConfig({
     sourcemap: false,
     target: "node22"
   },
+  ssr: {
+    noExternal: ["@pierre/diffs", "diff", "lru_map"]
+  },
   resolve: {
     alias: workspaceAliases
   }

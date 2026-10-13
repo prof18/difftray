@@ -36,6 +36,17 @@ type LoadSummary = (
 ) => Promise<GitFileDiffSummary | null>;
 type ResolveTarget = (projectPath: string, target: ReviewTarget) => Promise<ReviewTarget>;
 
+export type ExplicitReportWorkspace = Pick<
+  ReviewWorkspaceView,
+  "comments" | "fileComments" | "reviewTarget" | "reviewNote"
+> & {
+  readonly project: Pick<ReviewWorkspaceView["project"], "name">;
+  readonly files: readonly Pick<
+    ReviewWorkspaceView["files"][number],
+    "path" | "previousPath" | "diffHash" | "visible"
+  >[];
+};
+
 async function resolveExplicitTarget(
   projectPath: string,
   target: ReviewTarget
@@ -52,7 +63,7 @@ async function resolveExplicitTarget(
 export async function formatExplicitReviewReport(
   projectPath: string,
   target: ReviewTarget,
-  workspace: ReviewWorkspaceView,
+  workspace: ExplicitReportWorkspace,
   options: {
     readonly loadFile?: LoadFile;
     readonly loadSummary?: LoadSummary;

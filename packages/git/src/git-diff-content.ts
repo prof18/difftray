@@ -123,6 +123,7 @@ export async function synthesizeUntrackedDiff(
 
   if (fileStat.size > maxTextSnapshotBytes) {
     return {
+      oversized: true,
       content: {
         kind: "binary",
         ...(await fingerprintFile(filePath))
@@ -615,7 +616,7 @@ function patchLooksBinary(patch: string): boolean {
   return /\bBinary files? .+ differ\b/.test(patch);
 }
 
-function patchTooLarge(patch: string): boolean {
+export function patchTooLarge(patch: string): boolean {
   return (
     patch === oversizedPatchMarker ||
     Buffer.byteLength(patch, "utf8") > maxPatchBytesPerFile

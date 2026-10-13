@@ -169,18 +169,16 @@ export function updateReviewComment(
   id: string,
   body: string
 ): ReviewCommentRecord | null {
-  const result = db
-    .prepare(
-      `
+  db.prepare(
+    `
       update review_comments
       set body = ?,
           updated_at = ?
-      where id = ?
+      where id = ? and body is not ?
     `
-    )
-    .run(body, currentTimestamp(), id);
+  ).run(body, currentTimestamp(), id, body);
 
-  return result.changes > 0 ? getReviewComment(db, id) : null;
+  return getReviewComment(db, id);
 }
 
 export function deleteReviewComment(db: DatabaseSync, id: string): boolean {
@@ -199,7 +197,7 @@ export function listReviewComments(
         select *
         from review_comments
         where review_target_id = ?
-        order by path asc, line_start asc, line_end asc, created_at asc
+        order by path asc, line_start asc, line_end asc, created_at asc, id asc
       `
     )
     .all(reviewTargetId);
@@ -263,18 +261,16 @@ export function updateReviewFileComment(
   id: string,
   body: string
 ): ReviewFileCommentRecord | null {
-  const result = db
-    .prepare(
-      `
+  db.prepare(
+    `
       update review_file_comments
       set body = ?,
           updated_at = ?
-      where id = ?
+      where id = ? and body is not ?
     `
-    )
-    .run(body, currentTimestamp(), id);
+  ).run(body, currentTimestamp(), id, body);
 
-  return result.changes > 0 ? getReviewFileComment(db, id) : null;
+  return getReviewFileComment(db, id);
 }
 
 export function deleteReviewFileComment(db: DatabaseSync, id: string): boolean {
@@ -293,7 +289,7 @@ export function listReviewFileComments(
         select *
         from review_file_comments
         where review_target_id = ?
-        order by path asc, created_at asc
+        order by path asc, created_at asc, id asc
       `
     )
     .all(reviewTargetId);
@@ -324,6 +320,8 @@ export function saveReviewNote(
   input: SaveReviewNoteInput
 ): ReviewNoteRecord {
   return withReviewNoteTransaction(db, () => {
+    const existing = getReviewNote(db, input.scopeId);
+    if (existing?.body === input.body && !existing.dismissedAt) return existing;
     const now = currentTimestamp();
 
     db.prepare(
@@ -360,6 +358,8 @@ export function setReviewNoteDismissed(
   dismissed: boolean
 ): ReviewNoteRecord | null {
   return withReviewNoteTransaction(db, () => {
+    const existing = getReviewNote(db, scopeId);
+    if (!existing || Boolean(existing.dismissedAt) === dismissed) return existing;
     const now = currentTimestamp();
     const result = db
       .prepare(

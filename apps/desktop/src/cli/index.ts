@@ -1,19 +1,17 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
-import {
-  AgentProtocolError,
-  CLI_PROTOCOL_VERSION,
-  EXIT_USAGE,
-  EXIT_NOT_AVAILABLE,
-  EXIT_CONFLICT,
-  EXIT_IO,
-  EXIT_INTERNAL
-} from "../shared/agent-protocol.js";
+import { AgentProtocolError, CLI_PROTOCOL_VERSION } from "../shared/agent-protocol.js";
 import { parseCliArguments, CliUsageError } from "./commands.js";
 import { resolveAgentRuntime } from "./agent-runtime.js";
 import { connectAgent } from "./agent-connection.js";
 import { sendAgentRequest } from "./agent-client.js";
+import {
+  cliExitCode,
+  cliErrorResponse,
+  formatCliResponse,
+  wantsJsonOutput,
+  writeCliText
+} from "./output.js";
 
 const help = `Difftray local review CLI
 Usage: difftray open [PATH] [--target working-tree|branch|commit] [--base REF|--commit REF] [--json]
@@ -22,35 +20,38 @@ Usage: difftray open [PATH] [--target working-tree|branch|commit] [--base REF|--
        difftray feedback submit --context ID --input FILE_OR_STDIN
        difftray doctor [--json]
        difftray --help | --version [--json]
+
+Review scopes: overall notes, file comments, and side-aware line/range comments.
+open defaults to the current directory and working-tree target.
+inspect/export default to the current directory and selected target (working-tree
+for a newly opened repository). Explicit branch needs --base; commit needs --commit.
+export accepts --context ID or --repo PATH with selectors, never both.
+export defaults to --format prompt: exact report text on stdout. --json or
+--format json returns an envelope; errors are diagnostics on stderr.
+files/feedback accept --limit (default 100, maximum 500) and --cursor.
+feedback --include-inactive includes retained historical comments.
+Contexts expire after 24 hours; stale code requires fresh inspection. A stale
+feedback cursor requires restarting feedback pagination under the same context.
+Reads preserve feedback and the context's generated-file visibility setting.
+JSON preserves available author attribution. Agent names are labels, not identities.
+Access is local-only using the current OS user's private desktop endpoint.
+Callers must obtain user authorization for repository access and feedback actions.
+Exit codes: 1 internal, 2 input, 3 unavailable/not found/protocol,
+4 stale state/conflict, 5 transport/timeout/limit.
 `;
-function exitCode(error: AgentProtocolError): number {
-  if (["invalid_request", "invalid_target"].includes(error.code)) return EXIT_USAGE;
-  if (
-    [
-      "stale_review",
-      "stale_diff",
-      "stale_feedback",
-      "note_conflict",
-      "idempotency_conflict"
-    ].includes(error.code)
-  )
-    return EXIT_CONFLICT;
-  if (["repository_missing", "limit_exceeded", "request_timeout"].includes(error.code))
-    return EXIT_IO;
-  return error.code === "internal_error" ? EXIT_INTERNAL : EXIT_NOT_AVAILABLE;
-}
 // The fixed bundled entry point is Node-only: never import Electron's GUI process.
 async function main() {
   const command = parseCliArguments(process.argv.slice(2));
   if (command.kind === "help") {
-    process.stdout.write(help);
+    await writeCliText(process.stdout, help);
     return;
   }
   if (command.kind === "version") {
     const metadata = JSON.parse(
       readFileSync(path.resolve(__dirname, "../../package.json"), "utf8")
     ) as { version: string };
-    process.stdout.write(
+    await writeCliText(
+      process.stdout,
       command.json
         ? `${JSON.stringify({ appVersion: metadata.version, protocolVersion: CLI_PROTOCOL_VERSION, cwd: process.cwd(), runtime: process.versions })}\n`
         : `Difftray ${metadata.version} (CLI protocol ${String(CLI_PROTOCOL_VERSION)})\n`
@@ -123,34 +124,30 @@ async function main() {
     }
   }
   if (!response.ok) {
-    if (command.json) process.stdout.write(`${JSON.stringify(response)}\n`);
-    process.stderr.write(`${response.error.code}: ${response.error.message}\n`);
-    process.exitCode = exitCode(
+    if (command.json || (command.kind === "review.export" && command.format === "json"))
+      await writeCliText(process.stdout, formatCliResponse(command, response));
+    await writeCliText(
+      process.stderr,
+      `${response.error.code}: ${response.error.message}\n`
+    );
+    process.exitCode = cliExitCode(
       new AgentProtocolError(response.error.code, response.error.message)
     );
     return;
   }
-  if (command.kind === "open" && !command.json && "repoPath" in response.result)
-    process.stdout.write(`Opened ${response.result.repoPath}\n`);
-  else if (
-    command.kind === "review.export" &&
-    command.format === "prompt" &&
-    "content" in response.result &&
-    typeof response.result.content === "string"
-  )
-    process.stdout.write(`${response.result.content}\n`);
-  else process.stdout.write(`${JSON.stringify(response)}\n`);
+  await writeCliText(process.stdout, formatCliResponse(command, response));
 }
-void main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  if (error instanceof CliUsageError) {
-    process.stderr.write(help);
-    process.exitCode = EXIT_USAGE;
-  } else if (error instanceof AgentProtocolError) {
-    if (process.argv.includes("--json"))
-      process.stdout.write(
-        `${JSON.stringify({ version: CLI_PROTOCOL_VERSION, id: randomUUID(), ok: false, error: { code: error.code, message: error.message, retryable: error.code === "busy" || error.code === "request_timeout" } })}\n`
-      );
-    process.exitCode = exitCode(error);
-  } else process.exitCode = EXIT_INTERNAL;
-});
+void main()
+  .catch(async (error: unknown) => {
+    process.exitCode = cliExitCode(error);
+    if (wantsJsonOutput(process.argv.slice(2)))
+      await writeCliText(process.stdout, `${JSON.stringify(cliErrorResponse(error))}\n`);
+    await writeCliText(
+      process.stderr,
+      `${error instanceof Error ? error.message : String(error)}\n`
+    );
+    if (error instanceof CliUsageError) await writeCliText(process.stderr, help);
+  })
+  .catch(() => {
+    process.exitCode = 5;
+  });
