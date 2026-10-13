@@ -1,4 +1,21 @@
 import { DatabaseSync } from "node:sqlite";
+import {
+  getReviewNoteSnapshot,
+  type ReviewNoteSnapshot
+} from "./review-note-revisions.js";
+import {
+  createAgentReviewContext,
+  getAgentReviewContext,
+  pruneAgentReviewContexts,
+  type AgentReviewContextRecord,
+  type CreateAgentReviewContextOptions
+} from "./agent-context-store.js";
+
+export { type ReviewNoteSnapshot } from "./review-note-revisions.js";
+export {
+  AgentContextCapacityError,
+  type AgentReviewContextRecord
+} from "./agent-context-store.js";
 
 import {
   clearProjectWorktreeIdentity,
@@ -168,6 +185,13 @@ export type VerifyAndUnmarkReviewedResult =
     };
 
 export type DifftrayStorage = {
+  readonly createAgentReviewContext: (
+    record: AgentReviewContextRecord,
+    options: CreateAgentReviewContextOptions
+  ) => void;
+  readonly getAgentReviewContext: (id: string) => AgentReviewContextRecord | null;
+  readonly pruneAgentReviewContexts: (now: number) => number;
+  readonly getReviewNoteSnapshot: (scopeId: string) => ReviewNoteSnapshot;
   readonly addRepositorySearchRoot: (path: string) => RepositorySearchRootRecord;
   readonly beginRepositoryRootScan: (rootId: string) => void;
   readonly close: () => void;
@@ -275,6 +299,11 @@ export function openStorage(filename: string): DifftrayStorage {
   initializeProjectTabs(db, listRecentProjects(db));
 
   return {
+    createAgentReviewContext: (record, options) =>
+      createAgentReviewContext(db, record, options),
+    getAgentReviewContext: (id) => getAgentReviewContext(db, id),
+    pruneAgentReviewContexts: (now) => pruneAgentReviewContexts(db, now),
+    getReviewNoteSnapshot: (scopeId) => getReviewNoteSnapshot(db, scopeId),
     addRepositorySearchRoot: (rootPath) => addRepositorySearchRoot(db, rootPath),
     beginRepositoryRootScan: (rootId) => beginRepositoryRootScan(db, rootId),
     close: () => {

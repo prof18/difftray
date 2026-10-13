@@ -1,5 +1,6 @@
 export type AppVariant = "dev" | "production";
-export type AppFlavor = "alpha" | "dev" | "production";
+import type { AppFlavor } from "../shared/app-flavor.js";
+export type { AppFlavor } from "../shared/app-flavor.js";
 export type WindowPresentationMode = "active" | "inactive";
 
 export type ResolveAppRuntimeConfigInput = {

@@ -1,0 +1,629 @@
+import { describe, expect, it } from "vitest";
+import {
+  AgentProtocolError,
+  parseAgentRequest,
+  parseAgentResponse
+} from "./agent-protocol.js";
+
+const contextId = `ctx_${"a".repeat(32)}`;
+const token = "a".repeat(64);
+const base = (method: string, params: Record<string, unknown>) => ({
+  version: 1,
+  id: "transport-1",
+  token,
+  method,
+  params
+});
+const frame = (value: unknown) => `${JSON.stringify(value)}\n`;
+const parse = (value: unknown) => parseAgentRequest(frame(value));
+
+function expectCode(value: string | Uint8Array, code: string) {
+  try {
+    parseAgentRequest(value);
+    throw new Error("expected parseAgentRequest to reject input");
+  } catch (error) {
+    expect(error).toBeInstanceOf(AgentProtocolError);
+    expect((error as AgentProtocolError).code).toBe(code);
+  }
+}
+
+describe("parseAgentRequest", () => {
+  it.each([
+    ["hello", {}],
+    ["open", { repoPath: "/repo", selector: { kind: "working-tree" } }],
+    ["review.inspect", { repoPath: "/repo", selector: { kind: "selected" } }],
+    ["review.inspect", { repoPath: "/repo", selector: { kind: "working-tree" } }],
+    ["review.inspect", { repoPath: "/repo", selector: { kind: "branch", base: "main" } }],
+    [
+      "review.inspect",
+      { repoPath: "/repo", selector: { kind: "commit", commit: "abc123" } }
+    ],
+    ["review.files", { contextId }],
+    ["review.files", { contextId, limit: 500, cursor: "next" }],
+    ["review.file", { contextId, path: "src/file.ts" }],
+    ["review.feedback", { contextId }],
+    ["review.feedback", { contextId, limit: 1, cursor: "next", includeInactive: true }],
+    ["review.export", { contextId, format: "prompt" }],
+    ["review.export", { contextId, format: "json" }],
+    [
+      "feedback.submit",
+      {
+        contextId,
+        submission: {
+          actor: { name: "Agent 1", runId: "run-1" },
+          requestId: "request_1",
+          items: [
+            {
+              kind: "line",
+              path: "src/file.ts",
+              diffHash: "hash",
+              side: "additions",
+              lineStart: 2,
+              lineEnd: 2,
+              body: "Consider this."
+            },
+            {
+              kind: "file",
+              path: "src/file.ts",
+              previousPath: "src/old.ts",
+              diffHash: "hash",
+              body: "File-level note."
+            },
+            { kind: "overall", expectedNoteVersion: "v1", body: "Overall note." }
+          ]
+        }
+      }
+    ]
+  ])("accepts %s params", (method, params) => {
+    expect(parse(base(method, params))).toMatchObject({ method, params });
+  });
+
+  it("accepts exactly one JSON object followed by LF as text or UTF-8 bytes", () => {
+    const input = frame(base("hello", {}));
+    expect(parseAgentRequest(input)).toMatchObject({ method: "hello" });
+    expect(parseAgentRequest(new TextEncoder().encode(input))).toMatchObject({
+      method: "hello"
+    });
+  });
+
+  it.each([
+    ["", "invalid_request"],
+    ["{bad}\n", "invalid_request"],
+    [frame([]), "invalid_request"],
+    [JSON.stringify(base("hello", {})), "invalid_request"],
+    [`${frame(base("hello", {}))}\n`, "invalid_request"],
+    [frame({ ...base("hello", {}), version: 2 }), "unsupported_version"],
+    [frame({ ...base("hello", {}), token: "wrong" }), "unauthorized"],
+    [frame({ ...base("unknown", {}) }), "invalid_request"]
+  ])("rejects malformed envelope (%s)", (input, code) => expectCode(input, code));
+
+  it("measures the framing limit in UTF-8 bytes before JSON parsing", () => {
+    const valid = frame(base("hello", {}));
+    const oversized = `${valid.slice(0, -1)}${" ".repeat(1_048_576)}\n`;
+    expectCode(oversized, "limit_exceeded");
+    expectCode(new TextEncoder().encode(oversized), "limit_exceeded");
+    const multibyte = `${frame(base("hello", {})).slice(0, -1)}${"界".repeat(350_000)}\n`;
+    expectCode(new TextEncoder().encode(multibyte), "limit_exceeded");
+  });
+
+  it.each([
+    { extra: true },
+    { version: 1, id: "transport-1", token, method: "hello", params: {}, extra: true },
+    { ...base("hello", {}), params: { extra: true } },
+    { ...base("open", { repoPath: "/repo", selector: { kind: "selected" } }) },
+    {
+      ...base("open", {
+        repoPath: "/repo",
+        selector: { kind: "working-tree", extra: true }
+      })
+    },
+    { ...base("review.inspect", { repoPath: "/repo", selector: { kind: "branch" } }) },
+    {
+      ...base("review.inspect", {
+        repoPath: "/repo",
+        selector: { kind: "tag", name: "x" }
+      })
+    },
+    { ...base("review.files", { contextId, limit: 0 }) },
+    { ...base("review.files", { contextId, limit: 501 }) },
+    { ...base("review.files", { contextId, cursor: "" }) },
+    { ...base("review.files", { contextId: "ctx_bad" }) },
+    { ...base("review.file", { contextId, path: "../secret" }) },
+    { ...base("review.file", { contextId, path: "/absolute" }) },
+    { ...base("review.file", { contextId, path: "a//b" }) },
+    { ...base("review.file", { contextId, path: "a/./b" }) },
+    { ...base("review.feedback", { contextId, includeInactive: "yes" }) },
+    { ...base("review.export", { contextId, format: "markdown" }) }
+  ])("rejects invalid fields and discriminators", (input) =>
+    expectCode(frame(input), "invalid_request")
+  );
+
+  it("rejects unsafe line positions and invalid feedback batches", () => {
+    const submission = (items: unknown[]) =>
+      base("feedback.submit", {
+        contextId,
+        submission: {
+          actor: { name: "Agent", runId: "run.1" },
+          requestId: "req-1",
+          items
+        }
+      });
+    const line = {
+      kind: "line",
+      path: "src/a.ts",
+      diffHash: "h",
+      side: "deletions",
+      lineStart: 1,
+      lineEnd: 1,
+      body: "note"
+    };
+    expectCode(
+      frame(submission([{ ...line, lineStart: Number.MAX_SAFE_INTEGER + 1 }])),
+      "invalid_request"
+    );
+    expectCode(frame(submission([{ ...line, lineStart: 0 }])), "invalid_request");
+    expectCode(
+      frame(submission([{ ...line, lineStart: 2, lineEnd: 1 }])),
+      "invalid_request"
+    );
+    expectCode(frame(submission([])), "invalid_request");
+    expectCode(
+      frame(
+        submission(
+          Array.from({ length: 101 }, () => ({
+            kind: "file",
+            path: "a",
+            diffHash: "h",
+            body: "x"
+          }))
+        )
+      ),
+      "limit_exceeded"
+    );
+    expectCode(
+      frame(
+        submission([
+          { kind: "overall", expectedNoteVersion: "v", body: "one" },
+          { kind: "overall", expectedNoteVersion: "v", body: "two" }
+        ])
+      ),
+      "invalid_request"
+    );
+    expectCode(frame(submission([{ ...line, callerKind: "human" }])), "invalid_request");
+    expectCode(
+      frame(
+        submission([
+          {
+            ...line,
+            kind: "file",
+            lineStart: undefined,
+            lineEnd: undefined,
+            body: "x",
+            extra: "no"
+          }
+        ])
+      ),
+      "invalid_request"
+    );
+  });
+
+  it("counts body limits as Unicode code points and allows embedded body newlines", () => {
+    const item = (body: string) => ({ kind: "file", path: "a.ts", diffHash: "h", body });
+    const submit = (body: string) =>
+      base("feedback.submit", {
+        contextId,
+        submission: {
+          actor: { name: "Agent", runId: "run" },
+          requestId: "req",
+          items: [item(body)]
+        }
+      });
+    expect(parse(submit("🙂".repeat(10_000)))).toBeDefined();
+    expectCode(frame(submit("🙂".repeat(10_001))), "limit_exceeded");
+    expect(parse(submit("line one\nline two"))).toBeDefined();
+    expectCode(frame(submit("  \n\t  ")), "invalid_request");
+  });
+});
+
+describe("parseAgentResponse", () => {
+  const hello = {
+    appVersion: "1.2.3",
+    protocolVersion: 1,
+    instanceId: "instance-1",
+    profilePath: "/profile",
+    appId: "com.example.difftray",
+    flavor: "dev",
+    executablePath: "/app/Difftray"
+  };
+
+  it("accepts the typed hello success envelope", () => {
+    expect(
+      parseAgentResponse(
+        frame({ version: 1, id: "transport-1", ok: true, result: hello }),
+        "hello"
+      )
+    ).toMatchObject({ ok: true, result: hello });
+  });
+
+  it.each([
+    "invalid_request",
+    "unsupported_version",
+    "unauthorized",
+    "app_unavailable",
+    "profile_mismatch",
+    "repository_missing",
+    "invalid_target",
+    "context_missing",
+    "context_expired",
+    "stale_review",
+    "stale_diff",
+    "stale_feedback",
+    "note_conflict",
+    "idempotency_conflict",
+    "limit_exceeded",
+    "busy",
+    "request_timeout",
+    "internal_error"
+  ])("accepts error code %s and requires the exact error envelope", (code) => {
+    const response = {
+      version: 1,
+      id: "transport-1",
+      ok: false,
+      error: { code, message: "failed", retryable: false }
+    };
+    expect(parseAgentResponse(frame(response), "hello")).toMatchObject({
+      ok: false,
+      error: { code }
+    });
+    expect(() =>
+      parseAgentResponse(
+        frame({ ...response, error: { ...response.error, extra: true } }),
+        "hello"
+      )
+    ).toThrow(AgentProtocolError);
+  });
+
+  it("rejects unknown response/error fields, invalid enums, and mismatched correlation", () => {
+    const success = { version: 1, id: "transport-1", ok: true, result: hello };
+    expect(() => parseAgentResponse(frame({ ...success, extra: true }), "hello")).toThrow(
+      AgentProtocolError
+    );
+    expect(() =>
+      parseAgentResponse(
+        frame({ ...success, result: { ...hello, extra: true } }),
+        "hello"
+      )
+    ).toThrow(AgentProtocolError);
+    expect(() =>
+      parseAgentResponse(
+        frame({ ...success, result: { ...hello, flavor: "unknown" } }),
+        "hello"
+      )
+    ).toThrow(AgentProtocolError);
+    expect(() =>
+      parseAgentResponse(frame({ ...success, id: "other" }), "hello", "transport-1")
+    ).toThrow(AgentProtocolError);
+    expect(() =>
+      parseAgentResponse(
+        frame({
+          version: 1,
+          id: "transport-1",
+          ok: false,
+          error: { code: "future_code", message: "x", retryable: false }
+        }),
+        "hello"
+      )
+    ).toThrow(AgentProtocolError);
+  });
+});
+
+describe("method-specific success results", () => {
+  const target = { kind: "working_tree", projectId: "project", headSha: "abc123" };
+  const file = { path: "src/a.ts", diffHash: "hash", kind: "text", visible: true };
+  const note = { body: "Review note", dismissedAt: null };
+  const cases = [
+    ["open", { projectId: "project", repoPath: "/repo", target }],
+    [
+      "review.inspect",
+      {
+        contextId,
+        projectId: "project",
+        repoPath: "/repo",
+        target,
+        targetId: "target",
+        snapshotHash: "snapshot",
+        fileCount: 1,
+        visibleFileCount: 1,
+        expiresAt: 100,
+        noteVersion: "v0",
+        note
+      }
+    ],
+    ["review.files", { files: [file], total: 1, nextCursor: null }],
+    [
+      "review.file",
+      {
+        path: "src/a.ts",
+        diffHash: "hash",
+        content: { kind: "text", patch: "@@ -1 +1 @@" },
+        selectableRanges: { additions: [{ start: 1, end: 1 }], deletions: [] }
+      }
+    ],
+    [
+      "review.feedback",
+      {
+        items: [
+          {
+            id: "comment",
+            kind: "file",
+            body: "Fix this",
+            active: true,
+            path: "src/a.ts",
+            diffHash: "hash"
+          }
+        ],
+        total: 1,
+        nextCursor: null,
+        feedbackVersion: "f1",
+        noteVersion: "v1",
+        note
+      }
+    ],
+    ["review.export", { format: "prompt", content: "Review report" }],
+    [
+      "review.export",
+      {
+        format: "json",
+        content: { contextId, target, items: [], note: null, noteVersion: "v0" }
+      }
+    ],
+    [
+      "feedback.submit",
+      { requestId: "req-1", deduplicated: false, itemIds: ["item-1"], noteVersion: "v1" }
+    ]
+  ] as const;
+  it.each(cases)("accepts and validates %s", (method, result) => {
+    const response = { version: 1, id: "transport-1", ok: true, result };
+    expect(parseAgentResponse(frame(response), method)).toMatchObject(response);
+    expect(() =>
+      parseAgentResponse(
+        frame({ ...response, result: { ...result, unexpected: true } }),
+        method
+      )
+    ).toThrow(AgentProtocolError);
+  });
+  it("rejects invalid UTF-8 before JSON parsing", () => {
+    expectCode(new Uint8Array([0xc3, 0x28, 0x0a]), "invalid_request");
+  });
+  it("rejects fields belonging to another feedback scope", () => {
+    const response = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: {
+        items: [
+          {
+            id: "note",
+            kind: "overall",
+            body: "Review note",
+            active: true,
+            path: "src/a.ts"
+          }
+        ],
+        total: 1,
+        nextCursor: null,
+        feedbackVersion: "f1",
+        noteVersion: "v1",
+        note: null
+      }
+    };
+    expect(() => parseAgentResponse(frame(response), "review.feedback")).toThrow(
+      AgentProtocolError
+    );
+  });
+  it("accepts canonical absolute project IDs and long Git ref labels", () => {
+    const projectId = "/Users/mg/Workspace/" + "deep/".repeat(35) + "repo";
+    const target = {
+      kind: "branch",
+      projectId,
+      headSha: "abc",
+      baseRefName: "feature/" + "nested/".repeat(35),
+      baseSha: "def",
+      mergeBaseSha: "123"
+    };
+    const response = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: { projectId, repoPath: projectId, target }
+    };
+    expect(parseAgentResponse(frame(response), "open")).toMatchObject(response);
+  });
+  it("accepts the stored ISO dismissal timestamp", () => {
+    const response = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: {
+        contextId,
+        projectId: "/repo",
+        repoPath: "/repo",
+        target: { kind: "working_tree", projectId: "/repo", headSha: "abc" },
+        targetId: "target",
+        snapshotHash: "snapshot",
+        fileCount: 0,
+        visibleFileCount: 0,
+        expiresAt: 100,
+        noteVersion: "v1",
+        note: { body: "Read", dismissedAt: "2026-10-13T12:00:00.000Z" }
+      }
+    };
+    expect(parseAgentResponse(frame(response), "review.inspect")).toMatchObject(response);
+  });
+  it("accepts an explicit oversized diff descriptor", () => {
+    const response = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: {
+        path: "src/a.ts",
+        diffHash: "hash",
+        content: { kind: "oversized", reason: "patch_too_large" },
+        selectableRanges: { additions: [], deletions: [] }
+      }
+    };
+    expect(parseAgentResponse(frame(response), "review.file")).toMatchObject(response);
+  });
+  it("rejects Git selectors that begin with an option prefix", () => {
+    expectCode(
+      frame(
+        base("review.inspect", {
+          repoPath: "/repo",
+          selector: { kind: "branch", base: "--help" }
+        })
+      ),
+      "invalid_request"
+    );
+    expectCode(
+      frame(
+        base("review.inspect", {
+          repoPath: "/repo",
+          selector: { kind: "commit", commit: "--version" }
+        })
+      ),
+      "invalid_request"
+    );
+  });
+});
+
+describe("pagination cursors", () => {
+  const validCursor = "A".repeat(512) + "._-z";
+  it.each(["review.files", "review.feedback"] as const)(
+    "accepts a long %s request cursor",
+    (method) => {
+      expect(parse(base(method, { contextId, cursor: validCursor }))).toMatchObject({
+        params: { cursor: validCursor }
+      });
+    }
+  );
+  it.each(["review.files", "review.feedback"] as const)(
+    "rejects oversized and non-base64url %s request cursors",
+    (method) => {
+      expectCode(
+        frame(base(method, { contextId, cursor: "A".repeat(4097) })),
+        "limit_exceeded"
+      );
+      expectCode(
+        frame(base(method, { contextId, cursor: "abc+def" })),
+        "invalid_request"
+      );
+      expectCode(
+        frame(base(method, { contextId, cursor: "abc/def" })),
+        "invalid_request"
+      );
+    }
+  );
+  const resultByMethod = {
+    "review.files": { files: [], total: 0, nextCursor: validCursor },
+    "review.feedback": {
+      items: [],
+      total: 0,
+      nextCursor: validCursor,
+      feedbackVersion: "f1",
+      noteVersion: "v1",
+      note: null
+    }
+  };
+  it.each(["review.files", "review.feedback"] as const)(
+    "accepts a long %s response cursor and rejects invalid ones",
+    (method) => {
+      const response = {
+        version: 1,
+        id: "transport-1",
+        ok: true,
+        result: resultByMethod[method]
+      };
+      expect(parseAgentResponse(frame(response), method)).toMatchObject(response);
+      expect(() =>
+        parseAgentResponse(
+          frame({
+            ...response,
+            result: { ...response.result, nextCursor: "A".repeat(4097) }
+          }),
+          method
+        )
+      ).toThrow(AgentProtocolError);
+      expect(() =>
+        parseAgentResponse(
+          frame({ ...response, result: { ...response.result, nextCursor: "abc+def" } }),
+          method
+        )
+      ).toThrow(AgentProtocolError);
+    }
+  );
+});
+
+describe("legacy human feedback bodies", () => {
+  const longBody = "x".repeat(10_001);
+  it("accepts existing long notes and comments in responses", () => {
+    const inspect = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: {
+        contextId,
+        projectId: "/repo",
+        repoPath: "/repo",
+        target: { kind: "working_tree", projectId: "/repo", headSha: "abc" },
+        targetId: "target",
+        snapshotHash: "snapshot",
+        fileCount: 0,
+        visibleFileCount: 0,
+        expiresAt: 100,
+        noteVersion: "v1",
+        note: { body: longBody, dismissedAt: null }
+      }
+    };
+    expect(parseAgentResponse(frame(inspect), "review.inspect")).toMatchObject(inspect);
+    const feedback = {
+      version: 1,
+      id: "transport-1",
+      ok: true,
+      result: {
+        items: [
+          {
+            id: "comment",
+            kind: "file",
+            body: longBody,
+            active: true,
+            path: "src/a.ts",
+            diffHash: "hash"
+          }
+        ],
+        total: 1,
+        nextCursor: null,
+        feedbackVersion: "f1",
+        noteVersion: "v1",
+        note: null
+      }
+    };
+    expect(parseAgentResponse(frame(feedback), "review.feedback")).toMatchObject(
+      feedback
+    );
+  });
+  it("still rejects an over-limit submitted body", () => {
+    expectCode(
+      frame(
+        base("feedback.submit", {
+          contextId,
+          submission: {
+            actor: { name: "Agent", runId: "run" },
+            requestId: "req",
+            items: [{ kind: "overall", expectedNoteVersion: "v1", body: longBody }]
+          }
+        })
+      ),
+      "limit_exceeded"
+    );
+  });
+});

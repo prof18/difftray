@@ -1,3 +1,11 @@
+import { formatExplicitReviewReport } from "./review-feedback-service.js";
+import {
+  loadExplicitReviewState,
+  loadExplicitReviewTarget,
+  loadExplicitFileDiff,
+  loadExplicitFileSummary,
+  selectedReviewSelector
+} from "./review-context-service.js";
 import {
   app,
   BrowserWindow,
@@ -20,15 +28,10 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import {
-  calculateProgress,
   createDiffHash,
   createReviewNoteScopeId,
   createReviewTargetId,
-  formatReviewCommentsReport,
   isPathInsideApprovedRoot,
-  resolveReviewStates,
-  type ReviewCommentReportItem,
-  type ReviewMark,
   type ReviewProgress,
   type ReviewTarget
 } from "@difftray/core";
@@ -55,24 +58,11 @@ import {
   getGitStatus,
   getWorktreeInfo,
   listGitWorktrees,
-  loadBranchReviewTarget,
-  loadBranchDiffSummaries,
-  loadBranchFileDiffSummary,
-  loadBranchFileDiff,
   listBranchRefs,
   listRecentCommits,
   loadCommitSubject,
-  loadCommitReviewTarget,
-  loadCommitDiffSummaries,
-  loadCommitFileDiffSummary,
-  loadCommitFileDiff,
-  loadWorkingTreeReviewTarget,
-  loadWorkingTreeDiffSummaries,
-  loadWorkingTreeFileDiffSummary,
-  loadWorkingTreeFileDiff,
   loadRasterImageSnapshot,
   rasterImageSnapshotWithinSizeLimit,
-  type DiffLoadProgress,
   type GitLoadedFileDiff
 } from "@difftray/git";
 import {
@@ -172,7 +162,6 @@ import { listCompanionRepositoryCatalog as listCompanionRepositoryCatalogView } 
 import {
   activeCompanionDeviceRecords,
   appSettingsView,
-  commentReportContext,
   fileDiffFromGit,
   patchForDiff,
   projectProgressFromGit,
@@ -181,11 +170,7 @@ import {
   reviewFileCommentView,
   reviewNoteView,
   projectReviewSummaryView,
-  reviewCommentReportTarget,
-  reviewTargetFromGit,
   reviewTargetFromRecord,
-  reviewTargetLabel,
-  reviewTargetRecord,
   sameCommentIds,
   settingsView,
   summarizePatch,
@@ -3108,57 +3093,18 @@ async function loadProjectReviewState(
   readonly reviewTarget: ReviewTarget;
   readonly reviewTargetId: string;
 }> {
-  const gitProgress = {
-    onProgress: (progress: DiffLoadProgress) => {
-      reportProgress?.(projectProgressFromGit(progress));
-    }
-  };
-  const diffResult =
-    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
-      ? await loadBranchDiffSummaries(project.path, project.defaultBaseRef, gitProgress)
-      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
-        ? await loadCommitDiffSummaries(
-            project.path,
-            project.defaultCommitRef,
-            gitProgress
-          )
-        : await loadWorkingTreeDiffSummaries(project.path, gitProgress);
-  const reviewTarget = reviewTargetFromGit(diffResult.reviewTarget);
-  const reviewTargetId = createReviewTargetId(reviewTarget);
-  const settings = getStorage().getAppSettings();
-
+  const state = await loadExplicitReviewState(
+    getStorage(),
+    project,
+    selectedReviewSelector(project),
+    getStorage().getAppSettings().showGeneratedFiles,
+    (progress) => reportProgress?.(projectProgressFromGit(progress))
+  );
   reportProgress?.({
     message: "Resolving review state",
     phase: "resolving_review_state"
   });
-  getStorage().upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
-
-  const diffs = diffResult.files.map((file) => fileDiffFromGit(file));
-  const marks = getStorage().listReviewMarks(
-    reviewTargetId
-  ) satisfies readonly ReviewMark[];
-  const states = resolveReviewStates({
-    diffs,
-    marks,
-    reviewTarget,
-    showGeneratedFiles: settings.showGeneratedFiles
-  });
-  const files = states.map((state, index) => {
-    const summary = diffResult.files[index];
-
-    if (!summary) {
-      throw new Error(`Review summary missing for ${state.path}`);
-    }
-
-    return { state, summary };
-  });
-
-  return {
-    files,
-    progress: calculateProgress(states),
-    reviewTarget,
-    reviewTargetId
-  };
+  return state;
 }
 
 async function loadProjectWorkspaceIfAvailable(
@@ -3618,24 +3564,14 @@ async function formatProjectCommentsReport(
   projectId: string,
   workspace: ReviewWorkspaceView
 ): Promise<string> {
-  const comments = await reviewCommentReportItems(projectId, workspace.comments);
-  const reviewNote = activeReviewNoteView(workspace);
-  const target = reviewCommentReportTarget(workspace.reviewTarget);
-
-  return formatReviewCommentsReport({
-    comments,
-    fileComments: (workspace.fileComments ?? []).map((comment) => ({
-      body: comment.body,
-      path: comment.path
-    })),
-    projectName: workspace.project.name,
-    reviewedPaths: workspace.files
-      .filter((file) => file.visible)
-      .map((file) => file.path),
-    ...(reviewNote ? { reviewNote: reviewNote.body } : {}),
-    ...(target ? { target } : {}),
-    targetLabel: reviewTargetLabel(workspace.reviewTarget)
-  });
+  const record = getStorage().getReviewTarget(workspace.reviewTarget.id);
+  const target = record ? reviewTargetFromRecord(record) : undefined;
+  if (target?.projectId !== projectId) throw new Error("Review target is unavailable.");
+  return formatExplicitReviewReport(
+    assertStoredProject(projectId).path,
+    target,
+    workspace
+  );
 }
 
 function companionMarkResult(result: MarkReviewedResult): CompanionMarkResult {
@@ -3773,15 +3709,6 @@ async function showFileInFinder(
   });
 }
 
-async function loadProjectFileDiff(
-  projectId: string,
-  pathName: string
-): Promise<ReviewFileDiffContentView | null> {
-  const diff = await loadProjectFileDiffForCompanion(projectId, pathName);
-
-  return diff?.content ?? null;
-}
-
 async function loadProjectFileDiffForCompanion(
   projectId: string,
   pathName: string
@@ -3833,22 +3760,12 @@ async function loadProjectGitFileDiff(
   }
 
   const reviewTarget = await loadCurrentProjectReviewTarget(project);
-  const gitDiff =
-    reviewTarget.kind === "branch"
-      ? await loadBranchFileDiff(
-          project.path,
-          reviewTarget.baseRefName,
-          pathName,
-          previousPath
-        )
-      : reviewTarget.kind === "commit"
-        ? await loadCommitFileDiff(
-            project.path,
-            reviewTarget.commitSha,
-            pathName,
-            previousPath
-          )
-        : await loadWorkingTreeFileDiff(project.path, pathName, previousPath);
+  const gitDiff = await loadExplicitFileDiff(
+    project.path,
+    reviewTarget,
+    pathName,
+    previousPath
+  );
 
   if (!gitDiff) {
     return null;
@@ -3981,29 +3898,6 @@ function imageSnapshotSource(
       } as const);
 }
 
-async function reviewCommentReportItems(
-  projectId: string,
-  comments: readonly ReviewCommentView[]
-): Promise<readonly ReviewCommentReportItem[]> {
-  const uniquePaths = [...new Set(comments.map((comment) => comment.path))];
-  const diffEntries = await Promise.all(
-    uniquePaths.map(
-      async (pathName) =>
-        [pathName, await loadProjectFileDiff(projectId, pathName)] as const
-    )
-  );
-  const diffByPath = new Map(diffEntries);
-
-  return comments.map((comment) => {
-    const context = commentReportContext(comment, diffByPath.get(comment.path) ?? null);
-
-    return {
-      ...comment,
-      ...(context ? { context } : {})
-    };
-  });
-}
-
 function upsertOpenedProject(project: ProjectRecord): void {
   invalidateCompanionWorkspace(project.id);
   getProjectSummaryCoordinator().cancel(project.id);
@@ -4117,22 +4011,12 @@ async function loadCurrentReviewFile(
   pathName: string,
   previousPath?: string
 ): Promise<{ readonly diffHash: string; readonly previousPath?: string } | null> {
-  const summary =
-    reviewTarget.kind === "branch"
-      ? await loadBranchFileDiffSummary(
-          project.path,
-          reviewTarget.baseRefName,
-          pathName,
-          previousPath
-        )
-      : reviewTarget.kind === "commit"
-        ? await loadCommitFileDiffSummary(
-            project.path,
-            reviewTarget.commitSha,
-            pathName,
-            previousPath
-          )
-        : await loadWorkingTreeFileDiffSummary(project.path, pathName, previousPath);
+  const summary = await loadExplicitFileSummary(
+    project.path,
+    reviewTarget,
+    pathName,
+    previousPath
+  );
 
   if (!summary) {
     return null;
@@ -4149,12 +4033,5 @@ async function loadCurrentReviewFile(
 async function loadCurrentProjectReviewTarget(
   project: StoredProjectRecord
 ): Promise<ReviewTarget> {
-  const target =
-    project.defaultDiffTargetMode === "branch" && project.defaultBaseRef
-      ? await loadBranchReviewTarget(project.path, project.defaultBaseRef)
-      : project.defaultDiffTargetMode === "commit" && project.defaultCommitRef
-        ? await loadCommitReviewTarget(project.path, project.defaultCommitRef)
-        : (await loadWorkingTreeReviewTarget(project.path)).reviewTarget;
-
-  return reviewTargetFromGit(target);
+  return loadExplicitReviewTarget(project.path, selectedReviewSelector(project));
 }

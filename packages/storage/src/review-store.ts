@@ -22,6 +22,10 @@ import {
   type ReviewNoteRow
 } from "./rows.js";
 import { currentTimestamp } from "./timestamps.js";
+import {
+  incrementReviewNoteRevision,
+  withReviewNoteTransaction
+} from "./review-note-revisions.js";
 
 export function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
   const now = currentTimestamp();
@@ -319,10 +323,11 @@ export function saveReviewNote(
   db: DatabaseSync,
   input: SaveReviewNoteInput
 ): ReviewNoteRecord {
-  const now = currentTimestamp();
+  return withReviewNoteTransaction(db, () => {
+    const now = currentTimestamp();
 
-  db.prepare(
-    `
+    db.prepare(
+      `
     insert into review_notes (
       scope_id,
       project_id,
@@ -336,15 +341,17 @@ export function saveReviewNote(
       dismissed_at = null,
       updated_at = excluded.updated_at
   `
-  ).run(input.scopeId, input.projectId, input.body, now, now);
+    ).run(input.scopeId, input.projectId, input.body, now, now);
+    incrementReviewNoteRevision(db, input.scopeId, input.projectId);
 
-  const note = getReviewNote(db, input.scopeId);
+    const note = getReviewNote(db, input.scopeId);
 
-  if (!note) {
-    throw new Error("Review note was not stored.");
-  }
+    if (!note) {
+      throw new Error("Review note was not stored.");
+    }
 
-  return note;
+    return note;
+  });
 }
 
 export function setReviewNoteDismissed(
@@ -352,25 +359,36 @@ export function setReviewNoteDismissed(
   scopeId: string,
   dismissed: boolean
 ): ReviewNoteRecord | null {
-  const now = currentTimestamp();
-  const result = db
-    .prepare(
-      `
+  return withReviewNoteTransaction(db, () => {
+    const now = currentTimestamp();
+    const result = db
+      .prepare(
+        `
       update review_notes
       set dismissed_at = ?,
           updated_at = ?
       where scope_id = ?
     `
-    )
-    .run(dismissed ? now : null, now, scopeId);
+      )
+      .run(dismissed ? now : null, now, scopeId);
 
-  return result.changes > 0 ? getReviewNote(db, scopeId) : null;
+    if (result.changes === 0) return null;
+    const note = getReviewNote(db, scopeId);
+    if (!note) throw new Error("Updated review note was not found.");
+    incrementReviewNoteRevision(db, scopeId, note.projectId);
+    return note;
+  });
 }
 
 export function deleteReviewNote(db: DatabaseSync, scopeId: string): boolean {
-  const result = db.prepare("delete from review_notes where scope_id = ?").run(scopeId);
-
-  return result.changes > 0;
+  return withReviewNoteTransaction(db, () => {
+    const note = getReviewNote(db, scopeId);
+    if (!note) return false;
+    const result = db.prepare("delete from review_notes where scope_id = ?").run(scopeId);
+    if (result.changes === 0) return false;
+    incrementReviewNoteRevision(db, scopeId, note.projectId);
+    return true;
+  });
 }
 
 function reviewMarkId(input: ReviewMarkInput): string {

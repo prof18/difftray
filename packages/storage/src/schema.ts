@@ -100,6 +100,22 @@ export function runMigrations(db: DatabaseSync): void {
       updated_at text not null
     );
 
+    create table if not exists review_note_revisions (
+      scope_id text primary key,
+      project_id text not null references projects(id) on delete cascade,
+      revision integer not null
+    );
+
+    insert or ignore into review_note_revisions(scope_id, project_id, revision)
+      select scope_id, project_id, 1 from review_notes;
+
+    create table if not exists agent_review_contexts (
+      id text primary key,
+      project_id text not null references projects(id) on delete cascade,
+      context_json text not null,
+      expires_at integer not null
+    );
+
     create table if not exists project_settings (
       project_id text primary key references projects(id) on delete cascade,
       show_generated_files integer not null default 0,
