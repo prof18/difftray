@@ -328,7 +328,19 @@ async function benchmarkMarkReviewed(window, files, targets) {
   let nextDiffReadyMs = null;
 
   if (expectedNext && expectedNext !== target) {
-    await expectSelectedFile(window, expectedNext);
+    try {
+      await expectSelectedFile(window, expectedNext);
+    } catch (error) {
+      process.stderr.write(
+        `[benchmark] mark-reviewed selection: ${JSON.stringify({
+          target,
+          expectedNext,
+          selected: await selectedFilePath(window),
+          rendered: await currentRenderedFilePaths(window)
+        })}\n`
+      );
+      throw error;
+    }
     selectionMs = elapsed(start);
     await expectSelectedDiffReady(window);
     nextDiffReadyMs = elapsed(start);
@@ -377,9 +389,16 @@ async function benchmarkCommentSave(window, filePath, files) {
       .fill("Benchmark comment");
     const start = performance.now();
     await window.getByRole("button", { name: "Save" }).click();
-    await window.getByText("Benchmark comment", { exact: true }).waitFor({
+    // getByText also matches the draft textarea while its save is still pending.
+    // Start the next action only after the composer closes and a saved comment renders.
+    await window.locator('textarea[aria-label="Review comment"]').waitFor({
+      state: "detached",
       timeout: 60_000
     });
+    await window
+      .locator("p")
+      .filter({ hasText: /^Benchmark comment$/ })
+      .waitFor({ timeout: 60_000 });
 
     return elapsed(start);
   } catch (error) {
