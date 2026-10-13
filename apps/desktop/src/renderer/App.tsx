@@ -1,3 +1,4 @@
+import { createAgentOpenSelection } from "./agent-open-selection.js";
 import {
   useCallback,
   useEffect,
@@ -247,9 +248,22 @@ export function App(): React.JSX.Element {
     () => undefined
   );
   const projectClosedHandlerRef = useRef<(projectId: string) => void>(() => undefined);
-  const projectsOpenedHandlerRef = useRef<(focusProjectId: string) => void>(
+  const projectsOpenedHandlerRef = useRef<(event: ProjectsOpenedEvent) => void>(
     () => undefined
   );
+  const agentSelectionRef = useRef(
+    createAgentOpenSelection((ack) => {
+      void window.difftray.acknowledgeAgentOpen(ack).catch(() => undefined);
+    })
+  );
+  useEffect(() => {
+    if (workspace)
+      agentSelectionRef.current.committed(
+        workspace.project.id,
+        workspace.reviewTarget.id,
+        workspaceLoadRequestRef.current
+      );
+  }, [workspace]);
   const projectsOpenedRequestRef = useRef(0);
   const projectsOpenedTargetRef = useRef<
     { readonly projectId: string; readonly requestId: number } | undefined
@@ -313,6 +327,7 @@ export function App(): React.JSX.Element {
     requestId: number,
     invalidatesOnAnyProjectRemoval = false
   ): void {
+    agentSelectionRef.current.navigation(requestId);
     workspaceLoadTargetRef.current = {
       invalidatesOnAnyProjectRemoval,
       projectId,
@@ -630,9 +645,14 @@ export function App(): React.JSX.Element {
     const stopProjectClosed = window.difftray.onProjectClosed(({ projectId }) => {
       projectClosedHandlerRef.current(projectId);
     });
-    const stopProjectsOpened = window.difftray.onProjectsOpened(({ focusProjectId }) => {
-      projectsOpenedHandlerRef.current(focusProjectId);
+    const stopProjectsOpened = window.difftray.onProjectsOpened((event) => {
+      projectsOpenedHandlerRef.current(event);
     });
+    const stopAgentCancelled = window.difftray.onAgentOpenCancelled((requestId) => {
+      if (agentSelectionRef.current.cancel(requestId))
+        invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
+    });
+    void window.difftray.agentRendererReady().catch(() => undefined);
     const stopWorktreeChangeCount = window.difftray.onWorktreeChangeCount(
       ({ changeCount, worktreePath }) => {
         setWorktrees((current) =>
@@ -648,6 +668,7 @@ export function App(): React.JSX.Element {
     return () => {
       stopProjectClosed();
       stopProjectsOpened();
+      stopAgentCancelled();
       stopWorktreeChangeCount();
     };
   }, []);
@@ -2095,7 +2116,42 @@ export function App(): React.JSX.Element {
     });
   }
 
-  function handleProjectsOpened(focusProjectId: string): void {
+  function handleProjectsOpened(event: ProjectsOpenedEvent): void {
+    const { focusProjectId, agentOpenRequestId, expectedReviewTargetId } = event;
+    if (agentOpenRequestId && expectedReviewTargetId) {
+      const loadId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
+      agentSelectionRef.current.begin(
+        {
+          requestId: agentOpenRequestId,
+          projectId: focusProjectId,
+          reviewTargetId: expectedReviewTargetId
+        },
+        loadId
+      );
+      trackWorkspaceLoadTarget(focusProjectId, loadId);
+      void (async () => {
+        try {
+          await refreshRecentProjects();
+          if (loadId !== workspaceLoadRequestRef.current) return;
+          const next = await window.difftray.loadProject(focusProjectId);
+          if (loadId !== workspaceLoadRequestRef.current) return;
+          if (!next) throw new Error("Repository could not be loaded.");
+          await applyWorkspace(next, undefined, {}, loadId);
+        } catch (error) {
+          agentSelectionRef.current.failed(agentOpenRequestId);
+          if (loadId === workspaceLoadRequestRef.current) setError(errorMessage(error));
+        } finally {
+          clearWorkspaceLoadTarget(loadId);
+          if (loadId === workspaceLoadRequestRef.current) {
+            updateLoadState("idle");
+            setLoadStatus(defaultWorkspaceLoadStatus);
+            setPendingLoadingProjectId(undefined);
+            setLoadingProject(undefined);
+          }
+        }
+      })();
+      return;
+    }
     const requestId = ++projectsOpenedRequestRef.current;
     projectsOpenedTargetRef.current = { projectId: focusProjectId, requestId };
     void refreshRecentProjects()

@@ -27,6 +27,8 @@ export {
 
 export type ProjectsOpenedEvent = {
   readonly focusProjectId: string;
+  readonly agentOpenRequestId?: string;
+  readonly expectedReviewTargetId?: string;
   readonly projectIds: readonly string[];
 };
 
@@ -120,6 +122,14 @@ export type DifftrayApi = {
   ) => Promise<ReviewWorkspaceView | null>;
   readonly onProjectChanged: (listener: ProjectChangedListener) => () => void;
   readonly onProjectClosed: (listener: (event: ProjectClosedEvent) => void) => () => void;
+  readonly agentRendererReady: () => Promise<void>;
+  readonly acknowledgeAgentOpen: (input: {
+    requestId: string;
+    projectId: string;
+    reviewTargetId: string;
+    status: "selected" | "load_failed" | "busy";
+  }) => Promise<void>;
+  readonly onAgentOpenCancelled: (listener: (requestId: string) => void) => () => void;
   readonly onProjectsOpened: (
     listener: (event: ProjectsOpenedEvent) => void
   ) => () => void;
@@ -929,6 +939,18 @@ const api: DifftrayApi = {
       ipcRenderer.removeListener("projects:closed", handler);
     };
   },
+  agentRendererReady: () => ipcRenderer.invoke("agent:rendererReady") as Promise<void>,
+  acknowledgeAgentOpen: (input) =>
+    ipcRenderer.invoke("agent:acknowledgeOpen", input) as Promise<void>,
+  onAgentOpenCancelled: (listener) => {
+    const handler = (_event: IpcRendererEvent, requestId: unknown) => {
+      if (typeof requestId === "string") listener(requestId);
+    };
+    ipcRenderer.on("agent:cancelOpen", handler);
+    return () => {
+      ipcRenderer.removeListener("agent:cancelOpen", handler);
+    };
+  },
   onProjectsOpened: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
       if (!isProjectsOpenedEvent(payload)) return;
@@ -1078,6 +1100,16 @@ const api: DifftrayApi = {
 
 function isProjectsOpenedEvent(payload: unknown): payload is ProjectsOpenedEvent {
   if (!isRecord(payload) || typeof payload.focusProjectId !== "string") return false;
+  if (
+    payload.agentOpenRequestId !== undefined &&
+    typeof payload.agentOpenRequestId !== "string"
+  )
+    return false;
+  if (
+    payload.expectedReviewTargetId !== undefined &&
+    typeof payload.expectedReviewTargetId !== "string"
+  )
+    return false;
   return (
     Array.isArray(payload.projectIds) &&
     payload.projectIds.every(

@@ -90,6 +90,14 @@ declare global {
     readonly onProjectClosed: (
       listener: (event: ProjectClosedEvent) => void
     ) => () => void;
+    readonly agentRendererReady: () => Promise<void>;
+    readonly acknowledgeAgentOpen: (input: {
+      requestId: string;
+      projectId: string;
+      reviewTargetId: string;
+      status: "selected" | "load_failed" | "busy";
+    }) => Promise<void>;
+    readonly onAgentOpenCancelled: (listener: (requestId: string) => void) => () => void;
     readonly onProjectsOpened: (
       listener: (event: ProjectsOpenedEvent) => void
     ) => () => void;
@@ -373,6 +381,8 @@ declare global {
 
   type ProjectsOpenedEvent = {
     readonly focusProjectId: string;
+    readonly agentOpenRequestId?: string;
+    readonly expectedReviewTargetId?: string;
     readonly projectIds: readonly string[];
   };
 

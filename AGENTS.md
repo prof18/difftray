@@ -65,6 +65,7 @@ Project commands:
 - `pnpm --filter @difftray/desktop test:cli:bundle` — build an unsigned temporary
   macOS bundle and verify its bundled CLI without Node on PATH. Pass `--app PATH`
   to validate an explicitly supplied existing bundle without rebuilding it.
+- `pnpm --filter @difftray/desktop test:cli:e2e` — run isolated packaged CLI lifecycle and GUI smoke checks; accepts `--app PATH` to reuse an unsigned fixture bundle. Local evidence goes to `artifacts/agent-integration`.
 - `pnpm check`
 - `./ci.sh`
 

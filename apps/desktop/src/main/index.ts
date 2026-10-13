@@ -1,3 +1,16 @@
+import { createAgentOpenCoordinator } from "./agent-open-ack.js";
+import { prepareAgentOpen, assertAgentOpenActive } from "./agent-open-service.js";
+import {
+  createAgentWindowEnsurer,
+  acquireAgentProfile,
+  isBackgroundAgentLaunch
+} from "./agent-app-lifecycle.js";
+import { startAgentControlServer } from "./agent-control-server.js";
+import {
+  AgentProtocolError,
+  CLI_PROTOCOL_VERSION,
+  GUI_BACKGROUND_ARGUMENT
+} from "../shared/agent-protocol.js";
 import { formatExplicitReviewReport } from "./review-feedback-service.js";
 import {
   loadExplicitReviewState,
@@ -222,6 +235,10 @@ const windowPresentationMode = resolveWindowPresentationMode(
 );
 
 let mainWindow: BrowserWindow | undefined;
+const agentOpenCoordinator = createAgentOpenCoordinator({
+  getRendererSenderId: () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined
+});
 let projectWatchService: ProjectWatchService | undefined;
 let projectSummaryCoordinator:
   ProjectSummaryCoordinator<ProjectReviewSummaryView> | undefined;
@@ -237,6 +254,9 @@ const droppedRepositoryCandidates = new Map<
 let storage: DifftrayStorage | undefined;
 let didConfigureAppRuntime = false;
 let isQuitting = false;
+const agentBackground = process.argv.includes(GUI_BACKGROUND_ARGUMENT);
+let hasProfileLock = false;
+let agentControlServer: Awaited<ReturnType<typeof startAgentControlServer>> | undefined;
 let resolvedAppRuntimeConfig: AppRuntimeConfig | undefined;
 let didWireAutoUpdater = false;
 let applicationMenuController: ApplicationMenuController | undefined;
@@ -422,10 +442,7 @@ type CopyReviewCommentsReportResult =
 
 const createMainWindow = async (): Promise<void> => {
   const icon = appIconImage();
-  const windowStatePath = path.join(
-    userDataPath ?? app.getPath("userData"),
-    "window-state.json"
-  );
+  const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
   const savedWindowState = loadWindowState(
     windowStatePath,
     screen.getAllDisplays().map((display) => display.workArea)
@@ -455,6 +472,21 @@ const createMainWindow = async (): Promise<void> => {
     }
   });
 
+  mainWindow = window;
+  const rendererSenderId = window.webContents.id;
+  window.webContents.once("destroyed", () =>
+    agentOpenCoordinator.rendererDestroyed(rendererSenderId)
+  );
+  let rendererLoaded = false;
+  window.webContents.on("did-finish-load", () => {
+    rendererLoaded = true;
+  });
+  window.webContents.on("did-start-loading", () => {
+    if (rendererLoaded) agentOpenCoordinator.rendererDestroyed(rendererSenderId);
+  });
+  window.webContents.on("render-process-gone", () =>
+    agentOpenCoordinator.rendererDestroyed(rendererSenderId)
+  );
   let didShowWindow = false;
   const showWindow = (): void => {
     if (didShowWindow || window.isDestroyed()) {
@@ -560,7 +592,6 @@ const createMainWindow = async (): Promise<void> => {
   }
 
   showWindow();
-  mainWindow = window;
 };
 
 app.on("web-contents-created", (_event, contents) => {
@@ -575,6 +606,17 @@ app.on("web-contents-created", (_event, contents) => {
   });
 });
 
+handleTrusted("agent:rendererReady", (event): void => {
+  agentOpenCoordinator.rendererReady(event.sender.id);
+});
+handleTrusted("agent:acknowledgeOpen", (event, input: unknown): void => {
+  agentOpenCoordinator.acknowledge(event.sender.id, {
+    requestId: readStringProperty(input, "requestId"),
+    projectId: readStringProperty(input, "projectId"),
+    reviewTargetId: readStringProperty(input, "reviewTargetId"),
+    status: readEnumProperty(input, "status", ["selected", "load_failed", "busy"])
+  });
+});
 handleTrusted("app:version", () => app.getVersion());
 handleTrusted("app:setSelectedFileAvailable", (_event, input): void => {
   applicationMenuController?.setSelectedFileAvailable(
@@ -1539,6 +1581,10 @@ configureAppRuntime();
 
 app.on("before-quit", () => {
   isQuitting = true;
+  void agentControlServer
+    ?.close()
+    .catch((error: unknown) => console.error("Agent service shutdown failed", error));
+  agentControlServer = undefined;
   pendingProjectWatcherSync = undefined;
   for (const { controller } of repositoryScans.values()) {
     controller.abort();
@@ -1570,19 +1616,137 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    void createMainWindow();
+const ensureReviewWindow = createAgentWindowEnsurer({
+  ready: () => servicesReady,
+  hasWindow: () => Boolean(mainWindow && !mainWindow.isDestroyed()),
+  createWindow: async () => {
+    if (!isQuitting) await createMainWindow();
   }
 });
+async function activateReviewWindow(): Promise<void> {
+  const available = () => hasProfileLock && !isQuitting;
+  if (!available()) return;
+  await ensureReviewWindow();
+  if (!available()) return;
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show();
+  mainWindow?.focus();
+  scheduleAutoUpdaterWiring();
+}
+app.on("activate", () => {
+  void activateReviewWindow();
+});
+app.on("second-instance", (_event, _argv, _cwd, additionalData) => {
+  if (!isBackgroundAgentLaunch(additionalData))
+    void app.whenReady().then(activateReviewWindow);
+});
 
-void app.whenReady().then(async () => {
+const servicesReady = app.whenReady().then(async () => {
+  if (!hasProfileLock || isQuitting) return;
   installApplicationMenu();
   await bootstrapDevStorageFromProduction();
+  getStorage();
   await syncCompanionLifecycleWithSettings();
-  await createMainWindow();
-  scheduleAutoUpdaterWiring();
+  const runtime = resolvedAppRuntimeConfig;
+  if (!runtime) throw new Error("Application runtime was not configured.");
+  const identity = {
+    appVersion: app.getVersion(),
+    protocolVersion: CLI_PROTOCOL_VERSION as 1,
+    instanceId: randomUUID(),
+    profilePath: app.getPath("userData"),
+    appId: runtime.appId,
+    flavor: runtime.flavor,
+    executablePath: realpathSync(process.execPath)
+  };
+  agentControlServer = await startAgentControlServer({
+    identity,
+    hasProfileLock: true,
+    dispatch: async (request, signal) => {
+      if (request.method === "hello") return identity;
+      if (request.method === "open") {
+        let result:
+          { projectId: string; repoPath: string; target: ReviewTarget } | undefined;
+        await agentOpenCoordinator.open({
+          requestId: request.id,
+          signal,
+          prepare: async (openSignal) => {
+            const prepared = await prepareAgentOpen(
+              request.params.repoPath,
+              request.params.selector,
+              openSignal
+            );
+            assertAgentOpenActive(openSignal);
+            const opened = await openRepositoryPaths([prepared.repoPath]);
+            assertAgentOpenActive(openSignal);
+            const project = opened.projects.find(
+              (entry) => entry.path === prepared.repoPath
+            );
+            if (!project)
+              throw new AgentProtocolError(
+                "repository_missing",
+                "Exact worktree could not be opened."
+              );
+            await activateReviewWindow();
+            assertAgentOpenActive(openSignal);
+            const window = mainWindow;
+            if (!window || window.isDestroyed())
+              throw new AgentProtocolError(
+                "app_unavailable",
+                "Review window is unavailable."
+              );
+            const cancel = () => {
+              if (!window.isDestroyed())
+                window.webContents.send("agent:cancelOpen", request.id);
+            };
+            openSignal.addEventListener("abort", cancel, { once: true });
+            result = {
+              projectId: project.id,
+              repoPath: prepared.repoPath,
+              target: prepared.target
+            };
+            return {
+              projectId: project.id,
+              reviewTargetId: prepared.reviewTargetId,
+              send: () => {
+                assertAgentOpenActive(openSignal);
+                const selector = prepared.selector;
+                getStorage().updateProjectDefaultDiffTarget(
+                  project.id,
+                  selector.kind === "branch"
+                    ? { mode: "branch", ref: selector.base }
+                    : selector.kind === "commit"
+                      ? { mode: "commit", ref: selector.commit }
+                      : { mode: "working_tree" }
+                );
+                window.webContents.send("projects:opened", {
+                  projectIds: [project.id],
+                  focusProjectId: project.id,
+                  agentOpenRequestId: request.id,
+                  expectedReviewTargetId: prepared.reviewTargetId
+                });
+              }
+            };
+          }
+        });
+        if (!result)
+          throw new AgentProtocolError("internal_error", "Missing open result.");
+        return result;
+      }
+      throw new AgentProtocolError("invalid_request", "Operation is not available.");
+    }
+  });
 });
+void servicesReady
+  .then(async () => {
+    if (hasProfileLock && !isQuitting && !agentBackground) {
+      await ensureReviewWindow();
+      scheduleAutoUpdaterWiring();
+    }
+  })
+  .catch((error: unknown) => {
+    console.error("Failed to initialize Difftray", error);
+    app.quit();
+  });
 
 export { mainWindow };
 
@@ -1606,11 +1770,25 @@ function configureAppRuntime(): void {
     app.setAppUserModelId(appRuntimeConfig.appId);
   }
 
-  if (!userDataPath) {
-    app.setPath(
-      "userData",
-      path.join(app.getPath("appData"), appRuntimeConfig.userDataDirectoryName)
-    );
+  hasProfileLock = acquireAgentProfile(
+    app,
+    userDataPath ??
+      path.join(app.getPath("appData"), appRuntimeConfig.userDataDirectoryName),
+    agentBackground
+  );
+  if (!hasProfileLock) return;
+
+  // Explicit isolated-profile hook for the packaged CLI smoke harness.
+  const agentSmokeDebugPort = process.env.DIFFTRAY_AGENT_SMOKE_DEBUG_PORT;
+  if (
+    userDataPath &&
+    agentSmokeDebugPort &&
+    /^\d+$/.test(agentSmokeDebugPort) &&
+    Number(agentSmokeDebugPort) >= 1024 &&
+    Number(agentSmokeDebugPort) <= 65535
+  ) {
+    app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+    app.commandLine.appendSwitch("remote-debugging-port", agentSmokeDebugPort);
   }
 
   if (process.platform === "darwin" && !app.isPackaged) {
@@ -1850,7 +2028,7 @@ function getStorage(): DifftrayStorage {
     throw new Error("Storage is unavailable while Difftray is quitting.");
   }
 
-  const storageDir = path.join(userDataPath ?? app.getPath("userData"), "data");
+  const storageDir = path.join(app.getPath("userData"), "data");
   mkdirSync(storageDir, { recursive: true });
   storage = openStorage(path.join(storageDir, "difftray.sqlite"));
 
