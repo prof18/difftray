@@ -84,6 +84,7 @@ describe("project workspace views", () => {
     } satisfies ReviewTarget;
     const note = {
       body: "Overall feedback.",
+      lastEditedBy: { kind: "human" as const },
       createdAt: "2026-01-01T00:00:00.000Z",
       dismissedAt: "2026-01-02T00:00:00.000Z",
       projectId: "project-1",
@@ -116,6 +117,8 @@ describe("project workspace views", () => {
     expect(workspace.fileComments).toEqual([
       {
         body: "Split this file.",
+        createdBy: { kind: "human" as const },
+        lastEditedBy: { kind: "human" as const },
         createdAt: "2026-01-01T00:00:00.000Z",
         diffHash: "hash-1",
         id: "active",
@@ -126,6 +129,7 @@ describe("project workspace views", () => {
     ]);
     expect(workspace.reviewNote).toEqual({
       body: "Overall feedback.",
+      lastEditedBy: { kind: "human" as const },
       createdAt: "2026-01-01T00:00:00.000Z",
       dismissedAt: "2026-01-02T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z"
@@ -183,6 +187,8 @@ function reviewCommentRecord(
 ) {
   return {
     body: "Looks wrong",
+    createdBy: { kind: "human" as const },
+    lastEditedBy: { kind: "human" as const },
     createdAt: "2026-01-01T00:00:00.000Z",
     diffHash: "hash-1",
     id: "comment-1",
@@ -207,6 +213,8 @@ function reviewFileCommentRecord(
 ) {
   return {
     body: "Split this file.",
+    createdBy: { kind: "human" as const },
+    lastEditedBy: { kind: "human" as const },
     createdAt: "2026-01-01T00:00:00.000Z",
     diffHash: "hash-1",
     id: "file-comment-1",

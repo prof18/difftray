@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -155,6 +155,44 @@ async function cli(profile, args, success = true, expectedExitCode) {
       maxBuffer: 1024 * 1024
     });
   } catch (error) {
+    if (success) {
+      const processes = processIds(profile).map((pid) => {
+        let sample;
+        try {
+          sample = execFileSync("/usr/bin/sample", [String(pid), "1", "1"], {
+            encoding: "utf8",
+            timeout: 10_000,
+            maxBuffer: 4 * 1024 * 1024,
+            stdio: ["ignore", "pipe", "ignore"]
+          });
+        } catch {
+          sample = "Owned fixture process exited or could not be sampled";
+        }
+        return { pid, sample };
+      });
+      let endpoint;
+      try {
+        const metadata = JSON.parse(await readFile(profile.endpoint, "utf8"));
+        delete metadata.token;
+        endpoint = metadata;
+      } catch {
+        endpoint = "No readable endpoint";
+      }
+      await writeFile(
+        path.join(evidence, `cli-startup-failure-${randomUUID()}.json`),
+        JSON.stringify(
+          {
+            profile: path.basename(profile.path),
+            args,
+            endpoint,
+            processes,
+            completed: results
+          },
+          null,
+          2
+        )
+      );
+    }
     assert.equal(success, false, `CLI failed: ${error.stderr}`);
     if (expectedExitCode !== undefined) assert.equal(error.code, expectedExitCode);
     output = error;
@@ -254,7 +292,7 @@ async function open(profile, repo) {
   assert.equal(response.result.target.projectId, response.result.projectId);
   return response;
 }
-async function repository(name) {
+async function repository(name, before = "before\n", after = "after\n") {
   const repo = path.join(fixture, name);
   await mkdir(repo);
   const git = (args) =>
@@ -262,10 +300,10 @@ async function repository(name) {
   git(["init", "-b", "main"]);
   git(["config", "user.name", "CLI smoke"]);
   git(["config", "user.email", "smoke@example.invalid"]);
-  await writeFile(path.join(repo, "tracked.txt"), "before\n");
+  await writeFile(path.join(repo, "tracked.txt"), before);
   git(["add", "."]);
   git(["commit", "-m", "fixture"]);
-  await writeFile(path.join(repo, "tracked.txt"), "after\n");
+  await writeFile(path.join(repo, "tracked.txt"), after);
   return { path: await realpath(repo), git };
 }
 try {
@@ -483,6 +521,257 @@ try {
   await writeFile(path.join(repo.path, "tracked.txt"), "after\n");
   results.push(
     "packaged parser/read identities, human comment export, UTF-8 redirected stdout, linked-worktree isolation, GUI target independence, explicit stale-context failure"
+  );
+
+  const writeRepo = await repository(
+    "agent writes",
+    "old one\nold two\nold three\n",
+    "new one\nnew two\nnew three\n"
+  );
+  const writes = await createProfile("full-scope-writes");
+  const writeContext = (
+    await cli(writes, ["review", "inspect", "--repo", writeRepo.path])
+  ).result;
+  const writeFileView = (
+    await cli(writes, [
+      "review",
+      "file",
+      "--context",
+      writeContext.contextId,
+      "--path",
+      "tracked.txt"
+    ])
+  ).result;
+  const actor = { name: "Packaged reviewer", runId: randomUUID() };
+  const submission = {
+    actor,
+    requestId: randomUUID(),
+    items: [
+      {
+        kind: "line",
+        path: "tracked.txt",
+        diffHash: writeFileView.diffHash,
+        side: "additions",
+        lineStart: 1,
+        lineEnd: 1,
+        body: "Single-line agent finding"
+      },
+      {
+        kind: "line",
+        path: "tracked.txt",
+        diffHash: writeFileView.diffHash,
+        side: "deletions",
+        lineStart: 1,
+        lineEnd: 2,
+        body: "Multi-line agent finding"
+      },
+      {
+        kind: "file",
+        path: "tracked.txt",
+        diffHash: writeFileView.diffHash,
+        body: "File agent finding"
+      },
+      {
+        kind: "overall",
+        expectedNoteVersion: writeContext.noteVersion,
+        body: "Overall agent finding"
+      }
+    ]
+  };
+  const inputPath = path.join(fixture, "full-scope-feedback.json");
+  await writeFile(inputPath, JSON.stringify(submission));
+  const submit = (success = true, expectedExitCode) =>
+    cli(
+      writes,
+      ["feedback", "submit", "--context", writeContext.contextId, "--input", inputPath],
+      success,
+      expectedExitCode
+    );
+  await stop(writes);
+  const receipt = (await submit()).result;
+  assert.equal(receipt.deduplicated, false);
+  assert.equal(receipt.itemIds.length, 4);
+  const writesGui = await browser(writes);
+  assert.equal(
+    writesGui.contexts().flatMap((context) => context.pages()).length,
+    0,
+    "cold feedback submit must launch quietly without a GUI window"
+  );
+  const written = (
+    await cli(writes, ["review", "feedback", "--context", writeContext.contextId])
+  ).result;
+  assert.equal(written.total, 4);
+  assert.equal(new Set(written.items.map((item) => item.id)).size, 4);
+  for (const item of written.items) {
+    assert.equal(item.active, true);
+    assert.deepEqual(item.lastEditedBy, { kind: "agent", ...actor });
+    if (item.kind !== "overall")
+      assert.deepEqual(item.createdBy, { kind: "agent", ...actor });
+  }
+  const writtenReport = await promptExport(writes, writeContext.contextId);
+  for (const item of submission.items) assert.ok(writtenReport.includes(item.body));
+  assert.ok(
+    writtenReport.includes(actor.name),
+    "prompt report must include agent display labels"
+  );
+  const verifyReplay = async () => {
+    assert.deepEqual((await submit()).result, { ...receipt, deduplicated: true });
+    const afterRetry = (
+      await cli(writes, ["review", "feedback", "--context", writeContext.contextId])
+    ).result;
+    assert.deepEqual(
+      afterRetry,
+      written,
+      "receipt replay must not duplicate rows or bump note/feedback revisions"
+    );
+  };
+  await verifyReplay();
+  await stop(writes);
+  await verifyReplay();
+  await writeFile(
+    path.join(writeRepo.path, "tracked.txt"),
+    "source changed after successful submission\n"
+  );
+  assert.deepEqual(
+    (await submit()).result,
+    { ...receipt, deduplicated: true },
+    "committed retry must precede code freshness checks"
+  );
+  await writeFile(inputPath, JSON.stringify({ ...submission, requestId: randomUUID() }));
+  assert.equal((await submit(false, 4)).error.code, "stale_review");
+  await writeFile(
+    inputPath,
+    JSON.stringify({
+      ...submission,
+      items: submission.items.map((item, index) =>
+        index === 0 ? { ...item, body: "Different payload under same key" } : item
+      )
+    })
+  );
+  assert.equal(
+    (await submit(false, 4)).error.code,
+    "idempotency_conflict",
+    "same-key payload conflict must precede stale context checks"
+  );
+  await writeFile(inputPath, JSON.stringify(submission));
+  const refreshed = (await cli(writes, ["review", "inspect", "--repo", writeRepo.path]))
+    .result;
+  const retained = (
+    await cli(writes, [
+      "review",
+      "feedback",
+      "--context",
+      refreshed.contextId,
+      "--include-inactive"
+    ])
+  ).result;
+  assert.equal(retained.total, 4, "stale writes must retain existing findings");
+  const freshFile = (
+    await cli(writes, [
+      "review",
+      "file",
+      "--context",
+      refreshed.contextId,
+      "--path",
+      "tracked.txt"
+    ])
+  ).result;
+  const independent = {
+    actor: { ...actor, runId: randomUUID() },
+    requestId: submission.requestId,
+    items: [
+      {
+        kind: "file",
+        path: "tracked.txt",
+        diffHash: freshFile.diffHash,
+        body: "Independent run finding"
+      }
+    ]
+  };
+  const independentPath = path.join(fixture, "independent-run.json");
+  await writeFile(independentPath, JSON.stringify(independent));
+  const independentReceipt = (
+    await cli(writes, [
+      "feedback",
+      "submit",
+      "--context",
+      refreshed.contextId,
+      "--input",
+      independentPath
+    ])
+  ).result;
+  assert.equal(independentReceipt.deduplicated, false);
+  assert.ok(!receipt.itemIds.includes(independentReceipt.itemIds[0]));
+  await open(writes, writeRepo.path);
+  const editGui = await browser(writes);
+  const editPage = await selected(editGui, writeRepo.path, path.basename(writeRepo.path));
+  const humanNote = await editPage.evaluate(
+    (input) => window.difftray.saveReviewNote(input),
+    {
+      projectId: refreshed.projectId,
+      reviewTargetId: refreshed.targetId,
+      body: "Human note edited after agent inspection"
+    }
+  );
+  assert.equal(humanNote.status, "saved");
+  const beforeCas = (
+    await cli(writes, [
+      "review",
+      "feedback",
+      "--context",
+      refreshed.contextId,
+      "--include-inactive"
+    ])
+  ).result;
+  const casPath = path.join(fixture, "note-cas-conflict.json");
+  await writeFile(
+    casPath,
+    JSON.stringify({
+      actor,
+      requestId: randomUUID(),
+      items: [
+        {
+          kind: "file",
+          path: "tracked.txt",
+          diffHash: freshFile.diffHash,
+          body: "Must roll back with note conflict"
+        },
+        {
+          kind: "overall",
+          expectedNoteVersion: refreshed.noteVersion,
+          body: "Must not overwrite human note"
+        }
+      ]
+    })
+  );
+  const conflict = await cli(
+    writes,
+    ["feedback", "submit", "--context", refreshed.contextId, "--input", casPath],
+    false,
+    4
+  );
+  assert.equal(conflict.error.code, "note_conflict");
+  const afterCas = (
+    await cli(writes, [
+      "review",
+      "feedback",
+      "--context",
+      refreshed.contextId,
+      "--include-inactive"
+    ])
+  ).result;
+  assert.deepEqual(
+    afterCas,
+    beforeCas,
+    "note CAS failure must roll back the entire batch and revisions"
+  );
+  assert.ok(
+    (await promptExport(writes, refreshed.contextId)).includes(
+      "Human note edited after agent inspection"
+    )
+  );
+  results.push(
+    "cold full-scope attributed writes, exact replay without revision changes, persisted restart receipts, replay before stale checks, independent runs, atomic human note CAS conflict"
   );
 
   const alpha = await createProfile("alpha-like");

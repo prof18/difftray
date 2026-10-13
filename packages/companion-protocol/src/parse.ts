@@ -143,7 +143,26 @@ export function parseFileImageBody(input: unknown): ParseResult<FileImageBody> {
   return { ok: true, value: { path: path.value, side: side.value } };
 }
 
+function suppliedFeedbackMetadata(
+  input: unknown
+): { readonly ok: false; readonly error: string } | undefined {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    ["actor", "createdBy", "lastEditedBy", "noteVersion"].some((key) =>
+      Object.hasOwn(input, key)
+    )
+  )
+    return {
+      ok: false,
+      error: "Feedback attribution and versions are server-controlled."
+    };
+  return undefined;
+}
+
 export function parseCreateCommentBody(input: unknown): ParseResult<CreateCommentBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const body = readString(input, "body");
   if (!body.ok) return body;
   const diffHash = readString(input, "diffHash");
@@ -177,6 +196,8 @@ export function parseCreateCommentBody(input: unknown): ParseResult<CreateCommen
 }
 
 export function parseUpdateCommentBody(input: unknown): ParseResult<UpdateCommentBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const body = readString(input, "body");
   if (!body.ok) return body;
 
@@ -186,6 +207,8 @@ export function parseUpdateCommentBody(input: unknown): ParseResult<UpdateCommen
 export function parseCreateFileCommentBody(
   input: unknown
 ): ParseResult<CreateFileCommentBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const body = readString(input, "body");
   if (!body.ok) return body;
   const diffHash = readString(input, "diffHash");
@@ -210,6 +233,8 @@ export function parseCreateFileCommentBody(
 }
 
 export function parseSaveReviewNoteBody(input: unknown): ParseResult<SaveReviewNoteBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const body = readString(input, "body");
   if (!body.ok) return body;
   const reviewTargetId = readString(input, "reviewTargetId");
@@ -221,6 +246,8 @@ export function parseSaveReviewNoteBody(input: unknown): ParseResult<SaveReviewN
 export function parseSetReviewNoteDismissedBody(
   input: unknown
 ): ParseResult<SetReviewNoteDismissedBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const dismissed = readBoolean(input, "dismissed");
   if (!dismissed.ok) return dismissed;
   const reviewTargetId = readString(input, "reviewTargetId");
@@ -235,6 +262,8 @@ export function parseSetReviewNoteDismissedBody(
 export function parseReviewNoteTargetBody(
   input: unknown
 ): ParseResult<ReviewNoteTargetBody> {
+  const supplied = suppliedFeedbackMetadata(input);
+  if (supplied) return supplied;
   const reviewTargetId = readString(input, "reviewTargetId");
   if (!reviewTargetId.ok) return reviewTargetId;
 

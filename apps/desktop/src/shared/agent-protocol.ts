@@ -1,3 +1,4 @@
+import type { FeedbackActor } from "@difftray/companion-protocol";
 import type { ReviewTarget } from "@difftray/core";
 import type { AppFlavor } from "./app-flavor.js";
 
@@ -293,6 +294,8 @@ export type AgentExportMetadata = {
   readonly reviewedPathsTruncated: boolean;
 };
 export type AgentFeedbackView = {
+  readonly createdBy?: FeedbackActor;
+  readonly lastEditedBy?: FeedbackActor;
   readonly reviewTargetId?: string;
   readonly createdAt?: string;
   readonly updatedAt?: string;
@@ -697,7 +700,8 @@ function result(value: unknown, method: AgentMethod): void {
         x.itemIds.length > MAX_BATCH_ITEMS
       )
         fail("Invalid receipt");
-      (x.itemIds as unknown[]).forEach(identifier);
+      // Stored IDs include versioned note-scope hashes, not only request UUIDs.
+      (x.itemIds as unknown[]).forEach((id) => nonempty(id));
       nonempty(x.noteVersion);
       break;
     }
@@ -838,6 +842,17 @@ function exportMetadata(value: unknown): void {
   integer(x.reviewedPathLimit, 0, Number.MAX_SAFE_INTEGER);
   if (typeof x.reviewedPathsTruncated !== "boolean") fail("Invalid truncation flag");
 }
+function feedbackActor(value: unknown): void {
+  const actor = object(value, ["kind"], ["name", "runId"]);
+  if (actor.kind === "human") {
+    object(actor, ["kind"]);
+    return;
+  }
+  if (actor.kind !== "agent") fail("Invalid feedback actor kind");
+  object(actor, ["kind", "name", "runId"]);
+  nonempty(actor.name, MAX_LABEL_CHARACTERS);
+  identifier(actor.runId);
+}
 function feedbackView(value: unknown): void {
   const x = object(
     value,
@@ -851,6 +866,8 @@ function feedbackView(value: unknown): void {
       "lineEnd",
       "inactiveReason",
       "actor",
+      "createdBy",
+      "lastEditedBy",
       "reviewTargetId",
       "createdAt",
       "updatedAt"
@@ -862,7 +879,15 @@ function feedbackView(value: unknown): void {
     object(
       x,
       ["id", "kind", "body", "active"],
-      ["inactiveReason", "actor", "reviewTargetId", "createdAt", "updatedAt"]
+      [
+        "inactiveReason",
+        "actor",
+        "createdBy",
+        "lastEditedBy",
+        "reviewTargetId",
+        "createdAt",
+        "updatedAt"
+      ]
     );
   else if (x.kind === "file")
     object(
@@ -872,6 +897,8 @@ function feedbackView(value: unknown): void {
         "previousPath",
         "inactiveReason",
         "actor",
+        "createdBy",
+        "lastEditedBy",
         "reviewTargetId",
         "createdAt",
         "updatedAt"
@@ -895,6 +922,8 @@ function feedbackView(value: unknown): void {
         "previousPath",
         "inactiveReason",
         "actor",
+        "createdBy",
+        "lastEditedBy",
         "reviewTargetId",
         "createdAt",
         "updatedAt"
@@ -913,6 +942,8 @@ function feedbackView(value: unknown): void {
     integer(x.lineEnd, x.lineStart as number, Number.MAX_SAFE_INTEGER);
   }
   optional(x.inactiveReason, nonempty);
+  optional(x.createdBy, feedbackActor);
+  optional(x.lastEditedBy, feedbackActor);
   optional(x.reviewTargetId, nonempty);
   optional(x.createdAt, nonempty);
   optional(x.updatedAt, nonempty);

@@ -1,4 +1,19 @@
 import {
+  applyAgentFeedbackBatch,
+  findAgentFeedbackReceipt,
+  type AgentFeedbackBatch,
+  type AgentReceiptKey,
+  type AgentFeedbackReceipt
+} from "./agent-feedback-store.js";
+export {
+  AgentFeedbackConflictError,
+  type AgentFeedbackBatch,
+  type AgentReceiptKey,
+  type AgentFeedbackReceipt,
+  type AgentBatchItem
+} from "./agent-feedback-store.js";
+export { type FeedbackActor } from "./records.js";
+import {
   listAgentFeedbackPage,
   type AgentFeedbackPageInput,
   type AgentFeedbackPage
@@ -196,6 +211,10 @@ export type VerifyAndUnmarkReviewedResult =
     };
 
 export type DifftrayStorage = {
+  readonly applyAgentFeedbackBatch: (input: AgentFeedbackBatch) => AgentFeedbackReceipt;
+  readonly findAgentFeedbackReceipt: (
+    key: AgentReceiptKey
+  ) => AgentFeedbackReceipt | null;
   readonly listAgentFeedbackPage: (input: AgentFeedbackPageInput) => AgentFeedbackPage;
   readonly createAgentReviewContext: (
     record: AgentReviewContextRecord,
@@ -316,6 +335,8 @@ export function openStorage(filename: string): DifftrayStorage {
       createAgentReviewContext(db, record, options),
     getAgentReviewContext: (id) => getAgentReviewContext(db, id),
     pruneAgentReviewContexts: (now) => pruneAgentReviewContexts(db, now),
+    applyAgentFeedbackBatch: (input) => applyAgentFeedbackBatch(db, input),
+    findAgentFeedbackReceipt: (key) => findAgentFeedbackReceipt(db, key),
     getReviewNoteSnapshot: (scopeId) => getReviewNoteSnapshot(db, scopeId),
     addRepositorySearchRoot: (rootPath) => addRepositorySearchRoot(db, rootPath),
     beginRepositoryRootScan: (rootId) => beginRepositoryRootScan(db, rootId),

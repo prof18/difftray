@@ -1,6 +1,6 @@
 # Agent integration
 
-Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads and exports use explicit persisted contexts; feedback submission remains a later implementation step.
+Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 
 A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch. Frames are bounded to 1 MiB for requests and 16 MiB for responses. Unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields are rejected.
 
@@ -58,3 +58,37 @@ Exit codes: 0 success, 1 internal error, 2 invalid input, 3 unavailable app/repo
 missing or expired context, or incompatible protocol, 4 stale review/feedback or
 write conflict, and 5 transport/timeout/capacity failure. JSON errors preserve the
 typed code. Text and JSON work without a TTY; closed output pipes are handled cleanly.
+
+## Submitting feedback
+
+`feedback submit --context ID --input FILE` (or `--input -` for stdin) validates a
+bounded UTF-8 JSON document before connecting. Bodies never need to be placed on
+argv. The document contains `actor: {name, runId}`, `requestId`, and an ordered
+`items` array. Use distinct run IDs for separate reviewer runs and a fresh request
+ID for each new batch. `--request-id` can supply an omitted JSON request ID; two
+supplied values must agree.
+
+The desktop validates all paths, summary hashes and source-line anchors before a
+single atomic write. It does not downgrade unavailable line findings to file
+comments. An overall item needs the `expectedNoteVersion` returned by inspection
+or feedback reads. A conflict requires rereading and deliberately preserving or
+replacing the current note; no automatic concatenation occurs.
+
+Successful receipts are durable under `(actor name, runId, requestId)`. An exact
+retry using the original context and payload returns the same IDs even after a
+restart, context expiry or later code changes. Reusing that key with another
+payload returns `idempotency_conflict`. Receipt replay changes neither feedback
+nor revisions and emits no repeated notifications. New batches increment the
+project feedback revision once; note revisions remain independent.
+
+Author labels are caller-supplied display names, not authenticated provider
+identities. Comments retain their original creator when a human edits them, and
+record the last editor separately. Overall notes show their last editor. Human
+request routes reject caller-supplied provenance and version fields. Agent
+submission fixes the actor kind to agent.
+
+Companion clients opt in with `feedback-attribution-v1`. Without that capability,
+all response routes omit `createdBy`, `lastEditedBy`, and `noteVersion` recursively;
+existing response shapes and the `{report}` envelope remain unchanged. Reports
+use the same compact attribution text in clipboard, companion and CLI output.
+The optional desktop/mobile attribution labels are implemented in the next UI step.

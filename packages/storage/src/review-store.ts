@@ -137,8 +137,10 @@ export function createReviewComment(
       line_end,
       body,
       created_at,
-      updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      updated_at,
+      created_by_json,
+      last_edited_by_json
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   ).run(
     id,
@@ -152,7 +154,9 @@ export function createReviewComment(
     lineEnd,
     input.body,
     now,
-    now
+    now,
+    JSON.stringify(input.actor ?? { kind: "human" }),
+    JSON.stringify(input.actor ?? { kind: "human" })
   );
 
   const comment = getReviewComment(db, id);
@@ -173,7 +177,8 @@ export function updateReviewComment(
     `
       update review_comments
       set body = ?,
-          updated_at = ?
+          updated_at = ?,
+          last_edited_by_json = '{"kind":"human"}'
       where id = ? and body is not ?
     `
   ).run(body, currentTimestamp(), id, body);
@@ -232,8 +237,10 @@ export function createReviewFileComment(
       diff_hash,
       body,
       created_at,
-      updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      updated_at,
+      created_by_json,
+      last_edited_by_json
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   ).run(
     id,
@@ -244,7 +251,9 @@ export function createReviewFileComment(
     input.diffHash,
     input.body,
     now,
-    now
+    now,
+    JSON.stringify(input.actor ?? { kind: "human" }),
+    JSON.stringify(input.actor ?? { kind: "human" })
   );
 
   const comment = getReviewFileComment(db, id);
@@ -265,7 +274,8 @@ export function updateReviewFileComment(
     `
       update review_file_comments
       set body = ?,
-          updated_at = ?
+          updated_at = ?,
+          last_edited_by_json = '{"kind":"human"}'
       where id = ? and body is not ?
     `
   ).run(body, currentTimestamp(), id, body);
@@ -321,7 +331,13 @@ export function saveReviewNote(
 ): ReviewNoteRecord {
   return withReviewNoteTransaction(db, () => {
     const existing = getReviewNote(db, input.scopeId);
-    if (existing?.body === input.body && !existing.dismissedAt) return existing;
+    const actorJson = JSON.stringify(input.actor ?? { kind: "human" });
+    if (
+      existing?.body === input.body &&
+      !existing.dismissedAt &&
+      JSON.stringify(existing.lastEditedBy) === actorJson
+    )
+      return existing;
     const now = currentTimestamp();
 
     db.prepare(
@@ -332,14 +348,16 @@ export function saveReviewNote(
       body,
       dismissed_at,
       created_at,
-      updated_at
-    ) values (?, ?, ?, null, ?, ?)
+      updated_at,
+      last_edited_by_json
+    ) values (?, ?, ?, null, ?, ?, ?)
     on conflict(scope_id) do update set
       body = excluded.body,
       dismissed_at = null,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      last_edited_by_json = excluded.last_edited_by_json
   `
-    ).run(input.scopeId, input.projectId, input.body, now, now);
+    ).run(input.scopeId, input.projectId, input.body, now, now, actorJson);
     incrementReviewNoteRevision(db, input.scopeId, input.projectId);
 
     const note = getReviewNote(db, input.scopeId);
@@ -366,7 +384,8 @@ export function setReviewNoteDismissed(
         `
       update review_notes
       set dismissed_at = ?,
-          updated_at = ?
+          updated_at = ?,
+          last_edited_by_json = '{"kind":"human"}'
       where scope_id = ?
     `
       )

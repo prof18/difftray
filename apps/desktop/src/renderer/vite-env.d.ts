@@ -450,7 +450,13 @@ declare global {
 
   type ReviewCommentSide = "additions" | "deletions";
 
+  type FeedbackActor =
+    | { readonly kind: "human" }
+    | { readonly kind: "agent"; readonly name: string; readonly runId: string };
+
   type ReviewCommentView = {
+    readonly createdBy?: FeedbackActor;
+    readonly lastEditedBy?: FeedbackActor;
     readonly body: string;
     readonly createdAt: string;
     readonly diffHash: string;
@@ -502,6 +508,8 @@ declare global {
   };
 
   type ReviewFileCommentView = {
+    readonly createdBy?: FeedbackActor;
+    readonly lastEditedBy?: FeedbackActor;
     readonly body: string;
     readonly createdAt: string;
     readonly diffHash: string;
@@ -512,6 +520,8 @@ declare global {
   };
 
   type ReviewNoteView = {
+    readonly noteVersion?: string;
+    readonly lastEditedBy?: FeedbackActor;
     readonly body: string;
     readonly createdAt: string;
     readonly dismissedAt?: string;
@@ -607,6 +617,7 @@ declare global {
       };
 
   type ReviewWorkspaceView = {
+    readonly noteVersion?: string;
     readonly comments: readonly ReviewCommentView[];
     readonly fileComments?: readonly ReviewFileCommentView[];
     readonly reviewNote?: ReviewNoteView | null;

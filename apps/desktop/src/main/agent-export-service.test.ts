@@ -53,6 +53,7 @@ it.each(["working-tree", "branch", "commit"] as const)(
       };
       storage.createReviewComment({
         ...common,
+        actor: { kind: "agent", name: "Reviewer", runId: "run" },
         side: "additions",
         lineStart: 1,
         lineEnd: 2,
@@ -65,13 +66,18 @@ it.each(["working-tree", "branch", "commit"] as const)(
         lineEnd: 1,
         body: "Line β"
       });
-      storage.createReviewFileComment({ ...common, body: "File γ" });
+      storage.createReviewFileComment({
+        ...common,
+        body: "File γ",
+        actor: { kind: "agent", name: "Reviewer", runId: "run" }
+      });
       storage.createReviewFileComment({
         ...common,
         diffHash: "stale",
         body: "Hidden stale"
       });
       storage.saveReviewNote({
+        actor: { kind: "agent", name: "Reviewer", runId: "run" },
         projectId: context.projectId,
         scopeId: createReviewNoteScopeId(context.reviewTarget),
         body: "Overall δ"
@@ -112,6 +118,8 @@ it.each(["working-tree", "branch", "commit"] as const)(
         }
       });
       expect(expected).toContain("> 1 new");
+      expect(expected).toContain("Agent: Reviewer");
+      expect(expected).toContain("Last edited by agent: Reviewer");
       expect(expected).not.toContain("Hidden stale");
       const json = await service.export({ contextId: context.id, format: "json" });
       expect(json.format === "json" && json.content.items).toHaveLength(4);

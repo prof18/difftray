@@ -20,6 +20,12 @@ export {
   isPathInsideApprovedRoot,
   shouldTraverseRepositoryDirectory
 } from "./repository-discovery.js";
+export {
+  validateReviewCommentAnchor,
+  type ReviewCommentAnchorRange,
+  type ReviewCommentAnchorSide,
+  type ValidateReviewCommentAnchorInput
+} from "./review-comment-anchors.js";
 
 const reviewTargetFingerprintVersion = "difftray-review-target-v1";
 const reviewNoteScopeVersion = "note-scope-v1";
@@ -140,7 +146,15 @@ export type ReviewCommentReportContext = {
   readonly side: ReviewCommentSide;
 };
 
-export type ReviewCommentReportItem = {
+export type ReviewFeedbackActor =
+  | { readonly kind: "human" }
+  | { readonly kind: "agent"; readonly name: string; readonly runId: string };
+export type ReviewFeedbackAttribution = {
+  readonly createdBy?: ReviewFeedbackActor;
+  readonly lastEditedBy?: ReviewFeedbackActor;
+};
+
+export type ReviewCommentReportItem = ReviewFeedbackAttribution & {
   readonly body: string;
   readonly context?: ReviewCommentReportContext;
   readonly lineEnd: number;
@@ -149,7 +163,7 @@ export type ReviewCommentReportItem = {
   readonly side: ReviewCommentSide;
 };
 
-export type ReviewFileCommentReportItem = {
+export type ReviewFileCommentReportItem = ReviewFeedbackAttribution & {
   readonly body: string;
   readonly path: string;
 };
@@ -180,6 +194,7 @@ export type FormatReviewCommentsReportInput = {
   /** Files in the reviewed change, so overall notes can reach files without comments. */
   readonly reviewedPaths?: readonly string[];
   readonly reviewNote?: string;
+  readonly reviewNoteLastEditedBy?: ReviewFeedbackActor;
   /** Tells the agent how to reproduce the reviewed diff; falls back to targetLabel. */
   readonly target?: ReviewCommentReportTarget;
   readonly targetLabel?: string;
@@ -338,7 +353,7 @@ export function formatReviewCommentsReport(
     reviewNoteSection:
       note.length === 0
         ? ""
-        : `\n## Overall review notes\n\n${formatCommentBody(note)}\n`,
+        : `\n## Overall review notes\n\n${input.reviewNoteLastEditedBy?.kind === "agent" ? `Last edited by agent: ${formatActorName(input.reviewNoteLastEditedBy.name)}\n\n` : ""}${formatCommentBody(note)}\n`,
     reviewedFiles: formatReviewedFiles(input.reviewedPaths ?? []),
     targetSection: formatTargetSection(input)
   };
@@ -351,12 +366,31 @@ export function formatReviewCommentsReport(
   );
 }
 
+function formatActorName(name: string): string {
+  return name.replace(/\s+/g, " ").replace(/[\\`*_{}[\]()<>#!|]/g, "\\$&");
+}
+function formatReportAttribution(item: ReviewFeedbackAttribution): string {
+  const creator = item.createdBy;
+  const editor = item.lastEditedBy;
+  const parts: string[] = [];
+  if (creator?.kind === "agent") parts.push(`Agent: ${formatActorName(creator.name)}`);
+  if (
+    editor &&
+    JSON.stringify(editor) !== JSON.stringify(creator) &&
+    (creator?.kind === "agent" || editor.kind === "agent")
+  )
+    parts.push(
+      `edited by ${editor.kind === "human" ? "human" : formatActorName(editor.name)}`
+    );
+  return parts.length ? `${parts.join(" · ")}\n` : "";
+}
+
 function formatReviewFileCommentReportItem(
   comment: ReviewFileCommentReportItem,
   index: number
 ): string {
   return renderTemplate(reviewFileCommentReportItemTemplate, {
-    commentBody: formatCommentBody(comment.body),
+    commentBody: `${formatReportAttribution(comment)}${formatCommentBody(comment.body)}`,
     index: String(index),
     path: comment.path
   });
@@ -367,7 +401,7 @@ function formatReviewCommentReportItem(
   index: number
 ): string {
   return renderTemplate(reviewCommentReportItemTemplate, {
-    commentBody: formatCommentBody(comment.body),
+    commentBody: `${formatReportAttribution(comment)}${formatCommentBody(comment.body)}`,
     diffContext: formatCommentContext(comment),
     index: String(index),
     location: formatCommentLocation(comment),

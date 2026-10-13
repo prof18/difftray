@@ -549,6 +549,8 @@ describe("review comments", () => {
     expect(
       reviewCommentView({
         body: "Looks wrong",
+        createdBy: { kind: "human" },
+        lastEditedBy: { kind: "human" },
         createdAt: "2026-01-01T00:00:00.000Z",
         diffHash: "hash-1",
         id: "comment-1",
@@ -562,6 +564,8 @@ describe("review comments", () => {
         updatedAt: "2026-01-01T00:00:00.000Z"
       })
     ).toMatchObject({
+      createdBy: { kind: "human" },
+      lastEditedBy: { kind: "human" },
       id: "comment-1",
       previousPath: "src/OldApp.tsx",
       side: "additions"

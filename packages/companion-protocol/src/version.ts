@@ -5,3 +5,4 @@ export const COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE = "project-summary-state
 export const COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE = "repository-scan-state-v1";
 export const COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES =
   "file-comments-review-notes-v1";
+export const ATTRIBUTION_CAPABILITY = "feedback-attribution-v1";

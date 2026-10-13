@@ -13,6 +13,8 @@ import {
   resolveReviewStates
 } from "@difftray/core";
 import {
+  ATTRIBUTION_CAPABILITY,
+  COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
   COMPANION_PROTOCOL_VERSION,
   openEnvelope,
   sealEnvelope,
@@ -38,6 +40,8 @@ import {
   patchForDiff,
   projectView,
   reviewCommentView,
+  reviewFileCommentView,
+  reviewNoteView,
   reviewTargetFromGit,
   reviewTargetLabel,
   summarizePatch
@@ -56,6 +60,240 @@ afterEach(async () => {
 });
 
 describe("companion server integration", () => {
+  it.each([false, true])(
+    "projects every encrypted feedback response for attribution capability=%s",
+    async (supportsAttribution) => {
+      const { cleanup, deps, identity, pairSecret, project } =
+        await createIntegrationHarness();
+      const server = createCompanionServer(deps);
+      const actor = { kind: "agent" as const, name: "Codex", runId: "integration-run" };
+      try {
+        const { port } = await server.start(0);
+        const baseUrl = `http://127.0.0.1:${port}`;
+        await boxedPairRequest({
+          baseUrl,
+          serverPublicKey: identity.serverPublicKey,
+          body: {
+            deviceId: "device-1",
+            deviceName: "Integration Phone",
+            devicePublicKey,
+            platform: "ios",
+            protocolVersion: COMPANION_PROTOCOL_VERSION,
+            secret: pairSecret
+          }
+        });
+        const workspace = await deps.loadWorkspaceView(project.id);
+        const file = readWorkspaceFile(workspace, "tracked.txt");
+        const noteScopeId = createReviewNoteScopeId({
+          kind: "working_tree",
+          projectId: project.id,
+          headSha: workspace.reviewTarget.headSha,
+          ...(workspace.reviewTarget.headRefName
+            ? { headRefName: workspace.reviewTarget.headRefName }
+            : {})
+        });
+        const receipt = deps.storage.applyAgentFeedbackBatch({
+          actor,
+          requestId: "integration-batch",
+          payloadHash: "integration-payload",
+          projectId: project.id,
+          reviewTargetId: workspace.reviewTarget.id,
+          noteScopeId,
+          items: [
+            {
+              kind: "line",
+              path: file.path,
+              diffHash: file.diffHash,
+              side: "additions",
+              lineStart: 1,
+              lineEnd: 1,
+              body: "Agent line"
+            },
+            {
+              kind: "file",
+              path: file.path,
+              diffHash: file.diffHash,
+              body: "Agent file"
+            },
+            {
+              kind: "overall",
+              body: "Agent note",
+              expectedNoteVersion: deps.storage.getReviewNoteSnapshot(noteScopeId).token
+            }
+          ]
+        });
+        const capabilities = [
+          COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
+          ...(supportsAttribution ? [ATTRIBUTION_CAPABILITY] : [])
+        ];
+        const request = async (route: string, logicalMethod = "GET", body?: unknown) => {
+          const response = await encryptedRequest({
+            baseUrl,
+            serverPublicKey: identity.serverPublicKey,
+            capabilities,
+            path: route,
+            logicalMethod,
+            ...(body === undefined ? {} : { body })
+          });
+          expect(response.plain.status).toBe(200);
+          if (!supportsAttribution) assertNoAttribution(response.plain.body);
+          return response.plain.body as Record<string, unknown>;
+        };
+        const assertComment = (value: unknown, creator: unknown, editor: unknown) => {
+          if (supportsAttribution)
+            expect(value).toMatchObject({ createdBy: creator, lastEditedBy: editor });
+          else {
+            assertNoAttribution(value);
+            const comment = value as Record<string, unknown>;
+            const keys = ["body", "createdAt", "diffHash", "id", "path", "updatedAt"];
+            if ("side" in comment) keys.push("side", "lineStart", "lineEnd");
+            expect(Object.keys(comment).sort()).toEqual(keys.sort());
+          }
+        };
+        const assertNote = (value: unknown, editor: unknown) => {
+          if (supportsAttribution)
+            expect(value).toMatchObject({
+              lastEditedBy: editor,
+              noteVersion: expect.any(String)
+            });
+          else {
+            assertNoAttribution(value);
+            const note = value as Record<string, unknown>;
+            const keys = ["body", "createdAt", "updatedAt"];
+            if ("dismissedAt" in note) keys.push("dismissedAt");
+            expect(Object.keys(note).sort()).toEqual(keys.sort());
+          }
+        };
+        const projectRoute = `/companion/v1/projects/${project.id}`;
+        const getWorkspace = readWorkspace(await request(`${projectRoute}/workspace`));
+        if (supportsAttribution)
+          expect(getWorkspace).toHaveProperty("noteVersion", receipt.noteVersion);
+        assertComment(getWorkspace.comments[0], actor, actor);
+        assertComment(getWorkspace.fileComments?.[0], actor, actor);
+        assertNote(getWorkspace.reviewNote, actor);
+        const listed = await request(`${projectRoute}/comments`);
+        assertComment((listed.comments as unknown[])[0], actor, actor);
+        const target = { reviewTargetId: workspace.reviewTarget.id };
+        const human = { kind: "human" };
+        for (const attempt of [
+          {
+            route: `${projectRoute}/comments`,
+            method: "POST",
+            body: {
+              ...target,
+              path: file.path,
+              diffHash: file.diffHash,
+              side: "additions",
+              lineStart: 1,
+              lineEnd: 1,
+              body: "Forged line",
+              createdBy: actor
+            }
+          },
+          {
+            route: `/companion/v1/comments/${receipt.itemIds[0]}`,
+            method: "PATCH",
+            body: { body: "Forged edit", lastEditedBy: actor }
+          },
+          {
+            route: `${projectRoute}/file-comments`,
+            method: "POST",
+            body: {
+              ...target,
+              path: file.path,
+              diffHash: file.diffHash,
+              body: "Forged file",
+              createdBy: actor
+            }
+          },
+          {
+            route: `/companion/v1/file-comments/${receipt.itemIds[1]}`,
+            method: "PATCH",
+            body: { body: "Forged edit", lastEditedBy: actor }
+          },
+          {
+            route: `${projectRoute}/review-note`,
+            method: "POST",
+            body: { ...target, body: "Forged note", lastEditedBy: actor }
+          }
+        ]) {
+          const rejected = await encryptedRequest({
+            baseUrl,
+            serverPublicKey: identity.serverPublicKey,
+            capabilities,
+            path: attempt.route,
+            logicalMethod: attempt.method,
+            body: attempt.body
+          });
+          expect(rejected.plain.status).toBe(400);
+          expect(rejected.plain.body).toMatchObject({ error: { code: "bad_request" } });
+        }
+        expect(deps.storage.listReviewComments(workspace.reviewTarget.id)).toHaveLength(
+          1
+        );
+        expect(
+          deps.storage.listReviewFileComments(workspace.reviewTarget.id)
+        ).toHaveLength(1);
+        expect(deps.storage.getReviewNoteSnapshot(noteScopeId).token).toBe(
+          receipt.noteVersion
+        );
+        const createdLine = await request(`${projectRoute}/comments`, "POST", {
+          ...target,
+          path: file.path,
+          diffHash: file.diffHash,
+          side: "additions",
+          lineStart: 1,
+          lineEnd: 1,
+          body: "Human line"
+        });
+        assertComment(createdLine.comment, human, human);
+        const updatedLine = await request(
+          `/companion/v1/comments/${receipt.itemIds[0]}`,
+          "PATCH",
+          { body: "Human edited agent line" }
+        );
+        assertComment(updatedLine.comment, actor, human);
+        const createdFile = await request(`${projectRoute}/file-comments`, "POST", {
+          ...target,
+          path: file.path,
+          diffHash: file.diffHash,
+          body: "Human file"
+        });
+        assertComment(createdFile.fileComment, human, human);
+        const updatedFile = await request(
+          `/companion/v1/file-comments/${receipt.itemIds[1]}`,
+          "PATCH",
+          { body: "Human edited agent file" }
+        );
+        assertComment(updatedFile.fileComment, actor, human);
+        const saved = await request(`${projectRoute}/review-note`, "POST", {
+          ...target,
+          body: "Human note"
+        });
+        assertNote(saved.reviewNote, human);
+        const dismissed = await request(`${projectRoute}/review-note/dismissal`, "POST", {
+          ...target,
+          dismissed: true
+        });
+        assertNote(dismissed.reviewNote, human);
+        expect(dismissed.reviewNote).toHaveProperty("dismissedAt");
+        const restored = await request(`${projectRoute}/review-note/dismissal`, "POST", {
+          ...target,
+          dismissed: false
+        });
+        assertNote(restored.reviewNote, human);
+        expect(restored.reviewNote).not.toHaveProperty("dismissedAt");
+        const report = await request(`${projectRoute}/comments/report`);
+        expect(Object.keys(report)).toEqual(["report"]);
+        expect(report.report).toContain("Human edited agent line");
+      } finally {
+        await server.stop();
+        cleanup();
+      }
+    },
+    15_000
+  );
+
   it("covers pairing, encrypted API operations, comments, report, and websocket mutation events", async () => {
     const { cleanup, deps, identity, pairSecret, project, setMutationListener } =
       await createIntegrationHarness();
@@ -677,15 +915,52 @@ async function createIntegrationHarness(): Promise<{
 
       return deleted;
     },
-    createFileComment: async () => {
-      throw new Error("not implemented in integration test");
+    createFileComment: async (input) =>
+      reviewFileCommentView(storage.createReviewFileComment(input)),
+    updateFileComment: async (input) => {
+      const comment = storage.updateReviewFileComment(input.commentId, input.body.trim());
+      return comment ? reviewFileCommentView(comment) : null;
     },
-    updateFileComment: async () => null,
-    deleteFileComment: async () => false,
-    saveReviewNote: async () => {
-      throw new Error("not implemented in integration test");
+    deleteFileComment: async (id) => storage.deleteReviewFileComment(id),
+    saveReviewNote: async (input) => {
+      const workspace = await loadWorkspaceView(storage, input.projectId);
+      const scopeId = createReviewNoteScopeId({
+        kind: "working_tree",
+        projectId: input.projectId,
+        headSha: workspace.reviewTarget.headSha,
+        ...(workspace.reviewTarget.headRefName
+          ? { headRefName: workspace.reviewTarget.headRefName }
+          : {})
+      });
+      return {
+        ...reviewNoteView(
+          storage.saveReviewNote({
+            scopeId,
+            projectId: input.projectId,
+            body: input.body.trim()
+          })
+        ),
+        noteVersion: storage.getReviewNoteSnapshot(scopeId).token
+      };
     },
-    setReviewNoteDismissed: async () => null,
+    setReviewNoteDismissed: async (input) => {
+      const workspace = await loadWorkspaceView(storage, input.projectId);
+      const scopeId = createReviewNoteScopeId({
+        kind: "working_tree",
+        projectId: input.projectId,
+        headSha: workspace.reviewTarget.headSha,
+        ...(workspace.reviewTarget.headRefName
+          ? { headRefName: workspace.reviewTarget.headRefName }
+          : {})
+      });
+      const note = storage.setReviewNoteDismissed(scopeId, input.dismissed);
+      return note
+        ? {
+            ...reviewNoteView(note),
+            noteVersion: storage.getReviewNoteSnapshot(scopeId).token
+          }
+        : null;
+    },
     deleteReviewNote: async () => false,
     listBranchRefs: async () => [],
     listRecentCommits: async () => [],
@@ -859,6 +1134,9 @@ async function loadWorkspaceView(
     progress: calculateProgress(states),
     project,
     reviewNote: storage.getReviewNote(createReviewNoteScopeId(reviewTarget)),
+    reviewNoteVersion: storage.getReviewNoteSnapshot(
+      createReviewNoteScopeId(reviewTarget)
+    ).token,
     reviewTarget,
     reviewTargetId
   });
@@ -1129,6 +1407,7 @@ async function boxedPairRequest(input: {
 async function encryptedRequest(input: {
   readonly baseUrl: string;
   readonly body?: unknown;
+  readonly capabilities?: readonly string[];
   readonly logicalMethod: string;
   readonly path: string;
   readonly serverPublicKey: string;
@@ -1142,6 +1421,7 @@ async function encryptedRequest(input: {
     devicePublicKey,
     plaintext: {
       ...(input.body === undefined ? {} : { body: input.body }),
+      ...(input.capabilities ? { capabilities: input.capabilities } : {}),
       method: input.logicalMethod,
       path: input.path,
       requestId,
@@ -1338,5 +1618,17 @@ async function withTimeout<T>(
     if (timeout) {
       clearTimeout(timeout);
     }
+  }
+}
+
+function assertNoAttribution(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertNoAttribution);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value)) {
+    expect(["createdBy", "lastEditedBy", "noteVersion"]).not.toContain(key);
+    assertNoAttribution(entry);
   }
 }

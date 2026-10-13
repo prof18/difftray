@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createReviewNoteScopeId } from "@difftray/core";
 import {
   AgentProtocolError,
   parseAgentRequest,
@@ -318,7 +319,11 @@ describe("parseAgentResponse", () => {
 });
 
 describe("method-specific success results", () => {
-  const target = { kind: "working_tree", projectId: "project", headSha: "abc123" };
+  const target = {
+    kind: "working_tree",
+    projectId: "project",
+    headSha: "abc123"
+  } as const;
   const file = { path: "src/a.ts", diffHash: "hash", kind: "text", visible: true };
   const note = { body: "Review note", dismissedAt: null };
   const cases = [
@@ -382,6 +387,22 @@ describe("method-specific success results", () => {
       { requestId: "req-1", deduplicated: false, itemIds: ["item-1"], noteVersion: "v1" }
     ]
   ] as const;
+  it("accepts real overall-note scope IDs in submission receipts", () => {
+    const result = {
+      requestId: "req-1",
+      deduplicated: false,
+      itemIds: [createReviewNoteScopeId(target)],
+      noteVersion: "v1"
+    };
+    const response = { version: 1, id: "transport-1", ok: true, result };
+    expect(parseAgentResponse(frame(response), "feedback.submit")).toEqual(response);
+    expect(() =>
+      parseAgentResponse(
+        frame({ ...response, result: { ...result, itemIds: [""] } }),
+        "feedback.submit"
+      )
+    ).toThrow(AgentProtocolError);
+  });
   it.each(cases)("accepts and validates %s", (method, result) => {
     const response = { version: 1, id: "transport-1", ok: true, result };
     expect(parseAgentResponse(frame(response), method)).toMatchObject(response);
@@ -725,4 +746,44 @@ describe("feedback response metadata", () => {
       }
     }
   );
+});
+
+it("accepts strict creator/editor provenance including human edits of agent feedback", () => {
+  const item = {
+    id: "i",
+    kind: "file",
+    body: "Review",
+    active: true,
+    path: "a",
+    diffHash: "h",
+    createdBy: { kind: "agent", name: "Reviewer", runId: "run" },
+    lastEditedBy: { kind: "human" }
+  };
+  const encode = (entry: unknown) =>
+    frame({
+      version: 1,
+      id: "r",
+      ok: true,
+      result: {
+        items: [entry],
+        total: 1,
+        nextCursor: null,
+        feedbackVersion: "f",
+        noteVersion: "n",
+        note: null
+      }
+    });
+  expect(parseAgentResponse(encode(item), "review.feedback")).toMatchObject({
+    result: { items: [item] }
+  });
+  for (const actor of [
+    { kind: "robot" },
+    { kind: "human", name: "forged" },
+    { kind: "agent", name: "", runId: "r" },
+    { kind: "agent", name: "A" },
+    { kind: "agent", name: "A", runId: "bad run" }
+  ])
+    expect(() =>
+      parseAgentResponse(encode({ ...item, lastEditedBy: actor }), "review.feedback")
+    ).toThrow();
 });

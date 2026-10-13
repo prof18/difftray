@@ -8,6 +8,7 @@ import {
 import { startAgentControlServer } from "./agent-control-server.js";
 import { createAgentReviewService } from "./agent-review-service.js";
 import { createAgentExportService } from "./agent-export-service.js";
+import { createAgentFeedbackService } from "./agent-feedback-service.js";
 import {
   AgentProtocolError,
   CLI_PROTOCOL_VERSION,
@@ -1664,6 +1665,10 @@ const servicesReady = app.whenReady().then(async () => {
   const agentExports = createAgentExportService(getStorage(), {
     contexts: agentReads.contexts
   });
+  const agentFeedback = createAgentFeedbackService(getStorage(), {
+    contexts: agentReads.contexts,
+    onCommitted: notifyReviewFeedbackChanged
+  });
   agentControlServer = await startAgentControlServer({
     identity,
     hasProfileLock: true,
@@ -1675,76 +1680,74 @@ const servicesReady = app.whenReady().then(async () => {
       if (request.method === "review.feedback")
         return agentReads.feedback(request.params);
       if (request.method === "review.export") return agentExports.export(request.params);
-      if (request.method === "open") {
-        let result:
-          { projectId: string; repoPath: string; target: ReviewTarget } | undefined;
-        await agentOpenCoordinator.open({
-          requestId: request.id,
-          signal,
-          prepare: async (openSignal) => {
-            const prepared = await prepareAgentOpen(
-              request.params.repoPath,
-              request.params.selector,
-              openSignal
+      if (request.method === "feedback.submit")
+        return agentFeedback.submit(request.params);
+      let result:
+        { projectId: string; repoPath: string; target: ReviewTarget } | undefined;
+      await agentOpenCoordinator.open({
+        requestId: request.id,
+        signal,
+        prepare: async (openSignal) => {
+          const prepared = await prepareAgentOpen(
+            request.params.repoPath,
+            request.params.selector,
+            openSignal
+          );
+          assertAgentOpenActive(openSignal);
+          const opened = await openRepositoryPaths([prepared.repoPath]);
+          assertAgentOpenActive(openSignal);
+          const project = opened.projects.find(
+            (entry) => entry.path === prepared.repoPath
+          );
+          if (!project)
+            throw new AgentProtocolError(
+              "repository_missing",
+              "Exact worktree could not be opened."
             );
-            assertAgentOpenActive(openSignal);
-            const opened = await openRepositoryPaths([prepared.repoPath]);
-            assertAgentOpenActive(openSignal);
-            const project = opened.projects.find(
-              (entry) => entry.path === prepared.repoPath
+          await activateReviewWindow();
+          assertAgentOpenActive(openSignal);
+          const window = mainWindow;
+          if (!window || window.isDestroyed())
+            throw new AgentProtocolError(
+              "app_unavailable",
+              "Review window is unavailable."
             );
-            if (!project)
-              throw new AgentProtocolError(
-                "repository_missing",
-                "Exact worktree could not be opened."
+          const cancel = () => {
+            if (!window.isDestroyed())
+              window.webContents.send("agent:cancelOpen", request.id);
+          };
+          openSignal.addEventListener("abort", cancel, { once: true });
+          result = {
+            projectId: project.id,
+            repoPath: prepared.repoPath,
+            target: prepared.target
+          };
+          return {
+            projectId: project.id,
+            reviewTargetId: prepared.reviewTargetId,
+            send: () => {
+              assertAgentOpenActive(openSignal);
+              const selector = prepared.selector;
+              getStorage().updateProjectDefaultDiffTarget(
+                project.id,
+                selector.kind === "branch"
+                  ? { mode: "branch", ref: selector.base }
+                  : selector.kind === "commit"
+                    ? { mode: "commit", ref: selector.commit }
+                    : { mode: "working_tree" }
               );
-            await activateReviewWindow();
-            assertAgentOpenActive(openSignal);
-            const window = mainWindow;
-            if (!window || window.isDestroyed())
-              throw new AgentProtocolError(
-                "app_unavailable",
-                "Review window is unavailable."
-              );
-            const cancel = () => {
-              if (!window.isDestroyed())
-                window.webContents.send("agent:cancelOpen", request.id);
-            };
-            openSignal.addEventListener("abort", cancel, { once: true });
-            result = {
-              projectId: project.id,
-              repoPath: prepared.repoPath,
-              target: prepared.target
-            };
-            return {
-              projectId: project.id,
-              reviewTargetId: prepared.reviewTargetId,
-              send: () => {
-                assertAgentOpenActive(openSignal);
-                const selector = prepared.selector;
-                getStorage().updateProjectDefaultDiffTarget(
-                  project.id,
-                  selector.kind === "branch"
-                    ? { mode: "branch", ref: selector.base }
-                    : selector.kind === "commit"
-                      ? { mode: "commit", ref: selector.commit }
-                      : { mode: "working_tree" }
-                );
-                window.webContents.send("projects:opened", {
-                  projectIds: [project.id],
-                  focusProjectId: project.id,
-                  agentOpenRequestId: request.id,
-                  expectedReviewTargetId: prepared.reviewTargetId
-                });
-              }
-            };
-          }
-        });
-        if (!result)
-          throw new AgentProtocolError("internal_error", "Missing open result.");
-        return result;
-      }
-      throw new AgentProtocolError("invalid_request", "Operation is not available.");
+              window.webContents.send("projects:opened", {
+                projectIds: [project.id],
+                focusProjectId: project.id,
+                agentOpenRequestId: request.id,
+                expectedReviewTargetId: prepared.reviewTargetId
+              });
+            }
+          };
+        }
+      });
+      if (!result) throw new AgentProtocolError("internal_error", "Missing open result.");
+      return result;
     }
   });
 });
@@ -3236,13 +3239,17 @@ async function loadProjectWorkspace(
     phase: "preparing_workspace"
   });
 
+  const noteSnapshot = getStorage().getReviewNoteSnapshot(
+    createReviewNoteScopeId(reviewTarget)
+  );
   return reviewWorkspaceView({
     comments: getStorage().listReviewComments(reviewTargetId),
     fileComments: getStorage().listReviewFileComments(reviewTargetId),
     files,
     progress,
     project,
-    reviewNote: getStorage().getReviewNote(createReviewNoteScopeId(reviewTarget)),
+    reviewNote: noteSnapshot.note,
+    reviewNoteVersion: noteSnapshot.token,
     reviewTarget,
     reviewTargetId
   });
@@ -3690,7 +3697,10 @@ async function saveProjectReviewNote(
   });
 
   return {
-    reviewNote: reviewNoteView(reviewNote),
+    reviewNote: reviewNoteView(
+      reviewNote,
+      getStorage().getReviewNoteSnapshot(scopeId).token
+    ),
     status: "saved"
   };
 }
@@ -3717,7 +3727,10 @@ async function setProjectReviewNoteDismissed(
   }
 
   return {
-    reviewNote: reviewNoteView(reviewNote),
+    reviewNote: reviewNoteView(
+      reviewNote,
+      getStorage().getReviewNoteSnapshot(scopeId).token
+    ),
     status: "updated"
   };
 }

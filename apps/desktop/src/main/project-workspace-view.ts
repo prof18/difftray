@@ -30,6 +30,7 @@ export type ReviewWorkspaceViewInput = {
   readonly progress: ReviewProgress;
   readonly project: StoredProjectRecord;
   readonly reviewNote: ReviewNoteRecord | null;
+  readonly reviewNoteVersion?: string;
   readonly reviewTarget: ReviewTarget;
   readonly reviewTargetId: string;
 };
@@ -41,12 +42,14 @@ export function reviewWorkspaceView({
   progress,
   project,
   reviewNote,
+  reviewNoteVersion,
   reviewTarget,
   reviewTargetId
 }: ReviewWorkspaceViewInput): ReviewWorkspaceView {
   const reviewSummary = projectReviewSummaryView(files, progress);
 
   return {
+    ...(reviewNoteVersion ? { noteVersion: reviewNoteVersion } : {}),
     comments: activeReviewCommentViews(reviewTargetId, files, comments),
     fileComments: activeReviewFileCommentViews(reviewTargetId, files, fileComments),
     files: files.map((file) => reviewFileView(file)),
@@ -74,7 +77,7 @@ export function reviewWorkspaceView({
     },
     reviewNote:
       reviewNote?.scopeId === createReviewNoteScopeId(reviewTarget)
-        ? reviewNoteView(reviewNote)
+        ? reviewNoteView(reviewNote, reviewNoteVersion)
         : null
   };
 }

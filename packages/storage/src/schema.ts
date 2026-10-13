@@ -155,6 +155,15 @@ export function runMigrations(db: DatabaseSync): void {
     begin
       update project_feedback_revisions set revision = revision + 1 where project_id = old.project_id;
     end;
+    create table if not exists agent_feedback_receipts (
+      actor_name text not null,
+      run_id text not null,
+      request_id text not null,
+      payload_hash text not null,
+      response_json text not null,
+      created_at text not null,
+      primary key (actor_name, run_id, request_id)
+    );
     create table if not exists agent_review_contexts (
       id text primary key,
       project_id text not null references projects(id) on delete cascade,
@@ -223,6 +232,31 @@ export function runMigrations(db: DatabaseSync): void {
       repository_id, root_id, last_seen_at, available
     )
     select id, root_id, last_seen_at, available from repository_catalog;
+  `);
+  ensureColumn(db, "review_comments", "created_by_json", "text");
+  ensureColumn(db, "review_comments", "last_edited_by_json", "text");
+  ensureColumn(db, "review_file_comments", "created_by_json", "text");
+  ensureColumn(db, "review_file_comments", "last_edited_by_json", "text");
+  ensureColumn(db, "review_notes", "last_edited_by_json", "text");
+  db.exec(`
+    drop trigger if exists review_comments_feedback_update;
+    create trigger review_comments_feedback_update after update on review_comments
+    when old.body is not new.body or old.last_edited_by_json is not new.last_edited_by_json or old.created_by_json is not new.created_by_json
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    drop trigger if exists review_file_comments_feedback_update;
+    create trigger review_file_comments_feedback_update after update on review_file_comments
+    when old.body is not new.body or old.last_edited_by_json is not new.last_edited_by_json or old.created_by_json is not new.created_by_json
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
+    drop trigger if exists review_notes_feedback_update;
+    create trigger review_notes_feedback_update after update on review_notes
+    when old.body is not new.body or old.last_edited_by_json is not new.last_edited_by_json or old.dismissed_at is not new.dismissed_at
+    begin
+      update project_feedback_revisions set revision = revision + 1 where project_id = new.project_id;
+    end;
   `);
   ensureProjectColumn(db, "default_commit_ref", "text");
   ensureProjectColumn(db, "repository_name", "text");

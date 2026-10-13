@@ -151,13 +151,22 @@ export async function formatExplicitReviewReport(
     comments,
     fileComments: (workspace.fileComments ?? []).map((comment) => ({
       body: comment.body,
-      path: comment.path
+      path: comment.path,
+      ...(comment.createdBy ? { createdBy: comment.createdBy } : {}),
+      ...(comment.lastEditedBy ? { lastEditedBy: comment.lastEditedBy } : {})
     })),
     projectName: workspace.project.name,
     reviewedPaths: workspace.files
       .filter((file) => file.visible)
       .map((file) => file.path),
-    ...(activeNote ? { reviewNote: activeNote.body } : {}),
+    ...(activeNote
+      ? {
+          reviewNote: activeNote.body,
+          ...(activeNote.lastEditedBy
+            ? { reviewNoteLastEditedBy: activeNote.lastEditedBy }
+            : {})
+        }
+      : {}),
     ...(reportTarget ? { target: reportTarget } : {}),
     targetLabel: reviewTargetLabel(workspace.reviewTarget)
   });

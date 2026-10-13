@@ -328,6 +328,8 @@ export function reviewFileView(
 
 export function reviewCommentView(comment: ReviewCommentRecord): ReviewCommentView {
   return {
+    createdBy: comment.createdBy,
+    lastEditedBy: comment.lastEditedBy,
     body: comment.body,
     createdAt: comment.createdAt,
     diffHash: comment.diffHash,
@@ -345,6 +347,8 @@ export function reviewFileCommentView(
   comment: ReviewFileCommentRecord
 ): ReviewFileCommentView {
   return {
+    createdBy: comment.createdBy,
+    lastEditedBy: comment.lastEditedBy,
     body: comment.body,
     createdAt: comment.createdAt,
     diffHash: comment.diffHash,
@@ -355,8 +359,13 @@ export function reviewFileCommentView(
   };
 }
 
-export function reviewNoteView(note: ReviewNoteRecord): ReviewNoteView {
+export function reviewNoteView(
+  note: ReviewNoteRecord,
+  noteVersion?: string
+): ReviewNoteView {
   return {
+    ...(noteVersion ? { noteVersion } : {}),
+    lastEditedBy: note.lastEditedBy,
     body: note.body,
     createdAt: note.createdAt,
     ...(note.dismissedAt ? { dismissedAt: note.dismissedAt } : {}),

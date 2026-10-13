@@ -1,10 +1,15 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { AgentProtocolError, CLI_PROTOCOL_VERSION } from "../shared/agent-protocol.js";
+import {
+  AgentProtocolError,
+  CLI_PROTOCOL_VERSION,
+  type AgentResponse
+} from "../shared/agent-protocol.js";
 import { parseCliArguments, CliUsageError } from "./commands.js";
 import { resolveAgentRuntime } from "./agent-runtime.js";
 import { connectAgent } from "./agent-connection.js";
 import { sendAgentRequest } from "./agent-client.js";
+import { withSubmissionInput } from "./submission-input.js";
 import {
   cliExitCode,
   cliErrorResponse,
@@ -17,7 +22,7 @@ const help = `Difftray local review CLI
 Usage: difftray open [PATH] [--target working-tree|branch|commit] [--base REF|--commit REF] [--json]
        difftray review inspect [--repo PATH] [--target selected|working-tree|branch|commit]
        difftray review files|file|feedback|export --context ID
-       difftray feedback submit --context ID --input FILE_OR_STDIN
+       difftray feedback submit --context ID --input FILE_OR_STDIN [--request-id ID] [--json]
        difftray doctor [--json]
        difftray --help | --version [--json]
 
@@ -34,6 +39,9 @@ Contexts expire after 24 hours; stale code requires fresh inspection. A stale
 feedback cursor requires restarting feedback pagination under the same context.
 Reads preserve feedback and the context's generated-file visibility setting.
 JSON preserves available author attribution. Agent names are labels, not identities.
+submit reads a JSON document (maximum 1 MiB; use --input - for stdin) containing
+actor {name, runId}, requestId and items. An optional --request-id must agree with
+the document requestId if present. Bodies are supplied only in JSON input.
 Access is local-only using the current OS user's private desktop endpoint.
 Callers must obtain user authorization for repository access and feedback actions.
 Exit codes: 1 internal, 2 input, 3 unavailable/not found/protocol,
@@ -58,10 +66,19 @@ async function main() {
     );
     return;
   }
-  if (command.kind === "schema" || command.kind === "feedback.submit")
+  if (command.kind === "schema")
     throw new CliUsageError("This operation is not available in this build.");
   if (command.kind === "doctor" && command.appPath)
     throw new CliUsageError("Run the CLI inside the desired application bundle.");
+  if (command.kind === "feedback.submit") {
+    const response = await withSubmissionInput(command, async (params) => {
+      const runtime = await resolveAgentRuntime();
+      const endpoint = await connectAgent(runtime);
+      return sendAgentRequest(endpoint, "feedback.submit", params);
+    });
+    await displayResponse(command, response);
+    return;
+  }
   const runtime = await resolveAgentRuntime();
   const endpoint = await connectAgent(runtime);
   let response;
@@ -123,6 +140,16 @@ async function main() {
       break;
     }
   }
+  await displayResponse(command, response);
+}
+
+async function displayResponse(
+  command: Exclude<
+    ReturnType<typeof parseCliArguments>,
+    { kind: "help" | "schema" | "version" }
+  >,
+  response: AgentResponse
+): Promise<void> {
   if (!response.ok) {
     if (command.json || (command.kind === "review.export" && command.format === "json"))
       await writeCliText(process.stdout, formatCliResponse(command, response));

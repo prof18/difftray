@@ -1,3 +1,7 @@
+export type FeedbackActor =
+  | { readonly kind: "human" }
+  | { readonly kind: "agent"; readonly name: string; readonly runId: string };
+
 export type ProjectRecord = {
   readonly defaultBaseRef?: string;
   readonly defaultCommitRef?: string;
@@ -54,6 +58,7 @@ export type ReviewMarkRecord = {
 export type ReviewCommentSide = "additions" | "deletions";
 
 export type CreateReviewCommentInput = {
+  readonly actor?: FeedbackActor;
   readonly body: string;
   readonly diffHash: string;
   readonly lineEnd: number;
@@ -65,13 +70,16 @@ export type CreateReviewCommentInput = {
   readonly side: ReviewCommentSide;
 };
 
-export type ReviewCommentRecord = CreateReviewCommentInput & {
+export type ReviewCommentRecord = Omit<CreateReviewCommentInput, "actor"> & {
+  readonly createdBy: FeedbackActor;
+  readonly lastEditedBy: FeedbackActor;
   readonly createdAt: string;
   readonly id: string;
   readonly updatedAt: string;
 };
 
 export type CreateReviewFileCommentInput = {
+  readonly actor?: FeedbackActor;
   readonly body: string;
   readonly diffHash: string;
   readonly path: string;
@@ -80,19 +88,23 @@ export type CreateReviewFileCommentInput = {
   readonly reviewTargetId: string;
 };
 
-export type ReviewFileCommentRecord = CreateReviewFileCommentInput & {
+export type ReviewFileCommentRecord = Omit<CreateReviewFileCommentInput, "actor"> & {
+  readonly createdBy: FeedbackActor;
+  readonly lastEditedBy: FeedbackActor;
   readonly createdAt: string;
   readonly id: string;
   readonly updatedAt: string;
 };
 
 export type SaveReviewNoteInput = {
+  readonly actor?: FeedbackActor;
   readonly body: string;
   readonly projectId: string;
   readonly scopeId: string;
 };
 
 export type ReviewNoteRecord = {
+  readonly lastEditedBy: FeedbackActor;
   readonly body: string;
   readonly createdAt: string;
   readonly dismissedAt?: string;

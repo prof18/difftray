@@ -1,6 +1,7 @@
 import { posix as posixPath } from "node:path";
 
 import {
+  projectFeedbackAttribution,
   COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
   COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
@@ -213,7 +214,7 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
     }
   }
 
-  return [
+  const routes: RouteDefinition[] = [
     {
       handler: () => {
         const identity = deps.serverIdentity();
@@ -1055,6 +1056,16 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     }
   ];
+  return routes.map((route) => ({
+    ...route,
+    handler: async (input) => {
+      const response = await route.handler(input);
+      return {
+        ...response,
+        body: projectFeedbackAttribution(response.body, input.capabilities)
+      };
+    }
+  }));
 }
 
 function projectForCapabilities(

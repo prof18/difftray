@@ -1137,6 +1137,8 @@ describe("file comments and review notes", () => {
     });
 
     expect(renamed).toEqual({
+      createdBy: { kind: "human" },
+      lastEditedBy: { kind: "human" },
       body: "Split this module.",
       createdAt: expect.any(String),
       diffHash: "hash-a",
@@ -1194,6 +1196,7 @@ describe("file comments and review notes", () => {
 
     expect(first).toEqual({
       body: "First pass.",
+      lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       projectId: project.id,
       scopeId: "scope-1",

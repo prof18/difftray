@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import type { FeedbackActor } from "./records.js";
+import { parseFeedbackActor } from "./rows.js";
 import { getReviewNoteSnapshot } from "./review-note-revisions.js";
 
 export type AgentFeedbackPageInput = {
@@ -30,6 +32,8 @@ export type StoredAgentFeedbackView = {
   readonly lineEnd?: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly createdBy?: FeedbackActor;
+  readonly lastEditedBy: FeedbackActor;
   readonly inactiveReason?: "target_changed" | "diff_changed" | "dismissed";
 };
 export type AgentFeedbackPage = {
@@ -60,22 +64,24 @@ type Row = {
   line_end: number | null;
   created_at: string;
   updated_at: string;
+  created_by_json: string | null;
+  last_edited_by_json: string | null;
   reason: StoredAgentFeedbackView["inactiveReason"] | null;
 };
 const query = `with files as (
   select json_extract(value, '$.path') as path, json_extract(value, '$.diffHash') as diff_hash from json_each(?)
 ), feedback as (
  select c.id, 'line' as kind, c.body, c.path, c.previous_path, c.diff_hash, c.review_target_id,
- c.side, c.line_start, c.line_end, c.created_at, c.updated_at,
+ c.side, c.line_start, c.line_end, c.created_at, c.updated_at, c.created_by_json, c.last_edited_by_json,
  case when c.review_target_id != ? then 'target_changed' when f.path is null or c.diff_hash != f.diff_hash then 'diff_changed' else null end as reason
  from review_comments c left join files f on f.path = c.path where c.project_id = ?
  union all
  select c.id, 'file', c.body, c.path, c.previous_path, c.diff_hash, c.review_target_id,
- null, null, null, c.created_at, c.updated_at,
+ null, null, null, c.created_at, c.updated_at, c.created_by_json, c.last_edited_by_json,
  case when c.review_target_id != ? then 'target_changed' when f.path is null or c.diff_hash != f.diff_hash then 'diff_changed' else null end
  from review_file_comments c left join files f on f.path = c.path where c.project_id = ?
  union all
- select n.scope_id, 'overall', n.body, null, null, null, null, null, null, null, n.created_at, n.updated_at,
+ select n.scope_id, 'overall', n.body, null, null, null, null, null, null, null, n.created_at, n.updated_at, null, n.last_edited_by_json,
  case when n.scope_id != ? then 'target_changed' when n.dismissed_at is not null then 'dismissed' else null end
  from review_notes n where n.project_id = ?
 )`;
@@ -146,6 +152,10 @@ export function listAgentFeedbackPage(
       active: r.reason === null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      ...(r.kind !== "overall"
+        ? { createdBy: parseFeedbackActor(r.created_by_json) }
+        : {}),
+      lastEditedBy: parseFeedbackActor(r.last_edited_by_json),
       ...(r.reason ? { inactiveReason: r.reason } : {}),
       ...(r.path !== null ? { path: r.path } : {}),
       ...(r.previous_path !== null ? { previousPath: r.previous_path } : {}),

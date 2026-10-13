@@ -119,6 +119,8 @@ describe("storage row mappers", () => {
     expect(
       reviewCommentFromRow({
         body: "Looks stale.",
+        created_by_json: null,
+        last_edited_by_json: null,
         created_at: "2026-01-01T00:00:00.000Z",
         diff_hash: "hash-a",
         id: "comment-1",
@@ -133,6 +135,8 @@ describe("storage row mappers", () => {
       })
     ).toEqual({
       body: "Looks stale.",
+      createdBy: { kind: "human" },
+      lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       diffHash: "hash-a",
       id: "comment-1",
@@ -151,6 +155,8 @@ describe("file comment and review note row mappers", () => {
   it("maps file comment rows and omits a null previous path", () => {
     const row = {
       body: "Split this.",
+      created_by_json: null,
+      last_edited_by_json: null,
       created_at: "2026-01-01T00:00:00.000Z",
       diff_hash: "hash-a",
       id: "file-comment-1",
@@ -163,6 +169,8 @@ describe("file comment and review note row mappers", () => {
 
     expect(reviewFileCommentFromRow(row)).toEqual({
       body: "Split this.",
+      createdBy: { kind: "human" },
+      lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       diffHash: "hash-a",
       id: "file-comment-1",
@@ -179,6 +187,7 @@ describe("file comment and review note row mappers", () => {
   it("maps review note rows and omits a null dismissed time", () => {
     const row = {
       body: "Overall.",
+      last_edited_by_json: null,
       created_at: "2026-01-01T00:00:00.000Z",
       dismissed_at: null,
       project_id: "project-1",
@@ -188,6 +197,7 @@ describe("file comment and review note row mappers", () => {
 
     expect(reviewNoteFromRow(row)).toEqual({
       body: "Overall.",
+      lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       projectId: "project-1",
       scopeId: "scope-1",

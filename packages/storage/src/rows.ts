@@ -1,3 +1,4 @@
+import type { FeedbackActor } from "./records.js";
 import { clampFileListWidth, type ProjectSettingsRecord } from "./settings.js";
 import type {
   ReviewCommentRecord,
@@ -62,6 +63,8 @@ export type ReviewMarkRow = {
 };
 
 export type ReviewCommentRow = {
+  readonly created_by_json: null | string;
+  readonly last_edited_by_json: null | string;
   readonly body: string;
   readonly created_at: string;
   readonly diff_hash: string;
@@ -77,6 +80,8 @@ export type ReviewCommentRow = {
 };
 
 export type ReviewFileCommentRow = {
+  readonly created_by_json: null | string;
+  readonly last_edited_by_json: null | string;
   readonly body: string;
   readonly created_at: string;
   readonly diff_hash: string;
@@ -89,6 +94,7 @@ export type ReviewFileCommentRow = {
 };
 
 export type ReviewNoteRow = {
+  readonly last_edited_by_json: null | string;
   readonly body: string;
   readonly created_at: string;
   readonly dismissed_at: null | string;
@@ -152,6 +158,8 @@ export function reviewMarkFromRow(row: ReviewMarkRow): ReviewMarkRecord {
 
 export function reviewCommentFromRow(row: ReviewCommentRow): ReviewCommentRecord {
   return {
+    createdBy: parseFeedbackActor(row.created_by_json),
+    lastEditedBy: parseFeedbackActor(row.last_edited_by_json),
     body: row.body,
     createdAt: row.created_at,
     diffHash: row.diff_hash,
@@ -171,6 +179,8 @@ export function reviewFileCommentFromRow(
   row: ReviewFileCommentRow
 ): ReviewFileCommentRecord {
   return {
+    createdBy: parseFeedbackActor(row.created_by_json),
+    lastEditedBy: parseFeedbackActor(row.last_edited_by_json),
     body: row.body,
     createdAt: row.created_at,
     diffHash: row.diff_hash,
@@ -185,6 +195,7 @@ export function reviewFileCommentFromRow(
 
 export function reviewNoteFromRow(row: ReviewNoteRow): ReviewNoteRecord {
   return {
+    lastEditedBy: parseFeedbackActor(row.last_edited_by_json),
     body: row.body,
     createdAt: row.created_at,
     ...(row.dismissed_at ? { dismissedAt: row.dismissed_at } : {}),
@@ -192,4 +203,28 @@ export function reviewNoteFromRow(row: ReviewNoteRow): ReviewNoteRecord {
     scopeId: row.scope_id,
     updatedAt: row.updated_at
   };
+}
+
+export function parseFeedbackActor(json: null | string | undefined): FeedbackActor {
+  if (!json) return { kind: "human" };
+  try {
+    const value: unknown = JSON.parse(json);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "kind" in value &&
+      value.kind === "agent" &&
+      "name" in value &&
+      typeof value.name === "string" &&
+      value.name.trim().length > 0 &&
+      "runId" in value &&
+      typeof value.runId === "string" &&
+      value.runId.trim().length > 0
+    ) {
+      return { kind: "agent", name: value.name, runId: value.runId };
+    }
+  } catch {
+    // Invalid legacy metadata must not prevent reading feedback.
+  }
+  return { kind: "human" };
 }

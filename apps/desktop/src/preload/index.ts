@@ -409,7 +409,13 @@ export type ReviewFileView = {
 
 export type ReviewCommentSide = "additions" | "deletions";
 
+export type FeedbackActor =
+  | { readonly kind: "human" }
+  | { readonly kind: "agent"; readonly name: string; readonly runId: string };
+
 export type ReviewCommentView = {
+  readonly createdBy?: FeedbackActor;
+  readonly lastEditedBy?: FeedbackActor;
   readonly body: string;
   readonly createdAt: string;
   readonly diffHash: string;
@@ -462,6 +468,8 @@ export type ReviewFileDiffContentView = {
 };
 
 export type ReviewFileCommentView = {
+  readonly createdBy?: FeedbackActor;
+  readonly lastEditedBy?: FeedbackActor;
   readonly body: string;
   readonly createdAt: string;
   readonly diffHash: string;
@@ -472,6 +480,8 @@ export type ReviewFileCommentView = {
 };
 
 export type ReviewNoteView = {
+  readonly noteVersion?: string;
+  readonly lastEditedBy?: FeedbackActor;
   readonly body: string;
   readonly createdAt: string;
   readonly dismissedAt?: string;
@@ -567,6 +577,7 @@ export type DeleteReviewNoteResult =
     };
 
 export type ReviewWorkspaceView = {
+  readonly noteVersion?: string;
   readonly comments: readonly ReviewCommentView[];
   readonly fileComments?: readonly ReviewFileCommentView[];
   readonly reviewNote?: ReviewNoteView | null;

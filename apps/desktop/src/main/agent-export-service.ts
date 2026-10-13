@@ -116,6 +116,8 @@ export function createAgentExportService(
             comments: items
               .filter((item) => item.kind === "line")
               .map((item) => ({
+                ...(item.createdBy ? { createdBy: item.createdBy } : {}),
+                lastEditedBy: item.lastEditedBy,
                 id: item.id,
                 body: item.body,
                 path: required(item.path),
@@ -130,6 +132,8 @@ export function createAgentExportService(
             fileComments: items
               .filter((item) => item.kind === "file")
               .map((item) => ({
+                ...(item.createdBy ? { createdBy: item.createdBy } : {}),
+                lastEditedBy: item.lastEditedBy,
                 id: item.id,
                 body: item.body,
                 path: required(item.path),
@@ -139,7 +143,12 @@ export function createAgentExportService(
                 ...(item.previousPath ? { previousPath: item.previousPath } : {})
               })),
             reviewNote: note
-              ? { body: note.body, createdAt: note.createdAt, updatedAt: note.updatedAt }
+              ? {
+                  body: note.body,
+                  createdAt: note.createdAt,
+                  updatedAt: note.updatedAt,
+                  lastEditedBy: note.lastEditedBy
+                }
               : null
           };
           const content = await formatExplicitReviewReport(
