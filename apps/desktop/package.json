@@ -10,13 +10,14 @@
   "scripts": {
     "bench:performance": "pnpm --filter @difftray/core build && pnpm --filter @difftray/git build && pnpm --filter @difftray/storage build && pnpm build && node tests/performance-benchmark.mjs && node tests/repository-discovery-benchmark.mjs",
     "bench:repositories": "pnpm --filter @difftray/storage build && node tests/repository-discovery-benchmark.mjs",
-    "build": "node scripts/clean-dist.mjs && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts",
+    "build": "node scripts/clean-dist.mjs && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts && vite build --config vite.cli.config.ts",
     "clean": "node scripts/clean-dist.mjs",
     "companion:smoke": "node scripts/companion-smoke.mjs",
     "dev": "node scripts/dev.mjs",
     "test": "vitest run --passWithNoTests",
     "test:visual": "pnpm --filter @difftray/core build && pnpm --filter @difftray/git build && pnpm --filter @difftray/storage build && pnpm build && node tests/visual-smoke.mjs",
-    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.cli.json --noEmit",
+    "test:cli:bundle": "node scripts/cli-bundle-smoke.mjs"
   },
   "dependencies": {
     "bonjour-service": "^1.4.4",

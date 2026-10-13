@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+# Resolve installation symlinks without changing the caller's working directory.
+launcher=$0
+links=0
+while [ -L "$launcher" ]; do
+  links=$((links + 1))
+  if [ "$links" -gt 40 ]; then
+    echo "Difftray launcher symlink cycle" >&2
+    exit 3
+  fi
+  launcher_dir=$(CDPATH= cd -P -- "$(dirname -- "$launcher")" && pwd)
+  target=$(readlink -- "$launcher")
+  case "$target" in
+    /*) launcher=$target ;;
+    *) launcher=$launcher_dir/$target ;;
+  esac
+done
+bin_dir=$(CDPATH= cd -P -- "$(dirname -- "$launcher")" && pwd)
+contents=$(CDPATH= cd -P -- "$bin_dir/../.." && pwd)
+executable=$(/usr/bin/plutil -extract CFBundleExecutable raw "$contents/Info.plist")
+case "$executable" in
+  ''|*/*) echo "Invalid Difftray bundle executable" >&2; exit 3 ;;
+esac
+ELECTRON_RUN_AS_NODE=1 exec "$contents/MacOS/$executable" "$contents/Resources/app.asar/dist/cli/index.cjs" "$@"

@@ -62,10 +62,19 @@ Project commands:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm test:visual`
+- `pnpm --filter @difftray/desktop test:cli:bundle` — build an unsigned temporary
+  macOS bundle and verify its bundled CLI without Node on PATH. Pass `--app PATH`
+  to validate an explicitly supplied existing bundle without rebuilding it.
 - `pnpm check`
 - `./ci.sh`
 
 Use pnpm for dependency management.
+
+The bundled CLI requires Electron's `runAsNode` fuse to remain enabled. Its launcher
+executes only the fixed `dist/cli/index.cjs` entry point and does not import GUI code.
+The CLI has its own CJS Vite build and `tsconfig.cli.json` typecheck. Fixture bundles
+disable signing explicitly with `--config.mac.identity=null` and notarization with
+`DIFFTRAY_SKIP_NOTARIZE=1`; no fixture helper publishes or runs `release.sh`.
 
 `pnpm check` delegates to `./ci.sh`.
 

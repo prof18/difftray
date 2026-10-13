@@ -5,6 +5,7 @@
     { "path": "packages/git" },
     { "path": "packages/storage" },
     { "path": "apps/desktop/tsconfig.main.json" },
+    { "path": "apps/desktop/tsconfig.cli.json" },
     { "path": "apps/desktop/tsconfig.preload.json" },
     { "path": "apps/desktop/tsconfig.renderer.json" }
   ]

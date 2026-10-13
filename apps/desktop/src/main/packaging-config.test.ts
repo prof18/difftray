@@ -1,12 +1,21 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 type MacPackagingConfig = {
+  readonly electronFuses: { readonly runAsNode: boolean };
+  readonly extraResources: readonly { readonly from: string; readonly to: string }[];
   readonly afterPack: (context: {
     readonly appOutDir: string;
     readonly electronPlatformName: string;
@@ -24,6 +33,27 @@ const packagingConfig =
 const temporaryDirectories: string[] = [];
 
 describe("macOS packaging configuration", () => {
+  it("bundles an executable CLI with an independent CJS build and Node mode enabled", () => {
+    const root = path.resolve(import.meta.dirname, "../../../..");
+    const desktopPackage = JSON.parse(
+      readFileSync(path.join(root, "apps/desktop/package.json"), "utf8")
+    );
+    expect(packagingConfig.electronFuses).toMatchObject({ runAsNode: true });
+    expect(packagingConfig.extraResources).toContainEqual({
+      from: "apps/desktop/resources/bin/difftray",
+      to: "bin/difftray"
+    });
+    expect(desktopPackage.scripts.build).toContain(
+      "vite build --config vite.cli.config.ts"
+    );
+    expect(desktopPackage.scripts.typecheck).toContain("tsconfig.cli.json");
+    expect(desktopPackage.scripts["test:cli:bundle"]).toBe(
+      "node scripts/cli-bundle-smoke.mjs"
+    );
+    expect(
+      statSync(path.join(root, "apps/desktop/resources/bin/difftray")).mode & 0o111
+    ).not.toBe(0);
+  });
   afterEach(() => {
     for (const directory of temporaryDirectories.splice(0)) {
       rmSync(directory, { force: true, recursive: true });
