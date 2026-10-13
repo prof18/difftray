@@ -1,3 +1,4 @@
+import { noteAttributionLabel } from "./feedback-attribution.js";
 import { useEffect, useRef, useState } from "react";
 import { EyeOff, NotebookPen, Pencil, Save, Trash2, Undo2 } from "lucide-react";
 
@@ -186,6 +187,11 @@ export function ReviewNotesPanel({
   if (note.dismissedAt) {
     return (
       <section className={styles.panel} data-state="dismissed" aria-label="Review notes">
+        {noteAttributionLabel(note.lastEditedBy) ? (
+          <div className={styles.attribution}>
+            {noteAttributionLabel(note.lastEditedBy)}
+          </div>
+        ) : null}
         <p className={styles.dismissedText}>
           Review notes dismissed. They won&apos;t be included in the prompt.
         </p>
@@ -239,6 +245,11 @@ export function ReviewNotesPanel({
           {deleteButton}
         </div>
       </div>
+      {noteAttributionLabel(note.lastEditedBy) ? (
+        <div className={styles.attribution}>
+          {noteAttributionLabel(note.lastEditedBy)}
+        </div>
+      ) : null}
       <button
         aria-expanded={expanded}
         className={styles.body}

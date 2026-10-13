@@ -614,6 +614,32 @@ try {
     writtenReport.includes(actor.name),
     "prompt report must include agent display labels"
   );
+  await open(writes, writeRepo.path);
+  const attributedPage = await selected(
+    writesGui,
+    writeRepo.path,
+    path.basename(writeRepo.path)
+  );
+  await attributedPage.locator('button[data-file-path="tracked.txt"]').click();
+  await attributedPage.getByText("Single-line agent finding", { exact: true }).waitFor();
+  await attributedPage.getByText("Multi-line agent finding", { exact: true }).waitFor();
+  await attributedPage
+    .getByRole("group", { name: "File comments" })
+    .getByText(`Agent: ${actor.name}`, { exact: true })
+    .waitFor();
+  await attributedPage
+    .getByText(`Last edited by agent: ${actor.name}`, { exact: true })
+    .waitFor();
+  await until(
+    async () =>
+      (await attributedPage
+        .getByText(`Agent: ${actor.name}`, { exact: true })
+        .count()) === 3,
+    "desktop line, range and file creator labels"
+  );
+  await attributedPage.screenshot({
+    path: path.join(evidence, "cli-attributed-feedback.png")
+  });
   const verifyReplay = async () => {
     assert.deepEqual((await submit()).result, { ...receipt, deduplicated: true });
     const afterRetry = (

@@ -45,6 +45,12 @@ describe("diff surface app", () => {
           comments: [
             {
               body: "Please revisit this line.",
+              createdBy: {
+                kind: "agent",
+                name: '<img src=x onerror="attack()">' + "Reviewer".repeat(12),
+                runId: "run-1"
+              },
+              lastEditedBy: { kind: "human" },
               createdAt: "2026-01-01T00:00:00.000Z",
               diffHash: "hash-1",
               id: "comment-1",
@@ -68,6 +74,9 @@ describe("diff surface app", () => {
     expect(html).toContain('data-comment-id="comment-1"');
     expect(html).toContain("Please revisit this line.");
     expect(html).toContain("New line 1");
+    expect(html).toContain("Agent: &lt;img");
+    expect(html).toContain("edited by human");
+    expect(html).not.toContain("<img");
     expect(html).toContain('slot="annotation-deletions-1"');
     expect(html).toContain("Draft comment");
   });

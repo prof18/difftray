@@ -227,6 +227,12 @@ function fixtureComment({
   return {
     body,
     createdAt: "2026-07-03T00:00:00.000Z",
+    createdBy: {
+      kind: "agent",
+      name: harnessXssFixtureText + " Reviewer".repeat(7),
+      runId: "00000000-0000-4000-8000-000000000001"
+    },
+    lastEditedBy: { kind: "human" },
     diffHash: "harness-xss-fixture",
     id: "harness-comment-1",
     lineEnd: 4,

@@ -134,7 +134,48 @@ try {
 
   await page.getByRole("button", { name: /Set comments/ }).click();
   await page.getByText("Updated from browser harness").waitFor({ timeout: 10_000 });
-
+  const attributedComment = page.locator('[data-comment-id="harness-comment-1"]');
+  const provenance = await attributedComment
+    .locator(".diff-surface__attribution")
+    .textContent();
+  assert(
+    provenance?.startsWith("Agent: <img src=x onerror="),
+    "Agent label must remain plain text"
+  );
+  assert(provenance?.endsWith("edited by human"), "Human edit must retain agent creator");
+  assert(
+    (await attributedComment.getByText("New line 4", { exact: true }).count()) === 1,
+    "Attribution must retain comment location"
+  );
+  await expectHostileFixtureIsInert(page);
+  // The harness reserves 320px for controls; exercise a 390px phone surface.
+  await page.setViewportSize({ width: 710, height: 844 });
+  const surfaceWidth = await page
+    .locator(".diff-surface")
+    .evaluate((element) => element.getBoundingClientRect().width);
+  assert(surfaceWidth === 390, `Expected a phone-width surface, saw ${surfaceWidth}`);
+  const labelBounds = await attributedComment
+    .locator(".diff-surface__attribution")
+    .evaluate((element) => {
+      const label = element.getBoundingClientRect();
+      const button = element.closest("button").getBoundingClientRect();
+      return {
+        labelWidth: label.width,
+        buttonWidth: button.width,
+        overflow: element.scrollWidth > element.clientWidth + 1
+      };
+    });
+  assert(
+    !labelBounds.overflow && labelBounds.labelWidth <= labelBounds.buttonWidth,
+    `Long agent labels must wrap within the comment tap target: ${JSON.stringify(labelBounds)}`
+  );
+  await attributedComment.click();
+  await waitForSurfaceMessage(
+    page,
+    (message) =>
+      message.kind === "comment_tapped" && message.commentId === "harness-comment-1",
+    "attributed comment tapped"
+  );
   await page.getByRole("button", { name: /Set split mode/ }).click();
   await page.locator('.diff-surface[data-diff-mode="split"]').waitFor({
     timeout: 10_000

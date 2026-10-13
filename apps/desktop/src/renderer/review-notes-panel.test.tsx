@@ -50,6 +50,27 @@ describe("ReviewNotesPanel", () => {
     expect(html).not.toContain("Keep the public API stable.");
   });
 
+  it.each([
+    undefined,
+    { kind: "human" } as const,
+    { kind: "agent", name: "Codex", runId: "one" } as const
+  ])("shows the explicit last editor in active and dismissed notes: %j", (actor) => {
+    for (const dismissedAt of [undefined, "2026-01-03T00:00:00.000Z"]) {
+      const html = render({
+        note: {
+          ...note,
+          ...(actor ? { lastEditedBy: actor } : {}),
+          ...(dismissedAt ? { dismissedAt } : {})
+        }
+      });
+      if (!actor) expect(html).not.toContain("Last edited by");
+      else
+        expect(html).toContain(
+          actor.kind === "agent" ? "Last edited by agent: Codex" : "Last edited by human"
+        );
+    }
+  });
+
   it("disables every button while pending", () => {
     const html = render({ note, pending: true });
 

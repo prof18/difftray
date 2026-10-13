@@ -1,3 +1,4 @@
+import { commentAttributionLabel } from "./feedback-attribution.js";
 import { useEffect, useRef, useState } from "react";
 import type { DiffLineAnnotation } from "@pierre/diffs";
 import { MessageSquare, Pencil, Save, Trash2 } from "lucide-react";
@@ -160,6 +161,11 @@ export function ReviewCommentAnnotation({
           </button>
         </div>
       </div>
+      {commentAttributionLabel(metadata.comment) ? (
+        <div className={styles.attribution}>
+          {commentAttributionLabel(metadata.comment)}
+        </div>
+      ) : null}
       <p className={styles.reviewCommentBody}>{metadata.comment.body}</p>
     </div>
   );

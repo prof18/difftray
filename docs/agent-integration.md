@@ -91,4 +91,7 @@ Companion clients opt in with `feedback-attribution-v1`. Without that capability
 all response routes omit `createdBy`, `lastEditedBy`, and `noteVersion` recursively;
 existing response shapes and the `{report}` envelope remain unchanged. Reports
 use the same compact attribution text in clipboard, companion and CLI output.
-The optional desktop/mobile attribution labels are implemented in the next UI step.
+Desktop comments, file cards and overall notes display the optional attribution.
+The shared mobile inline diff renders agent labels as escaped text alongside the
+source-line location. Agent creator and later human editor remain distinct;
+overall notes display only their last editor.

@@ -26,6 +26,34 @@ describe("ReviewCommentAnnotation", () => {
     expect(html).toContain('aria-label="Delete review comment"');
   });
 
+  it("renders escaped agent creator and human editor without losing range or controls", () => {
+    const html = renderToStaticMarkup(
+      <ReviewCommentAnnotation
+        {...props()}
+        annotation={commentAnnotation(
+          reviewComment({
+            createdBy: {
+              kind: "agent",
+              name: '<img src=x onerror="attack()">' + "Reviewer".repeat(12),
+              runId: "run-1"
+            },
+            lastEditedBy: { kind: "human" },
+            lineStart: 10,
+            lineEnd: 12,
+            body: "First line\nSecond line"
+          })
+        )}
+      />
+    );
+    expect(html).toContain("Agent: &lt;img");
+    expect(html).toContain("edited by human");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("New lines 10-12");
+    expect(html).toContain("First line\nSecond line");
+    expect(html).toContain('aria-label="Edit review comment"');
+    expect(html).toContain('aria-label="Delete review comment"');
+  });
+
   it("renders draft editing controls with the draft body", () => {
     const html = renderToStaticMarkup(
       <ReviewCommentAnnotation

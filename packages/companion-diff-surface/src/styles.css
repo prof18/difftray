@@ -294,6 +294,8 @@ body {
 
 .diff-surface__annotation p {
   margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .diff-surface__context-expander {
@@ -644,4 +646,12 @@ body {
 .diff-surface__range-actions button:first-of-type {
   border-color: var(--diff-surface-accent);
   color: var(--diff-surface-accent);
+}
+
+.diff-surface__annotation .diff-surface__attribution {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--diff-surface-muted);
 }

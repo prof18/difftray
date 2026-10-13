@@ -15,6 +15,22 @@ describe("FileCommentStack", () => {
     expect(html).toContain('aria-label="Delete file comment"');
   });
 
+  it("distinguishes agent runs and retains file controls", () => {
+    const html = render({
+      comments: [
+        {
+          ...fileComment("agent", "First\nSecond"),
+          createdBy: { kind: "agent", name: "Codex", runId: "one" },
+          lastEditedBy: { kind: "agent", name: "Codex", runId: "two" }
+        }
+      ]
+    });
+    expect(html).toContain("Agent: Codex · edited by Codex");
+    expect(html).toContain("First\nSecond");
+    expect(html).toContain('aria-label="Edit file comment"');
+    expect(html).toContain('aria-label="Delete file comment"');
+  });
+
   it("renders the draft editor before saved cards", () => {
     const html = render({
       comments: [fileComment("first", "Saved comment.")],

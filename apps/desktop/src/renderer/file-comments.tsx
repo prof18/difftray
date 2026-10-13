@@ -1,3 +1,4 @@
+import { commentAttributionLabel } from "./feedback-attribution.js";
 import { useEffect, useRef, useState } from "react";
 import { FileText, Pencil, Save, Trash2 } from "lucide-react";
 
@@ -139,6 +140,9 @@ function FileCommentCard({
           </button>
         </div>
       </div>
+      {commentAttributionLabel(comment) ? (
+        <div className={styles.attribution}>{commentAttributionLabel(comment)}</div>
+      ) : null}
       <p className={styles.body}>{comment.body}</p>
     </div>
   );

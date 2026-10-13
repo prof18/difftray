@@ -1,3 +1,4 @@
+import { commentAttributionLabel } from "./surface-feedback-attribution.js";
 import { type DiffSurfaceMessage, type DiffSurfaceSide } from "./surface-bridge.js";
 import { createCommentTappedMessage } from "./surface-outbound.js";
 import {
@@ -51,6 +52,11 @@ export function SurfaceAnnotation({
           side: metadata.comment.side
         })}
       </span>
+      {commentAttributionLabel(metadata.comment) ? (
+        <span className="diff-surface__attribution">
+          {commentAttributionLabel(metadata.comment)}
+        </span>
+      ) : null}
       <p>{metadata.comment.body}</p>
     </button>
   );

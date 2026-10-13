@@ -42,6 +42,32 @@ describe("diff surface browser harness fixtures", () => {
     expect(showFile.message.newText).toContain(harnessXssFixtureText);
   });
 
+  it("carries a long hostile agent creator followed by a human edit at the same location", () => {
+    const action = createDiffSurfaceHarnessActions().find(
+      (item) => item.label === "Set comments"
+    );
+    expect(action?.message).toMatchObject({
+      kind: "set_comments",
+      comments: [
+        {
+          id: "harness-comment-1",
+          lineStart: 4,
+          lineEnd: 4,
+          createdBy: { kind: "agent" },
+          lastEditedBy: { kind: "human" }
+        }
+      ]
+    });
+    if (action?.message.kind !== "set_comments")
+      throw new Error("Missing comment action");
+    const actor = action.message.comments[0]?.createdBy;
+    expect(actor?.kind).toBe("agent");
+    if (actor?.kind === "agent") {
+      expect(actor.name).toContain("<img src=x onerror=");
+      expect(actor.name.length).toBeGreaterThan(80);
+    }
+  });
+
   it("includes a large-fixture scroll target for browser proof", () => {
     const actions = createDiffSurfaceHarnessActions();
     const showAtLine = actions.find(

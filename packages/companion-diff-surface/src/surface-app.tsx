@@ -1,8 +1,8 @@
+import { SurfaceAnnotation } from "./surface-row-annotations.js";
 import type { ReviewCommentView } from "@difftray/companion-protocol";
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import {
   Virtualizer as DiffsVirtualizer,
-  type DiffLineAnnotation,
   type OnDiffLineClickProps,
   type SelectedLineRange
 } from "@pierre/diffs";
@@ -22,10 +22,7 @@ import {
   surfaceAnnotationLocation,
   surfaceCommentAnnotations
 } from "./surface-pierre-renderer.js";
-import {
-  createCommentTappedMessage,
-  createLineRangeSelectedMessage
-} from "./surface-outbound.js";
+import { createLineRangeSelectedMessage } from "./surface-outbound.js";
 import { createPreviewSnapshot } from "./surface-preview-snapshot.js";
 import {
   surfaceVirtualFileMetrics,
@@ -257,53 +254,6 @@ function lineTextFromFileDiff(
     side === "additions" ? model.fileDiff.additionLines : model.fileDiff.deletionLines;
 
   return lines[lineNumber - 1] ?? "";
-}
-
-type SurfaceAnnotationProps = {
-  readonly annotation: DiffLineAnnotation<SurfaceAnnotationMetadata>;
-  readonly onSurfaceMessage?: (message: DiffSurfaceMessage) => void;
-};
-
-function SurfaceAnnotation({
-  annotation,
-  onSurfaceMessage
-}: SurfaceAnnotationProps): React.JSX.Element {
-  const { metadata } = annotation;
-
-  if (metadata.kind === "draft") {
-    return (
-      <div className="diff-surface__annotation" data-draft="true">
-        <span>
-          {surfaceAnnotationLocation({
-            lineEnd: metadata.draft.lineEnd,
-            lineStart: metadata.draft.lineStart,
-            side: metadata.draft.side
-          })}
-        </span>
-        <p>Draft comment</p>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      className="diff-surface__annotation"
-      data-comment-id={metadata.comment.id}
-      onClick={() => {
-        onSurfaceMessage?.(createCommentTappedMessage(metadata.comment.id));
-      }}
-      type="button"
-    >
-      <span>
-        {surfaceAnnotationLocation({
-          lineEnd: metadata.comment.lineEnd,
-          lineStart: metadata.comment.lineStart,
-          side: metadata.comment.side
-        })}
-      </span>
-      <p>{metadata.comment.body}</p>
-    </button>
-  );
 }
 
 type SurfacePointer = {
