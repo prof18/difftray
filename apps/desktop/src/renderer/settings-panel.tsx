@@ -276,6 +276,37 @@ function GeneralSettingsPage({
   readonly editorOptions: readonly EditorPresetView[];
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
 }): React.JSX.Element {
+  const [cliStatus, setCliStatus] = useState<CliInstallStatus | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
+  const [cliError, setCliError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.difftray
+      .getCliInstallStatus()
+      .then((status) => {
+        if (active) setCliStatus(status);
+      })
+      .catch((error: unknown) => {
+        if (active) setCliError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function installCli(): Promise<void> {
+    setCliBusy(true);
+    setCliError(null);
+    try {
+      setCliStatus(await window.difftray.installCli());
+    } catch (error) {
+      setCliError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCliBusy(false);
+    }
+  }
+
   return (
     <>
       <SettingsSection title="Appearance">
@@ -308,6 +339,64 @@ function GeneralSettingsPage({
             onChangeAppSettings={onChangeAppSettings}
           />
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="Terminal">
+        <div className={styles.settingRow}>
+          <span>
+            {cliStatus?.kind === "installed"
+              ? "Command-line tool installed"
+              : "Command-line tool"}
+          </span>
+          {cliStatus?.kind === "absent" || cliStatus?.kind === "repairable" ? (
+            <button
+              className={styles.secondaryButton}
+              disabled={disabled || cliBusy}
+              onClick={() => {
+                void installCli();
+              }}
+              type="button"
+            >
+              {cliStatus.kind === "repairable"
+                ? "Repair command-line tool"
+                : "Install command-line tool"}
+            </button>
+          ) : null}
+        </div>
+        {cliStatus ? (
+          <div className={styles.cliInstallDetails}>
+            {cliStatus.reason ? <p role="status">{cliStatus.reason}</p> : null}
+            <label>
+              Absolute command path
+              <input
+                aria-label="Absolute command path"
+                readOnly
+                value={
+                  cliStatus.kind === "installed"
+                    ? cliStatus.destination
+                    : cliStatus.invocation
+                }
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+            {!cliStatus.onPath ? (
+              <label>
+                Add to terminal PATH if needed
+                <input
+                  aria-label="PATH instruction"
+                  readOnly
+                  value={cliStatus.pathInstruction ?? ""}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+        {cliError ? (
+          <p className={styles.cliInstallError} role="alert">
+            {cliError}
+          </p>
+        ) : null}
       </SettingsSection>
     </>
   );

@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, realpath, writeFile, symlink, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,15 +20,63 @@ async function fixture(productName = "Difftray") {
   await mkdir(path.dirname(metadataPath), { recursive: true });
   await writeFile(executablePath, "fixture", { mode: 0o700 });
   await writeFile(metadataPath, JSON.stringify({ productName, version: "1.2.3" }));
+  const plistPath = path.join(bundle, "Contents/Info.plist");
+  const entryPath = path.join(bundle, "Contents/Resources/app.asar/dist/cli/index.cjs");
+  await mkdir(path.dirname(entryPath), { recursive: true });
+  await writeFile(entryPath, "// CLI");
+  await writeFile(
+    plistPath,
+    JSON.stringify({
+      CFBundleExecutable: productName,
+      CFBundleIdentifier:
+        productName === "Difftray" ? "com.prof18.difftray" : "com.prof18.difftray.dev"
+    })
+  );
+  execFileSync("/usr/bin/plutil", ["-convert", "xml1", plistPath]);
   return {
     root,
     bundle,
     executablePath,
     metadataPath,
+    plistPath,
+    entryPath,
     options: { executablePath, homeDirectory: root, env: {}, platform: "darwin" as const }
   };
 }
 describe("CLI own-bundle runtime", () => {
+  it("rejects a mismatched native bundle identity", async () => {
+    const f = await fixture();
+    execFileSync("/usr/bin/plutil", [
+      "-replace",
+      "CFBundleIdentifier",
+      "-string",
+      "com.other.app",
+      f.plistPath
+    ]);
+    await expect(resolveAgentRuntime(f.options)).rejects.toMatchObject({
+      code: "app_unavailable"
+    });
+  });
+  it("rejects a native executable different from the current runtime", async () => {
+    const f = await fixture();
+    execFileSync("/usr/bin/plutil", [
+      "-replace",
+      "CFBundleExecutable",
+      "-string",
+      "Other",
+      f.plistPath
+    ]);
+    await expect(resolveAgentRuntime(f.options)).rejects.toMatchObject({
+      code: "app_unavailable"
+    });
+  });
+  it("rejects an incomplete update missing the fixed CLI entry", async () => {
+    const f = await fixture();
+    await rm(f.entryPath);
+    await expect(resolveAgentRuntime(f.options)).rejects.toMatchObject({
+      code: "app_unavailable"
+    });
+  });
   it("creates and canonicalizes the default production profile", async () => {
     const f = await fixture();
     const runtime = await resolveAgentRuntime(f.options);
@@ -39,7 +88,8 @@ describe("CLI own-bundle runtime", () => {
       executablePath: await realpath(f.executablePath),
       profilePath: await realpath(
         path.join(f.root, "Library/Application Support/Difftray")
-      )
+      ),
+      profileOverride: false
     });
   });
   it("uses packaged metadata to identify Alpha even when bundle renamed", async () => {
@@ -60,6 +110,7 @@ describe("CLI own-bundle runtime", () => {
       env: { DIFFTRAY_USER_DATA_DIR: path.join(f.root, "link/new") }
     });
     expect(runtime.profilePath).toBe(await realpath(path.join(f.root, "actual/new")));
+    expect(runtime.profileOverride).toBe(true);
   });
   it("preserves profile override path whitespace exactly like the GUI", async () => {
     const f = await fixture();
@@ -69,6 +120,7 @@ describe("CLI own-bundle runtime", () => {
       env: { DIFFTRAY_USER_DATA_DIR: override }
     });
     expect(runtime.profilePath).toBe(await realpath(override));
+    expect(runtime.profileOverride).toBe(true);
   });
   it("resolves the own executable symlink and ignores bundle switching env", async () => {
     const f = await fixture();

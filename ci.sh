@@ -7,5 +7,6 @@ pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm --filter @difftray/desktop test:agent-package
 pnpm --filter @difftray/companion-diff-surface test:browser
 pnpm test:visual

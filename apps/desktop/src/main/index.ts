@@ -1,3 +1,4 @@
+import { createCliInstaller, type CliInstallStatus } from "./agent-cli-install.js";
 import { createAgentOpenCoordinator } from "./agent-open-ack.js";
 import { prepareAgentOpen, assertAgentOpenActive } from "./agent-open-service.js";
 import {
@@ -620,6 +621,20 @@ handleTrusted("agent:acknowledgeOpen", (event, input: unknown): void => {
     status: readEnumProperty(input, "status", ["selected", "load_failed", "busy"])
   });
 });
+function cliInstaller() {
+  return createCliInstaller({
+    home: homedir(),
+    resourcesPath: process.resourcesPath,
+    profilePath: app.getPath("userData"),
+    variant: resolvedAppRuntimeConfig?.flavor ?? "dev",
+    packaged: app.isPackaged && process.platform === "darwin",
+    profileOverride: Boolean(userDataPath),
+    pathValue: process.env.PATH ?? "",
+    uid: process.getuid?.() ?? -1
+  });
+}
+handleTrusted("cli:getInstallStatus", (): CliInstallStatus => cliInstaller().getStatus());
+handleTrusted("cli:install", (): CliInstallStatus => cliInstaller().install());
 handleTrusted("app:version", () => app.getVersion());
 handleTrusted("app:setSelectedFileAvailable", (_event, input): void => {
   applicationMenuController?.setSelectedFileAvailable(

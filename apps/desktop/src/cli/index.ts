@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   AgentProtocolError,
@@ -10,6 +11,7 @@ import { resolveAgentRuntime } from "./agent-runtime.js";
 import { connectAgent } from "./agent-connection.js";
 import { sendAgentRequest } from "./agent-client.js";
 import { withSubmissionInput } from "./submission-input.js";
+import { runDoctor } from "./diagnostics.js";
 import {
   cliExitCode,
   cliErrorResponse,
@@ -23,7 +25,7 @@ Usage: difftray open [PATH] [--target working-tree|branch|commit] [--base REF|--
        difftray review inspect [--repo PATH] [--target selected|working-tree|branch|commit]
        difftray review files|file|feedback|export --context ID
        difftray feedback submit --context ID --input FILE_OR_STDIN [--request-id ID] [--json]
-       difftray doctor [--json]
+       difftray doctor [--app OWN_BUNDLE_PATH] [--json]
        difftray --help | --version [--json]
 
 Review scopes: overall notes, file comments, and side-aware line/range comments.
@@ -43,6 +45,11 @@ submit reads a JSON document (maximum 1 MiB; use --input - for stdin) containing
 actor {name, runId}, requestId and items. An optional --request-id must agree with
 the document requestId if present. Bodies are supplied only in JSON input.
 Access is local-only using the current OS user's private desktop endpoint.
+This launcher always uses its own app bundle, including after relocation.
+doctor reports that bundle, profile, CLI version and startup/connection result.
+The portable skill resolver prefers /Applications/Difftray.app then
+~/Applications/Difftray.app; DIFFTRAY_APP_PATH explicitly selects custom/Alpha apps.
+DIFFTRAY_USER_DATA_DIR explicitly selects an isolated profile for this bundle.
 Callers must obtain user authorization for repository access and feedback actions.
 Exit codes: 1 internal, 2 input, 3 unavailable/not found/protocol,
 4 stale state/conflict, 5 transport/timeout/limit.
@@ -61,15 +68,13 @@ async function main() {
     await writeCliText(
       process.stdout,
       command.json
-        ? `${JSON.stringify({ appVersion: metadata.version, protocolVersion: CLI_PROTOCOL_VERSION, cwd: process.cwd(), runtime: process.versions })}\n`
+        ? `${JSON.stringify({ appVersion: metadata.version, cliVersion: metadata.version, bundlePath: path.dirname(path.dirname(path.dirname(process.execPath))), protocolVersion: CLI_PROTOCOL_VERSION, cwd: process.cwd(), runtime: process.versions })}\n`
         : `Difftray ${metadata.version} (CLI protocol ${String(CLI_PROTOCOL_VERSION)})\n`
     );
     return;
   }
   if (command.kind === "schema")
     throw new CliUsageError("This operation is not available in this build.");
-  if (command.kind === "doctor" && command.appPath)
-    throw new CliUsageError("Run the CLI inside the desired application bundle.");
   if (command.kind === "feedback.submit") {
     const response = await withSubmissionInput(command, async (params) => {
       const runtime = await resolveAgentRuntime();
@@ -80,12 +85,27 @@ async function main() {
     return;
   }
   const runtime = await resolveAgentRuntime();
+  if (command.kind === "doctor") {
+    if (
+      command.appPath &&
+      (await realpath(command.appPath)) !==
+        path.dirname(path.dirname(path.dirname(runtime.executablePath)))
+    )
+      throw new CliUsageError(
+        "Run the CLI inside the desired application bundle; --app must match this launcher’s bundle."
+      );
+    const diagnostic = await runDoctor(runtime, async () => {
+      const endpoint = await connectAgent(runtime);
+      const hello = await sendAgentRequest(endpoint, "hello", {});
+      if (!hello.ok) throw new AgentProtocolError(hello.error.code, hello.error.message);
+      return hello.result;
+    });
+    await displayResponse(command, diagnostic);
+    return;
+  }
   const endpoint = await connectAgent(runtime);
   let response;
   switch (command.kind) {
-    case "doctor":
-      response = await sendAgentRequest(endpoint, "hello", {});
-      break;
     case "open":
       response = await sendAgentRequest(endpoint, "open", {
         repoPath: command.repoPath,
@@ -148,10 +168,14 @@ async function displayResponse(
     ReturnType<typeof parseCliArguments>,
     { kind: "help" | "schema" | "version" }
   >,
-  response: AgentResponse
+  response: AgentResponse | Awaited<ReturnType<typeof runDoctor>>
 ): Promise<void> {
   if (!response.ok) {
-    if (command.json || (command.kind === "review.export" && command.format === "json"))
+    if (
+      command.kind === "doctor" ||
+      command.json ||
+      (command.kind === "review.export" && command.format === "json")
+    )
       await writeCliText(process.stdout, formatCliResponse(command, response));
     await writeCliText(
       process.stderr,

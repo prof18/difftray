@@ -97,6 +97,24 @@ Download the latest macOS build from the [Releases page](https://github.com/prof
 
 Open the `.dmg` and drag Difftray into your Applications folder.
 
+## Agent workflows
+
+The app includes a CLI at
+`/Applications/Difftray.app/Contents/Resources/bin/difftray`. It runs without a
+separate Node or npm installation. `doctor --json` checks the selected app and
+connection; review commands can start the installed app automatically. If the app
+is in `~/Applications`, use that path instead. The bundled launcher follows its
+own app when it is moved.
+
+The [portable Difftray skill](integrations/agents/difftray/README.md) provides
+review workflows for Codex, Claude Code, and Pi. Installing the skill in an agent
+is a one-time setup; it does not require installing a global `difftray` command.
+The skill finds the production app in `/Applications` or `~/Applications`. Set
+`DIFFTRAY_APP_PATH` to an absolute bundle path for a custom location or Difftray
+Alpha. General Settings also offers an optional **Install command-line tool**
+action for terminal convenience; it does not edit shell startup files. See
+[agent setup and review commands](docs/agent-integration.md#agent-skill-setup).
+
 ## Development
 
 Prerequisites:

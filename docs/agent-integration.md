@@ -1,5 +1,73 @@
 # Agent integration
 
+## Agent skill setup
+
+The portable package is at `integrations/agents/difftray` in this public
+checkout. It contains one canonical `skills/difftray` tree for Codex, Claude
+Code, and Pi. Installing a package into an agent is a one-time user setup step.
+The skill invokes the CLI already bundled with Difftray, so agent use requires
+no npm package, separate Node runtime, global CLI installation, or shell-profile
+change. These commands describe local setup; this repository has not published
+the package to an external marketplace or installed it in a user's agent.
+
+From this repository root, Codex CLI 0.162.1 accepts:
+
+```sh
+codex plugin marketplace add "$(pwd)"
+codex plugin add difftray@difftray-local
+```
+
+The first command adds this checkout's local catalog. The second installs its
+`difftray` plugin. Claude Code 2.1.281 accepts a session-local plugin directory;
+its manifest and catalog can be checked without starting a session:
+
+```sh
+claude plugin validate --strict "$(pwd)/integrations/agents/difftray"
+claude plugin validate --strict "$(pwd)/integrations/agents"
+claude --plugin-dir "$(pwd)/integrations/agents/difftray"
+```
+
+Pi 0.85.1 accepts the skill for a session or the local package for persistent
+installation:
+
+```sh
+pi --skill "$(pwd)/integrations/agents/difftray/skills/difftray/SKILL.md"
+pi install "$(pwd)/integrations/agents/difftray"
+```
+
+For Antigravity, copy the portable
+`integrations/agents/difftray/skills/difftray` directory into a location where
+its documented skill loader looks for skills. Preserve the `scripts` and
+`references` subdirectories. Antigravity plugin loading has not been validated.
+
+The host versions and invocation flags above were checked with installed
+`--help` output. The Claude plugin manifest passed `claude plugin validate
+--strict`; package tests use copied files and stub app bundles. Actual
+account-backed Codex, Claude, and Pi sessions remain a final user
+validation task. Antigravity remains optional and unverified. The commands above have not been run as installs or sessions.
+
+The skill's sibling `scripts/difftray` resolver uses `DIFFTRAY_APP_PATH` first
+when set; otherwise it chooses `/Applications/Difftray.app`, then
+`~/Applications/Difftray.app`. The override must name an absolute app bundle
+path and is how to select a moved/custom app or Difftray Alpha. It validates a
+known bundle ID and the executable paths before calling the bundled CLI. It
+does not search `PATH`, discover Alpha automatically, or change the caller's
+working directory. The direct launcher at
+`Difftray.app/Contents/Resources/bin/difftray` determines its own bundle.
+
+The optional **Install command-line tool** action in General Settings adds a
+terminal convenience command under `~/.local/bin` when possible. Use **Repair
+command-line tool** after moving an app if that symlink points at its old
+location. This action is unnecessary for the agent skill, which uses its own
+resolver. If `~/.local/bin` is not on `PATH`, use the absolute bundled CLI path
+or add that directory to the shell environment yourself.
+
+The [canonical skill](../integrations/agents/difftray/skills/difftray/SKILL.md)
+and [command reference](../integrations/agents/difftray/skills/difftray/references/commands.md)
+cover opening the current worktree, reading every feedback page, reviewing exact
+anchors, and submitting authorized single-line, inclusive-range, file, and overall findings. Loading a
+skill alone authorizes no write, code edit, other agent, or chat message.
+
 Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 
 A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch. Frames are bounded to 1 MiB for requests and 16 MiB for responses. Unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields are rejected.

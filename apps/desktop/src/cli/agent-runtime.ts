@@ -1,4 +1,6 @@
 import { constants } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { access, mkdir, readFile, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +13,7 @@ import {
 import type { AgentConnectionIdentity } from "./agent-connection.js";
 
 export type AgentRuntime = AgentConnectionIdentity & { readonly appVersion: string };
+const runFile = promisify(execFile);
 export type AgentRuntimeOptions = {
   readonly executablePath?: string;
   readonly homeDirectory?: string;
@@ -59,7 +62,19 @@ export async function resolveAgentRuntime(
       isPackaged: true,
       productName: record.productName
     });
+    const plist = path.join(contents, "Info.plist");
+    const extract = async (key: string) =>
+      (await runFile("/usr/bin/plutil", ["-extract", key, "raw", plist])).stdout.trim();
+    if (
+      (await extract("CFBundleIdentifier")) !== runtime.appId ||
+      (await extract("CFBundleExecutable")) !== path.basename(executablePath)
+    )
+      throw unavailable();
+    // Electron's synthetic ASAR Stats currently emits DEP0180. Reading the fixed
+    // entry verifies its presence/readability without polluting successful stderr.
+    await readFile(path.join(contents, "Resources/app.asar/dist/cli/index.cjs"));
     const env = options.env ?? process.env;
+    const profileOverride = env[PROFILE_OVERRIDE_ENV] !== undefined;
     const profile =
       env[PROFILE_OVERRIDE_ENV] ??
       path.join(
@@ -71,6 +86,7 @@ export async function resolveAgentRuntime(
     const profilePath = await realpath(profile);
     return {
       profilePath,
+      profileOverride,
       executablePath,
       appId: runtime.appId,
       flavor: runtime.flavor,

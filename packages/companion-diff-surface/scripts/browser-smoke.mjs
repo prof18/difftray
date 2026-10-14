@@ -31,7 +31,8 @@ try {
   browser = await launchBrowser();
 
   const page = await browser.newPage({
-    viewport: { height: 844, width: 390 }
+    // The harness sidebar occupies 320px; start with a real 390px phone surface.
+    viewport: { height: 844, width: 710 }
   });
   const browserErrors = [];
 
@@ -149,7 +150,6 @@ try {
   );
   await expectHostileFixtureIsInert(page);
   // The harness reserves 320px for controls; exercise a 390px phone surface.
-  await page.setViewportSize({ width: 710, height: 844 });
   const surfaceWidth = await page
     .locator(".diff-surface")
     .evaluate((element) => element.getBoundingClientRect().width);

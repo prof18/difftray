@@ -1,3 +1,4 @@
+import type { SpawnOptions } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import { AgentProtocolError, type AgentResponse } from "../shared/agent-protocol.js";
 import type { AgentEndpoint } from "../shared/agent-endpoint.js";
@@ -136,6 +137,47 @@ describe("agent startup connection", () => {
     });
     expect(deps.launch).toHaveBeenCalledTimes(1);
     expect(deps.now()).toBe(30_000);
+  });
+  it("omits the profile override for the own-bundle default", async () => {
+    const child = { once: vi.fn(), unref: vi.fn() };
+    child.once.mockImplementation((event: string, callback: () => void) => {
+      if (event === "spawn") callback();
+      return child;
+    });
+    const spawn = vi.fn<
+      (executable: string, args: string[], options: SpawnOptions) => typeof child
+    >(() => child);
+    await launchAgentApp(
+      { ...identity, profileOverride: false },
+      {
+        spawn,
+        env: { DIFFTRAY_USER_DATA_DIR: "/stale", KEEP: "yes" }
+      }
+    );
+    expect(spawn.mock.calls[0]?.[2].env).toEqual({
+      KEEP: "yes",
+      DIFFTRAY_APP_VARIANT: "alpha"
+    });
+  });
+  it("preserves a whitespace-containing explicit profile override", async () => {
+    const child = { once: vi.fn(), unref: vi.fn() };
+    child.once.mockImplementation((event: string, callback: () => void) => {
+      if (event === "spawn") callback();
+      return child;
+    });
+    const spawn = vi.fn<
+      (executable: string, args: string[], options: SpawnOptions) => typeof child
+    >(() => child);
+    await launchAgentApp(
+      { ...identity, profilePath: "/profile with spaces ", profileOverride: true },
+      {
+        spawn,
+        env: { DIFFTRAY_USER_DATA_DIR: "/other" }
+      }
+    );
+    expect(spawn.mock.calls[0]?.[2].env?.DIFFTRAY_USER_DATA_DIR).toBe(
+      "/profile with spaces "
+    );
   });
   it("sanitizes child environment and preserves cwd", async () => {
     const child = { once: vi.fn(), unref: vi.fn() };

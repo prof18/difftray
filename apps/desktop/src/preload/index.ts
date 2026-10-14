@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 
+export type CliInstallStatus = {
+  readonly kind: "absent" | "installed" | "repairable" | "blocked" | "unavailable";
+  readonly command: "difftray" | "difftray-alpha";
+  readonly destination: string;
+  readonly invocation: string;
+  readonly onPath: boolean;
+  readonly pathInstruction: string | null;
+  readonly reason: string | null;
+};
+
 import {
   parseApplicationCommand,
   parseProjectChangedEvent,
@@ -43,6 +53,8 @@ export type WorktreeChangeCountEvent = {
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly getCliInstallStatus: () => Promise<CliInstallStatus>;
+  readonly installCli: () => Promise<CliInstallStatus>;
   readonly platform: string;
   readonly checkForUpdates: () => Promise<UpdatePhase>;
   readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
@@ -755,6 +767,9 @@ export type CompanionStore = "app-store" | "google-play";
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  getCliInstallStatus: async () =>
+    ipcRenderer.invoke("cli:getInstallStatus") as Promise<CliInstallStatus>,
+  installCli: async () => ipcRenderer.invoke("cli:install") as Promise<CliInstallStatus>,
   platform: process.platform,
   cancelCompanionPairing: async () =>
     ipcRenderer.invoke("companion:cancelPairing") as Promise<CompanionStateView>,

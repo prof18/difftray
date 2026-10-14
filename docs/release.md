@@ -24,6 +24,17 @@ account. It uses `asc bundle-ids`.
 
 ## Local Build
 
+The packaged app includes the Node-free CLI at
+`Contents/Resources/bin/difftray`; the agent skill at
+`integrations/agents/difftray` uses that path through its resolver. Before a
+release, run `pnpm --filter @difftray/desktop test:agent-package` to check the
+copied plugin package and resolver fixtures, and
+`pnpm --filter @difftray/desktop test:cli:bundle` to check the temporary bundled
+CLI. These local checks do not install plugins, exercise agent accounts, or
+validate a signed release. Confirm agent-host sessions separately during the
+final user validation pass. General Settings offers an optional terminal
+command installation; the agent skill does not depend on it.
+
 ```sh
 pnpm package:mac
 pnpm package:mac:alpha

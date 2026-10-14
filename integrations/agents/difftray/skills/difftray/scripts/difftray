@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+fail() { printf '%s\n' "Difftray app bundle unavailable: $1" >&2; exit 3; }
+
+explicit_override=false
+if [ "${DIFFTRAY_APP_PATH+x}" = x ]; then
+  explicit_override=true
+  [ -n "$DIFFTRAY_APP_PATH" ] || fail 'DIFFTRAY_APP_PATH is empty'
+  app=$DIFFTRAY_APP_PATH
+elif [ -d /Applications/Difftray.app ]; then
+  app=/Applications/Difftray.app
+else
+  app=$HOME/Applications/Difftray.app
+fi
+
+case "$app" in /*) ;; *) fail 'DIFFTRAY_APP_PATH must be absolute' ;; esac
+[ -d "$app/Contents" ] || fail "$app"
+[ -f "$app/Contents/Info.plist" ] || fail 'missing Info.plist'
+bundle_id=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist" 2>/dev/null) || fail 'invalid Info.plist'
+case "$bundle_id" in
+  com.prof18.difftray) ;;
+  com.prof18.difftray.dev)
+    [ "$explicit_override" = true ] || fail 'Alpha requires explicit DIFFTRAY_APP_PATH'
+    ;;
+  *) fail "unexpected bundle identifier: $bundle_id" ;;
+esac
+executable=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist" 2>/dev/null) || fail 'missing bundle executable'
+case "$executable" in ''|*/*|.|..) fail 'invalid bundle executable' ;; esac
+[ -x "$app/Contents/MacOS/$executable" ] || fail 'missing bundle executable'
+[ -x "$app/Contents/Resources/bin/difftray" ] || fail 'missing bundled CLI'
+[ -f "$app/Contents/Resources/app.asar" ] || [ -d "$app/Contents/Resources/app.asar" ] || fail 'missing app payload'
+exec "$app/Contents/Resources/bin/difftray" "$@"

@@ -19,8 +19,17 @@ while [ -L "$launcher" ]; do
 done
 bin_dir=$(CDPATH= cd -P -- "$(dirname -- "$launcher")" && pwd)
 contents=$(CDPATH= cd -P -- "$bin_dir/../.." && pwd)
-executable=$(/usr/bin/plutil -extract CFBundleExecutable raw "$contents/Info.plist")
+identifier=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$contents/Info.plist") || exit 3
+case "$identifier" in
+  com.prof18.difftray|com.prof18.difftray.dev) ;;
+  *) echo "Invalid Difftray bundle identity" >&2; exit 3 ;;
+esac
+executable=$(/usr/bin/plutil -extract CFBundleExecutable raw "$contents/Info.plist") || exit 3
 case "$executable" in
   ''|*/*) echo "Invalid Difftray bundle executable" >&2; exit 3 ;;
 esac
+if [ ! -f "$contents/MacOS/$executable" ] || [ ! -x "$contents/MacOS/$executable" ]; then
+  echo "Difftray bundle executable is missing or not executable" >&2
+  exit 3
+fi
 ELECTRON_RUN_AS_NODE=1 exec "$contents/MacOS/$executable" "$contents/Resources/app.asar/dist/cli/index.cjs" "$@"

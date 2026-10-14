@@ -17,6 +17,29 @@ describe("SettingsPanel", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    Object.defineProperty(window, "difftray", {
+      configurable: true,
+      value: {
+        getCliInstallStatus: vi.fn().mockResolvedValue({
+          kind: "absent",
+          command: "difftray",
+          destination: "/Users/test/.local/bin/difftray",
+          invocation: "/Applications/Difftray.app/Contents/Resources/bin/difftray",
+          onPath: false,
+          pathInstruction: 'export PATH="/Users/test/.local/bin:$PATH"',
+          reason: null
+        }),
+        installCli: vi.fn().mockResolvedValue({
+          kind: "installed",
+          command: "difftray",
+          destination: "/Users/test/.local/bin/difftray",
+          invocation: "/Applications/Difftray.app/Contents/Resources/bin/difftray",
+          onPath: false,
+          pathInstruction: 'export PATH="/Users/test/.local/bin:$PATH"',
+          reason: null
+        })
+      }
+    });
   });
 
   afterEach(() => {
@@ -58,6 +81,29 @@ describe("SettingsPanel", () => {
 
     return detail;
   }
+
+  it("reads terminal status without installing until the user clicks", async () => {
+    const general = renderSettingsPage("general");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(window.difftray.getCliInstallStatus).toHaveBeenCalledOnce();
+    expect(window.difftray.installCli).not.toHaveBeenCalled();
+    expect(general.textContent).toContain("Install command-line tool");
+    const button = [...general.querySelectorAll<HTMLButtonElement>("button")].find(
+      (item) => item.textContent === "Install command-line tool"
+    );
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+    expect(window.difftray.installCli).toHaveBeenCalledOnce();
+    expect(general.textContent).toContain("Command-line tool installed");
+    expect(
+      general.querySelector<HTMLInputElement>('input[aria-label="Absolute command path"]')
+        ?.value
+    ).toBe("/Users/test/.local/bin/difftray");
+  });
 
   it("renders a full-window master-detail workspace and changes settings pages", () => {
     act(() => {
@@ -542,7 +588,7 @@ describe("SettingsPanel", () => {
     const originalDifftray = window.difftray;
     Object.defineProperty(window, "difftray", {
       configurable: true,
-      value: { openLocalNetworkSettings }
+      value: { ...originalDifftray, openLocalNetworkSettings }
     });
 
     try {

@@ -351,6 +351,11 @@ try {
   const quiet = await createProfile("production-like");
   const hello = await cli(quiet, ["doctor"]);
   assert.equal(hello.result.profilePath, quiet.path);
+  assert.equal(hello.result.connected, true);
+  assert.equal(hello.result.bundlePath, bundle.appPath);
+  assert.equal(hello.result.cliVersion, hello.result.appVersion);
+  assert.equal("token" in hello.result, false);
+  assert.equal("socketPath" in hello.result, false);
   const gui = await browser(quiet);
   assert.equal(
     gui.contexts().flatMap((context) => context.pages()).length,

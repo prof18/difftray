@@ -3,8 +3,19 @@
 export {};
 
 declare global {
+  type CliInstallStatus = {
+    readonly kind: "absent" | "installed" | "repairable" | "blocked" | "unavailable";
+    readonly command: "difftray" | "difftray-alpha";
+    readonly destination: string;
+    readonly invocation: string;
+    readonly onPath: boolean;
+    readonly pathInstruction: string | null;
+    readonly reason: string | null;
+  };
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly getCliInstallStatus: () => Promise<CliInstallStatus>;
+    readonly installCli: () => Promise<CliInstallStatus>;
     readonly platform: string;
     readonly cancelCompanionPairing: () => Promise<CompanionStateView>;
     readonly checkForUpdates: () => Promise<UpdatePhase>;

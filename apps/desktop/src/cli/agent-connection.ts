@@ -14,7 +14,11 @@ import { sendAgentRequest } from "./agent-client.js";
 export type AgentConnectionIdentity = Pick<
   AgentResultMap["hello"],
   "profilePath" | "appId" | "flavor" | "executablePath"
-> & { readonly protocolVersion: number };
+> & {
+  readonly protocolVersion: number;
+  /** Local launch hint only; never part of hello or endpoint identity. */
+  readonly profileOverride?: boolean;
+};
 type LaunchChild = {
   once(event: "spawn" | "error", callback: (...args: never[]) => void): unknown;
   unref(): void;
@@ -33,9 +37,10 @@ export async function launchAgentApp(
 ): Promise<void> {
   const env: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
-    [PROFILE_OVERRIDE_ENV]: identity.profilePath,
     DIFFTRAY_APP_VARIANT: identity.flavor
   };
+  if (identity.profileOverride === false) delete env.DIFFTRAY_USER_DATA_DIR;
+  else env[PROFILE_OVERRIDE_ENV] = identity.profilePath;
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_NO_ASAR;
   delete env.NODE_OPTIONS;
