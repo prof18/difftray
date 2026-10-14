@@ -98,3 +98,17 @@ describe("agent provenance migration", () => {
     db.close();
   });
 });
+
+describe("agent feedback query indexes", () => {
+  it.each(["review_comments", "review_file_comments"])(
+    "filters %s by project without a table scan",
+    (table) => {
+      const db = legacyDatabase();
+      const plan = db
+        .prepare(`explain query plan select id from ${table} where project_id = ?`)
+        .all("project") as { detail: string }[];
+      expect(plan.map((row) => row.detail).join("\n")).toMatch(/USING (COVERING )?INDEX/);
+      db.close();
+    }
+  );
+});

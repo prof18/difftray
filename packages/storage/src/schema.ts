@@ -91,6 +91,12 @@ export function runMigrations(db: DatabaseSync): void {
     create index if not exists review_file_comments_target_path_idx
       on review_file_comments(review_target_id, path, diff_hash);
 
+    -- Agent feedback pages and project deletion filter by project.
+    create index if not exists review_comments_project_idx
+      on review_comments(project_id);
+    create index if not exists review_file_comments_project_idx
+      on review_file_comments(project_id);
+
     create table if not exists review_notes (
       scope_id text primary key,
       project_id text not null references projects(id) on delete cascade,
