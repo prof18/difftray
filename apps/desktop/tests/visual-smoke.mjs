@@ -355,6 +355,10 @@ try {
   // with the same layout, so measure both gutters in one snapshot instead of
   // holding element handles that the swap can detach.
   await expectRenderedDiffText(window, "inactive tab update");
+  // A swap that lands between mouse down and up replaces the pressed row, so
+  // the drag never completes and no composer opens. Under load it can arrive
+  // well after the plain rows, so drag only once the diff stops changing.
+  await waitForDiffSettled(window);
   const { dragEnd, dragStart } = await additionGutterBoxes(window, 3, 2);
   if (!dragStart || !dragEnd) throw new Error("Missing review range gutters");
   await window.mouse.move(
@@ -1138,6 +1142,39 @@ async function additionGutterBoxes(window, startLine, endLine) {
     );
 
   return { dragEnd, dragStart };
+}
+
+async function waitForDiffSettled(window, quietMs = 400, timeoutMs = 15_000) {
+  await window.evaluate(
+    ({ quietMs, timeoutMs }) =>
+      new Promise((resolve, reject) => {
+        const root = document.querySelector(
+          "[data-diff-layout] diffs-container"
+        )?.shadowRoot;
+        if (!root) {
+          reject(new Error("Missing diff shadow root"));
+          return;
+        }
+        let quiet;
+        const settle = () => {
+          clearTimeout(quiet);
+          quiet = setTimeout(() => {
+            observer.disconnect();
+            clearTimeout(deadline);
+            resolve();
+          }, quietMs);
+        };
+        const observer = new MutationObserver(settle);
+        const deadline = setTimeout(() => {
+          observer.disconnect();
+          clearTimeout(quiet);
+          reject(new Error(`Diff kept changing for ${String(timeoutMs)}ms`));
+        }, timeoutMs);
+        observer.observe(root, { attributes: true, childList: true, subtree: true });
+        settle();
+      }),
+    { quietMs, timeoutMs }
+  );
 }
 
 async function clickDiffLineNumber(window, side, lineNumber) {
