@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import { mapWithConcurrency } from "./concurrency.js";
@@ -324,6 +327,52 @@ export async function loadWorkingTreeReviewTarget(repoPath: string): Promise<{
       projectId: repoPath
     }
   };
+}
+
+/**
+ * Diffs between fixed commits still depend on working-tree `.gitattributes`
+ * and diff configuration. Callers that trust commit SHAs compare this too.
+ */
+export async function loadDiffSettingsFingerprint(repoPath: string): Promise<string> {
+  const [attributePaths, infoAttributesPath, config] = await Promise.all([
+    gitOutput(repoPath, [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "--",
+      ":(glob)**/.gitattributes"
+    ]),
+    gitOutput(repoPath, ["rev-parse", "--git-path", "info/attributes"]),
+    // Exits 1 when nothing matches.
+    gitOutputOrNull(repoPath, [
+      "config",
+      "-z",
+      "--get-regexp",
+      "^(diff\\.|core\\.attributesfile$)"
+    ])
+  ]);
+  const globalAttributes = /(?:^|\0)core\.attributesfile\n([^\0]*)/i.exec(
+    config ?? ""
+  )?.[1];
+  const files = [
+    ...attributePaths.split("\0").filter(Boolean),
+    infoAttributesPath,
+    ...(globalAttributes ? [globalAttributes.replace(/^~(?=\/|$)/, homedir())] : [])
+  ];
+  const contents = await Promise.all(
+    files.map(async (file) => {
+      try {
+        return [file, await readFile(path.resolve(repoPath, file), "utf8")];
+      } catch {
+        return [file, null];
+      }
+    })
+  );
+  return createHash("sha256")
+    .update(JSON.stringify([contents, config ?? ""]))
+    .digest("hex");
 }
 
 export async function loadBranchReviewTarget(

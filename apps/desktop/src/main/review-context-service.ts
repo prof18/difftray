@@ -14,6 +14,7 @@ import {
   loadWorkingTreeDiffSummaries,
   loadBranchReviewTarget,
   loadCommitReviewTarget,
+  loadDiffSettingsFingerprint,
   loadWorkingTreeReviewTarget,
   loadBranchFileDiff,
   loadCommitFileDiff,
@@ -222,7 +223,11 @@ export function createReviewContextService(
       requested.kind === "selected" ? selectedReviewSelector(project) : requested;
     const showGeneratedFiles = storage.getAppSettings().showGeneratedFiles;
     let loaded;
+    let diffSettingsHash: string | undefined;
     try {
+      // Taken first: a change during the load fails the next validation.
+      if (selector.kind !== "working-tree")
+        diffSettingsHash = await loadDiffSettingsFingerprint(canonical);
       loaded = await snapshot(project, selector, showGeneratedFiles);
     } catch (error) {
       if (error instanceof AgentProtocolError) throw error;
@@ -241,6 +246,7 @@ export function createReviewContextService(
       ...identity,
       selector: pinnedSelector,
       ...loaded,
+      ...(diffSettingsHash ? { diffSettingsHash } : {}),
       showGeneratedFiles,
       createdAt: now(),
       expiresAt: now() + (options.ttl ?? CONTEXT_TTL_MS)
@@ -288,16 +294,19 @@ export function createReviewContextService(
         "Context repository is no longer registered."
       );
     try {
-      // Commit and branch diffs are fixed by the SHAs in the target id, so
-      // resolving the target proves the snapshot. Only working-tree content can
-      // change without moving a SHA, which needs the full reload.
+      // Commit and branch diffs are fixed by the SHAs in the target id plus the
+      // attributes and diff config, so checking those proves the snapshot. Only
+      // working-tree content (or an older context without the fingerprint)
+      // needs the full reload.
       const unchanged =
-        context.selector.kind === "working-tree"
+        context.selector.kind === "working-tree" || !context.diffSettingsHash
           ? (await snapshot(project, context.selector, context.showGeneratedFiles))
               .snapshotHash === context.snapshotHash
           : createReviewTargetId(
               await loadExplicitReviewTarget(project.path, context.selector)
-            ) === context.reviewTargetId;
+            ) === context.reviewTargetId &&
+            (await loadDiffSettingsFingerprint(project.path)) ===
+              context.diffSettingsHash;
       const after = await repositoryIdentity(context.canonicalWorktreePath);
       if (!unchanged || after.repositoryIdentity !== context.repositoryIdentity)
         throw new AgentProtocolError("stale_review", "Review changed; inspect again.");

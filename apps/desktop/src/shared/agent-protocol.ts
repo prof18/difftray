@@ -99,6 +99,8 @@ export type AgentReviewContext = {
   readonly reviewTarget: ReviewTarget;
   readonly reviewTargetId: string;
   readonly snapshotHash: string;
+  /** Attributes and diff config for commit and branch diffs; absent on older contexts. */
+  readonly diffSettingsHash?: string;
   readonly showGeneratedFiles: boolean;
   readonly files: readonly AgentContextFile[];
   readonly createdAt: number;

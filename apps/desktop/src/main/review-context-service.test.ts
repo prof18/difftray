@@ -133,6 +133,21 @@ describe("explicit review contexts", () => {
       service.withContext(context.id, { live: false }, async () => "next")
     ).rejects.toMatchObject({ code: "stale_review" });
   });
+  it("rejects commit and branch contexts when uncommitted Git attributes change their diff", async () => {
+    const { root, service } = fixture();
+    writeFileSync(path.join(root, "file.txt"), "next\n");
+    git(root, "commit", "-am", "next");
+    git(root, "branch", "base", "HEAD~1");
+    const branch = await service.inspect(root, { kind: "branch", base: "base" });
+    const commit = await service.inspect(root, { kind: "commit", commit: "HEAD" });
+    writeFileSync(path.join(root, ".gitattributes"), "file.txt binary\n");
+    await expect(service.validate(branch.id)).rejects.toMatchObject({
+      code: "stale_review"
+    });
+    await expect(service.validate(commit.id)).rejects.toMatchObject({
+      code: "stale_review"
+    });
+  });
   it("keeps commit and branch contexts valid across working-tree edits", async () => {
     const { root, service } = fixture();
     writeFileSync(path.join(root, "file.txt"), "next\n");
