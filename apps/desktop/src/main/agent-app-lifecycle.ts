@@ -48,3 +48,20 @@ export function createAgentWindowEnsurer(options: {
     }
   };
 }
+
+/**
+ * The agent service is optional for people using the window, so a setup failure
+ * (an unsafe /tmp directory or socket, a stuck probe) is logged instead of
+ * quitting the app. A quiet CLI launch exists only to serve agents, so there
+ * the failure stays fatal.
+ */
+export function optionalAgentServiceFailure(options: {
+  readonly background: boolean;
+  readonly log: (error: unknown) => void;
+}): (error: unknown) => undefined {
+  return (error) => {
+    if (options.background) throw error;
+    options.log(error);
+    return undefined;
+  };
+}

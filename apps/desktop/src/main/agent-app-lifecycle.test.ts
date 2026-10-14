@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createAgentWindowEnsurer,
   acquireAgentProfile,
-  isBackgroundAgentLaunch
+  isBackgroundAgentLaunch,
+  optionalAgentServiceFailure
 } from "./agent-app-lifecycle.js";
 
 describe("agent profile lifecycle", () => {
@@ -94,5 +95,27 @@ describe("startup window serialization", () => {
     finishWindow();
     await reopen;
     expect(createWindow).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("optional agent service", () => {
+  it("keeps the window app running when the agent service cannot start", async () => {
+    const log = vi.fn();
+    const failure = new Error("unsafe agent directory");
+    await expect(
+      Promise.reject(failure).catch(
+        optionalAgentServiceFailure({ background: false, log })
+      )
+    ).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith(failure);
+  });
+  it("stays fatal for a quiet CLI launch that exists only to serve agents", async () => {
+    const log = vi.fn();
+    await expect(
+      Promise.reject(new Error("busy")).catch(
+        optionalAgentServiceFailure({ background: true, log })
+      )
+    ).rejects.toThrow("busy");
+    expect(log).not.toHaveBeenCalled();
   });
 });

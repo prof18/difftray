@@ -4,7 +4,8 @@ import { prepareAgentOpen, assertAgentOpenActive } from "./agent-open-service.js
 import {
   createAgentWindowEnsurer,
   acquireAgentProfile,
-  isBackgroundAgentLaunch
+  isBackgroundAgentLaunch,
+  optionalAgentServiceFailure
 } from "./agent-app-lifecycle.js";
 import { startAgentControlServer } from "./agent-control-server.js";
 import { createAgentReviewService } from "./agent-review-service.js";
@@ -1751,6 +1752,8 @@ const servicesReady = app.whenReady().then(async () => {
                     ? { mode: "commit", ref: selector.commit }
                     : { mode: "working_tree" }
               );
+              // Companion clients cache workspaces per project, as for human target changes.
+              notifyCompanionWorkspaceChanged(project.id, "diff_target");
               window.webContents.send("projects:opened", {
                 projectIds: [project.id],
                 focusProjectId: project.id,
@@ -1764,7 +1767,12 @@ const servicesReady = app.whenReady().then(async () => {
       if (!result) throw new AgentProtocolError("internal_error", "Missing open result.");
       return result;
     }
-  });
+  }).catch(
+    optionalAgentServiceFailure({
+      background: agentBackground,
+      log: (error) => console.error("Agent service unavailable", error)
+    })
+  );
 });
 void servicesReady
   .then(async () => {
