@@ -149,12 +149,10 @@ export function createAgentReviewService(
     params: Params<"review.file">
   ): Promise<AgentResultMap["review.file"]> {
     return contexts.withContext(params.contextId, { live: true }, async (context) => {
+      // The manifest holds only Git-tracked relative paths, so an exact match
+      // is the whole check; backslashes are ordinary filename characters.
       const listed = context.files.find((entry) => entry.path === params.path);
-      if (
-        !listed ||
-        params.path.startsWith("/") ||
-        params.path.split(/[\\/]/).some((part) => part === ".." || part === "." || !part)
-      )
+      if (!listed)
         throw new AgentProtocolError(
           "invalid_request",
           "Path must exactly match a context-listed file."

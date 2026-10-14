@@ -40,6 +40,37 @@ describe("agent review reads", { timeout: 20_000 }, () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("reads every listed file, including backslash names Git allows", async () => {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "difftray-backslash-")));
+    const storage = openStorage(":memory:");
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+    try {
+      git("init", "-b", "main");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      git("commit", "--allow-empty", "-m", "initial");
+      for (const name of ["trailing\\", "double\\\\slash"])
+        writeFileSync(path.join(root, name), "content\n");
+      const service = createAgentReviewService(storage);
+      const context = await service.inspect({
+        repoPath: root,
+        selector: { kind: "working-tree" }
+      });
+      const listed = await service.files({ contextId: context.contextId });
+      expect(listed.files.map((file) => file.path).sort()).toEqual([
+        "double\\\\slash",
+        "trailing\\"
+      ]);
+      for (const file of listed.files)
+        expect(
+          (await service.file({ contextId: context.contextId, path: file.path })).path
+        ).toBe(file.path);
+    } finally {
+      storage.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("pages fixed manifests, rejects foreign cursors, and uses summary identities for text reads", async () => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), "difftray-reads-")));
     const storage = openStorage(":memory:");
