@@ -170,6 +170,8 @@ export function runMigrations(db: DatabaseSync): void {
       created_at text not null,
       primary key (actor_name, run_id, request_id)
     );
+    create index if not exists agent_feedback_receipts_created_idx
+      on agent_feedback_receipts(created_at);
     create table if not exists agent_review_contexts (
       id text primary key,
       project_id text not null references projects(id) on delete cascade,

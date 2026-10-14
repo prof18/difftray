@@ -164,7 +164,8 @@ replacing the current note; no automatic concatenation occurs.
 
 Successful receipts are durable under `(actor name, runId, requestId)`. An exact
 retry using the original context and payload returns the same IDs even after a
-restart, context expiry or later code changes. Reusing that key with another
+restart, context expiry or later code changes, for 30 days; committing a new
+batch prunes older receipts. Reusing that key with another
 payload returns `idempotency_conflict`. Receipt replay changes neither feedback
 nor revisions and emits no repeated notifications. New batches increment the
 project feedback revision once; note revisions remain independent.

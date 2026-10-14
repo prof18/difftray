@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { openStorage } from "../src/index.js";
 
@@ -145,5 +146,49 @@ it("rolls back earlier batch items and receipts when a later item fails", () => 
     expect(s.findAgentFeedbackReceipt(key)).toBeNull();
   } finally {
     s.close();
+  }
+});
+
+it("prunes receipts past their retention when a new batch commits", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "agent-receipts-"));
+  const file = path.join(root, "store.db");
+  const actor = { kind: "agent" as const, name: "Reviewer", runId: "run-1" };
+  const batch = (requestId: string) => ({
+    actor,
+    requestId,
+    payloadHash: requestId,
+    projectId: "p",
+    reviewTargetId: "t",
+    noteScopeId: "scope",
+    items: [{ kind: "file" as const, path: "a", diffHash: "h", body: requestId }]
+  });
+  try {
+    let s = openStorage(file);
+    s.upsertProject({ id: "p", path: "/p", name: "P" });
+    s.upsertReviewTarget({
+      id: "t",
+      projectId: "p",
+      mode: "working_tree",
+      headKind: "working_tree"
+    });
+    s.applyAgentFeedbackBatch(batch("old"));
+    s.applyAgentFeedbackBatch(batch("recent"));
+    s.close();
+    const db = new DatabaseSync(file);
+    db.prepare(
+      "update agent_feedback_receipts set created_at = ? where request_id = 'old'"
+    ).run(new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString());
+    db.close();
+    s = openStorage(file);
+    s.applyAgentFeedbackBatch(batch("new"));
+    expect(
+      s.findAgentFeedbackReceipt({ actor, requestId: "old", payloadHash: "old" })
+    ).toBeNull();
+    expect(
+      s.findAgentFeedbackReceipt({ actor, requestId: "recent", payloadHash: "recent" })
+    ).not.toBeNull();
+    s.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

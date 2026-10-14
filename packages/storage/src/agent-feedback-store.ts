@@ -8,6 +8,8 @@ import {
 import { getReviewNoteSnapshot } from "./review-note-revisions.js";
 import { currentTimestamp } from "./timestamps.js";
 
+const AGENT_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 export type AgentReceiptKey = {
   readonly actor: Extract<FeedbackActor, { kind: "agent" }>;
   readonly requestId: string;
@@ -167,6 +169,11 @@ export function applyAgentFeedbackBatch(
       itemIds,
       noteVersion: getReviewNoteSnapshot(db, input.noteScopeId).token
     };
+    // Retries resume within a host session, long after the 24h context TTL but
+    // never months later; without pruning the table only grows.
+    db.prepare("delete from agent_feedback_receipts where created_at < ?").run(
+      new Date(Date.now() - AGENT_RECEIPT_RETENTION_MS).toISOString()
+    );
     db.prepare(
       "insert into agent_feedback_receipts (actor_name,run_id,request_id,payload_hash,response_json,created_at) values (?,?,?,?,?,?)"
     ).run(
