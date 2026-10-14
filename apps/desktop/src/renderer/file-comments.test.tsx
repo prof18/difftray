@@ -25,7 +25,7 @@ describe("FileCommentStack", () => {
         }
       ]
     });
-    expect(html).toContain("Agent: Codex · edited by Codex");
+    expect(html).toContain("Agent: Codex · edited by agent: Codex");
     expect(html).toContain("First\nSecond");
     expect(html).toContain('aria-label="Edit file comment"');
     expect(html).toContain('aria-label="Delete file comment"');

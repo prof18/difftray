@@ -26,13 +26,18 @@ describe("comment attribution", () => {
         createdBy: agent,
         lastEditedBy: { ...agent, name: "Claude" }
       })
-    ).toBe("Agent: Codex · edited by Claude");
+    ).toBe("Agent: Codex · edited by agent: Claude");
     expect(
       commentAttributionLabel({
         createdBy: agent,
         lastEditedBy: { ...agent, runId: "two" }
       })
-    ).toBe("Agent: Codex · edited by Codex");
-    expect(commentAttributionLabel({ lastEditedBy: agent })).toBe("edited by Codex");
+    ).toBe("Agent: Codex · edited by agent: Codex");
+    expect(commentAttributionLabel({ lastEditedBy: agent })).toBe(
+      "edited by agent: Codex"
+    );
+    expect(commentAttributionLabel({ lastEditedBy: { ...agent, name: "human" } })).toBe(
+      "edited by agent: human"
+    );
   });
 });

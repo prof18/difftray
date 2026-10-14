@@ -154,5 +154,7 @@ it.each(["working-tree", "branch", "commit"] as const)(
       storage.close();
       rmSync(root, { recursive: true, force: true });
     }
-  }
+  },
+  // Real Git fixtures with repeated context validation exceed the 5s default under full-suite load.
+  20_000
 );

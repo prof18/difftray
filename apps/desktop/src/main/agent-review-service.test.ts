@@ -6,7 +6,8 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-describe("agent review reads", () => {
+// Real Git fixtures with repeated context validation exceed the 5s default under full-suite load.
+describe("agent review reads", { timeout: 20_000 }, () => {
   it("distinguishes oversized text from actual binary content", async () => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), "difftray-large-read-")));
     const storage = openStorage(":memory:");

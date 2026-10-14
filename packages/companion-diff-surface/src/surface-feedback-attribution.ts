@@ -15,6 +15,6 @@ export function commentAttributionLabel(feedback: {
   const authorLabel = author.kind === "agent" ? `Agent: ${author.name}` : undefined;
   const editorLabel = unchanged
     ? undefined
-    : `edited by ${editor.kind === "human" ? "human" : editor.name}`;
+    : `edited by ${editor.kind === "human" ? "human" : `agent: ${editor.name}`}`;
   return [authorLabel, editorLabel].filter(Boolean).join(" · ") || undefined;
 }
