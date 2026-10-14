@@ -36,4 +36,23 @@ describe("diff settings fingerprint", () => {
     execFileSync("git", ["-C", root, "config", "diff.renames", "false"]);
     expect(await loadDiffSettingsFingerprint(root)).not.toBe(info);
   });
+
+  it("covers the default global attributes file when none is configured", async () => {
+    const root = repository();
+    const configHome = realpathSync(
+      mkdtempSync(path.join(tmpdir(), "difftray-xdg-config-"))
+    );
+    roots.push(configHome);
+    const previous = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = configHome;
+    try {
+      const initial = await loadDiffSettingsFingerprint(root);
+      mkdirSync(path.join(configHome, "git"));
+      writeFileSync(path.join(configHome, "git/attributes"), "*.txt -diff\n");
+      expect(await loadDiffSettingsFingerprint(root)).not.toBe(initial);
+    } finally {
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previous;
+    }
+  });
 });

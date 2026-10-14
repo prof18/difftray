@@ -356,10 +356,20 @@ export async function loadDiffSettingsFingerprint(repoPath: string): Promise<str
   const globalAttributes = /(?:^|\0)core\.attributesfile\n([^\0]*)/i.exec(
     config ?? ""
   )?.[1];
+  // Git's default when core.attributesFile is unset; an empty XDG value is unset.
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  const defaultGlobalAttributes = path.join(
+    xdgConfigHome !== undefined && xdgConfigHome !== ""
+      ? xdgConfigHome
+      : path.join(homedir(), ".config"),
+    "git/attributes"
+  );
   const files = [
     ...attributePaths.split("\0").filter(Boolean),
     infoAttributesPath,
-    ...(globalAttributes ? [globalAttributes.replace(/^~(?=\/|$)/, homedir())] : [])
+    globalAttributes
+      ? globalAttributes.replace(/^~(?=\/|$)/, homedir())
+      : defaultGlobalAttributes
   ];
   const contents = await Promise.all(
     files.map(async (file) => {
