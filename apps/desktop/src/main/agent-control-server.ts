@@ -21,9 +21,12 @@ import {
   agentSocketPaths,
   assertPrivateAgentPath,
   ensureAgentDirectory,
+  isAgentSocketListening,
   publishAgentEndpoint,
   readAgentEndpoint,
   removeAgentEndpoint,
+  removeUnusableAgentEndpoint,
+  UnusableAgentEndpointError,
   validateAgentSocket,
   type AgentEndpoint
 } from "../shared/agent-endpoint.js";
@@ -62,31 +65,6 @@ function safeFailureId(frame: Buffer): string {
   }
   return "invalid";
 }
-async function isListening(socketPath: string): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(
-        new AgentProtocolError(
-          "busy",
-          "Existing agent socket did not answer the startup probe."
-        )
-      );
-    }, 500);
-    socket.once("connect", () => {
-      clearTimeout(timer);
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("error", (error: NodeJS.ErrnoException) => {
-      clearTimeout(timer);
-      socket.destroy();
-      if (error.code === "ECONNREFUSED" || error.code === "ENOENT") resolve(false);
-      else reject(error);
-    });
-  });
-}
 async function retireStaleEndpoint(identity: AgentResultMap["hello"]): Promise<void> {
   const paths = agentSocketPaths(identity.profilePath);
   let socket;
@@ -97,15 +75,21 @@ async function retireStaleEndpoint(identity: AgentResultMap["hello"]): Promise<v
   }
   if (socket) {
     assertPrivateAgentPath(socket, "socket");
-    if (await isListening(paths.socketPath))
+    if (await isAgentSocketListening(paths.socketPath))
       throw new AgentProtocolError(
         "busy",
         "A desktop instance is already listening for this profile."
       );
   }
-  const previous = await readAgentEndpoint(identity.profilePath, {
-    requireSocket: false
-  });
+  let previous = null;
+  try {
+    previous = await readAgentEndpoint(identity.profilePath, { requireSocket: false });
+  } catch (error) {
+    // Nothing listens and this process holds the profile lock, so metadata this
+    // build cannot use (an older or newer protocol, a torn write) is stale.
+    if (!(error instanceof UnusableAgentEndpointError)) throw error;
+    await removeUnusableAgentEndpoint(identity.profilePath);
+  }
   if (previous && !(await removeAgentEndpoint(previous)))
     throw new AgentProtocolError("busy", "Endpoint generation changed during startup.");
   if (socket) {

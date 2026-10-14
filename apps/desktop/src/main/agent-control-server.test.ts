@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdtemp, realpath, rm } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
@@ -7,7 +7,11 @@ import {
   startAgentControlServer,
   type AgentControlServerOptions
 } from "./agent-control-server.js";
-import { agentSocketPaths, readAgentEndpoint } from "../shared/agent-endpoint.js";
+import {
+  agentSocketPaths,
+  ensureAgentDirectory,
+  readAgentEndpoint
+} from "../shared/agent-endpoint.js";
 import {
   CLI_PROTOCOL_VERSION,
   parseAgentResponse,
@@ -156,6 +160,44 @@ describe("agent control socket", () => {
     ).rejects.toMatchObject({ code: "unauthorized" });
     expect((await lstat(server.endpoint.socketPath)).mode & 0o777).toBe(0o666);
     await chmod(server.endpoint.socketPath, 0o600);
+  });
+  it("retires metadata from another protocol version left by an unclean exit", async () => {
+    const profilePath = await realpath(
+      await mkdtemp(path.join(tmpdir(), "agent-server-"))
+    );
+    cleanup.push(() => rm(profilePath, { recursive: true, force: true }));
+    cleanup.push(() =>
+      rm(agentSocketPaths(profilePath).directory, { recursive: true, force: true })
+    );
+    const paths = await ensureAgentDirectory(profilePath);
+    const identity: AgentResultMap["hello"] = {
+      appVersion: "1.0.0",
+      protocolVersion: CLI_PROTOCOL_VERSION,
+      instanceId: "upgraded-instance",
+      profilePath,
+      appId: "com.prof18.difftray",
+      flavor: "production" as const,
+      executablePath: "/fixture/Difftray"
+    };
+    await writeFile(
+      paths.endpointPath,
+      JSON.stringify({
+        ...identity,
+        instanceId: "previous-version",
+        protocolVersion: CLI_PROTOCOL_VERSION + 1,
+        token: "c".repeat(64),
+        socketPath: paths.socketPath
+      }),
+      { mode: 0o600 }
+    );
+    await chmod(paths.endpointPath, 0o600);
+    const server = await startAgentControlServer({
+      identity,
+      hasProfileLock: true,
+      dispatch: async () => identity
+    });
+    cleanup.push(server.close);
+    expect((await readAgentEndpoint(profilePath))?.instanceId).toBe("upgraded-instance");
   });
   it("never replaces an active socket even with a claimed profile lock", async () => {
     const { server, identity: ownIdentity } = await fixture();

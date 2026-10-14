@@ -1,5 +1,8 @@
 import { spawn as spawnChild, type SpawnOptions } from "node:child_process";
-import { readAgentEndpoint, type AgentEndpoint } from "../shared/agent-endpoint.js";
+import {
+  readAgentEndpointForStartup,
+  type AgentEndpoint
+} from "../shared/agent-endpoint.js";
 import {
   AgentProtocolError,
   CONNECT_RETRY_MS,
@@ -111,9 +114,7 @@ export async function connectAgent(
 ): Promise<AgentEndpoint> {
   const now = dependencies.now ?? Date.now;
   const deadline = now() + STARTUP_TIMEOUT_MS;
-  const read =
-    dependencies.readEndpoint ??
-    ((profile) => readAgentEndpoint(profile, { requireSocket: false }));
+  const read = dependencies.readEndpoint ?? readAgentEndpointForStartup;
   const hello =
     dependencies.hello ??
     ((endpoint, timeoutMs) => sendAgentRequest(endpoint, "hello", {}, { timeoutMs }));

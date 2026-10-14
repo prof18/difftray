@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { link, lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
 import {
   AgentProtocolError,
@@ -41,6 +42,20 @@ function unsafe(): never {
   throw new AgentProtocolError(
     "unauthorized",
     "Unsafe local agent endpoint ownership, type or permissions."
+  );
+}
+/**
+ * Owned private endpoint metadata that this build cannot use: another protocol
+ * version or unreadable content, typically left by an unclean exit before an
+ * upgrade. It is stale once nothing listens on the profile socket.
+ */
+export class UnusableAgentEndpointError extends AgentProtocolError {}
+function unusable(error?: unknown): never {
+  if (error instanceof AgentProtocolError)
+    throw new UnusableAgentEndpointError(error.code, error.message);
+  throw new UnusableAgentEndpointError(
+    "unauthorized",
+    "Unreadable local agent endpoint metadata."
   );
 }
 export function assertPrivateAgentPath(
@@ -158,7 +173,7 @@ async function readRecord(
     throw error;
   }
   assertPrivateAgentPath(identity, "file");
-  if (identity.size > 16_384) return unsafe();
+  if (identity.size > 16_384) return unusable();
   const file = await open(paths.endpointPath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const opened = await file.stat();
@@ -167,7 +182,7 @@ async function readRecord(
     // Fixed buffer also bounds a same-user writer growing the file after fstat.
     const buffer = Buffer.alloc(16_385);
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > 16_384) return unsafe();
+    if (bytesRead > 16_384) return unusable();
     const current = await lstat(paths.endpointPath);
     assertPrivateAgentPath(current, "file");
     if (
@@ -182,9 +197,13 @@ async function readRecord(
         buffer.subarray(0, bytesRead)
       );
     } catch {
-      return unsafe();
+      return unusable();
     }
-    return { endpoint: parseEndpoint(text, profilePath), identity: current };
+    try {
+      return { endpoint: parseEndpoint(text, profilePath), identity: current };
+    } catch (error) {
+      return unusable(error);
+    }
   } finally {
     await file.close();
   }
@@ -197,6 +216,61 @@ export async function readAgentEndpoint(
   if (!record) return null;
   if (options.requireSocket !== false) await validateAgentSocket(record.endpoint);
   return record.endpoint;
+}
+export async function isAgentSocketListening(socketPath: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(socketPath);
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(
+        new AgentProtocolError(
+          "busy",
+          "Existing agent socket did not answer the startup probe."
+        )
+      );
+    }, 500);
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", (error: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      socket.destroy();
+      if (error.code === "ECONNREFUSED" || error.code === "ENOENT") resolve(false);
+      else reject(error);
+    });
+  });
+}
+/**
+ * Startup read for the CLI: unusable metadata with no listener is treated as
+ * absent, so the launched desktop can retire it instead of every call failing.
+ */
+export async function readAgentEndpointForStartup(
+  profilePath: string
+): Promise<AgentEndpoint | null> {
+  try {
+    return await readAgentEndpoint(profilePath, { requireSocket: false });
+  } catch (error) {
+    if (!(error instanceof UnusableAgentEndpointError)) throw error;
+    if (await isAgentSocketListening(agentSocketPaths(profilePath).socketPath))
+      throw error;
+    return null;
+  }
+}
+/** Caller must hold the profile lock and have confirmed nothing listens. */
+export async function removeUnusableAgentEndpoint(profilePath: string): Promise<void> {
+  const paths = agentSocketPaths(await canonicalProfile(profilePath));
+  assertPrivateAgentPath(await lstat(paths.directory), "directory");
+  let current: Stats;
+  try {
+    current = await lstat(paths.endpointPath);
+  } catch (error) {
+    if (missing(error)) return;
+    throw error;
+  }
+  assertPrivateAgentPath(current, "file");
+  await unlink(paths.endpointPath);
 }
 export async function publishAgentEndpoint(endpoint: AgentEndpoint): Promise<void> {
   parseEndpoint(JSON.stringify(endpoint), endpoint.profilePath);

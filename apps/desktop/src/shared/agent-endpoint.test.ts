@@ -17,6 +17,7 @@ import {
   ensureAgentDirectory,
   publishAgentEndpoint,
   readAgentEndpoint,
+  readAgentEndpointForStartup,
   removeAgentEndpoint,
   type AgentEndpoint
 } from "./agent-endpoint.js";
@@ -202,6 +203,31 @@ describe("agent endpoint filesystem contract", () => {
     await expect(
       readAgentEndpoint(profilePath, { requireSocket: false })
     ).rejects.toMatchObject({ code: "unauthorized" });
+  });
+  it("treats unusable owned metadata as absent at startup only without a listener", async () => {
+    const profilePath = await profile();
+    const paths = await ensureAgentDirectory(profilePath);
+    for (const content of [
+      JSON.stringify({ ...endpoint(profilePath, paths.socketPath), protocolVersion: 2 }),
+      "{ torn"
+    ]) {
+      await writeFile(paths.endpointPath, content, { mode: 0o600 });
+      await chmod(paths.endpointPath, 0o600);
+      await expect(readAgentEndpointForStartup(profilePath)).resolves.toBeNull();
+    }
+    await liveSocket(paths.socketPath);
+    await expect(readAgentEndpointForStartup(profilePath)).rejects.toMatchObject({
+      code: "unauthorized"
+    });
+  });
+  it("keeps rejecting unsafe metadata at startup", async () => {
+    const profilePath = await profile();
+    const paths = await ensureAgentDirectory(profilePath);
+    await writeFile(paths.endpointPath, "{ torn", { mode: 0o644 });
+    await chmod(paths.endpointPath, 0o644);
+    await expect(readAgentEndpointForStartup(profilePath)).rejects.toMatchObject({
+      code: "unauthorized"
+    });
   });
   it("removes only metadata matching this instance and token", async () => {
     const profilePath = await profile();
