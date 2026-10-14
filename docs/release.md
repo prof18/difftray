@@ -35,6 +35,18 @@ validate a signed release. Confirm agent-host sessions separately during the
 final user validation pass. General Settings offers an optional terminal
 command installation; the agent skill does not depend on it.
 
+The full gate runs bounded CLI process acceptance after visual tests with
+`test:cli:e2e --skip-build`, reusing its built outputs. This exercises actual
+fixture processes and shared review storage; it is distinct from the heavier
+`test:cli:bundle` archive check above. The process harness has a global ten-minute
+deadline and cleans up only its owned fixture profiles and processes.
+
+M6 acceptance and coordinated handoff remain pending. Before declaring release
+compatibility, the user still needs actual Codex/Claude/Pi host sessions and
+signed arm64 and x64 archive checks; optional Antigravity remains unverified.
+Fixture checks do not authorize publication. Uploading archives, publishing the
+agent package, or installing it into a user's host requires an explicit request.
+
 ```sh
 pnpm package:mac
 pnpm package:mac:alpha

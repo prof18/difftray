@@ -10,6 +10,7 @@ import {
   type AgentResultMap
 } from "../shared/agent-protocol.js";
 import { sendAgentRequest } from "./agent-client.js";
+import { acquireAgentStartup } from "./agent-startup-lock.js";
 
 export type AgentConnectionIdentity = Pick<
   AgentResultMap["hello"],
@@ -70,6 +71,9 @@ export async function launchAgentApp(
   });
 }
 export type AgentConnectionDependencies = {
+  readonly acquireStartup?: (
+    profile: string
+  ) => Promise<(() => Promise<void>) | undefined>;
   readonly readEndpoint?: (profilePath: string) => Promise<AgentEndpoint | null>;
   readonly hello?: (
     endpoint: AgentEndpoint,
@@ -143,59 +147,89 @@ export async function connectAgent(
     }
   }
   const pause = () => sleep(Math.min(CONNECT_RETRY_MS, remaining()));
+  const acquire = dependencies.acquireStartup ?? acquireAgentStartup;
+  let releaseStartup: (() => Promise<void>) | undefined;
+  let finished = false;
+  const claimStartup = async () => {
+    if (releaseStartup) return true;
+    await bounded(async () => {
+      const release = await acquire(identity.profilePath);
+      if (finished || now() >= deadline) {
+        await release?.();
+        return;
+      }
+      releaseStartup = release;
+    });
+    return Boolean(releaseStartup);
+  };
   let launched = false;
   let refreshing = false;
   let oldInstance: string | undefined;
-  let endpoint = await bounded(() => read(identity.profilePath));
-  for (;;) {
-    remaining();
-    if (!endpoint) {
-      if (!refreshing && !launched) {
-        launched = true;
-        await bounded(() => launch(identity));
-      }
-      await pause();
-      endpoint = await bounded(() => read(identity.profilePath));
-      continue;
-    }
-    verifyIdentity(endpoint, identity);
-    if (refreshing && endpoint.instanceId === oldInstance)
-      throw new AgentProtocolError(
-        "busy",
-        "Desktop endpoint generation changed repeatedly; retry later."
-      );
-    try {
-      const selectedEndpoint = endpoint;
-      const response = await bounded(() => hello(selectedEndpoint, remaining()));
-      if (!response.ok)
-        throw new AgentProtocolError(response.error.code, response.error.message);
-      verifyIdentity(response.result, identity);
-      if (response.result.instanceId !== endpoint.instanceId)
-        throw new AgentProtocolError(
-          "busy",
-          "Desktop endpoint generation changed during hello; retry later."
-        );
-      return endpoint;
-    } catch (error) {
-      if (!(error instanceof AgentProtocolError)) throw error;
-      if (error.code === "unauthorized" && !refreshing) {
-        const replacement = await bounded(() => read(identity.profilePath));
-        if (replacement) {
-          verifyIdentity(replacement, identity);
-          if (replacement.instanceId === endpoint.instanceId) throw error;
+  try {
+    let endpoint = await bounded(() => read(identity.profilePath));
+    for (;;) {
+      remaining();
+      if (!endpoint) {
+        if (!refreshing && !launched) {
+          if (await claimStartup()) {
+            // Another caller may have published while this claim was acquired.
+            endpoint = await bounded(() => read(identity.profilePath));
+            if (endpoint) continue;
+            launched = true;
+            await bounded(() => launch(identity));
+          }
         }
-        refreshing = true;
-        oldInstance = endpoint.instanceId;
-        endpoint = replacement;
+        await pause();
+        endpoint = await bounded(() => read(identity.profilePath));
         continue;
       }
-      if (error.code !== "app_unavailable" || refreshing) throw error;
-      if (!launched) {
-        launched = true;
-        await bounded(() => launch(identity));
+      verifyIdentity(endpoint, identity);
+      if (refreshing && endpoint.instanceId === oldInstance)
+        throw new AgentProtocolError(
+          "busy",
+          "Desktop endpoint generation changed repeatedly; retry later."
+        );
+      try {
+        const selectedEndpoint = endpoint;
+        const response = await bounded(() => hello(selectedEndpoint, remaining()));
+        if (!response.ok)
+          throw new AgentProtocolError(response.error.code, response.error.message);
+        verifyIdentity(response.result, identity);
+        if (response.result.instanceId !== endpoint.instanceId)
+          throw new AgentProtocolError(
+            "busy",
+            "Desktop endpoint generation changed during hello; retry later."
+          );
+        return endpoint;
+      } catch (error) {
+        if (!(error instanceof AgentProtocolError)) throw error;
+        if (error.code === "unauthorized" && !refreshing) {
+          const replacement = await bounded(() => read(identity.profilePath));
+          if (replacement) {
+            verifyIdentity(replacement, identity);
+            if (replacement.instanceId === endpoint.instanceId) throw error;
+          }
+          refreshing = true;
+          oldInstance = endpoint.instanceId;
+          endpoint = replacement;
+          continue;
+        }
+        if (error.code !== "app_unavailable" || refreshing) throw error;
+        if (!launched && (await claimStartup())) {
+          const replacement = await bounded(() => read(identity.profilePath));
+          if (replacement && replacement.instanceId !== endpoint.instanceId) {
+            endpoint = replacement;
+            continue;
+          }
+          launched = true;
+          await bounded(() => launch(identity));
+        }
+        await pause();
+        endpoint = await bounded(() => read(identity.profilePath));
       }
-      await pause();
-      endpoint = await bounded(() => read(identity.profilePath));
     }
+  } finally {
+    finished = true;
+    await releaseStartup?.();
   }
 }

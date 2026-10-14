@@ -80,6 +80,21 @@ The CLI has its own CJS Vite build and `tsconfig.cli.json` typecheck. Fixture bu
 disable signing explicitly with `--config.mac.identity=null` and notarization with
 `DIFFTRAY_SKIP_NOTARIZE=1`; no fixture helper publishes or runs `release.sh`.
 
+The full `./ci.sh` gate invokes `test:cli:e2e --skip-build` after visual checks,
+reusing build outputs. Read/write/invalidation/compatibility helpers exercise
+actual fixture CLI and Electron services, including encrypted legacy/current
+companion capabilities and all four feedback scopes: single line, inclusive
+range, file, and overall. Line/range scopes support either diff side. The global
+ten-minute harness deadline and cleanup affect only owned fixture processes and
+profiles. Fixture SQL/clock manipulation is test infrastructure, not an agent
+API. `doctor` adds CLI diagnostics to strict wire `hello` identity locally.
+
+Run the heavier `test:cli:bundle` archive check separately before handoff. M6
+acceptance remains pending until the final checks are recorded; actual agent-host
+sessions, signed arm64/x64 archives, and publication remain user checks or
+explicitly authorized actions. See `docs/testing-strategy.md` and
+`docs/agent-integration.md`.
+
 `pnpm check` delegates to `./ci.sh`.
 
 The `alpha` release channel produces `Difftray Alpha` with artifacts under

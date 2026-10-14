@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { prepareCliTestBundle } from "./cli-test-bundle.mjs";
+import { detachTestDmg } from "./detach-test-dmg.mjs";
 
 const { values } = parseArgs({ options: { app: { type: "string" } } });
 const bundle = await prepareCliTestBundle(values.app);
@@ -186,10 +187,7 @@ try {
     await checkLauncher(path.join(mountPoint, "Difftray.app"));
   } finally {
     if (mountedDmg) {
-      execFileSync("/usr/bin/hdiutil", ["detach", mountPoint], {
-        timeout: 120_000,
-        stdio: ["ignore", "pipe", "pipe"]
-      });
+      await detachTestDmg(mountPoint);
       mountedDmg = false;
     }
   }

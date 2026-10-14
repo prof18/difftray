@@ -10,3 +10,4 @@ pnpm test
 pnpm --filter @difftray/desktop test:agent-package
 pnpm --filter @difftray/companion-diff-surface test:browser
 pnpm test:visual
+pnpm --filter @difftray/desktop test:cli:e2e --skip-build

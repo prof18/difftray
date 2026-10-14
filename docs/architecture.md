@@ -5,7 +5,7 @@
 - Keep core review behavior independent from Electron.
 - Make Git and filesystem behavior testable.
 - Keep UI state separate from persisted review state.
-- Allow future CLI or non-Electron surfaces if useful.
+- Share review behavior across the desktop, bundled CLI, and mobile companion.
 
 ## Proposed Monorepo Shape
 
@@ -45,6 +45,41 @@ This split should stay pragmatic. Start with fewer packages if scaffolding overh
 Do not add Turborepo, Nx, or another monorepo task runner in v0. pnpm workspaces plus package scripts are enough until build orchestration becomes painful.
 
 ## Process Boundaries
+
+The bundled CLI uses the local agent protocol; mobile clients use the separate
+encrypted companion protocol. Both reach the same main-process review services
+and SQLite storage. The portable skill resolver selects a known app bundle and
+executes its fixed CLI entry point. A cold CLI connection starts only that bundle
+with its canonical profile; quiet reads do not create a renderer window.
+
+```mermaid
+flowchart LR
+  Skill[Agent skill] --> Resolver[App bundle resolver]
+  Resolver --> CLI[Bundled CLI]
+  CLI -->|Authenticated local socket| Main[Electron main]
+  Main --> Context[Persisted review contexts]
+  Context --> Git[Git identity and file manifest]
+  Context --> Storage[Shared SQLite review storage]
+  Desktop[Desktop renderer] -->|Typed preload IPC| Main
+  Mobile[Mobile client] -->|Encrypted companion protocol| Companion[Desktop companion]
+  Companion --> Main
+  Main --> Storage
+```
+
+Contexts pin canonical worktrees, Git targets, file identities, and expiry.
+Feedback submission validates that snapshot before an atomic write of single-line,
+inclusive-range, file, or overall findings. Line and range anchors support either
+diff side. Receipt replay precedes freshness checks so an acknowledged batch can
+be retried after source changes or context expiry without duplicating feedback.
+Overall notes use an independent version for compare-and-swap. Human edits retain
+agent creator attribution while recording the last editor separately.
+
+The local socket carries strict, bounded versioned envelopes. `doctor` adds local
+CLI diagnostics to the authenticated `hello` identity; it does not widen the wire
+schema. Companion clients opt into attribution with a capability, and legacy
+responses omit provenance/version fields recursively. See
+[agent integration](agent-integration.md) and
+[Decision 0041](decisions/0041-local-agent-integration.md).
 
 Electron main process:
 

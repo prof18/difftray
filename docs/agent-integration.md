@@ -74,7 +74,7 @@ A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests ca
 
 `open` takes `{ repoPath, selector }` and intentionally selects a desktop target. Its selector is `working-tree`, `branch` with `base`, or `commit` with `commit`. `review.inspect` takes the same parameters and can also specify `selected`; it resolves that selection into a context without changing the GUI. `review.files`, `review.file`, `review.feedback`, and `review.export` take a `contextId`. File and feedback reads support bounded pagination. A context records the canonical worktree and Git identity, target, file manifest, snapshot hash, and expiry. Later operations must reject stale code or expired contexts instead of silently switching targets.
 
-`feedback.submit` accepts an actor name and run ID, a request ID, and 1–100 items. Each item is an additions-line, deletions-line, file, or overall note. Line and file items carry the context file path and diff hash; line positions are positive safe integers. An overall item carries the expected note version. Bodies are nonblank and at most 10,000 Unicode code points. The server fixes attribution to agent; callers cannot claim human authorship. Feedback pagination uses a separate feedback version and reports `stale_feedback` if rows change between pages.
+`feedback.submit` accepts an actor name and run ID, a request ID, and 1–100 items. The four scopes are single line, inclusive range, file, and overall note. Single-line and range items both use wire kind `line` and may address additions or deletions. Line and file items carry the context file path and diff hash; line positions are positive safe integers. An overall item carries the expected note version. Bodies are nonblank and at most 10,000 Unicode code points. The server fixes attribution to agent; callers cannot claim human authorship. Feedback pagination uses a separate feedback version and reports `stale_feedback` if rows change between pages.
 
 The protocol error codes are `invalid_request`, `unsupported_version`, `unauthorized`, `app_unavailable`, `profile_mismatch`, `repository_missing`, `invalid_target`, `context_missing`, `context_expired`, `stale_review`, `stale_diff`, `stale_feedback`, `note_conflict`, `idempotency_conflict`, `limit_exceeded`, `busy`, `request_timeout`, and `internal_error`. `request_timeout` maps to the CLI I/O exit category; `stale_feedback` maps to the conflict category. No token should appear in CLI output.
 
@@ -86,6 +86,11 @@ Desktop and companion note mutations now increment a persistent revision in the 
 
 Run `Difftray.app/Contents/Resources/bin/difftray doctor --json` to connect quietly and inspect the authenticated bundle/profile identity. `open [PATH] --json` selects the canonical containing worktree and returns only after the renderer commits the requested target. Paths default to the caller’s working directory. Opening defaults to working-tree; branch and commit modes require `--base` and `--commit` respectively. Unknown arguments and invalid selectors fail before startup. Help and version work offline without standalone Node on PATH.
 
+`doctor` is a CLI command built on the strict wire `hello` operation. Fields such
+as `connected`, `bundlePath`, and `cliVersion` are CLI diagnostics assembled
+locally; clients must not add them to a wire `hello` response. Neither surface
+prints the endpoint token.
+
 The CLI launches only its own bundle executable, with detached standard streams and Electron runtime injection variables removed. Every profile is canonicalized before Electron acquires its single-instance lock or opens storage. Background second-instance launches do not focus the UI; a normal launch or an explicit open does. Context reads use this same connection path without opening a window.
 
 The socket lives beneath a per-user, profile-hashed directory with mode 0700. Socket and endpoint metadata must be owned by the current user with mode 0600. Existing unsafe paths are rejected rather than repaired. Endpoint publication follows explicit socket permission verification, independent of the launching shell’s umask. Connections are capped at 16, incomplete requests at five seconds, and authenticated dispatch plus response drain at 120 seconds. Disconnects cancel pending opens; queued expired selections never execute.
@@ -93,6 +98,21 @@ The socket lives beneath a per-user, profile-hashed directory with mode 0700. So
 Startup waits at most 30 seconds. Authentication failures normally stop immediately. A caller with pre-crash metadata can refresh once after a verified generation change within that same deadline, without launching another process because of an authentication error. A profile, flavor, executable or protocol mismatch requires quitting and restarting the intended bundle; the CLI never kills or substitutes an existing app.
 
 `pnpm --filter @difftray/desktop test:cli:e2e` builds an unsigned temporary bundle and exercises isolated profiles. `--app` can reuse an explicit fixture bundle. The smoke-only `DIFFTRAY_AGENT_SMOKE_DEBUG_PORT` environment variable enables loopback browser inspection only when an explicit `DIFFTRAY_USER_DATA_DIR` is supplied. This fixture evidence does not establish signed-release or real agent-host compatibility.
+
+The full gate runs that process test after visual verification with `--skip-build`,
+reusing the gate's build outputs. Read, write, invalidation, and companion
+compatibility matrix helpers exercise the bundled CLI and actual Electron
+services. The companion helper enables only its isolated fixture server, pairs
+fresh ephemeral keys, and reads encrypted legacy/current capability responses.
+Expiry and corruption cases manipulate only owned fixture state; SQL or clock
+manipulation is test infrastructure, not a supported agent API. A global
+ten-minute deadline bounds the process matrix and cleanup targets only owned
+fixture processes/profiles. The heavier `test:cli:bundle` archive check remains a
+separate pre-handoff check. See [testing strategy](testing-strategy.md).
+
+M6 acceptance and coordinated handoff remain pending until the final checks are
+recorded. Actual Codex/Claude/Pi sessions, signed arm64 and x64 archives, and any
+publication remain user validation or explicit authorization tasks.
 
 ## Reading and exporting
 

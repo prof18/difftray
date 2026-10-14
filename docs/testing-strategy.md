@@ -248,6 +248,8 @@ The root `./ci.sh` script is the full local CI gate. It runs:
 - integration tests
 - app workflow tests where feasible
 - visual verification for UI-facing changes
+- bounded bundled CLI process acceptance after visual verification, using
+  `pnpm --filter @difftray/desktop test:cli:e2e --skip-build`
 
 `pnpm check` delegates to `./ci.sh`.
 
@@ -284,3 +286,40 @@ confirm that the bottom action bar leaves the final line reachable.
 Native WebView runs should confirm immediate single-tap commenting, no keyboard
 on hold, scrolling while selecting, confirm/cancel and saved-comment editing.
 Browser tests prove internal gesture behavior; native layout trees alone do not.
+
+## Local agent process acceptance
+
+The CLI harness uses an unsigned temporary fixture bundle, isolated profiles,
+temporary Git repositories, and real Electron processes. `--skip-build` reuses
+the outputs built earlier in `./ci.sh`; `--app PATH` reuses an explicitly supplied
+fixture bundle. A global ten-minute deadline bounds the acceptance matrix.
+Cleanup inspects the exact fixture executable and owned profile identity before
+terminating processes, and removes only fixture state.
+
+The read matrix covers branch/commit/working-tree selection, explicit context
+reads, pagination and exports. The write matrix covers single lines, inclusive
+ranges on either side, file and overall findings, concurrent reviewers, note
+conflicts, lost-response retries, restart and expired-context receipt replay.
+The invalidation matrix exercises Git and context freshness failures. The
+compatibility matrix starts the fixture's actual companion through preload,
+pairs fresh ephemeral keys and compares encrypted responses with and without
+the attribution capability. Legacy responses recursively omit attribution and
+note-version fields; current responses preserve all four scopes' attribution.
+
+Clock/SQL fixture manipulation for deterministic expiry and corruption tests is
+confined to owned test data. It does not add SQL or clock controls to the agent
+protocol. The strict wire `hello` shape is tested separately from `doctor`'s
+CLI-only diagnostics. Successful stdout remains a single JSON envelope, or exact
+prompt text for a prompt export, without tokens or startup diagnostics.
+
+Run the heavier `pnpm --filter @difftray/desktop test:cli:bundle` separately before
+handoff to validate archive distribution without Node on PATH. Copied agent
+package/resolver tests do not establish actual host-session compatibility.
+M6's final acceptance and handoff are pending. Actual agent hosts, signed arm64
+and x64 archives, and publication remain user checks.
+
+The latest recorded M5 performance run versus baseline measured workspace loading
+at 2,050 versus 1,879 ms, selected-file loading at 2,116 versus 2,549 ms, and
+comment operations at 125 versus 218 ms. Reviewed overrides remained zero; the
+1,000-open-project benchmark measured 3.01 ms. No benchmark threshold was
+weakened. These M5 measurements do not establish a completed M6 gate.

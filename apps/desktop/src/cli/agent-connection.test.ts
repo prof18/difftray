@@ -34,6 +34,7 @@ function harness(records: (AgentEndpoint | null)[] = [endpoint]) {
     readEndpoint,
     hello,
     launch,
+    acquireStartup: async () => async () => undefined,
     sleep: vi.fn(async (ms: number) => {
       time += ms;
     }),
@@ -41,6 +42,37 @@ function harness(records: (AgentEndpoint | null)[] = [endpoint]) {
   };
 }
 describe("agent startup connection", () => {
+  it("serializes concurrent cold launchers until authenticated readiness", async () => {
+    let held = false;
+    let ready = false;
+    const acquireStartup = vi.fn(async () => {
+      if (held) return;
+      held = true;
+      return async () => {
+        held = false;
+      };
+    });
+    const launch = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      ready = true;
+    });
+    const dependencies = {
+      acquireStartup,
+      launch,
+      readEndpoint: async () => (ready ? endpoint : null),
+      hello: async () => success(),
+      sleep: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+    };
+    const connected = await Promise.all(
+      Array.from({ length: 3 }, () => connectAgent(identity, dependencies))
+    );
+    expect(connected).toEqual([endpoint, endpoint, endpoint]);
+    expect(launch).toHaveBeenCalledOnce();
+    expect(held).toBe(false);
+  });
+
   it("uses a running matching instance without launching", async () => {
     const deps = harness();
     expect(await connectAgent(identity, deps)).toEqual(endpoint);

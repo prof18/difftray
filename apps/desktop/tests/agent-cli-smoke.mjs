@@ -17,10 +17,18 @@ import path from "node:path";
 import { promisify, parseArgs } from "node:util";
 import { chromium, _electron as electron } from "playwright";
 import { prepareCliTestBundle } from "../scripts/cli-test-bundle.mjs";
+import { runReadMatrix } from "./agent-cli-read-matrix.mjs";
+import { runWriteMatrix } from "./agent-cli-write-matrix.mjs";
+import { runInvalidationMatrix } from "./agent-cli-invalidation-matrix.mjs";
+import { runCompatMatrix } from "./agent-cli-compat-matrix.mjs";
 
 const runFile = promisify(execFile);
-const { values } = parseArgs({ options: { app: { type: "string" } } });
-const bundle = await prepareCliTestBundle(values.app);
+const { values } = parseArgs({
+  options: { app: { type: "string" }, "skip-build": { type: "boolean", default: false } }
+});
+const bundle = await prepareCliTestBundle(values.app, {
+  skipBuild: values["skip-build"]
+});
 const fixture = await mkdtemp(path.join(tmpdir(), "difftray agent e2e "));
 const evidence = path.resolve(
   import.meta.dirname,
@@ -31,6 +39,11 @@ const profiles = [];
 const children = [];
 const fixtureSockets = [];
 const results = [];
+const recordResult = results.push.bind(results);
+results.push = (...rows) => {
+  for (const row of rows) console.log(`PASS: ${row}`);
+  return recordResult(...rows);
+};
 const launcher = path.join(bundle.appPath, "Contents/Resources/bin/difftray");
 const bundleExecutable = execFileSync(
   "/usr/bin/plutil",
@@ -48,6 +61,7 @@ const executablePath = await realpath(
   path.join(bundle.appPath, "Contents/MacOS", bundleExecutable)
 );
 const cleanupFailures = [];
+const controller = new AbortController();
 const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
 async function until(check, label, timeout = 30_000) {
   const deadline = Date.now() + timeout;
@@ -146,15 +160,18 @@ async function createProfile(name) {
   return profile;
 }
 async function cli(profile, args, success = true, expectedExitCode) {
+  controller.signal.throwIfAborted();
   let output;
   try {
     output = await runFile(launcher, [...args, "--json"], {
       cwd: fixture,
       env: profile.env,
+      signal: controller.signal,
       timeout: 150_000,
       maxBuffer: 1024 * 1024
     });
   } catch (error) {
+    controller.signal.throwIfAborted();
     if (success) {
       const processes = processIds(profile).map((pid) => {
         let sample;
@@ -306,7 +323,7 @@ async function repository(name, before = "before\n", after = "after\n") {
   await writeFile(path.join(repo, "tracked.txt"), after);
   return { path: await realpath(repo), git };
 }
-try {
+async function runMatrix() {
   await mkdir(evidence, { recursive: true });
   const repo = await repository("repo with 'quotes'");
   const sibling = path.join(fixture, "linked worktree");
@@ -805,6 +822,16 @@ try {
     "cold full-scope attributed writes, exact replay without revision changes, persisted restart receipts, replay before stale checks, independent runs, atomic human note CAS conflict"
   );
 
+  for (let round = 0; round < 5; round += 1) {
+    const concurrent = await createProfile(`cold-contention-${round}`);
+    const replies = await Promise.all(
+      Array.from({ length: 3 }, () => cli(concurrent, ["doctor"]))
+    );
+    assert.equal(new Set(replies.map((reply) => reply.result.instanceId)).size, 1);
+    assert.equal(processIds(concurrent).length, 1);
+    await stop(concurrent);
+  }
+  results.push("five repeated three-caller cold starts share exactly one GUI process");
   const alpha = await createProfile("alpha-like");
   const cold = await Promise.all([
     cli(alpha, ["doctor"]),
@@ -940,12 +967,46 @@ try {
     "open must foreground the requested repository"
   );
   results.push("clean shutdown/restart and foreground focus");
+  const matrix = {
+    cli,
+    createProfile,
+    repository,
+    stop,
+    browser,
+    selected,
+    open,
+    fixture,
+    results,
+    executablePath,
+    children,
+    fixtureSockets,
+    until,
+    launcher
+  };
+  await runReadMatrix(matrix);
+  await runWriteMatrix(matrix);
+  await runInvalidationMatrix(matrix);
+  await runCompatMatrix(matrix);
   await writeFile(
     path.join(evidence, "cli-e2e.json"),
     JSON.stringify({ result: "passed", scenarios: results }, null, 2)
   );
   console.log(JSON.stringify({ result: "passed", scenarios: results }, null, 2));
+}
+let deadline;
+try {
+  await Promise.race([
+    runMatrix(),
+    new Promise((_, reject) => {
+      deadline = setTimeout(() => {
+        const error = new Error("CLI process acceptance exceeded its 10-minute deadline");
+        controller.abort(error);
+        reject(error);
+      }, 600_000);
+    })
+  ]);
 } finally {
+  clearTimeout(deadline);
   for (const socket of fixtureSockets) {
     if (typeof socket.destroy === "function") socket.destroy();
     else

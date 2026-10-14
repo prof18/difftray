@@ -5,7 +5,7 @@ import path from "node:path";
 
 const publicRoot = path.resolve(import.meta.dirname, "../../..");
 
-export async function prepareCliTestBundle(appPath) {
+export async function prepareCliTestBundle(appPath, { skipBuild = false } = {}) {
   if (process.platform !== "darwin") {
     throw new Error("The CLI bundle smoke requires macOS.");
   }
@@ -22,12 +22,13 @@ export async function prepareCliTestBundle(appPath) {
       DIFFTRAY_RELEASE_CHANNEL: "production",
       DIFFTRAY_SKIP_NOTARIZE: "1"
     };
-    execFileSync("pnpm", ["build"], {
-      cwd: publicRoot,
-      env,
-      stdio: "inherit",
-      timeout: 300_000
-    });
+    if (!skipBuild)
+      execFileSync("pnpm", ["build"], {
+        cwd: publicRoot,
+        env,
+        stdio: "inherit",
+        timeout: 300_000
+      });
     execFileSync(
       "pnpm",
       [
@@ -57,7 +58,7 @@ export async function prepareCliTestBundle(appPath) {
     );
     await access(path.join(packagedApp, "Contents/Info.plist"));
     return {
-      appPath: packagedApp,
+      appPath: await realpath(packagedApp),
       cleanup: () => rm(root, { recursive: true, force: true })
     };
   } catch (error) {
