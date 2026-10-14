@@ -4,8 +4,7 @@ import {
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   parseAgentRequest,
-  type AgentSelector,
-  type ExplicitAgentSelector
+  type AgentSelector
 } from "../shared/agent-protocol.js";
 
 export class CliUsageError extends Error {
@@ -28,7 +27,7 @@ export type CliCommand =
   | {
       readonly kind: "open";
       readonly repoPath: string;
-      readonly selector: ExplicitAgentSelector;
+      readonly selector: AgentSelector;
       readonly json: boolean;
     }
   | ({ readonly kind: "review.inspect" } & RepoOptions & { readonly json: boolean })
@@ -185,9 +184,8 @@ function parseOpen(args: readonly string[], cwd: string): CliCommand {
   const extraArgument = positionals[1];
   if (extraArgument !== undefined)
     throw new CliUsageError(`Unexpected argument: ${extraArgument}`);
-  const selector = selectorFrom(values, "working-tree");
-  if (selector.kind === "selected")
-    throw new CliUsageError("open does not support --target selected.");
+  // Without a target, an already open worktree keeps the diff the user chose.
+  const selector = selectorFrom(values, "selected");
   return {
     kind: "open",
     repoPath: path.resolve(cwd, positionals[0] ?? cwd),

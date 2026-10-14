@@ -58,6 +58,25 @@ describe("exact agent opening", () => {
       prepareAgentOpen(root, { kind: "branch", base: "missing" })
     ).rejects.toMatchObject({ code: "invalid_target" });
   });
+  it("keeps the current selection unless a target is requested", async () => {
+    const root = fixture();
+    const sha = git(root, "rev-parse", "HEAD");
+    const selectedFor = (repoPath: string) => {
+      expect(repoPath).toBe(root);
+      return { kind: "commit" as const, commit: "HEAD" };
+    };
+    const kept = await prepareAgentOpen(root, { kind: "selected" }, undefined, {
+      selectedFor
+    });
+    expect(kept.target.kind).toBe("commit");
+    expect(kept.selector).toEqual({ kind: "commit", commit: sha });
+    expect(kept.applyTarget).toBe(false);
+    const requested = await prepareAgentOpen(root, { kind: "working-tree" }, undefined, {
+      selectedFor
+    });
+    expect(requested.target.kind).toBe("working_tree");
+    expect(requested.applyTarget).toBe(true);
+  });
   it("pins commit selectors and rejects already cancelled opens", async () => {
     const root = fixture();
     const sha = git(root, "rev-parse", "HEAD");

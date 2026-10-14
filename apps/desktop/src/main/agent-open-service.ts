@@ -3,6 +3,7 @@ import { getWorktreeInfo } from "@difftray/git";
 import { createReviewTargetId } from "@difftray/core";
 import {
   AgentProtocolError,
+  type AgentSelector,
   type ExplicitAgentSelector
 } from "../shared/agent-protocol.js";
 import { loadExplicitReviewTarget } from "./review-context-service.js";
@@ -15,8 +16,12 @@ export function assertAgentOpenActive(signal?: AbortSignal): void {
 /** Resolves exact identity and refs without opening tabs or changing selected settings. */
 export async function prepareAgentOpen(
   repoPath: string,
-  selector: ExplicitAgentSelector,
-  signal?: AbortSignal
+  requested: AgentSelector,
+  signal?: AbortSignal,
+  options: {
+    /** The worktree's current selection; a never-opened one has none. */
+    readonly selectedFor?: (canonicalPath: string) => ExplicitAgentSelector | undefined;
+  } = {}
 ) {
   assertAgentOpenActive(signal);
   let canonical: string;
@@ -29,6 +34,10 @@ export async function prepareAgentOpen(
     );
   }
   assertAgentOpenActive(signal);
+  const selector: ExplicitAgentSelector =
+    requested.kind === "selected"
+      ? (options.selectedFor?.(canonical) ?? { kind: "working-tree" })
+      : requested;
   let target;
   try {
     target = await loadExplicitReviewTarget(canonical, selector);
@@ -46,6 +55,8 @@ export async function prepareAgentOpen(
     selector:
       target.kind === "commit"
         ? { kind: "commit" as const, commit: target.commitSha }
-        : selector
+        : selector,
+    /** Only an explicitly requested target changes what the user had selected. */
+    applyTarget: requested.kind !== "selected"
   };
 }

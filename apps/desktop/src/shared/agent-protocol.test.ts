@@ -32,6 +32,7 @@ describe("parseAgentRequest", () => {
   it.each([
     ["hello", {}],
     ["open", { repoPath: "/repo", selector: { kind: "working-tree" } }],
+    ["open", { repoPath: "/repo", selector: { kind: "selected" } }],
     ["review.inspect", { repoPath: "/repo", selector: { kind: "selected" } }],
     ["review.inspect", { repoPath: "/repo", selector: { kind: "working-tree" } }],
     ["review.inspect", { repoPath: "/repo", selector: { kind: "branch", base: "main" } }],
@@ -111,7 +112,6 @@ describe("parseAgentRequest", () => {
     { extra: true },
     { version: 1, id: "transport-1", token, method: "hello", params: {}, extra: true },
     { ...base("hello", {}), params: { extra: true } },
-    { ...base("open", { repoPath: "/repo", selector: { kind: "selected" } }) },
     {
       ...base("open", {
         repoPath: "/repo",

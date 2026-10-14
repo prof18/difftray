@@ -144,7 +144,7 @@ export type AgentRequest = {
       readonly method: "open";
       readonly params: {
         readonly repoPath: string;
-        readonly selector: ExplicitAgentSelector;
+        readonly selector: AgentSelector;
       };
     }
   | {
@@ -521,7 +521,7 @@ export function parseAgentRequest(input: string | Uint8Array): AgentRequest {
     case "review.inspect": {
       const x = object(p, ["repoPath", "selector"]);
       nonempty(x.repoPath, 4096);
-      selector(x.selector, method === "review.inspect");
+      selector(x.selector, true);
       break;
     }
     case "review.files":

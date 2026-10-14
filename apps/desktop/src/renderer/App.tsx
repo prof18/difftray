@@ -1,4 +1,7 @@
-import { createAgentOpenSelection } from "./agent-open-selection.js";
+import {
+  createAgentOpenSelection,
+  isAgentOpenAlreadyShown
+} from "./agent-open-selection.js";
 import {
   useCallback,
   useEffect,
@@ -2119,15 +2122,32 @@ export function App(): React.JSX.Element {
   function handleProjectsOpened(event: ProjectsOpenedEvent): void {
     const { focusProjectId, agentOpenRequestId, expectedReviewTargetId } = event;
     if (agentOpenRequestId && expectedReviewTargetId) {
+      const request = {
+        requestId: agentOpenRequestId,
+        projectId: focusProjectId,
+        reviewTargetId: expectedReviewTargetId
+      };
+      const shown = workspaceRef.current;
+      if (
+        loadStateRef.current === "idle" &&
+        !workspaceLoadTargetRef.current &&
+        isAgentOpenAlreadyShown(
+          shown && { projectId: shown.project.id, reviewTargetId: shown.reviewTarget.id },
+          request
+        )
+      ) {
+        // Already on screen: keep the loaded diff, selection and scroll.
+        const loadId = workspaceLoadRequestRef.current;
+        agentSelectionRef.current.begin(request, loadId);
+        agentSelectionRef.current.committed(
+          request.projectId,
+          request.reviewTargetId,
+          loadId
+        );
+        return;
+      }
       const loadId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
-      agentSelectionRef.current.begin(
-        {
-          requestId: agentOpenRequestId,
-          projectId: focusProjectId,
-          reviewTargetId: expectedReviewTargetId
-        },
-        loadId
-      );
+      agentSelectionRef.current.begin(request, loadId);
       trackWorkspaceLoadTarget(focusProjectId, loadId);
       void (async () => {
         try {

@@ -1720,7 +1720,13 @@ const servicesReady = app.whenReady().then(async () => {
           const prepared = await prepareAgentOpen(
             request.params.repoPath,
             request.params.selector,
-            openSignal
+            openSignal,
+            {
+              selectedFor: (canonicalPath) => {
+                const known = getStorage().getProjectByPath(canonicalPath);
+                return known ? selectedReviewSelector(known) : undefined;
+              }
+            }
           );
           assertAgentOpenActive(openSignal);
           const opened = await openRepositoryPaths([prepared.repoPath]);
@@ -1757,16 +1763,18 @@ const servicesReady = app.whenReady().then(async () => {
             send: () => {
               assertAgentOpenActive(openSignal);
               const selector = prepared.selector;
-              getStorage().updateProjectDefaultDiffTarget(
-                project.id,
-                selector.kind === "branch"
-                  ? { mode: "branch", ref: selector.base }
-                  : selector.kind === "commit"
-                    ? { mode: "commit", ref: selector.commit }
-                    : { mode: "working_tree" }
-              );
-              // Companion clients cache workspaces per project, as for human target changes.
-              notifyCompanionWorkspaceChanged(project.id, "diff_target");
+              if (prepared.applyTarget) {
+                getStorage().updateProjectDefaultDiffTarget(
+                  project.id,
+                  selector.kind === "branch"
+                    ? { mode: "branch", ref: selector.base }
+                    : selector.kind === "commit"
+                      ? { mode: "commit", ref: selector.commit }
+                      : { mode: "working_tree" }
+                );
+                // Companion clients cache workspaces per project, as for human target changes.
+                notifyCompanionWorkspaceChanged(project.id, "diff_target");
+              }
               window.webContents.send("projects:opened", {
                 projectIds: [project.id],
                 focusProjectId: project.id,

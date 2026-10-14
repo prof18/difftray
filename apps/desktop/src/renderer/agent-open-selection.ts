@@ -43,3 +43,14 @@ export function createAgentOpenSelection(
     }
   };
 }
+
+/** An agent open needs no reload when this exact review is already on screen. */
+export function isAgentOpenAlreadyShown(
+  shown: { readonly projectId: string; readonly reviewTargetId: string } | undefined,
+  request: AgentOpenSelectionRequest
+): boolean {
+  return (
+    shown?.projectId === request.projectId &&
+    shown.reviewTargetId === request.reviewTargetId
+  );
+}

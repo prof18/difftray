@@ -16,7 +16,7 @@ Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to 
 "$cli" feedback submit --context "$contextId" --input "$savedPayload" --json
 ```
 
-Use `--target working-tree`, `--target branch --base REF`, or `--target commit --commit REF` with `review inspect` when the selected target is not the intended target. `open` supports the same explicit target modes and defaults to the working tree. `review inspect` defaults to the selected UI target. Keep the returned context for all later commands. `review files` and `review feedback` paginate independently until no `nextCursor` remains. Read exact file diffs before choosing line anchors. Do not infer a line number from a summary.
+Use `--target working-tree`, `--target branch --base REF`, or `--target commit --commit REF` with `review inspect` when the selected target is not the intended target. `open` supports the same explicit target modes. Without one it keeps the diff the user already selected for that worktree (the working tree for a worktree never opened before) and only brings it forward; pass a target only when the user asked for a specific diff. `review inspect` defaults to the selected UI target. Keep the returned context for all later commands. `review files` and `review feedback` paginate independently until no `nextCursor` remains. Read exact file diffs before choosing line anchors. Do not infer a line number from a summary.
 
 The submission file is a JSON object with `actor`, `requestId`, and `items`. The `contextId` is passed through `--context`. Generate IDs with the macOS utility, never with an actor label, timestamp alone, or copied example literal:
 

@@ -4,13 +4,16 @@ import { CliUsageError, parseCliArguments } from "./commands.js";
 const contextId = "ctx_0123456789abcdef0123456789abcdef";
 
 describe("parseCliArguments", () => {
-  it("defaults open to cwd and working-tree", () => {
+  it("defaults open to cwd and the worktree's current selection", () => {
     expect(parseCliArguments(["open"], "/work/my repo")).toEqual({
       kind: "open",
       repoPath: "/work/my repo",
-      selector: { kind: "working-tree" },
+      selector: { kind: "selected" },
       json: false
     });
+    expect(
+      parseCliArguments(["open", "--target", "working-tree"], "/work/my repo")
+    ).toMatchObject({ selector: { kind: "working-tree" } });
   });
 
   it("preserves nested paths containing spaces", () => {
@@ -19,7 +22,7 @@ describe("parseCliArguments", () => {
     ).toEqual({
       kind: "open",
       repoPath: "/repo root/nested folder/with spaces",
-      selector: { kind: "working-tree" },
+      selector: { kind: "selected" },
       json: false
     });
   });

@@ -1,7 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAgentOpenSelection } from "./agent-open-selection.js";
+import {
+  createAgentOpenSelection,
+  isAgentOpenAlreadyShown
+} from "./agent-open-selection.js";
 const request = { requestId: "one", projectId: "/repo", reviewTargetId: "target" };
 describe("agent renderer selection", () => {
+  it("treats an open as already shown only for the same project and target", () => {
+    const shown = { projectId: "/repo", reviewTargetId: "target" };
+    expect(isAgentOpenAlreadyShown(shown, request)).toBe(true);
+    expect(isAgentOpenAlreadyShown({ ...shown, reviewTargetId: "other" }, request)).toBe(
+      false
+    );
+    expect(isAgentOpenAlreadyShown({ ...shown, projectId: "/other" }, request)).toBe(
+      false
+    );
+    expect(isAgentOpenAlreadyShown(undefined, request)).toBe(false);
+  });
   it("clears a cancelled request without acknowledgement or later completion", () => {
     const acknowledge = vi.fn();
     const selection = createAgentOpenSelection(acknowledge);
