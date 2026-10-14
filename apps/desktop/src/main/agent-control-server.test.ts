@@ -199,6 +199,38 @@ describe("agent control socket", () => {
     cleanup.push(server.close);
     expect((await readAgentEndpoint(profilePath))?.instanceId).toBe("upgraded-instance");
   });
+  it("publishes nothing and releases the socket when startup is abandoned", async () => {
+    const profilePath = await realpath(
+      await mkdtemp(path.join(tmpdir(), "agent-server-"))
+    );
+    cleanup.push(() => rm(profilePath, { recursive: true, force: true }));
+    cleanup.push(() =>
+      rm(agentSocketPaths(profilePath).directory, { recursive: true, force: true })
+    );
+    const identity: AgentResultMap["hello"] = {
+      appVersion: "1.0.0",
+      protocolVersion: CLI_PROTOCOL_VERSION,
+      instanceId: "quitting-instance",
+      profilePath,
+      appId: "com.prof18.difftray",
+      flavor: "production" as const,
+      executablePath: "/fixture/Difftray"
+    };
+    await expect(
+      startAgentControlServer({
+        identity,
+        hasProfileLock: true,
+        dispatch: async () => identity,
+        beforePublish: () => Promise.reject(new Error("quitting"))
+      })
+    ).rejects.toThrow("quitting");
+    await expect(
+      readAgentEndpoint(profilePath, { requireSocket: false })
+    ).resolves.toBeNull();
+    await expect(lstat(agentSocketPaths(profilePath).socketPath)).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
   it("never replaces an active socket even with a claimed profile lock", async () => {
     const { server, identity: ownIdentity } = await fixture();
     await expect(

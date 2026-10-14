@@ -259,6 +259,11 @@ const droppedRepositoryCandidates = new Map<
 let storage: DifftrayStorage | undefined;
 let didConfigureAppRuntime = false;
 let isQuitting = false;
+// Async startup re-reads the flag through a call; TypeScript would otherwise keep
+// an earlier `isQuitting` check narrowed across awaits.
+function quitStarted(): boolean {
+  return isQuitting;
+}
 const agentBackground = process.argv.includes(GUI_BACKGROUND_ARGUMENT);
 let hasProfileLock = false;
 let agentControlServer: Awaited<ReturnType<typeof startAgentControlServer>> | undefined;
@@ -1688,6 +1693,14 @@ const servicesReady = app.whenReady().then(async () => {
   agentControlServer = await startAgentControlServer({
     identity,
     hasProfileLock: true,
+    // before-quit only closes an assigned server; a quit during startup must
+    // not publish an endpoint that nothing will close.
+    beforePublish: () =>
+      quitStarted()
+        ? Promise.reject(
+            new AgentProtocolError("app_unavailable", "Desktop is quitting.")
+          )
+        : Promise.resolve(),
     dispatch: async (request, signal) => {
       if (request.method === "hello") return identity;
       if (request.method === "review.inspect") return agentReads.inspect(request.params);
@@ -1773,6 +1786,11 @@ const servicesReady = app.whenReady().then(async () => {
       log: (error) => console.error("Agent service unavailable", error)
     })
   );
+  if (quitStarted() && agentControlServer) {
+    // Quit began after publishing but before this assignment.
+    await agentControlServer.close();
+    agentControlServer = undefined;
+  }
 });
 void servicesReady
   .then(async () => {
