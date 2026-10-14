@@ -43,6 +43,7 @@ Project commands:
 
 - `pnpm install`
 - `pnpm build`
+- `pnpm bench:agent-reads`
 - `pnpm bench:performance`
 - `pnpm bench:repositories`
 - `pnpm dev`
@@ -127,6 +128,8 @@ Run `pnpm bench:performance` before and after changes that can affect large-repo
 - Git diff loading, diff summaries, diff hashes, or review-state resolution
 - renderer diff parsing/rendering, file-list rendering, or scroll restoration
 - packaging/bundle changes that can affect renderer payload size
+
+For agent context validation or agent read/submit paths, also run `pnpm bench:agent-reads` before and after (`DIFFTRAY_AGENT_BENCH_FILE_COUNT` sets the fixture size).
 
 Do not keep a performance optimization only because it is theoretically better. Record the before/after benchmark outputs and keep the change only when the relevant benchmark metric improves or when a product tradeoff is explicitly accepted.
 

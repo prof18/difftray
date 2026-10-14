@@ -62,7 +62,9 @@ export function createAgentExportService(
       readonly contextId: string;
       readonly format: "prompt" | "json";
     }): Promise<AgentResultMap["review.export"]> {
-      return contexts.withContext(params.contextId, async (context) => {
+      // Only the prompt report reads file excerpts from the repository.
+      const live = params.format === "prompt";
+      return contexts.withContext(params.contextId, { live }, async (context) => {
         const first = page(context, 0);
         const items: StoredAgentFeedbackView[] = [...first.items];
         let encodedBytes = Buffer.byteLength(JSON.stringify(first.items));

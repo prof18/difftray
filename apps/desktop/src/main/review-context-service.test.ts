@@ -110,14 +110,46 @@ describe("explicit review contexts", () => {
     });
     await expect(service.inspect(root, { kind: "working-tree" })).resolves.toBeDefined();
   });
-  it("checks again after an asynchronous context read", async () => {
+  it("checks again after an asynchronous live read", async () => {
     const { root, service } = fixture();
     const context = await service.inspect(root, { kind: "working-tree" });
     await expect(
-      service.withContext(context.id, async () => {
+      service.withContext(context.id, { live: true }, async () => {
         writeFileSync(path.join(root, "untracked"), "changed");
         return "must not escape";
       })
     ).rejects.toMatchObject({ code: "stale_review" });
+  });
+  it("validates manifest reads once and rejects the next read after a change", async () => {
+    const { root, service } = fixture();
+    const context = await service.inspect(root, { kind: "working-tree" });
+    await expect(
+      service.withContext(context.id, { live: false }, async () => {
+        writeFileSync(path.join(root, "untracked"), "changed");
+        return "frozen manifest";
+      })
+    ).resolves.toBe("frozen manifest");
+    await expect(
+      service.withContext(context.id, { live: false }, async () => "next")
+    ).rejects.toMatchObject({ code: "stale_review" });
+  });
+  it("keeps commit and branch contexts valid across working-tree edits", async () => {
+    const { root, service } = fixture();
+    writeFileSync(path.join(root, "file.txt"), "next\n");
+    git(root, "commit", "-am", "next");
+    git(root, "branch", "base", "HEAD~1");
+    const branch = await service.inspect(root, { kind: "branch", base: "base" });
+    const commit = await service.inspect(root, { kind: "commit", commit: "HEAD" });
+    writeFileSync(path.join(root, "file.txt"), "uncommitted\n");
+    writeFileSync(path.join(root, "untracked"), "new");
+    expect((await service.validate(branch.id)).snapshotHash).toBe(branch.snapshotHash);
+    expect((await service.validate(commit.id)).snapshotHash).toBe(commit.snapshotHash);
+    git(root, "commit", "-qam", "moves HEAD");
+    await expect(service.validate(branch.id)).rejects.toMatchObject({
+      code: "stale_review"
+    });
+    expect((await service.validate(commit.id)).reviewTargetId).toBe(
+      commit.reviewTargetId
+    );
   });
 });

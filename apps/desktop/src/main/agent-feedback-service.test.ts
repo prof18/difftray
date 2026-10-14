@@ -92,7 +92,11 @@ function fixture() {
   } as unknown as DifftrayStorage;
   const contexts = {
     withContext: vi.fn(
-      async <T>(_id: string, read: (c: AgentReviewContext) => Promise<T>) => {
+      async <T>(
+        _id: string,
+        _options: { readonly live: boolean },
+        read: (c: AgentReviewContext) => Promise<T>
+      ) => {
         events.push("before");
         const result = await read(context);
         events.push("after");
@@ -200,7 +204,7 @@ it("preserves stale validation errors without a matching receipt", async () => {
 });
 it("does not write when the final validation fails after anchor loading", async () => {
   const f = fixture();
-  f.contexts.withContext.mockImplementation(async (_id, read) => {
+  f.contexts.withContext.mockImplementation(async (_id, _options, read) => {
     await read(context);
     throw new AgentProtocolError("stale_review", "Changed after anchor loading");
   });
@@ -270,6 +274,7 @@ it("returns committed receipts before touching a missing context", async () => {
   expect(notify).not.toHaveBeenCalled();
 });
 
+// Real Git fixtures with repeated context validation exceed the 5s default under full-suite load.
 it("stores all scopes with summary hashes and replays after source mutation and expiry", async () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "difftray-submit-")));
   const storage = openStorage(":memory:");
@@ -372,4 +377,4 @@ it("stores all scopes with summary hashes and replays after source mutation and 
     storage.close();
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 20_000);

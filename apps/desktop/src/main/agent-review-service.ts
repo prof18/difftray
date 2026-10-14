@@ -124,7 +124,7 @@ export function createAgentReviewService(
   async function files(
     params: Params<"review.files">
   ): Promise<AgentResultMap["review.files"]> {
-    return contexts.withContext(params.contextId, (context) => {
+    return contexts.withContext(params.contextId, { live: false }, (context) => {
       const cursor = decode(params.cursor, context, "files");
       const items = context.files.slice(
         cursor.offset,
@@ -148,7 +148,7 @@ export function createAgentReviewService(
   async function file(
     params: Params<"review.file">
   ): Promise<AgentResultMap["review.file"]> {
-    return contexts.withContext(params.contextId, async (context) => {
+    return contexts.withContext(params.contextId, { live: true }, async (context) => {
       const listed = context.files.find((entry) => entry.path === params.path);
       if (
         !listed ||
@@ -218,7 +218,7 @@ export function createAgentReviewService(
   async function feedback(
     params: Params<"review.feedback">
   ): Promise<AgentResultMap["review.feedback"] & { inactiveCount: number }> {
-    return contexts.withContext(params.contextId, (context) => {
+    return contexts.withContext(params.contextId, { live: false }, (context) => {
       const cursor = decode(
         params.cursor,
         context,

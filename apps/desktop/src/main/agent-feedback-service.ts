@@ -147,7 +147,7 @@ export function createAgentFeedbackService(
     if (prior) return prior;
     let batch;
     try {
-      batch = await contexts.withContext(contextId, async (context) => {
+      batch = await contexts.withContext(contextId, { live: true }, async (context) => {
         const manifest = new Map(context.files.map((file) => [file.path, file]));
         const loaded = new Map<string, Promise<AgentResultMap["review.file"]>>();
         for (const item of submission.items) {

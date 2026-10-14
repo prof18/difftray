@@ -9,6 +9,7 @@
   "main": "dist/main/index.cjs",
   "scripts": {
     "bench:performance": "pnpm --filter @difftray/core build && pnpm --filter @difftray/git build && pnpm --filter @difftray/storage build && pnpm build && node tests/performance-benchmark.mjs && node tests/repository-discovery-benchmark.mjs",
+    "bench:agent-reads": "DIFFTRAY_AGENT_BENCH=1 vitest run src/main/review-context-service.bench.test.ts",
     "bench:repositories": "pnpm --filter @difftray/storage build && node tests/repository-discovery-benchmark.mjs",
     "build": "node scripts/clean-dist.mjs && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.renderer.config.ts && vite build --config vite.cli.config.ts",
     "clean": "node scripts/clean-dist.mjs",

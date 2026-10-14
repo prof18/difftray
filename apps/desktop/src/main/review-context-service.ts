@@ -245,7 +245,14 @@ export function createReviewContextService(
       createdAt: now(),
       expiresAt: now() + (options.ttl ?? CONTEXT_TTL_MS)
     };
-    await validateSnapshot(context);
+    // snapshot() already bracketed the load with target checks; a working-tree
+    // edit during it leaves a hash that the next read's validation rejects.
+    const after = await repositoryIdentity(canonical);
+    if (after.repositoryIdentity !== identity.repositoryIdentity)
+      throw new AgentProtocolError(
+        "stale_review",
+        "Repository identity changed; inspect again."
+      );
     try {
       storage.createAgentReviewContext(
         {
@@ -281,16 +288,18 @@ export function createReviewContextService(
         "Context repository is no longer registered."
       );
     try {
-      const current = await snapshot(
-        project,
-        context.selector,
-        context.showGeneratedFiles
-      );
+      // Commit and branch diffs are fixed by the SHAs in the target id, so
+      // resolving the target proves the snapshot. Only working-tree content can
+      // change without moving a SHA, which needs the full reload.
+      const unchanged =
+        context.selector.kind === "working-tree"
+          ? (await snapshot(project, context.selector, context.showGeneratedFiles))
+              .snapshotHash === context.snapshotHash
+          : createReviewTargetId(
+              await loadExplicitReviewTarget(project.path, context.selector)
+            ) === context.reviewTargetId;
       const after = await repositoryIdentity(context.canonicalWorktreePath);
-      if (
-        current.snapshotHash !== context.snapshotHash ||
-        after.repositoryIdentity !== context.repositoryIdentity
-      )
+      if (!unchanged || after.repositoryIdentity !== context.repositoryIdentity)
         throw new AgentProtocolError("stale_review", "Review changed; inspect again.");
     } catch (error) {
       if (error instanceof AgentProtocolError) throw error;
@@ -313,13 +322,20 @@ export function createReviewContextService(
     await validateSnapshot(context);
     return context;
   }
+  /**
+   * `live` reads touch repository content and are checked again afterwards so a
+   * change during the read cannot escape. Manifest and database reads are not:
+   * the context's file list is frozen and feedback cursors carry their own
+   * version.
+   */
   async function withContext<T>(
     id: string,
+    options: { readonly live: boolean },
     read: (context: AgentReviewContext) => Promise<T>
   ): Promise<T> {
     const context = await validate(id);
     const result = await read(context);
-    await validate(id);
+    if (options.live) await validate(id);
     return result;
   }
   return { inspect, validate, withContext };
