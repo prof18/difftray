@@ -376,13 +376,13 @@ function hasControlCharacter(value: string): boolean {
     return code < 32 || (code >= 127 && code <= 159);
   });
 }
+// Any name Git can track is valid, including backslashes and control
+// characters; paths only travel as escaped JSON and match the manifest exactly.
 const path = (value: unknown): string => {
   const s = str(value, 4096);
   if (
     s.startsWith("/") ||
-    s.includes("\\") ||
-    s.split("/").some((part) => !part || part === "." || part === "..") ||
-    hasControlCharacter(s)
+    s.split("/").some((part) => !part || part === "." || part === "..")
   )
     return fail("Invalid relative path");
   return s;

@@ -139,6 +139,28 @@ describe("parseAgentRequest", () => {
     expectCode(frame(input), "invalid_request")
   );
 
+  it.each(["dir\\file.ts", "tab\tname.ts", "line\nbreak.ts"])(
+    "accepts any Git path shape a repository can contain: %j",
+    (gitPath) => {
+      expect(parse(base("review.file", { contextId, path: gitPath }))).toMatchObject({
+        params: { path: gitPath }
+      });
+      const page = {
+        version: 1,
+        id: "req-1",
+        ok: true,
+        result: {
+          files: [{ path: gitPath, diffHash: "hash", kind: "text", visible: true }],
+          total: 1,
+          nextCursor: null
+        }
+      };
+      expect(parseAgentResponse(frame(page), "review.files")).toMatchObject({
+        ok: true
+      });
+    }
+  );
+
   it("rejects unsafe line positions and invalid feedback batches", () => {
     const submission = (items: unknown[]) =>
       base("feedback.submit", {
