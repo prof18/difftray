@@ -366,6 +366,19 @@ export function formatReviewCommentsReport(
   );
 }
 
+// Git allows control characters in filenames; escape them so a path cannot
+// add report lines or terminal escape sequences.
+function formatReportPath(path: string): string {
+  return Array.from(path, (character) => {
+    const code = character.charCodeAt(0);
+    if (code >= 32 && (code < 127 || code > 159)) return character;
+    if (character === "\n") return "\\n";
+    if (character === "\r") return "\\r";
+    if (character === "\t") return "\\t";
+    return `\\u${code.toString(16).padStart(4, "0")}`;
+  }).join("");
+}
+
 function formatActorName(name: string): string {
   return name.replace(/\s+/g, " ").replace(/[\\`*_{}[\]()<>#!|]/g, "\\$&");
 }
@@ -380,7 +393,7 @@ function formatReportAttribution(item: ReviewFeedbackAttribution): string {
     (creator?.kind === "agent" || editor.kind === "agent")
   )
     parts.push(
-      `edited by ${editor.kind === "human" ? "human" : formatActorName(editor.name)}`
+      `edited by ${editor.kind === "human" ? "human" : `agent: ${formatActorName(editor.name)}`}`
     );
   return parts.length ? `${parts.join(" · ")}\n` : "";
 }
@@ -392,7 +405,7 @@ function formatReviewFileCommentReportItem(
   return renderTemplate(reviewFileCommentReportItemTemplate, {
     commentBody: `${formatReportAttribution(comment)}${formatCommentBody(comment.body)}`,
     index: String(index),
-    path: comment.path
+    path: formatReportPath(comment.path)
   });
 }
 
@@ -405,7 +418,7 @@ function formatReviewCommentReportItem(
     diffContext: formatCommentContext(comment),
     index: String(index),
     location: formatCommentLocation(comment),
-    path: comment.path
+    path: formatReportPath(comment.path)
   });
 }
 
@@ -468,7 +481,7 @@ function formatReviewedFiles(paths: readonly string[]): string {
 
   const listed = paths
     .slice(0, maxReportedPaths)
-    .map((path) => `\`${path}\``)
+    .map((path) => `\`${formatReportPath(path)}\``)
     .join(", ");
   const remaining = paths.length - maxReportedPaths;
   const more = remaining > 0 ? `, and ${String(remaining)} more` : "";

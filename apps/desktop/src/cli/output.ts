@@ -71,9 +71,21 @@ export function cliErrorResponse(error: unknown) {
     }
   };
 }
+// Reports quote repository content; on a terminal, show control sequences
+// instead of letting them act. Piped output stays byte-exact.
+function neutralizeTerminalControls(text: string): string {
+  return Array.from(text, (character) => {
+    const code = character.charCodeAt(0);
+    const control = code < 32 || (code >= 127 && code <= 159);
+    return control && character !== "\n" && character !== "\t"
+      ? `\\u${code.toString(16).padStart(4, "0")}`
+      : character;
+  }).join("");
+}
 export function formatCliResponse(
   command: { readonly kind: string; readonly json: boolean; readonly format?: string },
-  response: { readonly ok: boolean; readonly result?: unknown }
+  response: { readonly ok: boolean; readonly result?: unknown },
+  options: { readonly terminal?: boolean } = {}
 ): string {
   if (!response.ok || command.json || command.format === "json")
     return `${JSON.stringify(response)}\n`;
@@ -83,7 +95,7 @@ export function formatCliResponse(
     command.format === "prompt" &&
     typeof result.content === "string"
   )
-    return result.content;
+    return options.terminal ? neutralizeTerminalControls(result.content) : result.content;
   if (command.kind === "open" && typeof result.repoPath === "string")
     return `Opened ${result.repoPath}\n`;
   return `${JSON.stringify(response)}\n`;

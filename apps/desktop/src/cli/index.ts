@@ -186,7 +186,10 @@ async function displayResponse(
     );
     return;
   }
-  await writeCliText(process.stdout, formatCliResponse(command, response));
+  await writeCliText(
+    process.stdout,
+    formatCliResponse(command, response, { terminal: process.stdout.isTTY })
+  );
 }
 void main()
   .catch(async (error: unknown) => {

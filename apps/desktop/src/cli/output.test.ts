@@ -34,6 +34,17 @@ describe("CLI output", () => {
     );
     expect(captured).toBe(response.result.content);
   });
+  it("neutralizes terminal control sequences only when writing to a terminal", () => {
+    const hostile = {
+      ...response,
+      result: { ...response.result, content: "red \u001b[31mtext\tok\nnext\u0007" }
+    };
+    const command = { kind: "review.export", format: "prompt", json: false };
+    expect(formatCliResponse(command, hostile, { terminal: true })).toBe(
+      "red \\u001b[31mtext\tok\nnext\\u0007"
+    );
+    expect(formatCliResponse(command, hostile)).toBe(hostile.result.content);
+  });
   it("uses an envelope for --json even with prompt format", () => {
     expect(
       JSON.parse(
