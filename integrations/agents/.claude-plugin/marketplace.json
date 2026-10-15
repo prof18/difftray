@@ -1,6 +1,0 @@
-{
-  "name": "difftray-local",
-  "description": "Local Difftray review plugin",
-  "owner": { "name": "Difftray" },
-  "plugins": [{ "name": "difftray", "source": "./difftray" }]
-}

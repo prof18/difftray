@@ -1,61 +1,59 @@
 # Agent integration
 
+## In-app setup
+
+Open **Settings → Agents** in a packaged macOS app to install or repair the
+portable skill, check the bundled CLI, or read this guide. The app bundles the
+canonical skill at `Contents/Resources/skills/difftray` and the CLI at
+`Contents/Resources/bin/difftray`. Choose **Install** for a known agent or use
+the folder chooser for another agent:
+
+| Agent        | Destination                                             |
+| ------------ | ------------------------------------------------------- |
+| Claude Code  | `~/.claude/skills/difftray`                             |
+| Codex        | `~/.agents/skills/difftray`                             |
+| Pi           | `~/.pi/agent/skills/difftray`                           |
+| Other agents | Choose a native skills folder; the app adds `/difftray` |
+
+Install creates an app-owned symlink from the selected destination to the
+bundled skill. The skill folder remains inside the app, so the link receives
+skill updates whenever the app is updated at the same path. The host agent may
+need to restart or reload its skills to see those updates. **Repair** updates an
+app-owned link when the app has moved. If the destination already contains an
+unrelated folder, file, or symlink, the app preserves it and does not overwrite
+it. The folder chooser can always be used again to choose another destination.
+
+**Check** runs that app's bundled `bin/difftray doctor --json` against the current
+profile with a 20-second timeout. It reports **Connected** or the CLI's error
+message. **Full guide** opens this guide. **Terminal** contains the optional
+command-line tool installer, moved from General.
+
+The app resolves its own location from the installed skill symlink, including
+Alpha and custom-named bundles. If the app moves, use **Repair** to update the
+link. An explicit `DIFFTRAY_APP_PATH` override still takes precedence for
+manual or developer use. Unpackaged development runs show “Agent setup is
+available in packaged builds.” An isolated profile override cannot install into
+the actual agent directories.
+
 ## Agent skill setup
 
-The portable package is at `integrations/agents/difftray` in this public
-checkout. It contains one canonical `skills/difftray` tree for Codex, Claude
-Code, and Pi. Installing a package into an agent is a one-time user setup step.
-The skill invokes the CLI already bundled with Difftray, so agent use requires
-no npm package, separate Node runtime, global CLI installation, or shell-profile
-change. These commands describe local setup; this repository has not published
-the package to an external marketplace or installed it in a user's agent.
-
-From this repository root, Codex CLI 0.162.1 accepts:
-
-```sh
-codex plugin marketplace add "$(pwd)"
-codex plugin add difftray@difftray-local
-```
-
-The first command adds this checkout's local catalog. The second installs its
-`difftray` plugin. Claude Code 2.1.281 accepts a session-local plugin directory;
-its manifest and catalog can be checked without starting a session:
-
-```sh
-claude plugin validate --strict "$(pwd)/integrations/agents/difftray"
-claude plugin validate --strict "$(pwd)/integrations/agents"
-claude --plugin-dir "$(pwd)/integrations/agents/difftray"
-```
-
-Pi 0.85.1 accepts the skill for a session or the local package for persistent
-installation:
-
-```sh
-pi --skill "$(pwd)/integrations/agents/difftray/skills/difftray/SKILL.md"
-pi install "$(pwd)/integrations/agents/difftray"
-```
-
-For Antigravity, copy the portable
-`integrations/agents/difftray/skills/difftray` directory into a location where
-its documented skill loader looks for skills. Preserve the `scripts` and
-`references` subdirectories. Antigravity plugin loading has not been validated.
-
-The host versions and invocation flags above were checked with installed
-`--help` output. The Claude plugin manifest passed `claude plugin validate
---strict`; package tests use copied files and stub app bundles. Actual
-account-backed Codex, Claude, and Pi sessions remain a final user
-validation task. Antigravity remains optional and unverified. The commands above have not been run as installs or sessions.
+The repository remains the source for contributors, with one canonical portable
+skill at `integrations/agents/difftray/skills/difftray`. The app bundles only
+that skill folder and the existing CLI; plugin wrappers and marketplace catalogs
+are not needed for this installation flow. Their previous repository-based
+installation instructions are superseded. No host skill installation or live
+agent-session validation is claimed here.
 
 The skill's sibling `scripts/difftray` resolver uses `DIFFTRAY_APP_PATH` first
-when set; otherwise it chooses `/Applications/Difftray.app`, then
-`~/Applications/Difftray.app`. The override must name an absolute app bundle
-path and is how to select a moved/custom app or Difftray Alpha. It validates a
-known bundle ID and the executable paths before calling the bundled CLI. It
-does not search `PATH`, discover Alpha automatically, or change the caller's
-working directory. The direct launcher at
+when set. Otherwise, an installed skill link identifies its owning app bundle,
+including Alpha and custom-named bundles. When used from the repository source
+checkout, the resolver retains the default production lookup of
+`/Applications/Difftray.app`, then `~/Applications/Difftray.app`. It validates
+the app bundle and executable paths before calling the bundled CLI. It does not
+search `PATH` or change the caller's working directory. The direct launcher at
 `Difftray.app/Contents/Resources/bin/difftray` determines its own bundle.
 
-The optional **Install command-line tool** action in General Settings adds a
+The optional **Install command-line tool** action in Settings → Agents adds a
 terminal convenience command under `~/.local/bin` when possible. Use **Repair
 command-line tool** after moving an app if that symlink points at its old
 location. This action is unnecessary for the agent skill, which uses its own

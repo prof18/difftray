@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Bot,
   Check,
   ChevronDown,
   ChevronRight,
@@ -20,6 +21,12 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 
+import type {
+  AgentSetupInfo,
+  AgentSkillStatus,
+  AgentSkillTarget
+} from "../shared/agent-setup-types.js";
+
 import styles from "./settings-panel.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
 import {
@@ -30,7 +37,7 @@ import {
 } from "./editor-settings.js";
 import { classList, themeModeFromValue } from "./review-view-model.js";
 
-type SettingsPage = "general" | "review" | "repositories" | "companion";
+type SettingsPage = "general" | "review" | "repositories" | "agents" | "companion";
 
 const settingsPages: readonly {
   readonly id: SettingsPage;
@@ -39,6 +46,7 @@ const settingsPages: readonly {
   { id: "general", label: "General" },
   { id: "review", label: "Review" },
   { id: "repositories", label: "Repositories" },
+  { id: "agents", label: "Agents" },
   { id: "companion", label: "Phone companion" }
 ];
 
@@ -208,6 +216,10 @@ export function SettingsPanel({
                   />
                 ) : null}
 
+                {activePage === "agents" ? (
+                  <AgentsSettingsPage disabled={disabled} />
+                ) : null}
+
                 {activePage === "companion" ? (
                   <CompanionSettingsSection
                     appSettings={appSettings}
@@ -258,6 +270,8 @@ function SettingsNavigationIcon({
     return <FolderSearch {...iconProps} />;
   }
 
+  if (page === "agents") return <Bot {...iconProps} />;
+
   if (page === "companion") {
     return <Smartphone {...iconProps} />;
   }
@@ -276,37 +290,6 @@ function GeneralSettingsPage({
   readonly editorOptions: readonly EditorPresetView[];
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
 }): React.JSX.Element {
-  const [cliStatus, setCliStatus] = useState<CliInstallStatus | null>(null);
-  const [cliBusy, setCliBusy] = useState(false);
-  const [cliError, setCliError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void window.difftray
-      .getCliInstallStatus()
-      .then((status) => {
-        if (active) setCliStatus(status);
-      })
-      .catch((error: unknown) => {
-        if (active) setCliError(error instanceof Error ? error.message : String(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function installCli(): Promise<void> {
-    setCliBusy(true);
-    setCliError(null);
-    try {
-      setCliStatus(await window.difftray.installCli());
-    } catch (error) {
-      setCliError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setCliBusy(false);
-    }
-  }
-
   return (
     <>
       <SettingsSection title="Appearance">
@@ -340,8 +323,239 @@ function GeneralSettingsPage({
           />
         </div>
       </SettingsSection>
+    </>
+  );
+}
 
-      <SettingsSection title="Terminal">
+const INTRO =
+  "Let coding agents on this Mac open worktrees in Difftray, read your review feedback, and post findings for you to review.";
+const ABOUT_TITLE = "About";
+const SETUP_TITLE = "Set up an agent";
+const STATUS_TITLE = "Status";
+const TERMINAL_TITLE = "Terminal";
+const OTHER_LABEL = "Other agents";
+const INSTALL_NOTE =
+  "Install links the bundled skill into your agent’s skills directory. Restart the agent after installing or repairing.";
+const GUIDE_LABEL = "Full guide";
+const CHECK_LABEL = "Check";
+const CHECKING_LABEL = "Checking…";
+const CONNECTED_LABEL = "Connected";
+
+function AgentsSettingsPage({
+  disabled
+}: {
+  readonly disabled: boolean;
+}): React.JSX.Element {
+  const [setup, setSetup] = useState<AgentSetupInfo | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [installingTarget, setInstallingTarget] = useState<AgentSkillTarget | null>(null);
+  const [checkBusy, setCheckBusy] = useState(false);
+  const [checkResult, setCheckResult] = useState<AgentCheckResult | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.difftray
+      .getAgentSetup()
+      .then((result) => {
+        if (active) setSetup(result);
+      })
+      .catch((error: unknown) => {
+        if (active) setSetupError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function installSkill(target: AgentSkillTarget): Promise<void> {
+    setSetupError(null);
+    setInstallingTarget(target);
+    try {
+      setSetup(await window.difftray.installAgentSkill(target));
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInstallingTarget(null);
+    }
+  }
+
+  async function runCheck(): Promise<void> {
+    setCheckBusy(true);
+    setCheckResult(null);
+    try {
+      setCheckResult(await window.difftray.checkAgentConnection());
+    } catch (error) {
+      setCheckResult({
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setCheckBusy(false);
+    }
+  }
+
+  function skillAction(skill: AgentSkillStatus): React.JSX.Element {
+    const otherChoose =
+      skill.target === "other" &&
+      skill.kind !== "unavailable" &&
+      skill.kind !== "repairable";
+    const actionable =
+      skill.kind === "absent" || skill.kind === "repairable" || otherChoose;
+    const busy = installingTarget !== null;
+    const buttonText =
+      installingTarget === skill.target
+        ? "Installing…"
+        : otherChoose
+          ? "Choose folder…"
+          : skill.kind === "installed"
+            ? "Installed"
+            : skill.kind === "blocked"
+              ? "Blocked"
+              : skill.kind === "unavailable"
+                ? "Unavailable"
+                : skill.kind === "repairable"
+                  ? "Repair"
+                  : "Install";
+    const label = skill.target === "other" ? OTHER_LABEL : skill.label;
+    return (
+      <div className={styles.agentActions}>
+        {skill.target === "other" && skill.kind === "installed" ? (
+          <span role="status">Installed</span>
+        ) : null}
+        <button
+          aria-label={`${installingTarget === skill.target ? "Installing" : otherChoose ? "Choose folder for" : buttonText} ${label} skill`}
+          className={styles.secondaryButton}
+          disabled={disabled || busy || !actionable}
+          onClick={() => {
+            void installSkill(skill.target);
+          }}
+          type="button"
+        >
+          {buttonText}
+        </button>
+      </div>
+    );
+  }
+
+  function reportSetupError(error: unknown): void {
+    setSetupError(error instanceof Error ? error.message : String(error));
+  }
+
+  const [cliStatus, setCliStatus] = useState<CliInstallStatus | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
+  const [cliError, setCliError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.difftray
+      .getCliInstallStatus()
+      .then((status) => {
+        if (active) setCliStatus(status);
+      })
+      .catch((error: unknown) => {
+        if (active) setCliError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function installCli(): Promise<void> {
+    setCliBusy(true);
+    setCliError(null);
+    try {
+      setCliStatus(await window.difftray.installCli());
+    } catch (error) {
+      setCliError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCliBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <SettingsSection title={ABOUT_TITLE}>
+        <div className={styles.settingRow}>
+          <span>{INTRO}</span>
+          <div className={styles.agentActions}>
+            <button
+              className={styles.secondaryButton}
+              disabled={disabled}
+              onClick={() => {
+                void window.difftray.openAgentGuide().catch(reportSetupError);
+              }}
+              type="button"
+            >
+              {GUIDE_LABEL}
+            </button>
+          </div>
+        </div>
+      </SettingsSection>
+      <SettingsSection title={SETUP_TITLE}>
+        {setup?.available ? (
+          <>
+            {setup.skills.map((skill) => (
+              <div key={skill.target}>
+                <div className={styles.settingRow}>
+                  <span>{skill.target === "other" ? OTHER_LABEL : skill.label}</span>
+                  {skillAction(skill)}
+                </div>
+                {skill.destination || skill.reason ? (
+                  <div className={styles.cliInstallDetails}>
+                    {skill.destination ? (
+                      <input
+                        aria-label={`${skill.label} skill destination`}
+                        readOnly
+                        value={skill.destination}
+                      />
+                    ) : null}
+                    {skill.reason ? <p>{skill.reason}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            <div className={styles.cliInstallDetails}>
+              <p>{INSTALL_NOTE}</p>
+            </div>
+          </>
+        ) : setup ? (
+          <div className={styles.cliInstallDetails}>
+            <p>Agent setup is available in packaged builds.</p>
+          </div>
+        ) : null}
+        {setupError ? (
+          <p className={styles.cliInstallError} role="alert">
+            {setupError}
+          </p>
+        ) : null}
+      </SettingsSection>
+      <SettingsSection title={STATUS_TITLE}>
+        <div className={styles.settingRow}>
+          <span>
+            {checkResult?.status === "connected" ? (
+              <span role="status">{CONNECTED_LABEL}</span>
+            ) : (
+              STATUS_TITLE
+            )}
+          </span>
+          <button
+            className={styles.secondaryButton}
+            disabled={disabled || checkBusy || !setup?.available}
+            onClick={() => {
+              void runCheck();
+            }}
+            type="button"
+          >
+            {checkBusy ? CHECKING_LABEL : CHECK_LABEL}
+          </button>
+        </div>
+        {checkResult?.status === "failed" ? (
+          <p className={styles.cliInstallError} role="alert">
+            {checkResult.message}
+          </p>
+        ) : null}
+      </SettingsSection>
+      <SettingsSection title={TERMINAL_TITLE}>
         <div className={styles.settingRow}>
           <span>
             {cliStatus?.kind === "installed"

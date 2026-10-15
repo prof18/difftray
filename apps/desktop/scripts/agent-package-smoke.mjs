@@ -6,6 +6,8 @@ import {
   readFileSync,
   writeFileSync,
   chmodSync,
+  statSync,
+  symlinkSync,
   rmSync,
   existsSync,
   realpathSync
@@ -16,9 +18,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const source = path.join(root, "integrations/agents");
+const source = path.join(root, "integrations/agents/difftray/skills/difftray");
 const temporary = mkdtempSync(path.join(tmpdir(), "difftray-agent-package-"));
-const readJson = (file) => JSON.parse(readFileSync(file, "utf8"));
 const inside = (parent, relative) => {
   const resolved = path.resolve(parent, relative);
   assert.ok(resolved.startsWith(`${parent}${path.sep}`), `${relative} escapes ${parent}`);
@@ -28,35 +29,14 @@ const inside = (parent, relative) => {
 
 try {
   const copiedRoot = path.join(temporary, "checkout");
-  const agents = path.join(copiedRoot, "integrations/agents");
-  mkdirSync(path.join(copiedRoot, ".agents/plugins"), { recursive: true });
-  cpSync(
-    path.join(root, ".agents/plugins/marketplace.json"),
-    path.join(copiedRoot, ".agents/plugins/marketplace.json")
-  );
-  cpSync(source, agents, { recursive: true });
-  const plugin = path.join(agents, "difftray");
-  const codex = readJson(path.join(plugin, ".codex-plugin/plugin.json"));
-  const claude = readJson(path.join(plugin, ".claude-plugin/plugin.json"));
-  const pi = readJson(path.join(plugin, "package.json"));
-  assert.equal(codex.name, "difftray");
-  assert.equal(codex.version, "0.1.0");
-  assert.equal(codex.skills, "./skills/");
-  assert.equal(inside(plugin, codex.skills), path.join(plugin, "skills"));
-  assert.equal(claude.name, "difftray");
-  assert.equal(claude.version, "0.1.0");
-  assert.deepEqual(pi.pi.skills, ["./skills"]);
-  assert.equal(inside(plugin, pi.pi.skills[0]), path.join(plugin, "skills"));
+  const skill = path.join(copiedRoot, "skills/difftray");
+  cpSync(source, skill, { recursive: true });
   for (const file of ["SKILL.md", "scripts/difftray", "references/commands.md"])
-    inside(path.join(plugin, "skills/difftray"), file);
-  const claudeCatalog = readJson(path.join(agents, ".claude-plugin/marketplace.json"));
-  assert.equal(claudeCatalog.name, "difftray-local");
-  assert.equal(inside(agents, claudeCatalog.plugins[0].source), plugin);
-  const codexCatalog = readJson(
-    path.join(copiedRoot, ".agents/plugins/marketplace.json")
-  );
-  assert.equal(codexCatalog.name, "difftray-local");
-  assert.equal(inside(copiedRoot, codexCatalog.plugins[0].source.path), plugin);
+    inside(skill, file);
+  const skillSource = readFileSync(path.join(skill, "SKILL.md"), "utf8");
+  assert.match(skillSource, /Difftray/);
+  assert.match(skillSource, /\[commands\.md\]\(references\/commands\.md\)/);
+  assert.notEqual(statSync(path.join(skill, "scripts/difftray")).mode & 0o111, 0);
 
   const app = path.join(temporary, "Custom $`' app.app");
   const contents = path.join(app, "Contents");
@@ -75,7 +55,7 @@ try {
   writeFileSync(path.join(contents, "MacOS/Difftray"), "#!/bin/sh\nexit 99\n");
   chmodSync(path.join(contents, "MacOS/Difftray"), 0o755);
   writeFileSync(path.join(contents, "Resources/app.asar"), "stub");
-  const resolver = path.join(plugin, "skills/difftray/scripts/difftray");
+  const resolver = path.join(skill, "scripts/difftray");
   const argv = [
     "--json",
     "a b",
@@ -142,6 +122,71 @@ try {
   });
   assert.notEqual(missingExecutable.status, 0);
   assert.match(missingExecutable.stderr, /bundle executable/);
+
+  const linkedAgent = path.join(temporary, "agent");
+  const firstPackagedApp = path.join(temporary, "first", "Difftray Alpha.app");
+  const linkedSkill = path.join(firstPackagedApp, "Contents/Resources/skills/difftray");
+  const linkedCapture = path.join(temporary, "linked-args.json");
+  const makeAlphaApp = (appPath, capturePath) => {
+    const appContents = path.join(appPath, "Contents");
+    mkdirSync(path.join(appContents, "Resources/bin"), { recursive: true });
+    mkdirSync(path.join(appContents, "MacOS"), { recursive: true });
+    mkdirSync(path.join(appContents, "Resources/skills"), { recursive: true });
+    writeFileSync(
+      path.join(appContents, "Info.plist"),
+      `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.prof18.difftray.dev</string><key>CFBundleExecutable</key><string>Difftray Alpha</string></dict></plist>`
+    );
+    writeFileSync(path.join(appContents, "MacOS/Difftray Alpha"), "#!/bin/sh\nexit 99\n");
+    chmodSync(path.join(appContents, "MacOS/Difftray Alpha"), 0o755);
+    writeFileSync(
+      path.join(appContents, "Resources/bin/difftray"),
+      `#!/bin/sh\nprintf '%s\\0' "$PWD" "$@" > "${capturePath}"\n`
+    );
+    chmodSync(path.join(appContents, "Resources/bin/difftray"), 0o755);
+    writeFileSync(path.join(appContents, "Resources/app.asar"), "stub");
+    cpSync(source, path.join(appContents, "Resources/skills/difftray"), {
+      recursive: true
+    });
+  };
+  makeAlphaApp(firstPackagedApp, linkedCapture);
+  mkdirSync(path.join(linkedAgent, "skills"), { recursive: true });
+  let externalSkillLink = path.join(linkedAgent, "skills/difftray");
+  symlinkSync(linkedSkill, externalSkillLink, "dir");
+  const linkedResolver = path.join(externalSkillLink, "scripts/difftray");
+  const linkedArgs = ["--json", "from link", "quote'", "*?[x]"];
+  const withoutAppOverride = { ...process.env };
+  delete withoutAppOverride.DIFFTRAY_APP_PATH;
+  const linkedSuccess = spawnSync(linkedResolver, linkedArgs, {
+    cwd,
+    env: withoutAppOverride,
+    encoding: "utf8"
+  });
+  assert.equal(linkedSuccess.status, 0, linkedSuccess.stderr);
+  assert.deepEqual(readFileSync(linkedCapture, "utf8").split("\0").slice(0, -1), [
+    realpathSync(cwd),
+    ...linkedArgs
+  ]);
+
+  const relocatedApp = path.join(temporary, "relocated", "Difftray Alpha.app");
+  const relocatedCapture = path.join(temporary, "relocated-args.json");
+  makeAlphaApp(relocatedApp, relocatedCapture);
+  rmSync(externalSkillLink);
+  externalSkillLink = path.join(linkedAgent, "skills/difftray");
+  symlinkSync(
+    path.join(relocatedApp, "Contents/Resources/skills/difftray"),
+    externalSkillLink,
+    "dir"
+  );
+  const relocatedSuccess = spawnSync(
+    path.join(externalSkillLink, "scripts/difftray"),
+    linkedArgs,
+    { cwd, env: withoutAppOverride, encoding: "utf8" }
+  );
+  assert.equal(relocatedSuccess.status, 0, relocatedSuccess.stderr);
+  assert.deepEqual(readFileSync(relocatedCapture, "utf8").split("\0").slice(0, -1), [
+    realpathSync(cwd),
+    ...linkedArgs
+  ]);
 
   // Only the fixed discovery roots are rewritten in a copied script, never in the
   // production resolver. This keeps the test isolated from installed applications.

@@ -1,7 +1,9 @@
 # Difftray agent skill
 
-This package contains one portable skill and one shell resolver. Codex, Claude Code, and Pi reference the same `skills/difftray` tree. The skill calls Difftray's bundled CLI, so no separate Node or global CLI installation is needed. Installing this package into an agent is a one-time, user-controlled setup action; no host configuration is changed by this repository.
+This repository folder is the contributor source for Difftray's portable agent skill. Packaged apps bundle only `skills/difftray` at `Contents/Resources/skills/difftray`, alongside the CLI at `Contents/Resources/bin/difftray`. The app's **Settings → Agents** page creates a symlink from each agent's skill location to the bundled folder, so the installed skill follows app updates at the same location.
 
-The resolver uses `DIFFTRAY_APP_PATH` when set, otherwise `/Applications/Difftray.app` then `~/Applications/Difftray.app`. It validates the app bundle before launch. For custom or moved apps, set the override explicitly. An optional desktop setting can install a terminal convenience command; the skill does not need that setting.
+For setup from an installed app, open **Settings → Agents**; see the [agent integration guide](https://github.com/prof18/difftray/blob/main/docs/agent-integration.md#in-app-setup).
 
-Local catalogs are `../../../.agents/plugins/marketplace.json` for Codex and `../.claude-plugin/marketplace.json` for Claude. Pi reads this package's `pi.skills` declaration. A plain `SKILL.md` can also be loaded by agents that support portable skills, including Antigravity; no Antigravity plugin compatibility is claimed. See the public agent integration guide for host-specific setup commands.
+The resolver uses `DIFFTRAY_APP_PATH` when set, otherwise it identifies the owning app from the installed skill symlink. This supports Alpha and custom-named bundles. When run from the repository source checkout, it retains the default lookup of `/Applications/Difftray.app`, then `~/Applications/Difftray.app`. It validates the app bundle before launch. The optional terminal command is a convenience; the skill does not need it.
+
+The skill and CLI are sufficient for the app's install flow; repository plugin wrappers and marketplace catalogs are not needed. Agent-specific frontmatter and references remain in the canonical skill tree. See the [public agent integration guide](https://github.com/prof18/difftray/blob/main/docs/agent-integration.md#agent-skill-setup) for installation and resolver details.

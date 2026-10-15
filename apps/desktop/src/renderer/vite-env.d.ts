@@ -3,6 +3,9 @@
 export {};
 
 declare global {
+  type AgentSetupInfo = import("../shared/agent-setup-types.js").AgentSetupInfo;
+  type AgentCheckResult = import("../shared/agent-setup-types.js").AgentCheckResult;
+
   type CliInstallStatus = {
     readonly kind: "absent" | "installed" | "repairable" | "blocked" | "unavailable";
     readonly command: "difftray" | "difftray-alpha";
@@ -14,6 +17,12 @@ declare global {
   };
   type DifftrayApi = {
     readonly appVersion: () => Promise<string>;
+    readonly getAgentSetup: () => Promise<AgentSetupInfo>;
+    readonly installAgentSkill: (
+      target: import("../shared/agent-setup-types.js").AgentSkillTarget
+    ) => Promise<AgentSetupInfo>;
+    readonly checkAgentConnection: () => Promise<AgentCheckResult>;
+    readonly openAgentGuide: () => Promise<void>;
     readonly getCliInstallStatus: () => Promise<CliInstallStatus>;
     readonly installCli: () => Promise<CliInstallStatus>;
     readonly platform: string;

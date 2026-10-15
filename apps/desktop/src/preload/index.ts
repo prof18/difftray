@@ -1,5 +1,17 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 
+import type {
+  AgentSetupInfo,
+  AgentCheckResult,
+  AgentSkillTarget
+} from "../shared/agent-setup-types.js";
+export type {
+  AgentSetupInfo,
+  AgentCheckResult,
+  AgentSkillTarget,
+  AgentSkillStatus
+} from "../shared/agent-setup-types.js";
+
 export type CliInstallStatus = {
   readonly kind: "absent" | "installed" | "repairable" | "blocked" | "unavailable";
   readonly command: "difftray" | "difftray-alpha";
@@ -53,6 +65,10 @@ export type WorktreeChangeCountEvent = {
 
 export type DifftrayApi = {
   readonly appVersion: () => Promise<string>;
+  readonly getAgentSetup: () => Promise<AgentSetupInfo>;
+  readonly installAgentSkill: (target: AgentSkillTarget) => Promise<AgentSetupInfo>;
+  readonly checkAgentConnection: () => Promise<AgentCheckResult>;
+  readonly openAgentGuide: () => Promise<void>;
   readonly getCliInstallStatus: () => Promise<CliInstallStatus>;
   readonly installCli: () => Promise<CliInstallStatus>;
   readonly platform: string;
@@ -767,6 +783,13 @@ export type CompanionStore = "app-store" | "google-play";
 
 const api: DifftrayApi = {
   appVersion: async () => ipcRenderer.invoke("app:version") as Promise<string>,
+  getAgentSetup: async () =>
+    ipcRenderer.invoke("agents:getSetup") as Promise<AgentSetupInfo>,
+  installAgentSkill: async (target) =>
+    ipcRenderer.invoke("agents:installSkill", { target }) as Promise<AgentSetupInfo>,
+  checkAgentConnection: async () =>
+    ipcRenderer.invoke("agents:check") as Promise<AgentCheckResult>,
+  openAgentGuide: async () => ipcRenderer.invoke("agents:openGuide") as Promise<void>,
   getCliInstallStatus: async () =>
     ipcRenderer.invoke("cli:getInstallStatus") as Promise<CliInstallStatus>,
   installCli: async () => ipcRenderer.invoke("cli:install") as Promise<CliInstallStatus>,

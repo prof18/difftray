@@ -1128,18 +1128,27 @@
 .cliInstallDetails {
   display: grid;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 12px 14px;
   color: var(--text-2);
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-top: 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.cliInstallDetails:last-child {
+  border-bottom: 0;
+}
+
+.cliInstallDetails p {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .cliInstallDetails label {
   display: grid;
   gap: 5px;
-  font-size: 12px;
+  font: inherit;
 }
 
 .cliInstallDetails input {
@@ -1154,5 +1163,16 @@
 }
 
 .cliInstallError {
+  margin: 0;
+  padding: 12px 14px;
   color: var(--danger, var(--warn));
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.agentActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
 }

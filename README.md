@@ -107,13 +107,17 @@ is in `~/Applications`, use that path instead. The bundled launcher follows its
 own app when it is moved.
 
 The [portable Difftray skill](integrations/agents/difftray/README.md) provides
-review workflows for Codex, Claude Code, and Pi. Installing the skill in an agent
-is a one-time setup; it does not require installing a global `difftray` command.
-The skill finds the production app in `/Applications` or `~/Applications`. Set
-`DIFFTRAY_APP_PATH` to an absolute bundle path for a custom location or Difftray
-Alpha. General Settings also offers an optional **Install command-line tool**
-action for terminal convenience; it does not edit shell startup files. See
-[agent setup and review commands](docs/agent-integration.md#agent-skill-setup).
+review workflows for Codex, Claude Code, and Pi. Packaged apps include the
+canonical skill and CLI. In Settings → Agents, choose **Install** to link the
+skill into Claude Code (`~/.claude/skills/difftray`), Codex
+(`~/.agents/skills/difftray`), Pi (`~/.pi/agent/skills/difftray`), or a folder
+you choose for another agent. The link follows skill updates in place; if you
+move the app, use **Repair** to update it. The skill finds the owning app from
+its link, including Alpha and custom-named bundles. `DIFFTRAY_APP_PATH` remains
+an explicit override for manual or developer use. Settings → Agents also offers
+an optional **Install command-line tool** action for terminal convenience; it
+does not edit shell startup files. See [agent setup and review
+commands](docs/agent-integration.md#agent-skill-setup).
 
 ## Development
 

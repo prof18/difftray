@@ -4,14 +4,39 @@ set -eu
 fail() { printf '%s\n' "Difftray app bundle unavailable: $1" >&2; exit 3; }
 
 explicit_override=false
+bundled_skill=false
 if [ "${DIFFTRAY_APP_PATH+x}" = x ]; then
   explicit_override=true
   [ -n "$DIFFTRAY_APP_PATH" ] || fail 'DIFFTRAY_APP_PATH is empty'
   app=$DIFFTRAY_APP_PATH
-elif [ -d /Applications/Difftray.app ]; then
-  app=/Applications/Difftray.app
 else
-  app=$HOME/Applications/Difftray.app
+  # Resolve file and directory symlinks without changing the agent's working directory.
+  script=$0
+  links=0
+  while [ -L "$script" ]; do
+    links=$((links + 1))
+    [ "$links" -le 40 ] || fail 'skill symlink cycle'
+    directory=$(CDPATH= cd -P -- "$(/usr/bin/dirname -- "$script")" && pwd)
+    target=$(/usr/bin/readlink -- "$script")
+    case "$target" in
+      /*) script=$target ;;
+      *) script=$directory/$target ;;
+    esac
+  done
+  directory=$(CDPATH= cd -P -- "$(/usr/bin/dirname -- "$script")" && pwd)
+  case "$directory" in
+    *.app/Contents/Resources/skills/difftray/scripts)
+      app=${directory%/Contents/Resources/skills/difftray/scripts}
+      bundled_skill=true
+      ;;
+    *)
+      if [ -d /Applications/Difftray.app ]; then
+        app=/Applications/Difftray.app
+      else
+        app=$HOME/Applications/Difftray.app
+      fi
+      ;;
+  esac
 fi
 
 case "$app" in /*) ;; *) fail 'DIFFTRAY_APP_PATH must be absolute' ;; esac
@@ -21,7 +46,7 @@ bundle_id=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$app/Contents/Info.
 case "$bundle_id" in
   com.prof18.difftray) ;;
   com.prof18.difftray.dev)
-    [ "$explicit_override" = true ] || fail 'Alpha requires explicit DIFFTRAY_APP_PATH'
+    [ "$explicit_override" = true ] || [ "$bundled_skill" = true ] || fail 'Alpha requires an installed bundled skill or explicit DIFFTRAY_APP_PATH'
     ;;
   *) fail "unexpected bundle identifier: $bundle_id" ;;
 esac

@@ -20,6 +20,42 @@ describe("SettingsPanel", () => {
     Object.defineProperty(window, "difftray", {
       configurable: true,
       value: {
+        getAgentSetup: vi.fn().mockResolvedValue({
+          available: true,
+          skills: [
+            {
+              target: "claude",
+              label: "Claude Code",
+              destination: "/Users/test/.claude/skills/difftray",
+              kind: "absent",
+              reason: null
+            },
+            {
+              target: "codex",
+              label: "Codex",
+              destination: "/Users/test/.codex/skills/difftray",
+              kind: "repairable",
+              reason: "The installed skill link points to a missing location."
+            },
+            {
+              target: "pi",
+              label: "Pi",
+              destination: "/Users/test/.pi/agent/skills/difftray",
+              kind: "installed",
+              reason: null
+            },
+            {
+              target: "other",
+              label: "Other agents",
+              destination: null,
+              kind: "absent",
+              reason: null
+            }
+          ]
+        }),
+        installAgentSkill: vi.fn().mockResolvedValue({ available: true, skills: [] }),
+        checkAgentConnection: vi.fn().mockResolvedValue({ status: "connected" }),
+        openAgentGuide: vi.fn().mockResolvedValue(undefined),
         getCliInstallStatus: vi.fn().mockResolvedValue({
           kind: "absent",
           command: "difftray",
@@ -48,7 +84,7 @@ describe("SettingsPanel", () => {
   });
 
   function renderSettingsPage(
-    page: "general" | "review" | "repositories" | "companion",
+    page: "general" | "review" | "repositories" | "agents" | "companion",
     input: Partial<Parameters<typeof SettingsPanel>[0]> = {}
   ): HTMLElement {
     act(() => {
@@ -82,8 +118,265 @@ describe("SettingsPanel", () => {
     return detail;
   }
 
+  function section(detail: HTMLElement, title: string): HTMLElement {
+    const result = [...detail.querySelectorAll<HTMLElement>("section")].find(
+      (item) => item.firstElementChild?.textContent === title
+    );
+    if (!result) throw new Error(`Missing section ${title}`);
+    return result;
+  }
+  function buttonNamed(parent: HTMLElement, name: string): HTMLButtonElement {
+    const result = [...parent.querySelectorAll<HTMLButtonElement>("button")].find(
+      (item) => item.textContent === name
+    );
+    if (!result) throw new Error(`Missing button ${name}`);
+    return result;
+  }
+  async function readyAgents(): Promise<HTMLElement> {
+    const detail = renderSettingsPage("agents");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    return detail;
+  }
+  it("shows install, repair, installed, and unavailable states with destinations", async () => {
+    const setup = section(await readyAgents(), "Set up an agent");
+    expect(setup.textContent).toContain(
+      "Install links the bundled skill into your agent’s skills directory. Restart the agent after installing or repairing."
+    );
+    expect(buttonNamed(setup, "Install").getAttribute("aria-label")).toBe(
+      "Install Claude Code skill"
+    );
+    expect(buttonNamed(setup, "Repair").getAttribute("aria-label")).toBe(
+      "Repair Codex skill"
+    );
+    expect(buttonNamed(setup, "Installed").disabled).toBe(true);
+    expect(setup.textContent).toContain(
+      "The installed skill link points to a missing location."
+    );
+    expect(
+      [...setup.querySelectorAll<HTMLInputElement>("input")].map((input) => input.value)
+    ).toContain("/Users/test/.codex/skills/difftray");
+    expect(setup.textContent).not.toContain("github.com");
+    expect(setup.textContent).not.toContain("DIFFTRAY_APP_PATH");
+  });
+  it("keeps blocked and unavailable targets disabled and explains why", async () => {
+    vi.mocked(window.difftray.getAgentSetup).mockResolvedValue({
+      available: true,
+      skills: [
+        {
+          target: "claude",
+          label: "Claude Code",
+          destination: "/skills/claude",
+          kind: "blocked",
+          reason: "The destination is a regular file."
+        },
+        {
+          target: "codex",
+          label: "Codex",
+          destination: "/skills/codex",
+          kind: "unavailable",
+          reason: "The agent skills directory could not be inspected."
+        }
+      ]
+    });
+    const setup = section(await readyAgents(), "Set up an agent");
+    expect(buttonNamed(setup, "Blocked").disabled).toBe(true);
+    expect(buttonNamed(setup, "Unavailable").disabled).toBe(true);
+    expect(setup.textContent).toContain("The destination is a regular file.");
+    expect(setup.textContent).toContain(
+      "The agent skills directory could not be inspected."
+    );
+  });
+  it.each(["blocked", "installed"] as const)(
+    "lets Other agents choose a new folder when its saved destination is %s",
+    async (kind) => {
+      vi.mocked(window.difftray.getAgentSetup).mockResolvedValue({
+        available: true,
+        skills: [
+          {
+            target: "other",
+            label: "Other agents",
+            destination: "/custom/difftray",
+            kind,
+            reason: kind === "blocked" ? "The selected folder is not writable." : null
+          }
+        ]
+      });
+      const setup = section(await readyAgents(), "Set up an agent");
+      const chooseFolder = setup.querySelector<HTMLButtonElement>(
+        'button[aria-label="Choose folder for Other agents skill"]'
+      );
+      if (kind === "blocked")
+        expect(setup.textContent).toContain("The selected folder is not writable.");
+      expect(chooseFolder?.disabled).toBe(false);
+      await act(async () => {
+        chooseFolder?.click();
+        await Promise.resolve();
+      });
+      expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith("other");
+    }
+  );
+  it("installs each supported target and refreshes returned statuses", async () => {
+    for (const [target, label] of [
+      ["claude", "Install Claude Code skill"],
+      ["codex", "Repair Codex skill"],
+      ["pi", "Install Pi skill"],
+      ["other", "Choose folder for Other agents skill"]
+    ] as const) {
+      const allTargets = ["claude", "codex", "pi", "other"] as const;
+      const refreshed: AgentSetupInfo = {
+        available: true,
+        skills: allTargets.map((item) => ({
+          target: item,
+          label:
+            item === "claude"
+              ? "Claude Code"
+              : item === "codex"
+                ? "Codex"
+                : item === "pi"
+                  ? "Pi"
+                  : "Other agents",
+          destination: `/${item}/difftray`,
+          kind:
+            item === target ? "installed" : item === "codex" ? "repairable" : "absent",
+          reason: null
+        }))
+      };
+      const initial: AgentSetupInfo = {
+        available: true,
+        skills: allTargets.map((item) => ({
+          target: item,
+          label:
+            item === "claude"
+              ? "Claude Code"
+              : item === "codex"
+                ? "Codex"
+                : item === "pi"
+                  ? "Pi"
+                  : "Other agents",
+          destination: `/${item}/difftray`,
+          kind:
+            item === target ? (item === "codex" ? "repairable" : "absent") : "installed",
+          reason: null
+        }))
+      };
+      vi.mocked(window.difftray.getAgentSetup).mockResolvedValue(initial);
+      vi.mocked(window.difftray.installAgentSkill).mockResolvedValue(refreshed);
+      const setup = section(await readyAgents(), "Set up an agent");
+      const button = setup.querySelector<HTMLButtonElement>(
+        `button[aria-label="${label}"]`
+      );
+      await act(async () => {
+        button?.click();
+        await Promise.resolve();
+      });
+      expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith(target);
+      expect(setup.textContent).toContain("Installed");
+      act(() => {
+        container.querySelector<HTMLButtonElement>("nav button")?.click();
+      });
+    }
+  });
+  it("disables every install action while one target is installing", async () => {
+    let finish!: (value: AgentSetupInfo) => void;
+    vi.mocked(window.difftray.installAgentSkill).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const setup = section(await readyAgents(), "Set up an agent");
+    act(() => {
+      buttonNamed(setup, "Install").click();
+    });
+    expect(buttonNamed(setup, "Installing…").disabled).toBe(true);
+    expect(buttonNamed(setup, "Repair").disabled).toBe(true);
+    await act(async () => {
+      finish({ available: true, skills: [] });
+      await Promise.resolve();
+    });
+  });
+  it("reports installation errors and lets Other agents choose a folder", async () => {
+    vi.mocked(window.difftray.installAgentSkill).mockRejectedValueOnce(
+      new Error("Permission denied")
+    );
+    const setup = section(await readyAgents(), "Set up an agent");
+    await act(async () => {
+      buttonNamed(setup, "Install").click();
+      await Promise.resolve();
+    });
+    expect(setup.querySelector('[role="alert"]')?.textContent).toBe("Permission denied");
+    await act(async () => {
+      setup
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Choose folder for Other agents skill"]'
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith("other");
+  });
+  it("checks the connection and displays connected or the CLI error in Status", async () => {
+    const status = section(await readyAgents(), "Status");
+    await act(async () => {
+      buttonNamed(status, "Check").click();
+      await Promise.resolve();
+    });
+    expect(status.textContent).toContain("Connected");
+    vi.mocked(window.difftray.checkAgentConnection).mockResolvedValue({
+      status: "failed",
+      message: "Desktop startup timeout"
+    });
+    await act(async () => {
+      buttonNamed(status, "Check").click();
+      await Promise.resolve();
+    });
+    expect(status.querySelector('[role="alert"]')?.textContent).toBe(
+      "Desktop startup timeout"
+    );
+  });
+  it("allows only one pending connection check", async () => {
+    let finish!: (value: AgentCheckResult) => void;
+    vi.mocked(window.difftray.checkAgentConnection).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const status = section(await readyAgents(), "Status");
+    act(() => {
+      buttonNamed(status, "Check").click();
+    });
+    const checking = buttonNamed(status, "Checking…");
+    expect(checking.disabled).toBe(true);
+    act(() => {
+      checking.click();
+    });
+    expect(window.difftray.checkAgentConnection).toHaveBeenCalledOnce();
+    await act(async () => {
+      finish({ status: "connected" });
+      await Promise.resolve();
+    });
+  });
+  it("shows packaged-only setup without Copy buttons in development", async () => {
+    vi.mocked(window.difftray.getAgentSetup).mockResolvedValue({ available: false });
+    const detail = await readyAgents();
+    expect(detail.textContent).toContain("Agent setup is available in packaged builds.");
+    expect(
+      [...detail.querySelectorAll("button")].some((item) => item.textContent === "Copy")
+    ).toBe(false);
+  });
+  it("opens the full agent guide", async () => {
+    const detail = await readyAgents();
+    await act(async () => {
+      buttonNamed(detail, "Full guide").click();
+      await Promise.resolve();
+    });
+    expect(window.difftray.openAgentGuide).toHaveBeenCalledOnce();
+  });
+
   it("reads terminal status without installing until the user clicks", async () => {
-    const general = renderSettingsPage("general");
+    expect(renderSettingsPage("general").textContent).not.toContain("Command-line tool");
+    const general = renderSettingsPage("agents");
     await act(async () => {
       await Promise.resolve();
     });
@@ -143,18 +436,21 @@ describe("SettingsPanel", () => {
       "General",
       "Review",
       "Repositories",
+      "Agents",
       "Phone companion"
     ]);
     expect(navigationLabels).toEqual([
       "General",
       "Review",
       "Repositories",
+      "Agents",
       "Phone companion"
     ]);
     expect(navigationAccessibleLabels).toEqual([
       "General",
       "Review",
       "Repositories",
+      "Agents",
       "Phone companion"
     ]);
     expect(sidebar?.contains(container.querySelector("#settings-title"))).toBe(false);
@@ -174,7 +470,7 @@ describe("SettingsPanel", () => {
     expect(detail?.textContent).not.toContain("Appearance");
 
     act(() => {
-      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(4)")?.click();
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(5)")?.click();
     });
 
     expect(detail?.querySelector("#settings-page-title")?.textContent).toBe(
@@ -217,7 +513,7 @@ describe("SettingsPanel", () => {
     if (!scrollRegion) return;
 
     act(() => {
-      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(4)")?.click();
+      navigation?.querySelector<HTMLButtonElement>("button:nth-of-type(5)")?.click();
     });
     scrollRegion.scrollTop = 240;
     act(() => {
@@ -813,8 +1109,9 @@ describe("SettingsPanel", () => {
 });
 
 function settingsPageLabel(
-  page: "general" | "review" | "repositories" | "companion"
+  page: "general" | "review" | "repositories" | "agents" | "companion"
 ): string {
+  if (page === "agents") return "Agents";
   if (page === "review") return "Review";
   if (page === "repositories") return "Repositories";
   if (page === "companion") return "Phone companion";

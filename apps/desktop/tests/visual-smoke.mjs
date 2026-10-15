@@ -1709,6 +1709,7 @@ async function expectSettingsWorkspace(window) {
       "General",
       "Review",
       "Repositories",
+      "Agents",
       "Phone companion"
     ])
   ) {
@@ -1716,7 +1717,7 @@ async function expectSettingsWorkspace(window) {
   }
   if (
     JSON.stringify(navigationLabels.map((label) => label.trim())) !==
-    JSON.stringify(["General", "Review", "Repositories", "Phone companion"])
+    JSON.stringify(["General", "Review", "Repositories", "Agents", "Phone companion"])
   ) {
     throw new Error(
       `Unexpected settings navigation: ${JSON.stringify(navigationLabels)}`

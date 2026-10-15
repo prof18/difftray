@@ -1,4 +1,5 @@
 import { createCliInstaller, type CliInstallStatus } from "./agent-cli-install.js";
+import { createAgentSkillInstaller } from "./agent-skill-install.js";
 import { createAgentOpenCoordinator } from "./agent-open-ack.js";
 import { prepareAgentOpen, assertAgentOpenActive } from "./agent-open-service.js";
 import {
@@ -38,7 +39,10 @@ import {
   type NativeImage,
   type OpenDialogOptions
 } from "electron";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { checkAgentConnection } from "./agent-setup.js";
+import { GUIDE_URL, UNPACKAGED_NOTE } from "../shared/agent-setup-copy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { homedir, hostname, networkInterfaces } from "node:os";
@@ -639,6 +643,56 @@ function cliInstaller() {
     uid: process.getuid?.() ?? -1
   });
 }
+let agentSkillInstaller: ReturnType<typeof createAgentSkillInstaller> | undefined;
+let agentSkillInstallBusy = false;
+function skillInstaller() {
+  return (agentSkillInstaller ??= createAgentSkillInstaller({
+    home: homedir(),
+    resourcesPath: process.resourcesPath,
+    packaged: app.isPackaged && process.platform === "darwin",
+    profileOverride: Boolean(userDataPath),
+    uid: process.getuid?.() ?? -1
+  }));
+}
+handleTrusted("agents:getSetup", () => skillInstaller().getSetup());
+handleTrusted("agents:installSkill", async (_event, input) => {
+  const target = readEnumProperty(input, "target", ["claude", "codex", "pi", "other"]);
+  const installer = skillInstaller();
+  const setup = installer.getSetup();
+  if (!setup.available) return setup;
+  const status = setup.skills.find((item) => item.target === target);
+  if (status?.kind === "unavailable") return setup;
+  if (agentSkillInstallBusy)
+    throw new Error("A skill installation is already in progress.");
+  agentSkillInstallBusy = true;
+  try {
+    if (target === "other" && status?.kind !== "repairable") {
+      const selection = await dialog.showOpenDialog({
+        title: "Choose your agent's skills directory",
+        buttonLabel: "Install skill",
+        defaultPath: status?.destination ? path.dirname(status.destination) : homedir(),
+        properties: ["openDirectory", "createDirectory"]
+      });
+      if (selection.canceled || !selection.filePaths[0]) return installer.getSetup();
+      return installer.install(target, selection.filePaths[0]);
+    }
+    return installer.install(target);
+  } finally {
+    agentSkillInstallBusy = false;
+  }
+});
+handleTrusted("agents:check", () => {
+  if (!app.isPackaged || process.platform !== "darwin")
+    return { status: "failed", message: UNPACKAGED_NOTE };
+  return checkAgentConnection({
+    resourcesPath: process.resourcesPath,
+    profilePath: app.getPath("userData"),
+    profileOverride: Boolean(userDataPath),
+    env: process.env,
+    execFile: promisify(execFile)
+  });
+});
+handleTrusted("agents:openGuide", () => shell.openExternal(GUIDE_URL));
 handleTrusted("cli:getInstallStatus", (): CliInstallStatus => cliInstaller().getStatus());
 handleTrusted("cli:install", (): CliInstallStatus => cliInstaller().install());
 handleTrusted("app:version", () => app.getVersion());

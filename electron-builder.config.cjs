@@ -73,7 +73,13 @@ module.exports = {
   asar: true,
   // The bundled local CLI uses this Electron runtime without starting the GUI.
   electronFuses: { runAsNode: true },
-  extraResources: [{ from: "apps/desktop/resources/bin/difftray", to: "bin/difftray" }],
+  extraResources: [
+    { from: "apps/desktop/resources/bin/difftray", to: "bin/difftray" },
+    {
+      from: "integrations/agents/difftray/skills/difftray",
+      to: "skills/difftray"
+    }
+  ],
   npmRebuild: false,
   mac: {
     category: "public.app-category.developer-tools",

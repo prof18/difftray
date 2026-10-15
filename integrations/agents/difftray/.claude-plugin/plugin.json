@@ -1,6 +1,0 @@
-{
-  "name": "difftray",
-  "version": "0.1.0",
-  "description": "Local diff review and feedback through the bundled Difftray CLI",
-  "author": { "name": "Difftray" }
-}

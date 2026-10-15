@@ -33,6 +33,20 @@ const packagingConfig =
 const temporaryDirectories: string[] = [];
 
 describe("macOS packaging configuration", () => {
+  it("bundles the direct Difftray skill tree", () => {
+    expect(packagingConfig.extraResources).toContainEqual({
+      from: "integrations/agents/difftray/skills/difftray",
+      to: "skills/difftray"
+    });
+    const skill = path.resolve(
+      import.meta.dirname,
+      "../../../../integrations/agents/difftray/skills/difftray"
+    );
+    for (const file of ["SKILL.md", "scripts/difftray", "references/commands.md"]) {
+      expect(readFileSync(path.join(skill, file), "utf8")).toBeTruthy();
+    }
+  });
+
   it("bundles an executable CLI with an independent CJS build and Node mode enabled", () => {
     const root = path.resolve(import.meta.dirname, "../../../..");
     const desktopPackage = JSON.parse(
