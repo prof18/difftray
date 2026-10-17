@@ -65,6 +65,7 @@ try {
     "worktree refresh button"
   );
   await window.getByRole("button", { name: "Close worktrees" }).click();
+  const siblingLabel = await expectWorktreeLabelFlow(window, artifactsDir);
   await expectProjectTabSummary(window, "visual-secondary-repo", "0/1");
   await window.locator('[data-open-inline="true"]').waitFor({ timeout: 10_000 });
   await expectProjectTabOrder(window, ["visual-repo", "visual-secondary-repo"]);
@@ -140,6 +141,7 @@ try {
   await window
     .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
     .waitFor({ timeout: 10_000 });
+  await expectPersistedWorktreeLabel(window, siblingLabel);
   await window.getByRole("button", { name: /tracked\.txt modified/ }).click();
   await expectFileStats(window, "tracked.txt", "+2", "-0");
   await expectMissing(window, "button", "schema.generated.ts");
@@ -1947,4 +1949,85 @@ async function expectEditorChoice(window, expectedValue) {
   await window
     .getByRole("button", { name: `Editor: ${expectedValue}` })
     .waitFor({ timeout: 10_000 });
+}
+
+async function expectWorktreeLabelFlow(window, artifactsDir) {
+  const longLabel =
+    "Café 🚀 修正 — release candidate with a deliberately long display name";
+  await window.getByRole("button", { name: "Worktrees for visual-repo" }).click();
+  const picker = window.getByRole("dialog", { name: "Worktrees for visual-repo" });
+  await picker.waitFor({ timeout: 10_000 });
+  const siblingRow = picker.getByRole("option", { name: /visual-repo-sibling/ });
+  await siblingRow.click({ button: "right" });
+  await window.getByRole("menuitem", { name: "Set display name…" }).click();
+  const dialog = window.getByRole("dialog", { name: "Worktree display name" });
+  await dialog.waitFor({ timeout: 10_000 });
+  await dialog.getByRole("textbox", { name: "Display name" }).fill("bad\u0007label");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog
+    .getByRole("alert")
+    .filter({ hasText: "control characters" })
+    .waitFor({ timeout: 10_000 });
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-worktree-label-error.png")
+  });
+  await dialog.getByRole("textbox", { name: "Display name" }).fill(longLabel);
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.waitFor({ state: "detached", timeout: 10_000 });
+  await picker
+    .getByRole("option", { name: new RegExp(escapeRegExp(longLabel)) })
+    .waitFor({ timeout: 10_000 });
+  await picker.getByText(/main · /).waitFor({ timeout: 10_000 });
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-worktree-label-picker.png")
+  });
+  await window.getByRole("button", { name: "Close worktrees" }).click();
+
+  await window
+    .locator('[data-project-tab-name="visual-repo"]')
+    .click({ button: "right" });
+  await window.getByRole("menuitem", { name: "Set display name…" }).click();
+  await dialog.waitFor({ timeout: 10_000 });
+  await dialog.getByRole("textbox", { name: "Display name" }).fill("Main checkout ✨");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.waitFor({ state: "detached", timeout: 10_000 });
+  const tabName = window.locator(
+    '[data-project-tab-name="visual-repo"] [data-tab-worktree-name="true"]'
+  );
+  await tabName.filter({ hasText: "Main checkout ✨" }).waitFor({ timeout: 10_000 });
+  await window
+    .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
+    .waitFor({ timeout: 10_000 });
+  await window
+    .getByRole("button", { name: /tracked\.txt modified/ })
+    .waitFor({ timeout: 10_000 });
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, "desktop-worktree-label-tab.png")
+  });
+
+  await window
+    .locator('[data-project-tab-name="visual-repo"]')
+    .click({ button: "right" });
+  await window.getByRole("menuitem", { name: "Reset display name" }).click();
+  await tabName.waitFor({ state: "detached", timeout: 10_000 });
+  await window
+    .locator('[data-project-tab-name="visual-repo"][data-active="true"]')
+    .waitFor({ timeout: 10_000 });
+  return longLabel;
+}
+
+async function expectPersistedWorktreeLabel(window, label) {
+  await window.getByRole("button", { name: "Worktrees for visual-repo" }).click();
+  const picker = window.getByRole("dialog", { name: "Worktrees for visual-repo" });
+  await picker
+    .getByRole("option", { name: new RegExp(escapeRegExp(label)) })
+    .waitFor({ timeout: 10_000 });
+  await window.getByRole("button", { name: "Close worktrees" }).click();
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

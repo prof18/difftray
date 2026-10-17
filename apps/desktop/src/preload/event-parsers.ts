@@ -82,6 +82,31 @@ export type RepositoryScanProgressView = {
   readonly status: "cancelled" | "complete" | "failed" | "scanning";
 };
 
+export type WorktreeLabelsChangedEvent = {
+  readonly worktreeId: string;
+  readonly worktreePath: string;
+};
+
+export function parseWorktreeLabelsChangedEvent(
+  payload: unknown
+): WorktreeLabelsChangedEvent | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const { worktreeId, worktreePath } = payload;
+
+  if (
+    Object.keys(payload).length !== 2 ||
+    typeof worktreeId !== "string" ||
+    typeof worktreePath !== "string"
+  ) {
+    return undefined;
+  }
+
+  return { worktreeId, worktreePath };
+}
+
 export function parseProjectChangedEvent(
   payload: unknown
 ): ProjectChangedEvent | undefined {

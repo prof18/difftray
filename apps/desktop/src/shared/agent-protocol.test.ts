@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeWorktreeLabel } from "@difftray/companion-protocol";
 import { createReviewNoteScopeId } from "@difftray/core";
 import {
   AgentProtocolError,
@@ -808,4 +809,132 @@ it("accepts strict creator/editor provenance including human edits of agent feed
     expect(() =>
       parseAgentResponse(encode({ ...item, lastEditedBy: actor }), "review.feedback")
     ).toThrow();
+});
+
+describe("worktree.label.set", () => {
+  const worktree = {
+    branchName: "codex/checkout",
+    customLabel: "Checkout rework",
+    displayName: "Checkout rework",
+    displayPath: "/repo/agent",
+    headSha: "1".repeat(40),
+    id: "worktree-id",
+    locked: false,
+    shortHeadSha: "1111111",
+    state: "available"
+  };
+  const success = (result: unknown) =>
+    frame({ version: 1, id: "transport-1", ok: true, result });
+
+  it("accepts set and reset requests with an absolute repository path", () => {
+    expect(
+      parseAgentRequest(
+        frame(base("worktree.label.set", { repoPath: "/repo/agent", label: "Café 🚀" }))
+      ).params
+    ).toEqual({ repoPath: "/repo/agent", label: "Café 🚀" });
+    expect(
+      parseAgentRequest(
+        frame(base("worktree.label.set", { repoPath: "/repo/agent", label: null }))
+      ).params
+    ).toEqual({ repoPath: "/repo/agent", label: null });
+  });
+
+  it.each([
+    ["missing label", { repoPath: "/repo" }],
+    ["blank label", { repoPath: "/repo", label: "   " }],
+    ["oversized label", { repoPath: "/repo", label: "a".repeat(81) }],
+    ["control character", { repoPath: "/repo", label: "Label\n" }],
+    ["numeric label", { repoPath: "/repo", label: 3 }],
+    ["relative repository", { repoPath: "repo", label: "Label" }],
+    [
+      "review selector",
+      { repoPath: "/repo", label: "Label", selector: { kind: "selected" } }
+    ],
+    ["context id", { repoPath: "/repo", label: "Label", contextId }]
+  ])("rejects an invalid request: %s", (_name, params) => {
+    expect(() => parseAgentRequest(frame(base("worktree.label.set", params)))).toThrow(
+      AgentProtocolError
+    );
+  });
+
+  it("accepts trimmed labels up to 80 code points", () => {
+    expect(() =>
+      parseAgentRequest(
+        frame(
+          base("worktree.label.set", { repoPath: "/repo", label: ` ${"🚀".repeat(80)} ` })
+        )
+      )
+    ).not.toThrow();
+  });
+
+  it("matches the shared label validator", () => {
+    for (const label of [
+      "Label",
+      "  padded  ",
+      "",
+      "   ",
+      "\tTab",
+      "Line\n",
+      "\u0085",
+      "a".repeat(80),
+      "a".repeat(81),
+      "🚀".repeat(80),
+      "🚀".repeat(81)
+    ]) {
+      const request = () =>
+        parseAgentRequest(frame(base("worktree.label.set", { repoPath: "/r", label })));
+      if (normalizeWorktreeLabel(label).ok) expect(request).not.toThrow();
+      else expect(request).toThrow(AgentProtocolError);
+    }
+  });
+
+  it("accepts set and reset results", () => {
+    expect(
+      parseAgentResponse(
+        success({ repoPath: "/repo/agent", worktree }),
+        "worktree.label.set"
+      )
+    ).toMatchObject({ ok: true });
+    const reset: Record<string, unknown> = {
+      ...worktree,
+      changeCount: 2,
+      displayName: "codex/checkout"
+    };
+    delete reset.customLabel;
+    expect(
+      parseAgentResponse(
+        success({ repoPath: "/repo/agent", worktree: reset }),
+        "worktree.label.set"
+      )
+    ).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ["missing nested id", { ...worktree, id: undefined }],
+    ["extra nested key", { ...worktree, path: "/repo" }],
+    ["malformed state", { ...worktree, state: "closed" }],
+    ["wrong customLabel type", { ...worktree, customLabel: 3 }],
+    ["null customLabel", { ...worktree, customLabel: null }],
+    ["non-boolean locked", { ...worktree, locked: "no" }],
+    ["negative change count", { ...worktree, changeCount: -1 }]
+  ])("rejects an invalid result: %s", (_name, nested) => {
+    expect(() =>
+      parseAgentResponse(
+        success({ repoPath: "/repo/agent", worktree: nested }),
+        "worktree.label.set"
+      )
+    ).toThrow(AgentProtocolError);
+  });
+
+  it("rejects extra and missing outer result keys", () => {
+    expect(() => parseAgentResponse(success({ worktree }), "worktree.label.set")).toThrow(
+      AgentProtocolError
+    );
+    expect(() =>
+      parseAgentResponse(
+        success({ repoPath: "/repo/agent", worktree, projectId: "p" }),
+        "worktree.label.set"
+      )
+    ).toThrow(AgentProtocolError);
+  });
 });

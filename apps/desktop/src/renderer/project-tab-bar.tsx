@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Copy, Folder, FolderGit2, MoreHorizontal, Plus, X } from "lucide-react";
+import {
+  Copy,
+  Folder,
+  FolderGit2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RotateCcw,
+  X
+} from "lucide-react";
 
 import { ContextMenu } from "./context-menu.js";
 import styles from "./project-tab-bar.module.css";
@@ -27,12 +36,14 @@ export type ProjectTabBarProps = {
   readonly loadingStatus?: WorkspaceLoadStatus;
   readonly onCloseProject: (projectId: string) => void;
   readonly onCopyProjectPath: (projectId: string) => void;
+  readonly onEditProjectLabel: (project: RecentProjectView) => void;
   readonly onForgetActiveProject: () => void;
   readonly onOpenActiveProjectInFinder: () => void;
   readonly onOpenActiveProjectWorktrees: () => void;
   readonly onOpenProject: () => void;
   readonly onRefreshActiveProject: () => void;
   readonly onReorderProjects: (nextProjects: readonly RecentProjectView[]) => void;
+  readonly onResetProjectLabel: (project: RecentProjectView) => void;
   readonly onCommitProjectOrder: (input: {
     readonly nextProjects: readonly RecentProjectView[];
     readonly rollbackProjects: readonly RecentProjectView[];
@@ -51,12 +62,14 @@ export function ProjectTabBar({
   loadingStatus,
   onCloseProject,
   onCopyProjectPath,
+  onEditProjectLabel,
   onForgetActiveProject,
   onOpenActiveProjectInFinder,
   onOpenActiveProjectWorktrees,
   onOpenProject,
   onRefreshActiveProject,
   onReorderProjects,
+  onResetProjectLabel,
   onCommitProjectOrder,
   onSelectProject,
   projects,
@@ -468,16 +481,14 @@ export function ProjectTabBar({
             const tabState = reviewSummary
               ? reviewSummaryState(reviewSummary)
               : "unknown";
-            const repositoryName = project.repositoryName;
-            const worktreeName = project.worktreeName;
-            const worktreeLabel =
-              repositoryName && worktreeName
-                ? { repositoryName, worktreeName }
-                : undefined;
+            const worktreeLabel = projectTabWorktreeLabel(project);
             const tabTitle = isLoading
               ? loadingStatus.detail
               : projectTabTitle(project, reviewSummary, isSummaryLoading);
-            const identityLabel = projectIdentityLabel(project);
+            const identityLabel =
+              project.customLabel && project.worktreeName
+                ? `${projectIdentityLabel(project)} · ${project.worktreeName}`
+                : projectIdentityLabel(project);
 
             return (
               <div
@@ -516,7 +527,7 @@ export function ProjectTabBar({
                   setTabContextMenu({
                     left: Math.max(8, Math.min(invocationX, window.innerWidth - 204)),
                     project,
-                    top: Math.max(8, Math.min(invocationY, window.innerHeight - 84))
+                    top: Math.max(8, Math.min(invocationY, window.innerHeight - 160))
                   });
                 }}
                 onDragEnd={handleDragEnd}
@@ -755,6 +766,24 @@ export function ProjectTabBar({
               onSelect: () => onCopyProjectPath(tabContextMenu.project.id)
             },
             {
+              icon: <Pencil size={14} strokeWidth={1.4} aria-hidden />,
+              id: "edit-display-name",
+              label: tabContextMenu.project.customLabel
+                ? "Edit display name…"
+                : "Set display name…",
+              onSelect: () => onEditProjectLabel(tabContextMenu.project)
+            },
+            ...(tabContextMenu.project.customLabel
+              ? [
+                  {
+                    icon: <RotateCcw size={14} strokeWidth={1.4} aria-hidden />,
+                    id: "reset-display-name",
+                    label: "Reset display name",
+                    onSelect: () => onResetProjectLabel(tabContextMenu.project)
+                  }
+                ]
+              : []),
+            {
               icon: <X size={14} strokeWidth={1.4} aria-hidden />,
               id: "close-repository",
               label: "Close Repository",
@@ -769,4 +798,19 @@ export function ProjectTabBar({
       ) : null}
     </div>
   );
+}
+
+function projectTabWorktreeLabel(
+  project: RecentProjectView
+): { readonly repositoryName: string; readonly worktreeName: string } | undefined {
+  if (project.customLabel) {
+    return {
+      repositoryName: project.repositoryName ?? project.name,
+      worktreeName: project.customLabel
+    };
+  }
+
+  return project.repositoryName && project.worktreeName
+    ? { repositoryName: project.repositoryName, worktreeName: project.worktreeName }
+    : undefined;
 }

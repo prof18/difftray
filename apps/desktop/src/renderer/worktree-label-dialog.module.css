@@ -1,0 +1,89 @@
+.dialog {
+  width: min(440px, calc(100vw - 40px));
+  margin-top: 96px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header strong {
+  font-size: 15px;
+}
+
+.header small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  outline: 0;
+}
+
+.input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.help {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.error {
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.footer button {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  padding: 7px 12px;
+}
+
+.footer button[type="submit"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--primary-fg);
+}
+
+.footer button:disabled {
+  opacity: 0.45;
+}

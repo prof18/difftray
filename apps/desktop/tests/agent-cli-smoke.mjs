@@ -398,6 +398,57 @@ async function runMatrix() {
     "quiet doctor, cold open, exact nested/symlinked linked worktree, concurrent warm opens"
   );
 
+  const siblingRoot = await realpath(sibling);
+  const labelSet = ["worktree", "label", "set", "--repo", siblingRoot, "--label"];
+  const labeled = await cli(quiet, [...labelSet, "  Checkout rework 🚀  "]);
+  assert.equal(labeled.result.repoPath, siblingRoot);
+  assert.equal(labeled.result.worktree.customLabel, "Checkout rework 🚀");
+  assert.equal(labeled.result.worktree.displayName, "Checkout rework 🚀");
+  assert.equal(labeled.result.worktree.branchName, "agent-worktree");
+  assert.deepEqual(
+    (await cli(quiet, [...labelSet, "Checkout rework 🚀"])).result,
+    labeled.result,
+    "setting the same label again is idempotent"
+  );
+  const viaSymlink = await cli(quiet, [
+    "worktree",
+    "label",
+    "set",
+    "--repo",
+    link,
+    "--label",
+    "Checkout rework 🚀"
+  ]);
+  assert.equal(viaSymlink.result.repoPath, siblingRoot);
+  const subdirectory = await cli(
+    quiet,
+    ["worktree", "label", "set", "--repo", nested, "--label", "Nested"],
+    false,
+    2
+  );
+  assert.equal(subdirectory.error.code, "invalid_target");
+  const blank = await cli(quiet, [...labelSet, "   "], false, 2);
+  assert.equal(blank.error.code, "invalid_request");
+  const reset = await cli(quiet, ["worktree", "label", "reset", "--repo", siblingRoot]);
+  assert.equal("customLabel" in reset.result.worktree, false);
+  assert.equal(reset.result.worktree.displayName, "agent-worktree");
+  assert.deepEqual(
+    (await cli(quiet, ["worktree", "label", "reset", "--repo", siblingRoot])).result,
+    reset.result,
+    "resetting twice is idempotent"
+  );
+  assert.equal(processIds(quiet).length, 1, "labeling must reuse the running GUI");
+  assert.equal(
+    execFileSync("/usr/bin/git", ["-C", siblingRoot, "branch", "--show-current"], {
+      encoding: "utf8"
+    }).trim(),
+    "agent-worktree",
+    "labeling must not rename the branch"
+  );
+  results.push(
+    "worktree label set/reset: exact root, trimmed Unicode, idempotent, subdirectory and blank rejected, branch unchanged"
+  );
+
   await open(quiet, repo.path);
   const reviewPage = await selected(gui, repo.path, path.basename(repo.path));
   const review = (await cli(quiet, ["review", "inspect", "--repo", repo.path])).result;

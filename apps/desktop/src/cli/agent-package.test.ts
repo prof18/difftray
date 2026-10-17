@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseAgentResponse } from "../shared/agent-protocol.js";
 import { parseCliArguments } from "./commands.js";
 import { withSubmissionInput } from "./submission-input.js";
 
@@ -54,6 +55,53 @@ describe("portable agent skill", () => {
       ]
     ];
     for (const argv of examples) expect(() => parseCliArguments(argv)).not.toThrow();
+  });
+
+  it("documents worktree labels as Difftray-only metadata with runnable examples", () => {
+    const reference = readFileSync(
+      path.join(packageRoot, "skills/difftray/references/commands.md"),
+      "utf8"
+    );
+    const skill = readFileSync(
+      path.join(packageRoot, "skills/difftray/SKILL.md"),
+      "utf8"
+    );
+
+    expect(reference).toContain(
+      '"$cli" worktree label set --repo "$repo" --label "$label" --json'
+    );
+    expect(reference).toContain('"$cli" worktree label reset --repo "$repo" --json');
+    for (const text of [reference, skill]) {
+      expect(text).toContain("Difftray display name");
+      expect(text).toContain("does not rename the branch, move the directory");
+      expect(text).toContain("no review context");
+    }
+    expect(skill).toContain("Do not label worktrees the user did not ask you to label");
+    for (const argv of [
+      [
+        "worktree",
+        "label",
+        "set",
+        "--repo",
+        "/repo",
+        "--label",
+        "Checkout rework",
+        "--json"
+      ],
+      ["worktree", "label", "reset", "--repo", "/repo", "--json"]
+    ])
+      expect(() => parseCliArguments(argv)).not.toThrow();
+
+    const example = /<!-- worktree-label-result -->\n+```json\n([\s\S]*?)\n```/.exec(
+      reference
+    )?.[1];
+    expect(example).toBeDefined();
+    expect(() =>
+      parseAgentResponse(
+        `${JSON.stringify(JSON.parse(example ?? ""))}\n`,
+        "worktree.label.set"
+      )
+    ).not.toThrow();
   });
 
   it("keeps the original batch identity for uncertain retries and separates concurrent runs", () => {

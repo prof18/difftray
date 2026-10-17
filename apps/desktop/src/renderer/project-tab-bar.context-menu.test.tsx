@@ -77,6 +77,58 @@ describe("ProjectTabBar context menu", () => {
     expect(onSelectProject).not.toHaveBeenCalled();
   });
 
+  it("offers to set a display name for a main checkout without siblings", () => {
+    const onEditProjectLabel = vi.fn();
+    const onSelectProject = vi.fn();
+
+    renderTabBar({
+      activeProjectHasWorktreeSiblings: false,
+      onEditProjectLabel,
+      onSelectProject
+    });
+    openContextMenu("repo-one");
+
+    expect(menuItem("Reset display name")).toBeUndefined();
+    act(() => {
+      menuItem("Set display name…")?.click();
+    });
+
+    expect(onEditProjectLabel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "repo-one" })
+    );
+    expect(onSelectProject).not.toHaveBeenCalled();
+  });
+
+  it("offers edit and reset for a labeled worktree tab", () => {
+    const onEditProjectLabel = vi.fn();
+    const onResetProjectLabel = vi.fn();
+    const labeled = {
+      ...project("agent-cli", "agent-cli"),
+      customLabel: "Checkout rework",
+      repositoryName: "feed-flow",
+      worktreeName: "agent-cli"
+    };
+
+    renderTabBar({
+      onEditProjectLabel,
+      onResetProjectLabel,
+      projects: [project("repo-one", "Repo One"), labeled]
+    });
+    openContextMenu("agent-cli");
+
+    expect(menuItem("Set display name…")).toBeUndefined();
+    act(() => {
+      menuItem("Edit display name…")?.click();
+    });
+    expect(onEditProjectLabel).toHaveBeenCalledWith(labeled);
+
+    openContextMenu("agent-cli");
+    act(() => {
+      menuItem("Reset display name")?.click();
+    });
+    expect(onResetProjectLabel).toHaveBeenCalledWith(labeled);
+  });
+
   function renderTabBar(props: Partial<ProjectTabBarProps>): void {
     act(() => {
       root.render(<ProjectTabBar {...projectTabBarProps(props)} />);
@@ -124,12 +176,14 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     disabled: false,
     onCloseProject: vi.fn(),
     onCopyProjectPath: vi.fn(),
+    onEditProjectLabel: vi.fn(),
     onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
     onOpenActiveProjectWorktrees: vi.fn(),
     onOpenProject: vi.fn(),
     onRefreshActiveProject: vi.fn(),
     onReorderProjects: vi.fn(),
+    onResetProjectLabel: vi.fn(),
     onCommitProjectOrder: vi.fn(),
     onSelectProject: vi.fn(),
     projects: [

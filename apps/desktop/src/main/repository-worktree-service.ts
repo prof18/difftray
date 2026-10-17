@@ -312,7 +312,8 @@ function requireProject(
   return project;
 }
 
-function worktreeView(
+/** Builds the picker view for one candidate; `customLabel` overrides the name. */
+export function worktreeView(
   candidate: GitWorktreeCandidate,
   openPaths: ReadonlySet<string>,
   changeCount: number | null | undefined,

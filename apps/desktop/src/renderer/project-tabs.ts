@@ -271,7 +271,10 @@ export function mergeProjectTabs<TProject extends ProjectTabRecord>(
     const nextProject = nextProjectsById.get(project.id);
 
     if (nextProject) {
-      orderedProjects.push({ ...project, ...nextProject });
+      const merged: Record<string, unknown> = { ...project, ...nextProject };
+      // A reset label is absent from the refreshed project, not undefined.
+      if (!Object.hasOwn(nextProject, "customLabel")) delete merged.customLabel;
+      orderedProjects.push(merged as TProject);
     }
   }
 

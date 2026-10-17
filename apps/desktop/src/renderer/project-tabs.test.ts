@@ -14,6 +14,18 @@ import {
 } from "./project-tabs.js";
 
 describe("mergeProjectTabs", () => {
+  it("drops a custom label that the refreshed project no longer carries", () => {
+    expect(
+      mergeProjectTabs(
+        [
+          { customLabel: "Old label", id: "labeled" },
+          { customLabel: "Kept", id: "kept" }
+        ],
+        [{ id: "labeled" }, { customLabel: "Kept", id: "kept" }]
+      )
+    ).toEqual([{ id: "labeled" }, { customLabel: "Kept", id: "kept" }]);
+  });
+
   it("keeps the storage order for the initial tab list", () => {
     expect(mergeProjectTabs([], [project("newest"), project("older")])).toEqual([
       project("newest"),

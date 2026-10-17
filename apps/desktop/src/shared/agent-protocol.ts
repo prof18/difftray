@@ -1,4 +1,4 @@
-import type { FeedbackActor } from "@difftray/companion-protocol";
+import type { FeedbackActor, RepositoryWorktreeView } from "@difftray/companion-protocol";
 import type { ReviewTarget } from "@difftray/core";
 import type { AppFlavor } from "./app-flavor.js";
 
@@ -48,7 +48,8 @@ export const AGENT_OPERATION_NAMES = [
   "review.file",
   "review.feedback",
   "review.export",
-  "feedback.submit"
+  "feedback.submit",
+  "worktree.label.set"
 ] as const;
 export type AgentMethod = (typeof AGENT_OPERATION_NAMES)[number];
 export const AGENT_ERROR_CODES = [
@@ -183,6 +184,11 @@ export type AgentRequest = {
         readonly submission: FeedbackSubmission;
       };
     }
+  | {
+      readonly method: "worktree.label.set";
+      /** `null` resets the label. */
+      readonly params: { readonly repoPath: string; readonly label: string | null };
+    }
 );
 export type AgentError = {
   readonly code: AgentErrorCode;
@@ -286,6 +292,10 @@ export type AgentResultMap = {
     readonly deduplicated: boolean;
     readonly itemIds: string[];
     readonly noteVersion: string;
+  };
+  "worktree.label.set": {
+    readonly repoPath: string;
+    readonly worktree: RepositoryWorktreeView;
   };
 };
 export type AgentExportMetadata = {
@@ -562,6 +572,13 @@ export function parseAgentRequest(input: string | Uint8Array): AgentRequest {
       validateSubmission(x.submission);
       break;
     }
+    case "worktree.label.set": {
+      const x = object(p, ["repoPath", "label"]);
+      const repoPath = nonempty(x.repoPath, 4096);
+      if (!repoPath.startsWith("/")) fail("Repository path must be absolute");
+      if (x.label !== null) worktreeLabel(x.label);
+      break;
+    }
   }
   return r as AgentRequest;
 }
@@ -707,7 +724,40 @@ function result(value: unknown, method: AgentMethod): void {
       nonempty(x.noteVersion);
       break;
     }
+    case "worktree.label.set": {
+      const x = object(value, ["repoPath", "worktree"]);
+      nonempty(x.repoPath, 4096);
+      worktreeView(x.worktree);
+      break;
+    }
   }
+}
+// Mirrors normalizeWorktreeLabel in @difftray/companion-protocol, which the CLI
+// bundle does not load at runtime; the desktop re-validates with the shared one.
+function worktreeLabel(value: unknown): string {
+  if (typeof value !== "string") return fail("Label must be a string or null");
+  if (hasControlCharacter(value)) return fail("Control character");
+  const length = Array.from(value.trim()).length;
+  if (length < 1) return fail("Label must not be blank");
+  if (length > MAX_LABEL_CHARACTERS) return fail("Label too long", "limit_exceeded");
+  return value;
+}
+function worktreeView(value: unknown): void {
+  const x = object(
+    value,
+    ["id", "displayName", "displayPath", "locked", "state"],
+    ["branchName", "changeCount", "customLabel", "headSha", "shortHeadSha"]
+  );
+  nonempty(x.id);
+  responseBody(x.displayName);
+  nonempty(x.displayPath, 4096);
+  if (typeof x.locked !== "boolean") fail("Invalid locked flag");
+  enumValue(x.state, ["available", "current", "open"]);
+  optional(x.branchName, (v) => responseBody(v));
+  optional(x.headSha, nonempty);
+  optional(x.shortHeadSha, nonempty);
+  optional(x.changeCount, (v) => integer(v, 0, Number.MAX_SAFE_INTEGER));
+  optional(x.customLabel, worktreeLabel);
 }
 function reviewTarget(value: unknown): void {
   const base = object(

@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { GitWorktreeCandidate } from "@difftray/git";
 
+import { AgentProtocolError } from "../shared/agent-protocol.js";
 import { ExpectedUnavailableWorktreeError } from "./repository-worktree-service.js";
 import {
   createWorktreeLabelService,
+  setAgentWorktreeLabel,
   WorktreeLabelValidationError,
   type WorktreeLabelServiceDependencies
 } from "./worktree-label-service.js";
@@ -51,6 +53,21 @@ describe("worktree label service", () => {
     );
     expect(dependencies.setLabel).not.toHaveBeenCalled();
     expect(dependencies.onChanged).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes a symlinked root before comparing it with Git's root", async () => {
+    const dependencies = {
+      ...createDependencies(),
+      canonicalPath: vi.fn(async (requested: string) =>
+        requested === "/tmp/agent" ? "/workspace/agent" : requested
+      )
+    };
+    const service = createWorktreeLabelService(dependencies);
+
+    await expect(service.setForPath("/tmp/agent", "Linked")).resolves.toMatchObject({
+      candidate: { id: "candidate-2" }
+    });
+    expect(dependencies.findRepository).toHaveBeenCalledWith("/workspace/agent");
   });
 
   it("rejects paths outside Git without writing", async () => {
@@ -201,3 +218,66 @@ function createDependencies() {
     }))
   } satisfies WorktreeLabelServiceDependencies;
 }
+
+describe("setAgentWorktreeLabel", () => {
+  it("returns the canonical root and resolved worktree without opening it", async () => {
+    const dependencies = createDependencies();
+    const service = createWorktreeLabelService(dependencies);
+    const view = vi.fn((candidate: GitWorktreeCandidate, label: string | null) => ({
+      ...(label === null ? {} : { customLabel: label }),
+      displayName: label ?? candidate.branchName ?? "",
+      displayPath: candidate.path,
+      id: candidate.id,
+      locked: candidate.locked,
+      state: "available" as const
+    }));
+
+    await expect(
+      setAgentWorktreeLabel(
+        service,
+        { label: "Checkout rework", repoPath: "/workspace/agent" },
+        view
+      )
+    ).resolves.toEqual({
+      repoPath: "/workspace/agent",
+      worktree: {
+        customLabel: "Checkout rework",
+        displayName: "Checkout rework",
+        displayPath: "/workspace/agent",
+        id: "candidate-2",
+        locked: false,
+        state: "available"
+      }
+    });
+    await expect(
+      setAgentWorktreeLabel(service, { label: null, repoPath: "/workspace/agent" }, view)
+    ).resolves.toMatchObject({ worktree: { displayName: "codex/checkout" } });
+  });
+
+  it("maps validation and target failures to agent protocol errors", async () => {
+    const dependencies = createDependencies();
+    dependencies.findRepository.mockResolvedValue({ root: "/workspace/agent" });
+    const service = createWorktreeLabelService(dependencies);
+    const view = vi.fn();
+
+    await expect(
+      setAgentWorktreeLabel(
+        service,
+        { label: "x", repoPath: "/workspace/agent/src" },
+        view
+      )
+    ).rejects.toMatchObject({ code: "invalid_target" });
+    await expect(
+      setAgentWorktreeLabel(service, { label: "\tx", repoPath: "/workspace/agent" }, view)
+    ).rejects.toEqual(expect.any(AgentProtocolError));
+    await expect(
+      setAgentWorktreeLabel(service, { label: "\tx", repoPath: "/workspace/agent" }, view)
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    dependencies.findRepository.mockResolvedValue(null);
+    await expect(
+      setAgentWorktreeLabel(service, { label: "x", repoPath: "/tmp/plain" }, view)
+    ).rejects.toMatchObject({ code: "repository_missing" });
+    expect(view).not.toHaveBeenCalled();
+    expect(dependencies.setLabel).not.toHaveBeenCalled();
+  });
+});

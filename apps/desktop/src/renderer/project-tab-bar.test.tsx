@@ -118,6 +118,62 @@ describe("ProjectTabBar", () => {
     expect(html).toContain("folder-git-2");
     expect(html).toContain('aria-label="Worktrees for feed-flow"');
   });
+
+  it("shows a custom label for a linked worktree and keeps its Git name", () => {
+    const worktree = {
+      ...project("agent-cli", "agent-cli"),
+      customLabel: "Checkout rework",
+      repositoryName: "feed-flow",
+      worktreeName: "codex/checkout"
+    } satisfies RecentProjectView;
+    const html = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({
+          activeProjectId: worktree.id,
+          projects: [project("feed-flow", "feed-flow"), worktree]
+        })}
+      />
+    );
+
+    expect(html).toContain('data-tab-repository-name="true">feed-flow</span>');
+    expect(html).toContain('data-tab-worktree-name="true">Checkout rework</span>');
+    expect(html).toContain(
+      'aria-label="feed-flow / Checkout rework · codex/checkout · /workspace/agent-cli · Review status not loaded"'
+    );
+  });
+
+  it("shows repository plus label for a labeled main checkout", () => {
+    const main = {
+      ...project("feed-flow", "feed-flow"),
+      customLabel: "Release prep"
+    } satisfies RecentProjectView;
+    const html = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({ activeProjectId: main.id, projects: [main] })}
+      />
+    );
+
+    expect(html).toContain('data-tab-repository-name="true">feed-flow</span>');
+    expect(html).toContain('data-tab-worktree-name="true">Release prep</span>');
+    expect(html).toContain(
+      'aria-label="feed-flow / Release prep · /workspace/feed-flow · Review status not loaded"'
+    );
+  });
+
+  it("renders a label containing markup as text", () => {
+    const main = {
+      ...project("feed-flow", "feed-flow"),
+      customLabel: "<b>bold</b>"
+    } satisfies RecentProjectView;
+    const html = renderToStaticMarkup(
+      <ProjectTabBar
+        {...projectTabBarProps({ activeProjectId: main.id, projects: [main] })}
+      />
+    );
+
+    expect(html).toContain("&lt;b&gt;bold&lt;/b&gt;");
+    expect(html).not.toContain("<b>bold</b>");
+  });
 });
 
 function project(
@@ -139,12 +195,14 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     disabled: false,
     onCloseProject: vi.fn(),
     onCopyProjectPath: vi.fn(),
+    onEditProjectLabel: vi.fn(),
     onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
     onOpenActiveProjectWorktrees: vi.fn(),
     onOpenProject: vi.fn(),
     onRefreshActiveProject: vi.fn(),
     onReorderProjects: vi.fn(),
+    onResetProjectLabel: vi.fn(),
     onCommitProjectOrder: vi.fn(),
     onSelectProject: vi.fn(),
     projects: [],

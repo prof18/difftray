@@ -39,6 +39,8 @@ describe("WorktreePicker", () => {
         createElement(WorktreePicker, {
           onClose: vi.fn(),
           onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
           onRefresh: vi.fn(),
           onSelect: vi.fn(),
           projectName: "Repository",
@@ -61,6 +63,102 @@ describe("WorktreePicker", () => {
     );
   });
 
+  it("shows a custom label with the real branch and path", () => {
+    act(() => {
+      root.render(
+        createElement(WorktreePicker, {
+          onClose: vi.fn(),
+          onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
+          onRefresh: vi.fn(),
+          onSelect: vi.fn(),
+          projectName: "Repository",
+          worktrees: [
+            {
+              ...worktree("one", "Checkout rework"),
+              branchName: "codex/checkout",
+              customLabel: "Checkout rework"
+            },
+            {
+              ...worktree("two", "Detached work"),
+              customLabel: "Detached work",
+              shortHeadSha: "2222222"
+            }
+          ]
+        })
+      );
+    });
+
+    const rows = container.querySelectorAll<HTMLButtonElement>('[role="option"]');
+    expect(rows[0]?.querySelector("strong")?.textContent).toBe("Checkout rework");
+    expect(rows[0]?.textContent).toContain("codex/checkout");
+    expect(rows[0]?.textContent).toContain("/workspace/one");
+    expect(rows[1]?.textContent).toContain("Detached @ 2222222");
+  });
+
+  it("offers set, edit and reset display name actions", () => {
+    const onEditLabel = vi.fn();
+    const onResetLabel = vi.fn();
+    const onSelect = vi.fn();
+    const labeled = { ...worktree("two", "Label"), customLabel: "Label" };
+    const worktrees = [worktree("one", "main"), labeled];
+
+    act(() => {
+      root.render(
+        createElement(WorktreePicker, {
+          onClose: vi.fn(),
+          onCopyPath: vi.fn(),
+          onEditLabel,
+          onResetLabel,
+          onRefresh: vi.fn(),
+          onSelect,
+          projectName: "Repository",
+          worktrees
+        })
+      );
+    });
+
+    const openMenu = (index: number) => {
+      const rows = container.querySelectorAll<HTMLButtonElement>('[role="option"]');
+      act(() => {
+        rows[index]?.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            clientX: 40,
+            clientY: 60
+          })
+        );
+      });
+    };
+    const menuItem = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+        (button) => button.textContent === label
+      );
+
+    openMenu(0);
+    expect(menuItem("Reset display name")).toBeUndefined();
+    act(() => {
+      menuItem("Set display name…")?.click();
+    });
+    expect(onEditLabel).toHaveBeenCalledWith(worktrees[0]);
+
+    openMenu(1);
+    expect(menuItem("Set display name…")).toBeUndefined();
+    act(() => {
+      menuItem("Edit display name…")?.click();
+    });
+    expect(onEditLabel).toHaveBeenLastCalledWith(labeled);
+
+    openMenu(1);
+    act(() => {
+      menuItem("Reset display name")?.click();
+    });
+    expect(onResetLabel).toHaveBeenCalledWith(labeled);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("copies a worktree path from the row context menu", () => {
     const onCopyPath = vi.fn();
     const onSelect = vi.fn();
@@ -71,6 +169,8 @@ describe("WorktreePicker", () => {
         createElement(WorktreePicker, {
           onClose: vi.fn(),
           onCopyPath,
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
           onRefresh: vi.fn(),
           onSelect,
           projectName: "Repository",
@@ -118,6 +218,8 @@ describe("WorktreePicker", () => {
         createElement(WorktreePicker, {
           onClose: vi.fn(),
           onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
           onRefresh: vi.fn(),
           onSelect,
           projectName: "Repository",

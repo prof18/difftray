@@ -126,7 +126,8 @@ import {
   readOptionalStringArrayProperty,
   readOptionalStringProperty,
   readStringArrayProperty,
-  readStringProperty
+  readStringProperty,
+  readUnknownProperty
 } from "./ipc-input.js";
 import { editorConfigFromInput, expandEditorArg } from "./editor-launch.js";
 import { revealStoredProjectFile } from "./file-finder-open.js";
@@ -137,8 +138,15 @@ import {
   createRepositoryOpenService,
   type RepositoryOpenBatchResult
 } from "./repository-open-service.js";
-import { createRepositoryWorktreeService } from "./repository-worktree-service.js";
-import { createWorktreeLabelService } from "./worktree-label-service.js";
+import {
+  createRepositoryWorktreeService,
+  worktreeView
+} from "./repository-worktree-service.js";
+import {
+  createWorktreeLabelService,
+  setAgentWorktreeLabel,
+  type WorktreeLabelChange
+} from "./worktree-label-service.js";
 import {
   projectViewsWithLabels,
   projectViewWithLabel,
@@ -1241,6 +1249,15 @@ handleTrusted("projects:copyPath", (_event: IpcMainInvokeEvent, input: unknown):
   });
 });
 handleTrusted(
+  "projects:setWorktreeLabel",
+  async (_event: IpcMainInvokeEvent, input: unknown): Promise<RepositoryWorktreeView> =>
+    repositoryWorktreeService().setLabel(
+      readStringProperty(input, "projectId"),
+      readStringProperty(input, "worktreeId"),
+      readUnknownProperty(input, "label")
+    )
+);
+handleTrusted(
   "projects:copyWorktreePath",
   async (event: IpcMainInvokeEvent, input: unknown): Promise<void> => {
     await copyWorktreePath(
@@ -1774,6 +1791,22 @@ const servicesReady = app.whenReady().then(async () => {
       if (request.method === "review.export") return agentExports.export(request.params);
       if (request.method === "feedback.submit")
         return agentFeedback.submit(request.params);
+      if (request.method === "worktree.label.set")
+        return setAgentWorktreeLabel(
+          worktreeLabelService(),
+          request.params,
+          (candidate, label) =>
+            worktreeView(
+              candidate,
+              new Set(
+                getStorage()
+                  .listOpenProjects()
+                  .map((project) => path.normalize(project.path))
+              ),
+              getWorktreeChangeCountCoordinator().get(candidate.path),
+              label ?? undefined
+            )
+        );
       let result:
         { projectId: string; repoPath: string; target: ReviewTarget } | undefined;
       await agentOpenCoordinator.open({
@@ -2422,6 +2455,20 @@ function emitProjectsOpened(projectIds: readonly string[], focusProjectId: strin
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send("projects:opened", payload);
+    }
+  }
+}
+
+function emitWorktreeLabelsChanged(change: WorktreeLabelChange): void {
+  const project = getStorage().getProjectByPath(change.worktreePath);
+  if (project) invalidateCompanionWorkspace(project.id);
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("projects:labelsChanged", {
+        worktreeId: change.worktreeId,
+        worktreePath: change.worktreePath
+      });
     }
   }
 }
@@ -3174,8 +3221,10 @@ function repositoryWorktreeService() {
 
 function worktreeLabelService() {
   return createWorktreeLabelService({
+    canonicalPath: (requestedPath) => Promise.resolve(realpathSync.native(requestedPath)),
     findRepository: findGitRepository,
     listWorktrees: listGitWorktrees,
+    onChanged: emitWorktreeLabelsChanged,
     pathExists: existsSync,
     resetLabel: (worktreeId) => getStorage().resetWorktreeLabel(worktreeId),
     setLabel: (input) => getStorage().setWorktreeLabel(input),

@@ -32,6 +32,8 @@ describe("repository dialog state", () => {
       createElement(WorktreePicker, {
         onClose: vi.fn(),
         onCopyPath: vi.fn(),
+        onEditLabel: vi.fn(),
+        onResetLabel: vi.fn(),
         onRefresh: vi.fn(),
         onSelect,
         projectName: "Difftray",
@@ -73,6 +75,8 @@ describe("repository dialog state", () => {
         createElement(WorktreePicker, {
           onClose: vi.fn(),
           onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
           onRefresh,
           onSelect,
           projectName: "Difftray",

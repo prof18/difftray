@@ -53,6 +53,13 @@ export type CliCommand =
       readonly input: string;
       readonly requestId?: string;
       readonly json: boolean;
+    }
+  | {
+      readonly kind: "worktree.label.set";
+      readonly repoPath: string;
+      /** `null` resets the label. */
+      readonly label: string | null;
+      readonly json: boolean;
     };
 
 type OptionKind = "string" | "boolean";
@@ -321,6 +328,30 @@ function parseReview(args: readonly string[], cwd: string): CliCommand {
   throw new CliUsageError(`Unknown review operation: ${operation}`);
 }
 
+function parseWorktree(args: readonly string[], cwd: string): CliCommand {
+  const [group, operation, ...rest] = args;
+  if (group !== "label" || (operation !== "set" && operation !== "reset"))
+    throw new CliUsageError(
+      `Unknown worktree operation: ${[group, operation].filter(Boolean).join(" ") || "(empty)"}`
+    );
+  const { positionals, values } = parseOptions(rest, {
+    ...commonJson,
+    "--repo": "string",
+    ...(operation === "set" ? { "--label": "string" } : {})
+  });
+  assertNoPositionals(positionals);
+  const repo = stringValue(values, "--repo");
+  if (!repo) throw new CliUsageError("--repo is required.");
+  const label = operation === "set" ? stringValue(values, "--label") : null;
+  if (label === undefined) throw new CliUsageError("--label is required.");
+  return {
+    kind: "worktree.label.set",
+    repoPath: path.resolve(cwd, repo),
+    label,
+    json: boolValue(values, "--json")
+  };
+}
+
 function parseCliArgumentsRaw(argv: readonly string[], cwd: string): CliCommand {
   if (argv.length === 0) return { kind: "help" };
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -352,6 +383,7 @@ function parseCliArgumentsRaw(argv: readonly string[], cwd: string): CliCommand 
   }
   if (argv[0] === "open") return parseOpen(argv.slice(1), cwd);
   if (argv[0] === "review") return parseReview(argv.slice(1), cwd);
+  if (argv[0] === "worktree") return parseWorktree(argv.slice(1), cwd);
   if (argv[0] === "feedback" && argv[1] === "submit") {
     const { positionals, values } = parseOptions(argv.slice(2), {
       ...commonJson,
@@ -434,6 +466,10 @@ function validateCommand(command: CliCommand): CliCommand {
       // happens after the input file/stdin has been loaded.
       method = "review.files";
       params = { contextId: command.contextId };
+      break;
+    case "worktree.label.set":
+      method = "worktree.label.set";
+      params = { repoPath: command.repoPath, label: command.label };
       break;
   }
 

@@ -90,6 +90,72 @@ describe("parseCliArguments", () => {
     ).toMatchObject({ kind: "feedback.submit", input: "-" });
   });
 
+  it("parses worktree label set and reset with an exact repository", () => {
+    expect(
+      parseCliArguments(
+        ["worktree", "label", "set", "--repo", "/work/my repo", "--label", "Café 🚀 fix"],
+        "/elsewhere"
+      )
+    ).toEqual({
+      kind: "worktree.label.set",
+      label: "Café 🚀 fix",
+      repoPath: "/work/my repo",
+      json: false
+    });
+    expect(
+      parseCliArguments(
+        ["worktree", "label", "reset", "--repo", "agent", "--json"],
+        "/work"
+      )
+    ).toEqual({
+      kind: "worktree.label.set",
+      label: null,
+      repoPath: "/work/agent",
+      json: true
+    });
+  });
+
+  it("requires --repo and --label for worktree labels", () => {
+    expect(() => parseCliArguments(["worktree", "label", "set", "--label", "x"])).toThrow(
+      /--repo is required/
+    );
+    expect(() => parseCliArguments(["worktree", "label", "set", "--repo", "/r"])).toThrow(
+      /--label is required/
+    );
+    expect(() => parseCliArguments(["worktree", "label", "reset"])).toThrow(
+      /--repo is required/
+    );
+  });
+
+  it("rejects unknown, duplicate and review options for worktree labels", () => {
+    const set = ["worktree", "label", "set", "--repo", "/r", "--label", "x"];
+    expect(() => parseCliArguments([...set, "--target", "selected"])).toThrow(
+      CliUsageError
+    );
+    expect(() => parseCliArguments([...set, "--context", contextId])).toThrow(
+      CliUsageError
+    );
+    expect(() => parseCliArguments([...set, "--repo", "/other"])).toThrow(
+      /may only be supplied once/
+    );
+    expect(() =>
+      parseCliArguments(["worktree", "label", "reset", "--repo", "/r", "--label", "x"])
+    ).toThrow(CliUsageError);
+    expect(() => parseCliArguments([...set, "extra"])).toThrow(CliUsageError);
+    expect(() => parseCliArguments(["worktree", "label", "rename"])).toThrow(
+      CliUsageError
+    );
+    expect(() => parseCliArguments(["worktree", "list"])).toThrow(CliUsageError);
+  });
+
+  it("rejects blank and oversized labels before connecting", () => {
+    const set = (label: string) =>
+      parseCliArguments(["worktree", "label", "set", "--repo", "/r", "--label", label]);
+    expect(() => set("   ")).toThrow(CliUsageError);
+    expect(() => set("a".repeat(81))).toThrow(CliUsageError);
+    expect(set(" spaced ")).toMatchObject({ label: " spaced " });
+  });
+
   it("parses offline help, version, schema, and doctor commands", () => {
     expect(parseCliArguments(["--help"])).toEqual({ kind: "help" });
     expect(parseCliArguments(["--version", "--json"])).toEqual({

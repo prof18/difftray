@@ -5,10 +5,29 @@ import {
   parseProjectChangedEvent,
   parseProjectLoadProgress,
   parseRepositoryScanProgress,
-  parseUpdatePhase
+  parseUpdatePhase,
+  parseWorktreeLabelsChangedEvent
 } from "./event-parsers.js";
 
 describe("preload event parsers", () => {
+  it("parses worktree label change events strictly", () => {
+    expect(
+      parseWorktreeLabelsChangedEvent({ worktreeId: "id-1", worktreePath: "/repo/agent" })
+    ).toEqual({ worktreeId: "id-1", worktreePath: "/repo/agent" });
+    expect(parseWorktreeLabelsChangedEvent({ worktreeId: "id-1" })).toBeUndefined();
+    expect(
+      parseWorktreeLabelsChangedEvent({ worktreeId: 1, worktreePath: "/repo" })
+    ).toBeUndefined();
+    expect(
+      parseWorktreeLabelsChangedEvent({
+        label: "secret",
+        worktreeId: "id-1",
+        worktreePath: "/repo"
+      })
+    ).toBeUndefined();
+    expect(parseWorktreeLabelsChangedEvent(null)).toBeUndefined();
+  });
+
   it("accepts only known application commands", () => {
     expect(parseApplicationCommand("open-settings")).toBe("open-settings");
     expect(parseApplicationCommand("file-show-in-finder")).toBe("file-show-in-finder");

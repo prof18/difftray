@@ -159,6 +159,8 @@ function projectTabBarProps(props: Partial<ProjectTabBarProps> = {}): ProjectTab
     disabled: false,
     onCloseProject: vi.fn(),
     onCopyProjectPath: vi.fn(),
+    onEditProjectLabel: vi.fn(),
+    onResetProjectLabel: vi.fn(),
     onForgetActiveProject: vi.fn(),
     onOpenActiveProjectInFinder: vi.fn(),
     onOpenActiveProjectWorktrees: vi.fn(),

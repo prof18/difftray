@@ -8,7 +8,8 @@ import {
   EXIT_CONFLICT,
   EXIT_IO,
   EXIT_INTERNAL,
-  type AgentErrorCode
+  type AgentErrorCode,
+  type AgentResponse
 } from "../shared/agent-protocol.js";
 import { CliUsageError } from "./commands.js";
 
@@ -98,6 +99,13 @@ export function formatCliResponse(
     return options.terminal ? neutralizeTerminalControls(result.content) : result.content;
   if (command.kind === "open" && typeof result.repoPath === "string")
     return `Opened ${result.repoPath}\n`;
+  if (command.kind === "worktree.label.set" && typeof result.repoPath === "string") {
+    const worktree = result.worktree as { readonly displayName?: unknown } | undefined;
+    if (typeof worktree?.displayName === "string") {
+      const text = `${worktree.displayName}  ${result.repoPath}\n`;
+      return options.terminal ? neutralizeTerminalControls(text) : text;
+    }
+  }
   return `${JSON.stringify(response)}\n`;
 }
 // Retain one listener per stream: Node emits 'error' after invoking a failed write's
@@ -116,4 +124,26 @@ export async function writeCliText(stream: Writable, text: string): Promise<void
       else reject(error);
     });
   });
+}
+
+/**
+ * An app older than this CLI rejects the unknown method as an invalid enum.
+ * Say what to do instead of reporting a malformed request.
+ */
+export function worktreeLabelCompatibleResponse<T extends AgentResponse>(response: T): T {
+  if (
+    response.ok ||
+    response.error.code !== "invalid_request" ||
+    response.error.message !== "Invalid enum value"
+  )
+    return response;
+  return {
+    ...response,
+    error: {
+      ...response.error,
+      code: "app_unavailable",
+      message:
+        "This Difftray app does not support worktree labels. Use the CLI bundled with the same Difftray build."
+    }
+  };
 }

@@ -1,4 +1,12 @@
-import { Copy, GitBranch, LockKeyhole, RefreshCw, X } from "lucide-react";
+import {
+  Copy,
+  GitBranch,
+  LockKeyhole,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  X
+} from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
@@ -9,14 +17,18 @@ import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js
 export function WorktreePicker({
   onClose,
   onCopyPath,
+  onEditLabel,
   onRefresh,
+  onResetLabel,
   onSelect,
   projectName,
   worktrees
 }: {
   readonly onClose: () => void;
   readonly onCopyPath: (worktree: RepositoryWorktreeView) => void;
+  readonly onEditLabel: (worktree: RepositoryWorktreeView) => void;
   readonly onRefresh: () => void;
+  readonly onResetLabel: (worktree: RepositoryWorktreeView) => void;
   readonly onSelect: (worktree: RepositoryWorktreeView) => void;
   readonly projectName: string;
   readonly worktrees: readonly RepositoryWorktreeView[];
@@ -162,7 +174,7 @@ export function WorktreePicker({
                 contextMenuTriggerRef.current = event.currentTarget;
                 setContextMenu({
                   left: Math.max(8, Math.min(invocationX, window.innerWidth - 204)),
-                  top: Math.max(8, Math.min(invocationY, window.innerHeight - 48)),
+                  top: Math.max(8, Math.min(invocationY, window.innerHeight - 124)),
                   worktree
                 });
               }}
@@ -178,7 +190,9 @@ export function WorktreePicker({
               <span className={paletteStyles.paletteItemCopy}>
                 <strong>{worktree.displayName}</strong>
                 <small title={worktree.displayPath}>
-                  {middleTruncatePath(worktree.displayPath)}
+                  {worktree.customLabel
+                    ? `${gitWorktreeName(worktree)} · ${middleTruncatePath(worktree.displayPath)}`
+                    : middleTruncatePath(worktree.displayPath)}
                 </small>
               </span>
               {worktree.locked ? (
@@ -204,7 +218,25 @@ export function WorktreePicker({
                 id: "copy-path",
                 label: "Copy path",
                 onSelect: () => onCopyPath(contextMenu.worktree)
-              }
+              },
+              {
+                icon: <Pencil size={14} strokeWidth={1.4} aria-hidden />,
+                id: "edit-display-name",
+                label: contextMenu.worktree.customLabel
+                  ? "Edit display name…"
+                  : "Set display name…",
+                onSelect: () => onEditLabel(contextMenu.worktree)
+              },
+              ...(contextMenu.worktree.customLabel
+                ? [
+                    {
+                      icon: <RotateCcw size={14} strokeWidth={1.4} aria-hidden />,
+                      id: "reset-display-name",
+                      label: "Reset display name",
+                      onSelect: () => onResetLabel(contextMenu.worktree)
+                    }
+                  ]
+                : [])
             ]}
             left={contextMenu.left}
             onClose={closeContextMenu}
@@ -225,6 +257,16 @@ export function middleTruncatePath(pathName: string, maxLength = 72): string {
   const tailLength = Math.ceil((maxLength - 1) * 0.65);
   const headLength = maxLength - tailLength - 1;
   return `${pathName.slice(0, headLength)}…${pathName.slice(-tailLength)}`;
+}
+
+/** The Git-derived name, shown next to a custom label. */
+export function gitWorktreeName(
+  worktree: Pick<RepositoryWorktreeView, "branchName" | "shortHeadSha">
+): string {
+  return (
+    worktree.branchName ??
+    (worktree.shortHeadSha ? `Detached @ ${worktree.shortHeadSha}` : "Detached worktree")
+  );
 }
 
 function stateLabel(state: RepositoryWorktreeView["state"]): string {

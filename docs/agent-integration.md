@@ -145,6 +145,26 @@ missing or expired context, or incompatible protocol, 4 stale review/feedback or
 write conflict, and 5 transport/timeout/capacity failure. JSON errors preserve the
 typed code. Text and JSON work without a TTY; closed output pipes are handled cleanly.
 
+## Worktree display names
+
+`worktree label set --repo ROOT --label TEXT` and `worktree label reset --repo ROOT`
+send the `worktree.label.set` method (reset sends `label: null`). The CLI resolves
+`--repo` against the working directory; the desktop requires it to be the exact
+Git root of a main or linked worktree and rejects subdirectories, bare, prunable,
+missing and foreign targets. The label is validated by the shared
+`normalizeWorktreeLabel` rules: control characters are rejected before trimming,
+then 1–80 code points remain. The result is `{repoPath, worktree}` with the
+canonical root and the `RepositoryWorktreeView` the picker shows; a reset omits
+`customLabel`. Both commands are idempotent.
+
+Labels are desktop-profile display metadata (see
+[the decision](decisions/worktree-display-labels.md)). Setting one does not
+rename a branch, move a directory, change Git config, open the worktree, change
+the selected diff or invalidate reviews and review contexts, and needs no
+context ID. The method keeps protocol version 1. An app older than its CLI
+rejects the unknown method; the CLI reports `app_unavailable` and asks for the
+CLI bundled with the same build instead of falling back to Git.
+
 ## Submitting feedback
 
 `feedback submit --context ID --input FILE` (or `--input -` for stdin) validates a

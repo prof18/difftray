@@ -25,6 +25,8 @@ export type CliInstallStatus = {
 import {
   parseApplicationCommand,
   parseProjectChangedEvent,
+  parseWorktreeLabelsChangedEvent,
+  type WorktreeLabelsChangedEvent,
   parseProjectLoadProgress,
   parseRepositoryScanProgress,
   parseUpdatePhase,
@@ -134,6 +136,11 @@ export type DifftrayApi = {
     projectId: string
   ) => Promise<readonly RepositoryWorktreeView[]>;
   readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
+  readonly setWorktreeLabel: (
+    projectId: string,
+    worktreeId: string,
+    label: string | null
+  ) => Promise<RepositoryWorktreeView>;
   readonly respondToCompanionPairRequest: (
     input: RespondToCompanionPairRequestInput
   ) => Promise<CompanionStateView>;
@@ -162,6 +169,9 @@ export type DifftrayApi = {
     listener: (event: ProjectsOpenedEvent) => void
   ) => () => void;
   readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
+  readonly onWorktreeLabelsChanged: (
+    listener: (event: WorktreeLabelsChangedEvent) => void
+  ) => () => void;
   readonly onWorktreeChangeCount: (
     listener: (event: WorktreeChangeCountEvent) => void
   ) => () => void;
@@ -331,6 +341,7 @@ export type EditorPresetView = {
 };
 
 export type RecentProjectView = {
+  readonly customLabel?: string;
   readonly defaultBaseRef?: string;
   readonly defaultCommitRef?: string;
   readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
@@ -346,6 +357,7 @@ export type RecentProjectView = {
 export type RepositoryWorktreeView = {
   readonly branchName?: string;
   readonly changeCount?: number;
+  readonly customLabel?: string;
   readonly displayName: string;
   readonly displayPath: string;
   readonly headSha?: string;
@@ -941,6 +953,12 @@ const api: DifftrayApi = {
   saveProjectTabOrder: async (projectIds) => {
     await ipcRenderer.invoke("projects:saveTabOrder", { projectIds });
   },
+  setWorktreeLabel: async (projectId, worktreeId, label) =>
+    ipcRenderer.invoke("projects:setWorktreeLabel", {
+      label,
+      projectId,
+      worktreeId
+    }) as Promise<RepositoryWorktreeView>,
   setCompanionEnabled: async (enabled) =>
     ipcRenderer.invoke("companion:setEnabled", {
       enabled
@@ -1025,6 +1043,18 @@ const api: DifftrayApi = {
 
     return () => {
       ipcRenderer.removeListener("projects:loadProgress", handler);
+    };
+  },
+  onWorktreeLabelsChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+      const event = parseWorktreeLabelsChangedEvent(payload);
+      if (event) listener(event);
+    };
+
+    ipcRenderer.on("projects:labelsChanged", handler);
+
+    return () => {
+      ipcRenderer.removeListener("projects:labelsChanged", handler);
     };
   },
   onWorktreeChangeCount: (listener) => {

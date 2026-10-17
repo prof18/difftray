@@ -96,6 +96,11 @@ declare global {
     ) => Promise<CompanionStateView>;
     readonly revokeCompanionDevice: (id: string) => Promise<CompanionStateView>;
     readonly saveProjectTabOrder: (projectIds: readonly string[]) => Promise<void>;
+    readonly setWorktreeLabel: (
+      projectId: string,
+      worktreeId: string,
+      label: string | null
+    ) => Promise<RepositoryWorktreeView>;
     readonly setCompanionEnabled: (enabled: boolean) => Promise<CompanionStateView>;
     readonly startCompanionPairing: () => Promise<CompanionPairingStateView>;
     readonly loadFileDiff: (
@@ -122,6 +127,9 @@ declare global {
       listener: (event: ProjectsOpenedEvent) => void
     ) => () => void;
     readonly onProjectLoadProgress: (listener: ProjectLoadProgressListener) => () => void;
+    readonly onWorktreeLabelsChanged: (
+      listener: (event: WorktreeLabelsChangedEvent) => void
+    ) => () => void;
     readonly onWorktreeChangeCount: (
       listener: (event: WorktreeChangeCountEvent) => void
     ) => () => void;
@@ -306,6 +314,7 @@ declare global {
   };
 
   type RecentProjectView = {
+    readonly customLabel?: string;
     readonly defaultBaseRef?: string;
     readonly defaultCommitRef?: string;
     readonly defaultDiffTargetMode?: "branch" | "commit" | "working_tree";
@@ -321,6 +330,7 @@ declare global {
   type RepositoryWorktreeView = {
     readonly branchName?: string;
     readonly changeCount?: number;
+    readonly customLabel?: string;
     readonly displayName: string;
     readonly displayPath: string;
     readonly headSha?: string;
@@ -408,6 +418,11 @@ declare global {
 
   type ProjectClosedEvent = {
     readonly projectId: string;
+  };
+
+  type WorktreeLabelsChangedEvent = {
+    readonly worktreeId: string;
+    readonly worktreePath: string;
   };
 
   type WorktreeChangeCountEvent = {

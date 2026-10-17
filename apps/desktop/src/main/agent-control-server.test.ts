@@ -86,6 +86,46 @@ describe("agent control socket", () => {
     expect(response).toMatchObject({ version: 1, id: "req-1", ok: true });
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
+  it("round-trips a worktree label request and validates its result", async () => {
+    const result: AgentResultMap["worktree.label.set"] = {
+      repoPath: "/repo/agent",
+      worktree: {
+        branchName: "codex/checkout",
+        customLabel: "Checkout rework",
+        displayName: "Checkout rework",
+        displayPath: "/repo/agent",
+        id: "worktree-id",
+        locked: false,
+        state: "available"
+      }
+    };
+    const { server, dispatch } = await fixture(async () => result);
+    const raw = await exchange(server.endpoint.socketPath, [
+      Buffer.from(
+        `${JSON.stringify({
+          version: 1,
+          id: "req-1",
+          token: server.endpoint.token,
+          method: "worktree.label.set",
+          params: { repoPath: "/repo/agent", label: "Checkout rework" }
+        })}\n`
+      )
+    ]);
+
+    expect(parseAgentResponse(raw, "worktree.label.set", "req-1")).toEqual({
+      version: 1,
+      id: "req-1",
+      ok: true,
+      result
+    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "worktree.label.set",
+        params: { repoPath: "/repo/agent", label: "Checkout rework" }
+      }),
+      expect.any(AbortSignal)
+    );
+  });
   it("preserves safe request IDs for unsupported-version replies without dispatch", async () => {
     const { server, dispatch } = await fixture();
     const frame = Buffer.from(

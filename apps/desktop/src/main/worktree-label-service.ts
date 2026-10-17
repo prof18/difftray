@@ -4,6 +4,9 @@ import { normalizeWorktreeLabel } from "@difftray/companion-protocol";
 import type { GitWorktreeCandidate } from "@difftray/git";
 import type { SetWorktreeLabelInput } from "@difftray/storage";
 
+import type { RepositoryWorktreeView } from "@difftray/companion-protocol";
+
+import { AgentProtocolError } from "../shared/agent-protocol.js";
 import { ExpectedUnavailableWorktreeError } from "./repository-worktree-service.js";
 
 export type WorktreeLabelChange = {
@@ -17,6 +20,8 @@ export type WorktreeLabelResult = {
 };
 
 export type WorktreeLabelServiceDependencies = {
+  /** Resolves symlinks like Git's own root does; defaults to the normalized path. */
+  readonly canonicalPath?: (requestedPath: string) => Promise<string>;
   readonly findRepository: (
     worktreePath: string
   ) => Promise<{ readonly root: string } | null>;
@@ -42,6 +47,9 @@ export type WorktreeLabelService = {
   ) => Promise<WorktreeLabelResult>;
 };
 
+/** The requested path is not inside any Git worktree. */
+class WorktreeLabelRepositoryMissingError extends ExpectedUnavailableWorktreeError {}
+
 /** The label text failed shared validation. Nothing was written. */
 export class WorktreeLabelValidationError extends Error {
   constructor(message: string) {
@@ -66,11 +74,15 @@ export function createWorktreeLabelService(
     setForCandidate,
     setForPath: async (repoPath, label) => {
       const normalized = requireValidLabel(label);
-      const requestedPath = path.normalize(repoPath);
+      const requestedPath = path.normalize(
+        (await dependencies.canonicalPath?.(repoPath).catch(() => undefined)) ?? repoPath
+      );
       const repository = await dependencies.findRepository(requestedPath);
 
       if (!repository) {
-        throw new ExpectedUnavailableWorktreeError("Path is not inside a Git worktree.");
+        throw new WorktreeLabelRepositoryMissingError(
+          "Path is not inside a Git worktree."
+        );
       }
 
       if (path.normalize(repository.root) !== requestedPath) {
@@ -166,4 +178,30 @@ function writeLabel(
   });
 
   return { candidate, label };
+}
+
+/**
+ * Agent entry point: labels the exact worktree root and maps expected failures
+ * to agent protocol errors. It never opens the worktree.
+ */
+export async function setAgentWorktreeLabel(
+  service: Pick<WorktreeLabelService, "setForPath">,
+  params: { readonly repoPath: string; readonly label: string | null },
+  view: (candidate: GitWorktreeCandidate, label: string | null) => RepositoryWorktreeView
+): Promise<{ readonly repoPath: string; readonly worktree: RepositoryWorktreeView }> {
+  try {
+    const result = await service.setForPath(params.repoPath, params.label);
+    return {
+      repoPath: path.normalize(result.candidate.path),
+      worktree: view(result.candidate, result.label)
+    };
+  } catch (error) {
+    if (error instanceof WorktreeLabelValidationError)
+      throw new AgentProtocolError("invalid_request", error.message);
+    if (error instanceof WorktreeLabelRepositoryMissingError)
+      throw new AgentProtocolError("repository_missing", error.message);
+    if (error instanceof ExpectedUnavailableWorktreeError)
+      throw new AgentProtocolError("invalid_target", error.message);
+    throw error;
+  }
 }

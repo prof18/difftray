@@ -117,7 +117,14 @@ import {
 } from "./workspace-load-status.js";
 import { editorSettingsError, updateAppSettingsInput } from "./editor-settings.js";
 import { elapsedSince, logRendererPerformance } from "./renderer-performance.js";
-import { WorktreePicker } from "./worktree-picker.js";
+import { gitWorktreeName, WorktreePicker } from "./worktree-picker.js";
+import { WorktreeLabelDialog } from "./worktree-label-dialog.js";
+import {
+  currentWorktreeForLabel,
+  ipcErrorMessage,
+  withProjectLabel,
+  type WorktreeLabelEditorState
+} from "./worktree-label-editor.js";
 import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
 import { createRepositoryDropZone } from "./repository-drop-zone.js";
@@ -235,6 +242,9 @@ export function App(): React.JSX.Element {
     RecentProjectView | undefined
   >();
   const [worktrees, setWorktrees] = useState<readonly RepositoryWorktreeView[]>([]);
+  const [labelEditor, setLabelEditor] = useState<WorktreeLabelEditorState>();
+  const labelEditorRequestRef = useRef(0);
+  const labelRefreshRequestRef = useRef(0);
   const [activeProjectHasWorktreeSiblings, setActiveProjectHasWorktreeSiblings] =
     useState<boolean | undefined>();
   const diffSurfaceRef = useRef<HTMLDivElement>(null);
@@ -254,6 +264,7 @@ export function App(): React.JSX.Element {
   const projectsOpenedHandlerRef = useRef<(event: ProjectsOpenedEvent) => void>(
     () => undefined
   );
+  const worktreeLabelsChangedHandlerRef = useRef<() => void>(() => undefined);
   const agentSelectionRef = useRef(
     createAgentOpenSelection((ack) => {
       void window.difftray.acknowledgeAgentOpen(ack).catch(() => undefined);
@@ -656,6 +667,9 @@ export function App(): React.JSX.Element {
         invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
     });
     void window.difftray.agentRendererReady().catch(() => undefined);
+    const stopWorktreeLabelsChanged = window.difftray.onWorktreeLabelsChanged(() => {
+      worktreeLabelsChangedHandlerRef.current();
+    });
     const stopWorktreeChangeCount = window.difftray.onWorktreeChangeCount(
       ({ changeCount, worktreePath }) => {
         setWorktrees((current) =>
@@ -672,6 +686,7 @@ export function App(): React.JSX.Element {
       stopProjectClosed();
       stopProjectsOpened();
       stopAgentCancelled();
+      stopWorktreeLabelsChanged();
       stopWorktreeChangeCount();
     };
   }, []);
@@ -1744,6 +1759,129 @@ export function App(): React.JSX.Element {
       },
       item.project
     );
+  }
+
+  async function refreshWorktreeLabels(): Promise<void> {
+    const requestId = ++labelRefreshRequestRef.current;
+    const projectId = activeProjectIdRef.current;
+    const [nextProjects, nextWorktrees] = await Promise.all([
+      window.difftray.listRecentProjects(),
+      projectId
+        ? window.difftray.listProjectWorktrees(projectId)
+        : Promise.resolve(undefined)
+    ]);
+    // A later label change started a newer refresh; let it win.
+    if (requestId !== labelRefreshRequestRef.current) return;
+
+    setRecentProjects((currentProjects) =>
+      mergeProjectTabs(currentProjects, nextProjects)
+    );
+    setWorkspace((current) =>
+      current
+        ? { ...current, project: withProjectLabel(current.project, nextProjects) }
+        : current
+    );
+    if (nextWorktrees && activeProjectIdRef.current === projectId) {
+      setWorktrees(nextWorktrees);
+    }
+  }
+
+  function openLabelEditor(projectId: string, worktree: RepositoryWorktreeView): void {
+    const requestId = ++labelEditorRequestRef.current;
+    setLabelEditor({
+      ...(worktree.customLabel ? { initialLabel: worktree.customLabel } : {}),
+      projectId,
+      requestId,
+      subject: `${gitWorktreeName(worktree)} · ${worktree.displayPath}`,
+      worktreeId: worktree.id
+    });
+  }
+
+  async function openProjectLabelEditor(project: RecentProjectView): Promise<void> {
+    const requestId = ++labelEditorRequestRef.current;
+    setLabelEditor({
+      ...(project.customLabel ? { initialLabel: project.customLabel } : {}),
+      projectId: project.id,
+      requestId,
+      subject: project.path,
+      targetPending: true
+    });
+
+    await resolveLabelEditorTarget(requestId, project.id);
+  }
+
+  async function retryLabelEditorTarget(): Promise<void> {
+    const editor = labelEditor;
+    if (!editor) return;
+
+    setLabelEditor((current) => {
+      if (current?.requestId !== editor.requestId) return current;
+      const next: Record<string, unknown> = { ...current, targetPending: true };
+      delete next.targetError;
+      return next as WorktreeLabelEditorState;
+    });
+    await resolveLabelEditorTarget(editor.requestId, editor.projectId);
+  }
+
+  async function resolveLabelEditorTarget(
+    requestId: number,
+    projectId: string
+  ): Promise<void> {
+    const resolved = await currentWorktreeForLabel(projectId);
+    if (requestId !== labelEditorRequestRef.current) return;
+
+    setLabelEditor((current) =>
+      current?.requestId !== requestId
+        ? current
+        : "worktree" in resolved
+          ? {
+              ...current,
+              subject: `${gitWorktreeName(resolved.worktree)} · ${resolved.worktree.displayPath}`,
+              targetPending: false,
+              worktreeId: resolved.worktree.id
+            }
+          : { ...current, targetError: resolved.error, targetPending: false }
+    );
+  }
+
+  async function saveWorktreeLabel(label: string): Promise<void> {
+    const editor = labelEditor;
+    if (!editor?.worktreeId) return;
+
+    try {
+      await window.difftray.setWorktreeLabel(editor.projectId, editor.worktreeId, label);
+    } catch (caughtError) {
+      throw new Error(ipcErrorMessage(caughtError), { cause: caughtError });
+    }
+
+    if (editor.requestId === labelEditorRequestRef.current) {
+      labelEditorRequestRef.current += 1;
+      setLabelEditor(undefined);
+    }
+  }
+
+  async function resetWorktreeLabel(
+    projectId: string,
+    worktreeId: string
+  ): Promise<void> {
+    setError(undefined);
+    try {
+      await window.difftray.setWorktreeLabel(projectId, worktreeId, null);
+    } catch (caughtError) {
+      setError(ipcErrorMessage(caughtError));
+    }
+  }
+
+  async function resetProjectLabel(project: RecentProjectView): Promise<void> {
+    setError(undefined);
+    const resolved = await currentWorktreeForLabel(project.id);
+
+    if ("error" in resolved) {
+      setError(resolved.error);
+      return;
+    }
+
+    await resetWorktreeLabel(project.id, resolved.worktree.id);
   }
 
   async function openWorktreePicker(project: RecentProjectView): Promise<void> {
@@ -3753,6 +3891,9 @@ export function App(): React.JSX.Element {
   applicationCommandHandlerRef.current = handleApplicationCommand;
   projectClosedHandlerRef.current = handleProjectClosed;
   projectsOpenedHandlerRef.current = handleProjectsOpened;
+  worktreeLabelsChangedHandlerRef.current = () => {
+    void refreshWorktreeLabels().catch(() => undefined);
+  };
 
   return (
     <main className={styles.windowShell}>
@@ -3779,6 +3920,12 @@ export function App(): React.JSX.Element {
           }}
           onCloseProject={(projectId) => {
             void closeProject(projectId);
+          }}
+          onEditProjectLabel={(project) => {
+            void openProjectLabelEditor(project);
+          }}
+          onResetProjectLabel={(project) => {
+            void resetProjectLabel(project);
           }}
           onCopyProjectPath={(projectId) => {
             setError(undefined);
@@ -4245,14 +4392,40 @@ export function App(): React.JSX.Element {
                 }
               });
           }}
+          onEditLabel={(worktree) => {
+            openLabelEditor(worktreePickerProject.id, worktree);
+          }}
           onRefresh={() => {
             void openWorktreePicker(worktreePickerProject);
+          }}
+          onResetLabel={(worktree) => {
+            void resetWorktreeLabel(worktreePickerProject.id, worktree.id);
           }}
           onSelect={(worktree) => {
             void selectWorktree(worktree);
           }}
           projectName={worktreePickerProject.repositoryName ?? worktreePickerProject.name}
           worktrees={worktrees}
+        />
+      ) : null}
+
+      {labelEditor ? (
+        <WorktreeLabelDialog
+          key={labelEditor.requestId}
+          {...(labelEditor.initialLabel
+            ? { initialLabel: labelEditor.initialLabel }
+            : {})}
+          onCancel={() => {
+            labelEditorRequestRef.current += 1;
+            setLabelEditor(undefined);
+          }}
+          onRetryTarget={() => {
+            void retryLabelEditorTarget();
+          }}
+          onSave={saveWorktreeLabel}
+          subject={labelEditor.subject}
+          {...(labelEditor.targetError ? { targetError: labelEditor.targetError } : {})}
+          targetPending={labelEditor.targetPending === true}
         />
       ) : null}
 
