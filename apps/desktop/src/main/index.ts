@@ -2899,6 +2899,8 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       return projectViewWithLabel(projectView(project), worktreeLabelProjection());
     },
     openRepositories: openCompanionRepositories,
+    setProjectWorktreeLabel: (projectId, body) =>
+      repositoryWorktreeService().setLabel(projectId, body.worktreeId, body.label),
     loadFileDiff: async (projectId, pathName) => {
       const [diff, workspace] = await Promise.all([
         loadProjectFileDiffForCompanion(projectId, pathName),

@@ -974,6 +974,9 @@ async function createIntegrationHarness(): Promise<{
       throw new Error("Worktree not found");
     },
     openRepositories: async () => ({ failures: [], openedProjects: [] }),
+    setProjectWorktreeLabel: async () => {
+      throw new Error("unexpected setProjectWorktreeLabel call");
+    },
     loadFileDiff: async (projectId, pathName) =>
       loadFileDiff(storage, projectId, pathName),
     loadFileImage: async () => null,

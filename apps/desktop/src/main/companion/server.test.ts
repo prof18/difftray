@@ -7,6 +7,7 @@ import {
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
+  COMPANION_CAPABILITY_WORKTREE_LABELS,
   COMPANION_PROTOCOL_VERSION,
   openEnvelope,
   sealEnvelope,
@@ -932,6 +933,253 @@ describe("companion server core", () => {
         ]
       });
     }
+  });
+
+  it("exposes worktree labels only to clients that negotiate them", async () => {
+    const labeledProject = {
+      customLabel: "Checkout rework",
+      id: "project-1",
+      name: "agent",
+      path: "/repo/agent",
+      repositoryName: "Difftray",
+      worktreeName: "codex/checkout"
+    };
+    const labeledWorktree = {
+      branchName: "codex/checkout",
+      customLabel: "Checkout rework",
+      displayName: "Checkout rework",
+      displayPath: "/repo/agent",
+      id: "worktree-1",
+      locked: false,
+      state: "current" as const
+    };
+    const { baseUrl } = await startServer({
+      listProjectWorktrees: async () => [labeledWorktree],
+      listRecentProjects: async () => [labeledProject],
+      loadWorkspaceView: async () => ({
+        ...testWorkspace("project-1"),
+        project: labeledProject
+      }),
+      openProjectWorktree: async () => labeledProject,
+      openRepositories: async () => ({ failures: [], openedProjects: [labeledProject] })
+    });
+    const capabilities = [
+      COMPANION_CAPABILITY_PROJECT_IDENTITY,
+      COMPANION_CAPABILITY_WORKTREE_LABELS
+    ];
+
+    const worktrees = await encryptedRequest({
+      baseUrl,
+      capabilities,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/worktrees"
+    });
+    const projects = await encryptedRequest({
+      baseUrl,
+      capabilities,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects"
+    });
+    const workspace = await encryptedRequest({
+      baseUrl,
+      capabilities,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+    const opened = await encryptedRequest({
+      baseUrl,
+      body: { worktreeId: "worktree-1" },
+      capabilities,
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/project-1/worktrees/open"
+    });
+    const legacyWorktrees = await encryptedRequest({
+      baseUrl,
+      capabilities: [COMPANION_CAPABILITY_PROJECT_IDENTITY],
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/worktrees"
+    });
+
+    expect(worktrees.plain.body).toEqual({
+      supportsLabels: true,
+      worktrees: [labeledWorktree]
+    });
+    expect(projects.plain.body).toEqual({ projects: [labeledProject] });
+    expect(
+      (workspace.plain.body as { workspace: { project: unknown } }).workspace.project
+    ).toEqual(labeledProject);
+    expect(opened.plain.body).toEqual({ project: labeledProject });
+    expect(legacyWorktrees.plain.body).toEqual({
+      worktrees: [
+        {
+          branchName: "codex/checkout",
+          displayName: "codex/checkout",
+          displayPath: "/repo/agent",
+          id: "worktree-1",
+          locked: false,
+          state: "current"
+        }
+      ]
+    });
+  });
+
+  it("sets and resets a worktree label for negotiated clients", async () => {
+    const worktree = {
+      branchName: "codex/checkout",
+      customLabel: "Checkout rework",
+      displayName: "Checkout rework",
+      displayPath: "/repo/agent",
+      id: "worktree-1",
+      locked: false,
+      state: "available" as const
+    };
+    const setProjectWorktreeLabel = vi.fn(
+      async (_projectId: string, body: { readonly label: string | null }) =>
+        body.label === null
+          ? {
+              branchName: "codex/checkout",
+              displayName: "codex/checkout",
+              displayPath: "/repo/agent",
+              id: "worktree-1",
+              locked: false,
+              state: "available" as const
+            }
+          : worktree
+    );
+    const { baseUrl } = await startServer({ setProjectWorktreeLabel });
+    const request = (
+      body: unknown,
+      capabilities = [COMPANION_CAPABILITY_WORKTREE_LABELS]
+    ) =>
+      encryptedRequest({
+        baseUrl,
+        body,
+        capabilities,
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/worktrees/label"
+      });
+
+    const set = await request({ label: "  Checkout rework ", worktreeId: "worktree-1" });
+    const reset = await request({ label: null, worktreeId: "worktree-1" });
+
+    expect(set.plain).toMatchObject({ body: { worktree }, status: 200 });
+    expect(reset.plain.body).toEqual({
+      worktree: expect.not.objectContaining({ customLabel: expect.anything() })
+    });
+    expect(setProjectWorktreeLabel).toHaveBeenNthCalledWith(1, "project-1", {
+      label: "Checkout rework",
+      worktreeId: "worktree-1"
+    });
+    expect(setProjectWorktreeLabel).toHaveBeenNthCalledWith(2, "project-1", {
+      label: null,
+      worktreeId: "worktree-1"
+    });
+  });
+
+  it("rejects label mutations that are unnegotiated, malformed or unauthenticated", async () => {
+    const setProjectWorktreeLabel = vi.fn();
+    const { baseUrl } = await startServer({ setProjectWorktreeLabel });
+    const path = "/companion/v1/projects/project-1/worktrees/label";
+
+    const unnegotiated = await encryptedRequest({
+      baseUrl,
+      body: { label: "Label", worktreeId: "worktree-1" },
+      logicalMethod: "POST",
+      path
+    });
+    const blank = await encryptedRequest({
+      baseUrl,
+      body: { label: "   ", worktreeId: "worktree-1" },
+      capabilities: [COMPANION_CAPABILITY_WORKTREE_LABELS],
+      logicalMethod: "POST",
+      path
+    });
+    const missingId = await encryptedRequest({
+      baseUrl,
+      body: { label: "Label" },
+      capabilities: [COMPANION_CAPABILITY_WORKTREE_LABELS],
+      logicalMethod: "POST",
+      path
+    });
+    const plaintext = await fetch(`${baseUrl}${path}`, {
+      body: JSON.stringify({ label: "Label", worktreeId: "worktree-1" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    });
+
+    expect(unnegotiated.plain.status).toBe(400);
+    expect(blank.plain).toMatchObject({
+      body: { error: { code: "bad_request" } },
+      status: 400
+    });
+    expect(missingId.plain.status).toBe(400);
+    expect(plaintext.status).toBe(401);
+    expect(setProjectWorktreeLabel).not.toHaveBeenCalled();
+  });
+
+  it("maps unknown projects and stale or foreign targets to not_found", async () => {
+    const setProjectWorktreeLabel = vi.fn(async () => {
+      throw new ExpectedUnavailableWorktreeError(
+        "Worktree belongs to a different repository."
+      );
+    });
+    const unknown = await startServer({
+      setProjectWorktreeLabel,
+      storage: { ...testCompanionStorage(), getProject: () => null }
+    });
+    const stale = await startServer({ setProjectWorktreeLabel });
+    const body = { label: "Label", worktreeId: "worktree-1" };
+    const capabilities = [COMPANION_CAPABILITY_WORKTREE_LABELS];
+
+    const unknownResponse = await encryptedRequest({
+      baseUrl: unknown.baseUrl,
+      body,
+      capabilities,
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/missing/worktrees/label"
+    });
+    expect(unknownResponse.plain.status).toBe(404);
+    expect(setProjectWorktreeLabel).not.toHaveBeenCalled();
+
+    const staleResponse = await encryptedRequest({
+      baseUrl: stale.baseUrl,
+      body,
+      capabilities,
+      logicalMethod: "POST",
+      path: "/companion/v1/projects/project-1/worktrees/label"
+    });
+    expect(staleResponse.plain).toMatchObject({
+      body: { error: { code: "not_found" } },
+      status: 404
+    });
+  });
+
+  it("rate limits label mutations like worktree opens", async () => {
+    const { baseUrl } = await startServer({
+      setProjectWorktreeLabel: async () => ({
+        displayName: "main",
+        displayPath: "/repo",
+        id: "worktree-1",
+        locked: false,
+        state: "current"
+      })
+    });
+    const statuses = [];
+    for (let index = 0; index < 11; index += 1) {
+      statuses.push(
+        (
+          await rawEncryptedRequest({
+            baseUrl,
+            body: { label: "Label", worktreeId: "worktree-1" },
+            logicalMethod: "POST",
+            path: `/companion/v1/projects/project-${String(index % 2)}/worktrees/label`
+          })
+        ).status
+      );
+    }
+
+    expect(statuses.slice(0, 10).every((status) => status !== 429)).toBe(true);
+    expect(statuses.at(10)).toBe(429);
   });
 
   it("only exposes the selected commit subject to clients that opt in", async () => {
@@ -1918,6 +2166,9 @@ async function startServer(
       serverName: "Test Mac",
       serverPublicKey
     }),
+    setProjectWorktreeLabel: async () => {
+      throw new Error("unexpected setProjectWorktreeLabel call");
+    },
     setReviewNoteDismissed: async () => null,
     storage: testCompanionStorage(),
     unmarkReviewed: async () => ({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMPANION_CAPABILITY_WORKTREE_LABELS,
   normalizeWorktreeLabel,
   parseSetWorktreeLabelBody,
   WORKTREE_LABEL_MAX_CODE_POINTS
@@ -128,5 +129,11 @@ describe("parseSetWorktreeLabelBody", () => {
       error: "missing worktreeId",
       ok: false
     });
+  });
+});
+
+describe("worktree label capability", () => {
+  it("is negotiated as worktree-labels-v1 without a protocol bump", () => {
+    expect(COMPANION_CAPABILITY_WORKTREE_LABELS).toBe("worktree-labels-v1");
   });
 });

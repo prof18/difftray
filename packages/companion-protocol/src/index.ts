@@ -6,6 +6,7 @@ export {
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
+  COMPANION_CAPABILITY_WORKTREE_LABELS,
   COMPANION_PROTOCOL_VERSION
 } from "./version.js";
 export {
@@ -317,6 +318,8 @@ export type RepositoryWorktreeView = {
 };
 
 export type ProjectWorktreesResponse = {
+  /** Present only for clients that negotiated `worktree-labels-v1`. */
+  readonly supportsLabels?: true;
   readonly worktrees: readonly RepositoryWorktreeView[];
 };
 

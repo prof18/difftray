@@ -7,6 +7,7 @@ import {
   COMPANION_CAPABILITY_PROJECT_IDENTITY,
   COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
   COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE,
+  COMPANION_CAPABILITY_WORKTREE_LABELS,
   COMPANION_PROTOCOL_VERSION,
   type CompanionServerEvent,
   type CreateCommentBody,
@@ -31,6 +32,7 @@ import {
   type ReviewWorkspaceView,
   type SaveReviewNoteBody,
   type SetReviewNoteDismissedBody,
+  type SetWorktreeLabelBody,
   type UpdateCommentBody,
   type WorkspaceSummary,
   parseCreateCommentBody,
@@ -45,6 +47,7 @@ import {
   parseReviewNoteTargetBody,
   parseSaveReviewNoteBody,
   parseSetReviewNoteDismissedBody,
+  parseSetWorktreeLabelBody,
   parseUpdateCommentBody
 } from "@difftray/companion-protocol";
 import type { DifftrayStorage } from "@difftray/storage";
@@ -59,6 +62,7 @@ import {
   ExpectedUnavailableWorktreeError,
   generatedWorktreeDisplayName
 } from "../repository-worktree-service.js";
+import { WorktreeLabelValidationError } from "../worktree-label-service.js";
 
 export class StaleReviewTargetError extends Error {}
 
@@ -163,6 +167,11 @@ export type CompanionDeps = {
     projectId: string,
     body: OpenWorktreeBody
   ) => Promise<RecentProjectView>;
+  /** Metadata-only label write; returns the canonical labeled view. */
+  readonly setProjectWorktreeLabel: (
+    projectId: string,
+    body: SetWorktreeLabelBody
+  ) => Promise<RepositoryWorktreeView>;
   readonly listRepositoryCatalog: (
     capabilities?: readonly string[]
   ) => Promise<readonly RepositoryCatalogEntry[]>;
@@ -591,7 +600,56 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       requiresAuth: true
     },
     {
-      handler: async ({ params }) => {
+      handler: async ({ body, capabilities, params }) => {
+        const projectId = params.get("projectId");
+
+        if (!capabilities.includes(COMPANION_CAPABILITY_WORKTREE_LABELS)) {
+          return badRequest(
+            `Worktree labels require ${COMPANION_CAPABILITY_WORKTREE_LABELS}`
+          );
+        }
+
+        const parsed = parseSetWorktreeLabelBody(body);
+
+        if (!projectId || !parsed.ok) {
+          return badRequest(parsed.ok ? "Missing projectId" : parsed.error);
+        }
+
+        if (!deps.storage.getProject(projectId)) {
+          return {
+            body: companionError("not_found", "Project not found"),
+            status: 404
+          };
+        }
+
+        try {
+          return {
+            body: {
+              worktree: await deps.setProjectWorktreeLabel(projectId, parsed.value)
+            },
+            status: 200
+          };
+        } catch (error) {
+          if (error instanceof WorktreeLabelValidationError) {
+            return badRequest(error.message);
+          }
+
+          if (!(error instanceof ExpectedUnavailableWorktreeError)) {
+            throw error;
+          }
+
+          return {
+            body: companionError("not_found", "Worktree is no longer available"),
+            status: 404
+          };
+        }
+      },
+      method: "POST",
+      path: "/companion/v1/projects/:projectId/worktrees/label",
+      requiresAuth: true
+    },
+    {
+      handler: async ({ capabilities, params }) => {
         const projectId = params.get("projectId");
 
         if (!projectId) {
@@ -610,11 +668,16 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
 
         try {
           return {
-            body: {
-              worktrees: (await deps.listProjectWorktrees(projectId)).map(
-                legacyWorktreeView
-              )
-            },
+            body: capabilities.includes(COMPANION_CAPABILITY_WORKTREE_LABELS)
+              ? {
+                  supportsLabels: true,
+                  worktrees: await deps.listProjectWorktrees(projectId)
+                }
+              : {
+                  worktrees: (await deps.listProjectWorktrees(projectId)).map(
+                    legacyWorktreeView
+                  )
+                },
             status: 200
           };
         } catch (error) {
@@ -1096,7 +1159,11 @@ function projectForCapabilities(
   project: RecentProjectView,
   capabilities: readonly string[]
 ): RecentProjectView {
-  const compatibleProject = { ...legacyProjectView(project) } as Record<string, unknown>;
+  const compatibleProject = {
+    ...(capabilities.includes(COMPANION_CAPABILITY_WORKTREE_LABELS)
+      ? project
+      : legacyProjectView(project))
+  } as Record<string, unknown>;
   if (!capabilities.includes(COMPANION_CAPABILITY_PROJECT_IDENTITY)) {
     delete compatibleProject.repositoryName;
     delete compatibleProject.worktreeName;

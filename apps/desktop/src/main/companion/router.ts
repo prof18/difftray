@@ -230,7 +230,7 @@ function rateLimitFor(method: string, pathname: string): number {
 
   if (
     method === "POST" &&
-    /^\/companion\/v1\/projects\/[^/]+\/worktrees\/open$/.test(pathname)
+    /^\/companion\/v1\/projects\/[^/]+\/worktrees\/(?:open|label)$/.test(pathname)
   ) {
     return 10;
   }
@@ -247,6 +247,9 @@ function rateLimitBucketKey(method: string, pathname: string): string {
   }
   if (/^\/companion\/v1\/projects\/[^/]+\/worktrees\/open$/.test(pathname)) {
     return `${method}:/companion/v1/projects/:projectId/worktrees/open`;
+  }
+  if (/^\/companion\/v1\/projects\/[^/]+\/worktrees\/label$/.test(pathname)) {
+    return `${method}:/companion/v1/projects/:projectId/worktrees/label`;
   }
   return `${method}:${pathname}`;
 }
