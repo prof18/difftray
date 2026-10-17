@@ -174,7 +174,15 @@ async function readRecord(
   }
   assertPrivateAgentPath(identity, "file");
   if (identity.size > 16_384) return unusable();
-  const file = await open(paths.endpointPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let file: Awaited<ReturnType<typeof open>>;
+  try {
+    file = await open(paths.endpointPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    // A starting desktop can retire the file between these steps; treat it as
+    // not yet published so the caller keeps waiting.
+    if (missing(error)) return null;
+    throw error;
+  }
   try {
     const opened = await file.stat();
     assertPrivateAgentPath(opened, "file");
@@ -183,7 +191,13 @@ async function readRecord(
     const buffer = Buffer.alloc(16_385);
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
     if (bytesRead > 16_384) return unusable();
-    const current = await lstat(paths.endpointPath);
+    let current: Stats;
+    try {
+      current = await lstat(paths.endpointPath);
+    } catch (error) {
+      if (missing(error)) return null;
+      throw error;
+    }
     assertPrivateAgentPath(current, "file");
     if (
       !sameFile(opened, current) ||

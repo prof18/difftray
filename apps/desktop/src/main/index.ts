@@ -1797,7 +1797,8 @@ const servicesReady = app.whenReady().then(async () => {
           request.params,
           (candidate, label) =>
             worktreeView(
-              candidate,
+              // The CLI has no source project, so no worktree is "current".
+              { ...candidate, current: false },
               new Set(
                 getStorage()
                   .listOpenProjects()

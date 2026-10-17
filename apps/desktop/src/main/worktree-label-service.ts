@@ -153,7 +153,8 @@ async function requireLiveCandidate(
     );
   }
 
-  return live;
+  // Git marks the worktree it runs in as current; keep the caller's view.
+  return { ...live, current: candidate.current };
 }
 
 function writeLabel(

@@ -155,7 +155,9 @@ missing and foreign targets. The label is validated by the shared
 `normalizeWorktreeLabel` rules: control characters are rejected before trimming,
 then 1–80 code points remain. The result is `{repoPath, worktree}` with the
 canonical root and the `RepositoryWorktreeView` the picker shows; a reset omits
-`customLabel`. Both commands are idempotent.
+`customLabel`. Its `state` is `open` when a Difftray tab shows the worktree and
+`available` otherwise; the CLI has no source project, so it is never `current`.
+Both commands are idempotent.
 
 Labels are desktop-profile display metadata (see
 [the decision](decisions/worktree-display-labels.md)). Setting one does not

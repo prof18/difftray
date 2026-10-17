@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; implementation in progress
+Accepted
 
 ## Context
 
@@ -87,7 +87,9 @@ unless the client negotiates the `worktree-labels-v1` capability. The protocol
 version is unchanged for this additive, negotiated change. The companion route is
 `POST /companion/v1/projects/:projectId/worktrees/label` with body
 `{ worktreeId, label }`; the CLI adds `difftray worktree label set|reset` over the
-agent method `worktree.label.set`.
+agent method `worktree.label.set`. The CLI has no source project, so its result
+reports the worktree as `open` when a Difftray tab shows it and `available`
+otherwise, never `current`.
 
 ## Consequences
 

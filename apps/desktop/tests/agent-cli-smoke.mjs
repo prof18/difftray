@@ -21,6 +21,7 @@ import { runReadMatrix } from "./agent-cli-read-matrix.mjs";
 import { runWriteMatrix } from "./agent-cli-write-matrix.mjs";
 import { runInvalidationMatrix } from "./agent-cli-invalidation-matrix.mjs";
 import { runCompatMatrix } from "./agent-cli-compat-matrix.mjs";
+import { runLabelMatrix } from "./agent-cli-label-matrix.mjs";
 
 const runFile = promisify(execFile);
 const { values } = parseArgs({
@@ -1038,6 +1039,7 @@ async function runMatrix() {
   await runWriteMatrix(matrix);
   await runInvalidationMatrix(matrix);
   await runCompatMatrix(matrix);
+  await runLabelMatrix({ ...matrix, evidence });
   await writeFile(
     path.join(evidence, "cli-e2e.json"),
     JSON.stringify({ result: "passed", scenarios: results }, null, 2)

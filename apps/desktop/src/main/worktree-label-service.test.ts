@@ -155,6 +155,25 @@ describe("worktree label service", () => {
     expect(dependencies.onChanged).not.toHaveBeenCalled();
   });
 
+  it("keeps the caller's view of a sibling when rechecking it from its own path", async () => {
+    const dependencies = createDependencies();
+    // Git marks the worktree it is run in as current.
+    dependencies.listWorktrees.mockImplementation(async (repositoryPath?: unknown) =>
+      worktrees.map((worktree) => ({
+        ...worktree,
+        current: worktree.path === repositoryPath
+      }))
+    );
+    const service = createWorktreeLabelService(dependencies);
+
+    const result = await service.setForCandidate(
+      { ...(worktrees[1] as GitWorktreeCandidate), current: false },
+      "Sibling"
+    );
+
+    expect(result.candidate.current).toBe(false);
+  });
+
   it("writes through one path for both entry points", async () => {
     const dependencies = createDependencies();
     const service = createWorktreeLabelService(dependencies);
