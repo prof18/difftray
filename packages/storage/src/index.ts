@@ -98,6 +98,14 @@ import {
 } from "./review-store.js";
 import { runMigrations } from "./schema.js";
 import {
+  getWorktreeLabel,
+  listWorktreeLabels,
+  resetWorktreeLabel,
+  setWorktreeLabel,
+  type SetWorktreeLabelInput,
+  type WorktreeLabelRecord
+} from "./worktree-label-store.js";
+import {
   addRepositorySearchRoot,
   beginRepositoryRootScan,
   countAvailableRepositoriesForRoot,
@@ -175,6 +183,10 @@ export type {
   RepositorySearchRootRecord
 } from "./repository-catalog-store.js";
 export { repositoryDiscoveryVersion } from "./repository-catalog-store.js";
+export type {
+  SetWorktreeLabelInput,
+  WorktreeLabelRecord
+} from "./worktree-label-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly currentDiffHash: string;
@@ -249,6 +261,7 @@ export type DifftrayStorage = {
   readonly getReviewFileComment: (id: string) => ReviewFileCommentRecord | null;
   readonly getReviewNote: (scopeId: string) => ReviewNoteRecord | null;
   readonly getReviewTarget: (id: string) => StoredReviewTargetRecord | null;
+  readonly getWorktreeLabel: (worktreeId: string) => WorktreeLabelRecord | null;
   readonly forgetProject: (id: string) => void;
   readonly failRepositoryRootScan: (rootId: string, message: string) => void;
   readonly getRepositoryCatalogEntry: (id: string) => RepositoryCatalogRecord | null;
@@ -268,6 +281,9 @@ export type DifftrayStorage = {
   ) => readonly ReviewFileCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
+  readonly listWorktreeLabels: (
+    worktreePaths: readonly string[]
+  ) => readonly WorktreeLabelRecord[];
   readonly markReviewed: (input: ReviewMarkInput) => void;
   readonly saveReviewNote: (input: SaveReviewNoteInput) => ReviewNoteRecord;
   readonly setReviewNoteDismissed: (
@@ -306,7 +322,9 @@ export type DifftrayStorage = {
     rootId: string,
     candidates: readonly RepositoryCatalogCandidate[]
   ) => void;
+  readonly resetWorktreeLabel: (worktreeId: string) => boolean;
   readonly revokeCompanionDevice: (id: string) => void;
+  readonly setWorktreeLabel: (input: SetWorktreeLabelInput) => WorktreeLabelRecord;
   readonly touchCompanionDeviceLastSeen: (id: string) => void;
   readonly upsertProject: (project: ProjectRecord) => void;
   readonly upsertAppSettings: (settings: AppSettingsRecord) => void;
@@ -368,6 +386,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getReviewFileComment: (id) => getReviewFileComment(db, id),
     getReviewNote: (scopeId) => getReviewNote(db, scopeId),
     getReviewTarget: (id) => getReviewTarget(db, id),
+    getWorktreeLabel: (worktreeId) => getWorktreeLabel(db, worktreeId),
     forgetProject: (id) => {
       db.exec("begin immediate");
 
@@ -396,6 +415,7 @@ export function openStorage(filename: string): DifftrayStorage {
       listReviewFileComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
+    listWorktreeLabels: (worktreePaths) => listWorktreeLabels(db, worktreePaths),
     markReviewed: (input) => {
       markReviewed(db, input);
     },
@@ -419,6 +439,8 @@ export function openStorage(filename: string): DifftrayStorage {
     removeRepositorySearchRoot: (rootId) => removeRepositorySearchRoot(db, rootId),
     replaceRepositoryCatalogForRoot: (rootId, candidates) =>
       replaceRepositoryCatalogForRoot(db, rootId, candidates),
+    resetWorktreeLabel: (worktreeId) => resetWorktreeLabel(db, worktreeId),
+    setWorktreeLabel: (input) => setWorktreeLabel(db, input),
     revokeCompanionDevice: (id) => {
       revokeCompanionDevice(db, id);
     },

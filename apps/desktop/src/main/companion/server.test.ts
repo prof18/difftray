@@ -781,6 +781,159 @@ describe("companion server core", () => {
     expect(capableWorkspace.plain.body).toMatchObject({ workspace: { project } });
   });
 
+  it("never exposes stored worktree labels on existing companion routes", async () => {
+    const allCapabilities = [
+      COMPANION_CAPABILITY_FILE_COMMENTS_REVIEW_NOTES,
+      COMPANION_CAPABILITY_PROJECT_COMMIT_SUBJECT,
+      COMPANION_CAPABILITY_PROJECT_IDENTITY,
+      COMPANION_CAPABILITY_PROJECT_SUMMARY_STATE,
+      COMPANION_CAPABILITY_REPOSITORY_SCAN_STATE
+    ];
+    const labeledProject = {
+      customLabel: "Checkout rework",
+      id: "project-1",
+      name: "agent",
+      path: "/repo/agent",
+      repositoryName: "Difftray",
+      worktreeName: "codex/checkout"
+    };
+    const legacyProject = {
+      id: "project-1",
+      name: "agent",
+      path: "/repo/agent"
+    };
+    const identityProject = {
+      ...legacyProject,
+      repositoryName: "Difftray",
+      worktreeName: "codex/checkout"
+    };
+    const labeledWorkspace = { ...testWorkspace("project-1"), project: labeledProject };
+    const { baseUrl } = await startServer({
+      listProjectWorktrees: async () => [
+        {
+          branchName: "codex/checkout",
+          customLabel: "Checkout rework",
+          displayName: "Checkout rework",
+          displayPath: "/repo/agent",
+          headSha: "1".repeat(40),
+          id: "worktree-1",
+          locked: false,
+          shortHeadSha: "1111111",
+          state: "current"
+        },
+        {
+          customLabel: "Detached work",
+          displayName: "Detached work",
+          displayPath: "/repo/detached",
+          headSha: "2".repeat(40),
+          id: "worktree-2",
+          locked: true,
+          shortHeadSha: "2222222",
+          state: "available"
+        },
+        {
+          customLabel: "Unknown head",
+          displayName: "Unknown head",
+          displayPath: "/repo/unknown",
+          id: "worktree-3",
+          locked: false,
+          state: "open"
+        }
+      ],
+      listRecentProjects: async () => [labeledProject],
+      loadWorkspaceView: async () => labeledWorkspace,
+      openProjectWorktree: async () => labeledProject,
+      openRepositories: async () => ({ failures: [], openedProjects: [labeledProject] }),
+      updateDiffTarget: async () => labeledWorkspace
+    });
+
+    for (const capabilities of [[], allCapabilities]) {
+      const expectedProject = capabilities.length > 0 ? identityProject : legacyProject;
+      const projects = await encryptedRequest({
+        baseUrl,
+        capabilities,
+        logicalMethod: "GET",
+        path: "/companion/v1/projects"
+      });
+      const opened = await encryptedRequest({
+        baseUrl,
+        body: { repositoryIds: ["repository-1"] },
+        capabilities,
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/open"
+      });
+      const worktreeOpen = await encryptedRequest({
+        baseUrl,
+        body: { worktreeId: "worktree-2" },
+        capabilities,
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/worktrees/open"
+      });
+      const workspace = await encryptedRequest({
+        baseUrl,
+        capabilities,
+        logicalMethod: "GET",
+        path: "/companion/v1/projects/project-1/workspace"
+      });
+      const diffTarget = await encryptedRequest({
+        baseUrl,
+        body: { mode: "working_tree" },
+        capabilities,
+        logicalMethod: "POST",
+        path: "/companion/v1/projects/project-1/diff-target"
+      });
+      const worktrees = await encryptedRequest({
+        baseUrl,
+        capabilities,
+        logicalMethod: "GET",
+        path: "/companion/v1/projects/project-1/worktrees"
+      });
+
+      expect(projects.plain.body).toEqual({ projects: [expectedProject] });
+      expect(opened.plain.body).toEqual({
+        failures: [],
+        openedProjects: [expectedProject]
+      });
+      expect(worktreeOpen.plain.body).toEqual({ project: expectedProject });
+      expect(
+        (workspace.plain.body as { workspace: { project: unknown } }).workspace.project
+      ).toEqual(expectedProject);
+      expect(
+        (diffTarget.plain.body as { workspace: { project: unknown } }).workspace.project
+      ).toEqual(expectedProject);
+      expect(worktrees.plain.body).toEqual({
+        worktrees: [
+          {
+            branchName: "codex/checkout",
+            displayName: "codex/checkout",
+            displayPath: "/repo/agent",
+            headSha: "1".repeat(40),
+            id: "worktree-1",
+            locked: false,
+            shortHeadSha: "1111111",
+            state: "current"
+          },
+          {
+            displayName: "Detached @ 2222222",
+            displayPath: "/repo/detached",
+            headSha: "2".repeat(40),
+            id: "worktree-2",
+            locked: true,
+            shortHeadSha: "2222222",
+            state: "available"
+          },
+          {
+            displayName: "Detached worktree",
+            displayPath: "/repo/unknown",
+            id: "worktree-3",
+            locked: false,
+            state: "open"
+          }
+        ]
+      });
+    }
+  });
+
   it("only exposes the selected commit subject to clients that opt in", async () => {
     const project = {
       defaultCommitRef: "abc123",

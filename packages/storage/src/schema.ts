@@ -236,6 +236,17 @@ export function runMigrations(db: DatabaseSync): void {
       primary key (repository_id, root_id)
     );
 
+    create table if not exists worktree_labels (
+      worktree_id text primary key,
+      common_git_dir text not null,
+      worktree_path text not null,
+      label text not null,
+      updated_at text not null
+    );
+
+    create index if not exists worktree_labels_path
+      on worktree_labels(worktree_path);
+
     insert or ignore into repository_catalog_roots (
       repository_id, root_id, last_seen_at, available
     )

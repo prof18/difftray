@@ -55,7 +55,10 @@ import type {
   CompanionEnvelopeVerifier
 } from "./auth.js";
 import type { RouteDefinition } from "./router.js";
-import { ExpectedUnavailableWorktreeError } from "../repository-worktree-service.js";
+import {
+  ExpectedUnavailableWorktreeError,
+  generatedWorktreeDisplayName
+} from "../repository-worktree-service.js";
 
 export class StaleReviewTargetError extends Error {}
 
@@ -607,7 +610,11 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
 
         try {
           return {
-            body: { worktrees: await deps.listProjectWorktrees(projectId) },
+            body: {
+              worktrees: (await deps.listProjectWorktrees(projectId)).map(
+                legacyWorktreeView
+              )
+            },
             status: 200
           };
         } catch (error) {
@@ -1068,11 +1075,28 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
   }));
 }
 
+/** Removes label metadata that strict legacy parsers reject. */
+function legacyProjectView(project: RecentProjectView): RecentProjectView {
+  const legacyProject = { ...project } as Record<string, unknown>;
+  delete legacyProject.customLabel;
+  return legacyProject as RecentProjectView;
+}
+
+/** Removes label metadata and restores the generated worktree name. */
+function legacyWorktreeView(worktree: RepositoryWorktreeView): RepositoryWorktreeView {
+  const legacyWorktree = {
+    ...worktree,
+    displayName: generatedWorktreeDisplayName(worktree)
+  } as Record<string, unknown>;
+  delete legacyWorktree.customLabel;
+  return legacyWorktree as RepositoryWorktreeView;
+}
+
 function projectForCapabilities(
   project: RecentProjectView,
   capabilities: readonly string[]
 ): RecentProjectView {
-  const compatibleProject = { ...project } as Record<string, unknown>;
+  const compatibleProject = { ...legacyProjectView(project) } as Record<string, unknown>;
   if (!capabilities.includes(COMPANION_CAPABILITY_PROJECT_IDENTITY)) {
     delete compatibleProject.repositoryName;
     delete compatibleProject.worktreeName;

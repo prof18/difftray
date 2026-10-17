@@ -138,6 +138,12 @@ import {
   type RepositoryOpenBatchResult
 } from "./repository-open-service.js";
 import { createRepositoryWorktreeService } from "./repository-worktree-service.js";
+import { createWorktreeLabelService } from "./worktree-label-service.js";
+import {
+  projectViewsWithLabels,
+  projectViewWithLabel,
+  type WorktreeLabelProjectionDependencies
+} from "./worktree-label-projection.js";
 import { createWorktreePathCopyHandler } from "./worktree-path-copy.js";
 import {
   resolveAppRuntimeConfig,
@@ -874,9 +880,12 @@ handleTrusted("companion:openLocalNetworkSettings", async (): Promise<void> => {
 });
 handleTrusted("projects:listRecent", () => listAvailableRecentProjectViews());
 handleTrusted("projects:listKnown", () =>
-  getStorage()
-    .listKnownProjects()
-    .map((project) => projectView(project))
+  projectViewsWithLabels(
+    getStorage()
+      .listKnownProjects()
+      .map((project) => projectView(project)),
+    worktreeLabelProjection()
+  )
 );
 handleTrusted("repositories:listCatalog", () => {
   const catalog = getStorage().listRepositoryCatalog();
@@ -2204,7 +2213,8 @@ function getCompanionProjectList(): CompanionProjectList {
   }
 
   companionProjectList = new CompanionProjectList({
-    listProjects: listAvailableRecentProjectViews,
+    listProjects: () =>
+      listAvailableRecentProjects().map((project) => projectView(project)),
     loadSummary: loadProjectReviewSummaryIfAvailable,
     onSummaryUpdated: (projectId) => {
       broadcastCompanionWorkspaceChanged(projectId, "filesystem");
@@ -2531,10 +2541,23 @@ function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
   return getStorage().listOpenProjects();
 }
 
-function listAvailableRecentProjectViews(): readonly RecentProjectView[] {
+async function listAvailableRecentProjectViews(): Promise<readonly RecentProjectView[]> {
   const projects = listAvailableRecentProjects();
 
-  return projects.map((project) => projectView(project));
+  return projectViewsWithLabels(
+    projects.map((project) => projectView(project)),
+    worktreeLabelProjection()
+  );
+}
+
+function worktreeLabelProjection(): WorktreeLabelProjectionDependencies {
+  const storage = getStorage();
+
+  return {
+    getLabel: (worktreeId) => storage.getWorktreeLabel(worktreeId),
+    listLabels: (worktreePaths) => storage.listWorktreeLabels(worktreePaths),
+    worktreeInfo: getWorktreeInfo
+  };
 }
 
 async function listAvailableRecentProjectViewsWithSummaries(options: {
@@ -2547,13 +2570,19 @@ async function listAvailableRecentProjectViewsWithSummaries(options: {
   if (options.summaryMode === "complete") {
     const summaries = await coordinator.loadAll(projects.map((project) => project.id));
 
-    const views = projects.map((project, index) =>
-      projectView(project, summaries[index] ?? undefined)
+    const views = await projectViewsWithLabels(
+      projects.map((project, index) =>
+        projectView(project, summaries[index] ?? undefined)
+      ),
+      worktreeLabelProjection()
     );
     return options.includeCommitSubject ? addSelectedCommitSubjects(views) : views;
   }
 
-  const views = getCompanionProjectList().list();
+  const views = await projectViewsWithLabels(
+    getCompanionProjectList().list(),
+    worktreeLabelProjection()
+  );
   return options.includeCommitSubject ? addSelectedCommitSubjects(views) : views;
 }
 
@@ -2820,7 +2849,7 @@ export function createDesktopCompanionDeps(): CompanionDeps {
     openProjectWorktree: async (projectId, body) => {
       const project = await repositoryWorktreeService().open(projectId, body.worktreeId);
       emitProjectsOpened([project.id], project.id);
-      return projectView(project);
+      return projectViewWithLabel(projectView(project), worktreeLabelProjection());
     },
     openRepositories: openCompanionRepositories,
     loadFileDiff: async (projectId, pathName) => {
@@ -3116,7 +3145,10 @@ async function openCompanionRepositories(
 
   return {
     failures,
-    openedProjects: result.projects.map((project) => projectView(project))
+    openedProjects: await projectViewsWithLabels(
+      result.projects.map((project) => projectView(project)),
+      worktreeLabelProjection()
+    )
   };
 }
 
@@ -3127,6 +3159,8 @@ function repositoryWorktreeService() {
     changeCount: (worktreePath) => changeCounts.get(worktreePath),
     findProject: (projectId) => getStorage().getProject(projectId),
     findRepository: findGitRepository,
+    labelService: worktreeLabelService(),
+    listLabels: (worktreePaths) => getStorage().listWorktreeLabels(worktreePaths),
     listOpenProjects: () => getStorage().listOpenProjects(),
     listWorktrees: listGitWorktrees,
     openPaths: openRepositoryPaths,
@@ -3134,6 +3168,17 @@ function repositoryWorktreeService() {
     pathExists: existsSync,
     queueChangeCount: (worktreePath, options) =>
       changeCounts.queue(worktreePath, options),
+    worktreeInfo: getWorktreeInfo
+  });
+}
+
+function worktreeLabelService() {
+  return createWorktreeLabelService({
+    findRepository: findGitRepository,
+    listWorktrees: listGitWorktrees,
+    pathExists: existsSync,
+    resetLabel: (worktreeId) => getStorage().resetWorktreeLabel(worktreeId),
+    setLabel: (input) => getStorage().setWorktreeLabel(input),
     worktreeInfo: getWorktreeInfo
   });
 }
@@ -3345,7 +3390,7 @@ async function loadProjectWorkspace(
   const noteSnapshot = getStorage().getReviewNoteSnapshot(
     createReviewNoteScopeId(reviewTarget)
   );
-  return reviewWorkspaceView({
+  const workspace = reviewWorkspaceView({
     comments: getStorage().listReviewComments(reviewTargetId),
     fileComments: getStorage().listReviewFileComments(reviewTargetId),
     files,
@@ -3356,6 +3401,11 @@ async function loadProjectWorkspace(
     reviewTarget,
     reviewTargetId
   });
+
+  return {
+    ...workspace,
+    project: await projectViewWithLabel(workspace.project, worktreeLabelProjection())
+  };
 }
 
 async function loadProjectReviewSummaryIfAvailable(

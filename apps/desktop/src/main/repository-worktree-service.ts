@@ -5,9 +5,10 @@ import type {
   ProjectWorktreeAvailabilityView,
   RepositoryWorktreeView
 } from "@difftray/companion-protocol";
-import type { ProjectRecord } from "@difftray/storage";
+import type { ProjectRecord, WorktreeLabelRecord } from "@difftray/storage";
 
 import type { RepositoryOpenBatchResult } from "./repository-open-service.js";
+import type { WorktreeLabelService } from "./worktree-label-service.js";
 
 type StoredProjectPath = {
   readonly id: string;
@@ -24,6 +25,10 @@ export type RepositoryWorktreeServiceDependencies = {
   readonly findRepository: (
     worktreePath: string
   ) => Promise<{ readonly root: string } | null>;
+  readonly labelService?: Pick<WorktreeLabelService, "setForCandidate">;
+  readonly listLabels?: (
+    worktreePaths: readonly string[]
+  ) => readonly WorktreeLabelRecord[];
   readonly listOpenProjects: () => readonly Pick<StoredProjectPath, "id" | "path">[];
   readonly listWorktrees: (
     repositoryPath: string
@@ -49,6 +54,12 @@ export type RepositoryWorktreeService = {
   readonly list: (projectId: string) => Promise<readonly RepositoryWorktreeView[]>;
   readonly open: (projectId: string, worktreeId: string) => Promise<ProjectRecord>;
   readonly resolvePath: (projectId: string, worktreeId: string) => Promise<string>;
+  /** Sets (or with `null` resets) a worktree display label; metadata only. */
+  readonly setLabel: (
+    projectId: string,
+    worktreeId: string,
+    label: unknown
+  ) => Promise<RepositoryWorktreeView>;
 };
 
 /** An expected stale or unavailable worktree validation outcome. */
@@ -126,11 +137,20 @@ export function createRepositoryWorktreeService(
         openProjects.map((project) => path.normalize(project.path))
       );
 
-      const views = candidates
-        .filter((candidate) => !candidate.bare && !candidate.prunable)
-        .map((candidate) =>
-          worktreeView(candidate, openPaths, dependencies.changeCount?.(candidate.path))
-        );
+      const listed = candidates.filter(
+        (candidate) => !candidate.bare && !candidate.prunable
+      );
+      const labels = labelsById(
+        dependencies.listLabels?.(listed.map((candidate) => candidate.path)) ?? []
+      );
+      const views = listed.map((candidate) =>
+        worktreeView(
+          candidate,
+          openPaths,
+          dependencies.changeCount?.(candidate.path),
+          labels.get(candidate.id)
+        )
+      );
 
       for (const candidate of candidates) {
         if (!candidate.bare && !candidate.prunable) {
@@ -214,8 +234,49 @@ export function createRepositoryWorktreeService(
       }
 
       return candidate.path;
+    },
+    setLabel: async (projectId, worktreeId, label) => {
+      const source = requireProject(dependencies, projectId);
+      const labelService = dependencies.labelService;
+
+      if (!labelService) {
+        throw new Error("Worktree labels are not available.");
+      }
+
+      const [candidates, sourceInfo, openProjects] = await Promise.all([
+        dependencies.listWorktrees(source.path),
+        dependencies.worktreeInfo(source.path),
+        Promise.resolve(dependencies.listOpenProjects())
+      ]);
+      const candidate = candidates.find(({ id }) => id === worktreeId);
+
+      if (!candidate || candidate.bare || candidate.prunable) {
+        throw new ExpectedUnavailableWorktreeError(
+          "Worktree is no longer available. Refresh and try again."
+        );
+      }
+
+      if (
+        path.normalize(sourceInfo.commonGitDir) !== path.normalize(candidate.commonGitDir)
+      ) {
+        throw new ExpectedUnavailableWorktreeError(
+          "Worktree belongs to a different repository."
+        );
+      }
+
+      const result = await labelService.setForCandidate(candidate, label);
+      return worktreeView(
+        result.candidate,
+        new Set(openProjects.map((project) => path.normalize(project.path))),
+        dependencies.changeCount?.(result.candidate.path),
+        result.label ?? undefined
+      );
     }
   };
+}
+
+function labelsById(labels: readonly WorktreeLabelRecord[]): ReadonlyMap<string, string> {
+  return new Map(labels.map((label) => [label.worktreeId, label.label]));
 }
 
 async function forEachBounded<T>(
@@ -254,14 +315,16 @@ function requireProject(
 function worktreeView(
   candidate: GitWorktreeCandidate,
   openPaths: ReadonlySet<string>,
-  changeCount: number | null | undefined
+  changeCount: number | null | undefined,
+  customLabel?: string
 ): RepositoryWorktreeView {
   const shortHeadSha = candidate.headSha?.slice(0, 7);
 
   return {
     ...(candidate.branchName ? { branchName: candidate.branchName } : {}),
     ...(changeCount === undefined || changeCount === null ? {} : { changeCount }),
-    displayName: worktreeDisplayName(candidate),
+    ...(customLabel === undefined ? {} : { customLabel }),
+    displayName: customLabel ?? worktreeDisplayName(candidate),
     displayPath: candidate.path,
     ...(candidate.headSha ? { headSha: candidate.headSha } : {}),
     id: candidate.id,
@@ -276,9 +339,18 @@ function worktreeView(
 }
 
 function worktreeDisplayName(candidate: GitWorktreeCandidate): string {
-  const shortHeadSha = candidate.headSha?.slice(0, 7);
+  return generatedWorktreeDisplayName({
+    ...(candidate.branchName ? { branchName: candidate.branchName } : {}),
+    ...(candidate.headSha ? { shortHeadSha: candidate.headSha.slice(0, 7) } : {})
+  });
+}
+
+/** The Git-derived worktree name: branch, then detached short hash. */
+export function generatedWorktreeDisplayName(
+  worktree: Pick<RepositoryWorktreeView, "branchName" | "shortHeadSha">
+): string {
   return (
-    candidate.branchName ??
-    (shortHeadSha ? `Detached @ ${shortHeadSha}` : "Detached worktree")
+    worktree.branchName ??
+    (worktree.shortHeadSha ? `Detached @ ${worktree.shortHeadSha}` : "Detached worktree")
   );
 }

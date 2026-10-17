@@ -39,6 +39,11 @@ export {
   parseUpdateCommentBody,
   type ParseResult
 } from "./parse.js";
+export {
+  normalizeWorktreeLabel,
+  parseSetWorktreeLabelBody,
+  WORKTREE_LABEL_MAX_CODE_POINTS
+} from "./worktree-label.js";
 
 export type CompanionErrorCode =
   | "bad_request"
@@ -69,6 +74,7 @@ export type FileImageSide = "new" | "old";
 export type RasterImageMimeType = "image/jpeg" | "image/png" | "image/webp";
 
 export type RecentProjectView = {
+  readonly customLabel?: string;
   readonly defaultBaseRef?: string;
   readonly defaultCommitRef?: string;
   readonly defaultCommitSubject?: string;
@@ -300,6 +306,7 @@ export type ProjectsResponse = {
 export type RepositoryWorktreeView = {
   readonly branchName?: string;
   readonly changeCount?: number;
+  readonly customLabel?: string;
   readonly displayName: string;
   readonly displayPath: string;
   readonly headSha?: string;
@@ -324,6 +331,15 @@ export type ProjectWorktreeAvailabilityView = {
 
 export type ProjectWorktreeAvailabilityResponse = {
   readonly availability: readonly ProjectWorktreeAvailabilityView[];
+};
+
+export type SetWorktreeLabelBody = {
+  readonly label: string | null;
+  readonly worktreeId: string;
+};
+
+export type SetWorktreeLabelResponse = {
+  readonly worktree: RepositoryWorktreeView;
 };
 
 export type OpenWorktreeBody = {

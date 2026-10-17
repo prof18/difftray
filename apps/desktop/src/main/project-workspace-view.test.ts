@@ -1,13 +1,76 @@
 import { createReviewNoteScopeId, type ReviewTarget } from "@difftray/core";
+import { worktreeOpaqueId } from "@difftray/git";
 import { describe, expect, it } from "vitest";
 
 import {
   activeReviewCommentViews,
   reviewWorkspaceView
 } from "./project-workspace-view.js";
-import type { FileReviewStateWithSummary } from "./view-models.js";
+import { projectView, type FileReviewStateWithSummary } from "./view-models.js";
+import {
+  projectViewsWithLabels,
+  projectViewWithLabel
+} from "./worktree-label-projection.js";
 
 describe("project workspace views", () => {
+  it("labels the decorated workspace project like the project list", async () => {
+    const project = {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "project-1",
+      name: "agent",
+      path: "/repo/agent",
+      repositoryName: "Difftray",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      worktreeName: "codex/checkout"
+    };
+    const label = {
+      commonGitDir: "/repo/.git",
+      label: "Checkout rework",
+      updatedAt: "2026-10-17T10:00:00.000Z",
+      worktreeId: worktreeOpaqueId("/repo/.git", "/repo/agent"),
+      worktreePath: "/repo/agent"
+    };
+    const dependencies = {
+      getLabel: (worktreeId: string) => (worktreeId === label.worktreeId ? label : null),
+      listLabels: () => [label],
+      worktreeInfo: async (worktreePath: string) => ({
+        commonGitDir: "/repo/.git",
+        root: worktreePath
+      })
+    };
+    const progress = { reviewedVisibleFiles: 0, totalVisibleReviewableFiles: 1 };
+    const workspace = reviewWorkspaceView({
+      comments: [],
+      fileComments: [],
+      files: [reviewFileStateWithSummary("src/App.tsx", { diffHash: "hash-1" })],
+      progress,
+      project,
+      reviewNote: null,
+      reviewTarget: {
+        headRefName: "codex/checkout",
+        headSha: "head-sha",
+        kind: "working_tree",
+        projectId: "project-1"
+      },
+      reviewTargetId: "target-1"
+    });
+
+    const decorated = {
+      ...workspace,
+      project: await projectViewWithLabel(workspace.project, dependencies)
+    };
+    const [listed] = await projectViewsWithLabels([projectView(project)], dependencies);
+
+    expect(decorated.project).toEqual({
+      ...workspace.project,
+      customLabel: "Checkout rework"
+    });
+    expect(decorated.project.worktreeName).toBe("codex/checkout");
+    expect(decorated.project.customLabel).toBe(listed?.customLabel);
+    expect(decorated.files).toEqual(workspace.files);
+    expect(decorated.progress).toEqual(progress);
+  });
+
   it("builds the renderer workspace shape and preserves branch target metadata", () => {
     const progress = {
       reviewedVisibleFiles: 0,

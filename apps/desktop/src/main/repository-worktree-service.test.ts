@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { GitWorktreeCandidate } from "@difftray/git";
+import type { WorktreeLabelRecord } from "@difftray/storage";
 
 import {
   createRepositoryWorktreeService,
@@ -165,6 +166,130 @@ describe("repository worktree service", () => {
     );
   });
 
+  it("overlays stored labels on listed worktrees without replacing Git metadata", async () => {
+    const dependencies = createDependencies();
+    dependencies.listLabels = vi.fn(() => [
+      labelRecord("candidate-3", "/workspace/agent", "Checkout rework"),
+      labelRecord("stale-identity", "/workspace/agent-copy", "Stale identity")
+    ]);
+    const service = createRepositoryWorktreeService(dependencies);
+
+    const views = await service.list("source");
+
+    expect(dependencies.listLabels).toHaveBeenCalledWith([
+      "/workspace/source",
+      "/workspace/agent-copy",
+      "/workspace/agent"
+    ]);
+    expect(views[0]).not.toHaveProperty("customLabel");
+    expect(views[1]).toEqual(
+      expect.objectContaining({ displayName: "Detached @ 2222222" })
+    );
+    expect(views[1]).not.toHaveProperty("customLabel");
+    expect(views[2]).toEqual(
+      expect.objectContaining({
+        branchName: "codex/feature",
+        customLabel: "Checkout rework",
+        displayName: "Checkout rework",
+        displayPath: "/workspace/agent",
+        state: "available"
+      })
+    );
+    expect(dependencies.openPaths).not.toHaveBeenCalled();
+  });
+
+  it("keeps a label after the worktree branch changes", async () => {
+    const dependencies = createDependencies();
+    dependencies.listLabels = vi.fn(() => [
+      labelRecord("candidate-3", "/workspace/agent", "Checkout rework")
+    ]);
+    dependencies.listWorktrees.mockResolvedValueOnce([
+      worktrees[0],
+      { ...worktrees[2], branchName: "codex/renamed", headSha: "4".repeat(40) }
+    ]);
+    const service = createRepositoryWorktreeService(dependencies);
+
+    await expect(service.list("source")).resolves.toContainEqual(
+      expect.objectContaining({
+        branchName: "codex/renamed",
+        customLabel: "Checkout rework",
+        displayName: "Checkout rework"
+      })
+    );
+  });
+
+  it("labels a closed sibling through the label service without opening it", async () => {
+    const dependencies = createDependencies();
+    const setForCandidate = vi.fn(
+      async (candidate: GitWorktreeCandidate, label: unknown) => ({
+        candidate,
+        label: label as string | null
+      })
+    );
+    dependencies.labelService = { setForCandidate };
+    const service = createRepositoryWorktreeService(dependencies);
+
+    const labeled = await service.setLabel("source", "candidate-3", "Checkout rework");
+    const reset = await service.setLabel("source", "candidate-3", null);
+
+    expect(setForCandidate).toHaveBeenNthCalledWith(1, worktrees[2], "Checkout rework");
+    expect(labeled).toEqual(
+      expect.objectContaining({
+        branchName: "codex/feature",
+        customLabel: "Checkout rework",
+        displayName: "Checkout rework",
+        id: "candidate-3",
+        locked: true,
+        state: "available"
+      })
+    );
+    expect(reset).toEqual(
+      expect.objectContaining({ displayName: "codex/feature", id: "candidate-3" })
+    );
+    expect(reset).not.toHaveProperty("customLabel");
+    expect(dependencies.openPaths).not.toHaveBeenCalled();
+    expect(dependencies.persistProject).not.toHaveBeenCalled();
+    expect(dependencies.queueChangeCount).not.toHaveBeenCalled();
+  });
+
+  it("labels the current worktree", async () => {
+    const dependencies = createDependencies();
+    const setForCandidate = vi.fn(async (candidate: GitWorktreeCandidate) => ({
+      candidate,
+      label: "Main checkout"
+    }));
+    dependencies.labelService = { setForCandidate };
+    const service = createRepositoryWorktreeService(dependencies);
+
+    await expect(
+      service.setLabel("source", "candidate-1", "Main checkout")
+    ).resolves.toEqual(
+      expect.objectContaining({ customLabel: "Main checkout", state: "current" })
+    );
+  });
+
+  it("rejects unknown projects, forged ids and foreign repositories before writing", async () => {
+    const dependencies = createDependencies();
+    const setForCandidate = vi.fn();
+    dependencies.labelService = { setForCandidate };
+    const service = createRepositoryWorktreeService(dependencies);
+
+    await expect(
+      service.setLabel("missing", "candidate-3", "Label")
+    ).rejects.toBeInstanceOf(ExpectedUnavailableWorktreeError);
+    await expect(service.setLabel("source", "forged", "Label")).rejects.toThrow(
+      "Worktree is no longer available"
+    );
+    dependencies.listWorktrees.mockResolvedValueOnce([
+      { ...worktrees[2], commonGitDir: "/workspace/other/.git" }
+    ]);
+    await expect(service.setLabel("source", "candidate-3", "Label")).rejects.toThrow(
+      "Worktree belongs to a different repository"
+    );
+
+    expect(setForCandidate).not.toHaveBeenCalled();
+  });
+
   it("preserves discovery, validation probe, and open failures as real errors", async () => {
     const dependencies = createDependencies();
     const service = createRepositoryWorktreeService(dependencies);
@@ -219,8 +344,24 @@ const worktrees: readonly GitWorktreeCandidate[] = [
   }
 ];
 
+function labelRecord(
+  worktreeId: string,
+  worktreePath: string,
+  label: string
+): WorktreeLabelRecord {
+  return {
+    commonGitDir: "/workspace/source/.git",
+    label,
+    updatedAt: "2026-10-17T10:00:00.000Z",
+    worktreeId,
+    worktreePath
+  };
+}
+
 function createDependencies(): RepositoryWorktreeServiceDependencies & {
   changeCount?: (worktreePath: string) => number | null | undefined;
+  labelService?: RepositoryWorktreeServiceDependencies["labelService"];
+  listLabels?: RepositoryWorktreeServiceDependencies["listLabels"];
   readonly listWorktrees: ReturnType<typeof vi.fn>;
   readonly openPaths: ReturnType<typeof vi.fn>;
   readonly persistProject: ReturnType<typeof vi.fn>;
