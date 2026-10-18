@@ -42,8 +42,16 @@ retained labels.
 
 Validation is shared by every caller (`normalizeWorktreeLabel` in
 `@difftray/companion-protocol`): reject C0/C1 control characters on the raw
-string before trimming (including leading or trailing tabs and newlines), trim
-ordinary surrounding whitespace, then require 1 to 80 Unicode code points.
+string before trimming (including leading or trailing tabs and newlines), reject
+malformed Unicode (lone surrogates, which SQLite would store as U+FFFD), and
+reject bidirectional controls (U+061C, U+200E, U+200F, U+202A–U+202E,
+U+2066–U+2069), zero-width and invisible characters (U+200B, U+2060, U+FEFF) and
+line or paragraph separators (U+2028, U+2029), which could make a label spoof
+another name or look blank. Then trim ordinary surrounding whitespace and require
+1 to 80 Unicode code points, at least one of them visible. ZWJ (U+200D) and ZWNJ
+(U+200C) stay allowed because emoji sequences and several scripts need them. The
+CLI escapes the same formatting characters, as it does controls, when writing to
+a terminal.
 Internal spaces and Unicode are preserved and labels need not be unique. `null`
 resets the label and deletes the stored override; an empty or whitespace-only
 string is a validation error, not an implicit reset. Labels are plain text, never

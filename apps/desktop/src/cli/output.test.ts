@@ -130,6 +130,18 @@ describe("worktree label output", () => {
     );
   });
 
+  it("shows bidirectional and invisible characters escaped on a terminal", () => {
+    const spoofed = { ...worktree, displayName: "safe\u202eexe.txt\u200b" };
+    const response = { ok: true, result: { repoPath: "/repo/agent", worktree: spoofed } };
+
+    expect(formatCliResponse(command, response, { terminal: true })).toBe(
+      "safe\\u202eexe.txt\\u200b  /repo/agent\n"
+    );
+    expect(formatCliResponse(command, response)).toBe(
+      "safe\u202eexe.txt\u200b  /repo/agent\n"
+    );
+  });
+
   it("explains that an older desktop app lacks the label method", () => {
     const unsupported = {
       version: 1 as const,

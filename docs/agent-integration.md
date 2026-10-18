@@ -152,8 +152,9 @@ send the `worktree.label.set` method (reset sends `label: null`). The CLI resolv
 `--repo` against the working directory; the desktop requires it to be the exact
 Git root of a main or linked worktree and rejects subdirectories, bare, prunable,
 missing and foreign targets. The label is validated by the shared
-`normalizeWorktreeLabel` rules: control characters are rejected before trimming,
-then 1–80 code points remain. The result is `{repoPath, worktree}` with the
+`normalizeWorktreeLabel` rules: control characters, malformed Unicode and
+invisible or bidirectional formatting characters are rejected before trimming,
+then 1–80 code points with at least one visible character remain. The result is `{repoPath, worktree}` with the
 canonical root and the `RepositoryWorktreeView` the picker shows; a reset omits
 `customLabel`. Its `state` is `open` when a Difftray tab shows the worktree and
 `available` otherwise; the CLI has no source project, so it is never `current`.

@@ -879,7 +879,14 @@ describe("worktree.label.set", () => {
       "a".repeat(80),
       "a".repeat(81),
       "🚀".repeat(80),
-      "🚀".repeat(81)
+      "🚀".repeat(81),
+      "Label\u202e",
+      "\u200b",
+      "La\u2060bel",
+      "Label\u2028",
+      "a\ud800b",
+      "\u200d",
+      "Team \u{1f468}\u200d\u{1f469}"
     ]) {
       const request = () =>
         parseAgentRequest(frame(base("worktree.label.set", { repoPath: "/r", label })));

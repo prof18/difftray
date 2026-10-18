@@ -18,7 +18,7 @@ Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to 
 "$cli" worktree label reset --repo "$repo" --json
 ```
 
-`worktree label set` gives the worktree at the exact root `$repo` a Difftray display name of 1–80 characters (surrounding spaces are trimmed; tabs, newlines and other control characters are rejected). `worktree label reset` removes it so Difftray shows the Git branch or detached hash again. Both are idempotent. A subdirectory is rejected rather than resolved to its parent. Labeling does not rename the branch, move the directory, change Git config or open the worktree, and it uses no review context. Label only the worktrees the user asked you to label. The JSON result returns the canonical root and the resolved worktree; a reset omits `customLabel`:
+`worktree label set` gives the worktree at the exact root `$repo` a Difftray display name of 1–80 characters (surrounding spaces are trimmed; tabs, newlines, other control characters and invisible or bidirectional formatting characters are rejected). `worktree label reset` removes it so Difftray shows the Git branch or detached hash again. Both are idempotent. A subdirectory is rejected rather than resolved to its parent. Labeling does not rename the branch, move the directory, change Git config or open the worktree, and it uses no review context. Label only the worktrees the user asked you to label. The JSON result returns the canonical root and the resolved worktree; a reset omits `customLabel`:
 
 <!-- worktree-label-result -->
 

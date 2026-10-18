@@ -734,13 +734,36 @@ function result(value: unknown, method: AgentMethod): void {
 }
 // Mirrors normalizeWorktreeLabel in @difftray/companion-protocol, which the CLI
 // bundle does not load at runtime; the desktop re-validates with the shared one.
+const labelFormattingCharacters =
+  /[\u061c\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060\u2066-\u2069\ufeff]/u;
 function worktreeLabel(value: unknown): string {
   if (typeof value !== "string") return fail("Label must be a string or null");
   if (hasControlCharacter(value)) return fail("Control character");
-  const length = Array.from(value.trim()).length;
+  if (!isWellFormedText(value)) return fail("Label must be valid Unicode text");
+  if (labelFormattingCharacters.test(value))
+    return fail(
+      "Label must not contain invisible or bidirectional formatting characters"
+    );
+  const trimmed = value.trim();
+  const length = Array.from(trimmed).length;
   if (length < 1) return fail("Label must not be blank");
   if (length > MAX_LABEL_CHARACTERS) return fail("Label too long", "limit_exceeded");
+  if (/^[\u200c\u200d]*$/u.test(trimmed))
+    return fail("Label must contain a visible character");
   return value;
+}
+function isWellFormedText(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
 function worktreeView(value: unknown): void {
   const x = object(

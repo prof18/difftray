@@ -64,6 +64,54 @@ describe("normalizeWorktreeLabel", () => {
   });
 
   it.each([
+    ["right-to-left override", "Label\u202e"],
+    ["left-to-right mark", "\u200eLabel"],
+    ["right-to-left mark", "La\u200fbel"],
+    ["Arabic letter mark", "Label\u061c"],
+    ["first strong isolate", "\u2068Label"],
+    ["pop directional isolate", "Label\u2069"],
+    ["zero-width space", "La\u200bbel"],
+    ["word joiner", "La\u2060bel"],
+    ["byte order mark", "\ufeffLabel"],
+    ["line separator", "Label\u2028"],
+    ["paragraph separator", "Label\u2029"]
+  ])("rejects invisible or bidirectional formatting: %s", (_name, value) => {
+    expect(normalizeWorktreeLabel(value)).toEqual({
+      error: "label must not contain invisible or bidirectional formatting characters",
+      ok: false
+    });
+  });
+
+  it.each([
+    ["lone high surrogate", "a\ud800b"],
+    ["lone low surrogate", "a\udc00b"],
+    ["reversed pair", "\udc00\ud800"]
+  ])("rejects malformed Unicode: %s", (_name, value) => {
+    expect(normalizeWorktreeLabel(value)).toEqual({
+      error: "label must be valid Unicode text",
+      ok: false
+    });
+  });
+
+  it("keeps joiners that emoji and scripts need, but requires a visible character", () => {
+    const family = "\u{1f468}\u200d\u{1f469}\u200d\u{1f467}";
+    expect(normalizeWorktreeLabel(`Team ${family}`)).toEqual({
+      ok: true,
+      value: `Team ${family}`
+    });
+    expect(
+      normalizeWorktreeLabel("\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645")
+    ).toEqual({
+      ok: true,
+      value: "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+    });
+    expect(normalizeWorktreeLabel("\u200d\u200c")).toEqual({
+      error: "label must contain a visible character",
+      ok: false
+    });
+  });
+
+  it.each([
     ["empty", ""],
     ["spaces", "   "],
     ["non-breaking spaces", "  "]

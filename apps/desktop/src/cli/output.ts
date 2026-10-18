@@ -74,10 +74,17 @@ export function cliErrorResponse(error: unknown) {
 }
 // Reports quote repository content; on a terminal, show control sequences
 // instead of letting them act. Piped output stays byte-exact.
+// Bidirectional and invisible formatting characters can reorder or hide text
+// on a terminal, so show them as escapes too.
+const terminalFormattingCharacters = new Set([
+  0x061c, 0x200b, 0x200e, 0x200f, 0x2028, 0x2029, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
+  0x2060, 0x2066, 0x2067, 0x2068, 0x2069, 0xfeff
+]);
 function neutralizeTerminalControls(text: string): string {
   return Array.from(text, (character) => {
     const code = character.charCodeAt(0);
-    const control = code < 32 || (code >= 127 && code <= 159);
+    const control =
+      code < 32 || (code >= 127 && code <= 159) || terminalFormattingCharacters.has(code);
     return control && character !== "\n" && character !== "\t"
       ? `\\u${code.toString(16).padStart(4, "0")}`
       : character;

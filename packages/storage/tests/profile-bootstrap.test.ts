@@ -10,7 +10,10 @@ import {
   replaceStorageFromExistingProfile
 } from "../src/index.js";
 
-describe("profile storage bootstrap", () => {
+// These tests write and back up real on-disk databases; every write fsyncs.
+// Alone they take well under a second, but the parallel CI gate can push them
+// past Vitest's 5 s default.
+describe("profile storage bootstrap", { timeout: 30_000 }, () => {
   it("copies review data and preferences without companion identity or devices", async () => {
     const storageDir = mkdtempSync(path.join(tmpdir(), "difftray-bootstrap-"));
     const sourcePath = path.join(storageDir, "production.sqlite");
