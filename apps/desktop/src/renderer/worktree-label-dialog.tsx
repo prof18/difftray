@@ -62,6 +62,7 @@ export function WorktreeLabelDialog({
         setError(
           caughtError instanceof Error ? caughtError.message : String(caughtError)
         );
+        inputRef.current?.focus();
       }
     } finally {
       if (mountedRef.current) setSaving(false);
@@ -104,12 +105,12 @@ export function WorktreeLabelDialog({
             aria-label="Display name"
             className={styles.input}
             data-testid="worktree-label-input"
-            disabled={saving}
             id={inputId}
             onChange={(event) => {
               setDraft(event.target.value);
               setError(undefined);
             }}
+            readOnly={saving}
             ref={inputRef}
             spellCheck={false}
             type="text"

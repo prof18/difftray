@@ -54,3 +54,20 @@ export function ipcErrorMessage(error: unknown): string {
     ""
   );
 }
+
+/**
+ * Data for a label refresh. A failing worktree listing (for example a missing
+ * directory) must not block the project list that carries the tab labels.
+ */
+export async function loadLabelRefresh(projectId: string | undefined): Promise<{
+  readonly projects: readonly RecentProjectView[];
+  readonly worktrees?: readonly RepositoryWorktreeView[];
+}> {
+  const [projects, worktrees] = await Promise.all([
+    window.difftray.listRecentProjects(),
+    projectId
+      ? window.difftray.listProjectWorktrees(projectId).catch(() => undefined)
+      : Promise.resolve(undefined)
+  ]);
+  return worktrees ? { projects, worktrees } : { projects };
+}

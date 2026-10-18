@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   currentWorktreeForLabel,
   ipcErrorMessage,
+  loadLabelRefresh,
   withProjectLabel
 } from "./worktree-label-editor.js";
 
@@ -53,6 +54,34 @@ describe("currentWorktreeForLabel", () => {
     await expect(currentWorktreeForLabel("project-1")).resolves.toEqual({
       error: "Current worktree is not available. Retry."
     });
+  });
+});
+
+describe("loadLabelRefresh", () => {
+  it("still returns the project list when the worktree listing fails", async () => {
+    const projects = [{ customLabel: "New", id: "p", name: "agent", path: "/repo" }];
+    vi.stubGlobal("window", {
+      difftray: {
+        listProjectWorktrees: vi.fn(async () => {
+          throw new Error("missing directory");
+        }),
+        listRecentProjects: vi.fn(async () => projects)
+      }
+    });
+
+    await expect(loadLabelRefresh("p")).resolves.toEqual({ projects });
+  });
+
+  it("returns both lists and skips worktrees without an active project", async () => {
+    const worktrees = [worktree("main", "current")];
+    const listProjectWorktrees = vi.fn(async () => worktrees);
+    vi.stubGlobal("window", {
+      difftray: { listProjectWorktrees, listRecentProjects: vi.fn(async () => []) }
+    });
+
+    await expect(loadLabelRefresh("p")).resolves.toEqual({ projects: [], worktrees });
+    await expect(loadLabelRefresh(undefined)).resolves.toEqual({ projects: [] });
+    expect(listProjectWorktrees).toHaveBeenCalledTimes(1);
   });
 });
 

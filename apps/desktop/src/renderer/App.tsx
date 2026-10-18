@@ -122,6 +122,7 @@ import { WorktreeLabelDialog } from "./worktree-label-dialog.js";
 import {
   currentWorktreeForLabel,
   ipcErrorMessage,
+  loadLabelRefresh,
   withProjectLabel,
   type WorktreeLabelEditorState
 } from "./worktree-label-editor.js";
@@ -1764,12 +1765,8 @@ export function App(): React.JSX.Element {
   async function refreshWorktreeLabels(): Promise<void> {
     const requestId = ++labelRefreshRequestRef.current;
     const projectId = activeProjectIdRef.current;
-    const [nextProjects, nextWorktrees] = await Promise.all([
-      window.difftray.listRecentProjects(),
-      projectId
-        ? window.difftray.listProjectWorktrees(projectId)
-        : Promise.resolve(undefined)
-    ]);
+    const { projects: nextProjects, worktrees: nextWorktrees } =
+      await loadLabelRefresh(projectId);
     // A later label change started a newer refresh; let it win.
     if (requestId !== labelRefreshRequestRef.current) return;
 

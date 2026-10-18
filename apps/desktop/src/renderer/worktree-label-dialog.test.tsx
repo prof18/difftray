@@ -76,6 +76,8 @@ describe("WorktreeLabelDialog", () => {
     );
     expect(input().value).toBe("A label");
     expect(button("Save")?.disabled).toBe(false);
+    // Keyboard users can retry without hunting for the field.
+    expect(document.activeElement).toBe(input());
   });
 
   it("disables controls while a save is pending", async () => {
@@ -94,7 +96,9 @@ describe("WorktreeLabelDialog", () => {
     });
 
     expect(button("Save")?.disabled).toBe(true);
-    expect(input().disabled).toBe(true);
+    // Read-only, not disabled: a disabled field drops keyboard focus.
+    expect(input().disabled).toBe(false);
+    expect(input().readOnly).toBe(true);
     act(() => {
       button("Save")?.click();
     });

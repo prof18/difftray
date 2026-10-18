@@ -3428,6 +3428,12 @@ async function loadProjectWorkspace(
     throw new Error(`Project is not stored: ${projectId}`);
   }
 
+  // Verify a stored label alongside the review load rather than after it, so a
+  // labeled project adds no serial Git latency to workspace loads.
+  const labeledProject = projectViewWithLabel(
+    projectView(project),
+    worktreeLabelProjection()
+  ).catch(() => undefined);
   const { files, progress, reviewTarget, reviewTargetId } = await loadProjectReviewState(
     project,
     reportProgress
@@ -3454,10 +3460,10 @@ async function loadProjectWorkspace(
     reviewTargetId
   });
 
-  return {
-    ...workspace,
-    project: await projectViewWithLabel(workspace.project, worktreeLabelProjection())
-  };
+  const customLabel = (await labeledProject)?.customLabel;
+  return customLabel === undefined
+    ? workspace
+    : { ...workspace, project: { ...workspace.project, customLabel } };
 }
 
 async function loadProjectReviewSummaryIfAvailable(
