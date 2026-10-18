@@ -36,8 +36,8 @@
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  padding: 8px 10px;
+  font-size: 13px;
+  padding: 7px 10px;
   outline: 0;
 }
 
@@ -69,21 +69,27 @@
   justify-content: flex-end;
 }
 
+/* Same size as the app's primary/secondary buttons (review comments, notes). */
 .footer button {
-  border: 1px solid var(--border-strong);
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  padding: 7px 12px;
+  background: var(--elev);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
 }
 
 .footer button[type="submit"] {
-  border-color: var(--accent);
+  border-color: var(--accent-2);
   background: var(--accent);
   color: var(--primary-fg);
 }
 
 .footer button:disabled {
-  opacity: 0.45;
+  opacity: 0.52;
 }
