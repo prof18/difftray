@@ -14,8 +14,9 @@ then update this overview.
 
 The desktop companion server is disabled by default. When enabled, it binds to
 the configured companion port, falling back within `48620-48629`, and advertises
-Bonjour/mDNS service `_difftray._tcp`. Pairing payloads can also include LAN and
-Tailscale MagicDNS addresses.
+Bonjour/mDNS service `_difftray._tcp`. Pairing payloads list every non-internal
+IPv4 interface address with the port, which covers LAN and Tailscale (`100.64/10`)
+addresses; DNS names are not advertised.
 
 The public unauthenticated endpoint is:
 
@@ -162,10 +163,59 @@ The WebSocket endpoint is:
 
 - `WS /companion/v1/events`
 
-The first frame must be an encrypted auth envelope from a paired device. Server
-events are then encrypted per connected device. Events include `hello`,
-`workspace_changed`, `device_revoked`, `server_stopping`, and encrypted `pong`
-responses to client `ping` frames.
+The first frame must be an encrypted auth envelope from a paired device, sent
+within 5 seconds or the server closes the socket. Server events are then encrypted
+per connected device. Events include `hello`, `workspace_changed`,
+`device_revoked`, `server_stopping`, and encrypted `pong` responses to client
+`ping` frames.
+
+`workspace_changed` carries a `projectId` and a reason: `filesystem`,
+`review_state`, `comments` or `diff_target`. File watching and mutations from any
+client, the desktop UI included, trigger it, debounced per project by one second
+(`CompanionWorkspaceChangeBroadcaster` in `apps/desktop/src/main/companion/lifecycle.ts`).
+Clients invalidate their cached data for that project rather than patching it from
+the event.
+
+## Errors and Versioning
+
+Every response carries `x-difftray-protocol` with the server's
+`COMPANION_PROTOCOL_VERSION`; a client that sees a different version stops and asks
+the user to update the older app. Error bodies are
+`{ error: { code, message, protocolVersion } }`, where `code` is one of
+`bad_request`, `forbidden`, `internal`, `not_found`, `pairing_expired`,
+`protocol_mismatch`, `stale_diff` or `unauthorized`, and `message` is safe to show.
+The HTTP status mirrors the code; `stale_diff` is `409` and `pairing_expired` is
+`410`.
+
+On authenticated routes both successes and application errors are enveloped, so an
+attacker cannot forge either. Plaintext error bodies appear only on unauthenticated
+routes and for envelope failures, where the server cannot reply encrypted; those
+are `401 unauthorized`, and a request outside the clock-skew window gets a
+`401` whose message asks the user to check both clocks. A client accepts a
+plaintext body on an authenticated route only in that `401` form and rejects any
+other unenveloped or undecryptable response.
+
+## Request Guards
+
+`apps/desktop/src/main/companion/router.ts` checks every request before routing:
+
+- **Host header**: accepted when it is an IP literal, `localhost`, the computer's
+  hostname or `<hostname>.local`; any other DNS name gets `403 forbidden`. IP
+  literals cannot be rebound, so this blocks DNS-rebinding pages in a browser.
+- **Size**: URLs over 4096 bytes get `414`, and JSON bodies are capped at 256 KB.
+- **Rate limits**: per remote IP and route, over a one-minute window, with `429`
+  past the limit.
+
+  | Route                                                                     | Requests per minute |
+  | ------------------------------------------------------------------------- | ------------------- |
+  | `GET /companion/v1/handshake`                                             | 120                 |
+  | `POST /companion/v1/pair`                                                 | 10                  |
+  | `GET /companion/v1/pair/:id` (the phone polls while waiting for approval) | 40                  |
+  | `POST /companion/v1/projects/open`                                        | 10                  |
+  | `POST /companion/v1/projects/worktree-availability`                       | 20                  |
+  | `POST /companion/v1/projects/:projectId/worktrees`                        | 20                  |
+  | `POST .../worktrees/open`, `.../worktrees/label`                          | 10                  |
+  | Everything else                                                           | 60                  |
 
 ## Security Model
 
