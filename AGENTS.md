@@ -21,6 +21,27 @@
   checkout exists, reconcile its branches and uncommitted changes before choosing
   one canonical checkout.
 
+## Docs
+
+Open the page that matches the area you are changing:
+
+| Page                                                                                 | Covers                                                                                    |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| [`docs/product-behavior.md`](docs/product-behavior.md)                               | Review targets, file list, review state, feedback kinds, agent report, editor, shortcuts  |
+| [`docs/architecture.md`](docs/architecture.md)                                       | Workspace layout, process boundaries, Git and watching strategy, rendering, failure modes |
+| [`docs/data-model.md`](docs/data-model.md)                                           | SQLite tables, comment and note scopes, diff hashing, renames, generated files            |
+| [`docs/companion-protocol.md`](docs/companion-protocol.md)                           | Phone pairing, encrypted envelopes, companion API routes, capabilities, security model    |
+| [`docs/agent-integration.md`](docs/agent-integration.md)                             | Bundled CLI, skill install, review contexts, reading and submitting agent feedback        |
+| [`docs/testing-strategy.md`](docs/testing-strategy.md)                               | Test layers, fixtures, visual checks, what the gate runs                                  |
+| [`docs/release.md`](docs/release.md)                                                 | Packaging, signing, notarization, Alpha channel, release upload                           |
+| [`docs/professional-ui-redesign.md`](docs/professional-ui-redesign.md)               | Visual direction and UI acceptance standard                                               |
+| [`docs/product-brief.md`](docs/product-brief.md), [`docs/naming.md`](docs/naming.md) | Product positioning and naming                                                            |
+| [`docs/decisions/`](docs/decisions/)                                                 | ADRs: why each durable decision was made                                                  |
+
+A plan exists only while its feature is being built. Its last task updates the
+`docs/` pages the feature changed and records new decisions as ADRs; then the plan
+is deleted.
+
 ## Project Rules
 
 - Keep Difftray focused on local diff review. Do not turn it into an IDE, agent runner, PR platform, or merge tool without an explicit product decision.
@@ -90,9 +111,8 @@ ten-minute harness deadline and cleanup affect only owned fixture processes and
 profiles. Fixture SQL/clock manipulation is test infrastructure, not an agent
 API. `doctor` adds CLI diagnostics to strict wire `hello` identity locally.
 
-Run the heavier `test:cli:bundle` archive check separately before handoff. M6
-acceptance remains pending until the final checks are recorded; actual agent-host
-sessions, signed arm64/x64 archives, and publication remain user checks or
+Run the heavier `test:cli:bundle` archive check separately before handoff. Actual
+agent-host sessions, signed arm64/x64 archives, and publication are user checks or
 explicitly authorized actions. See `docs/testing-strategy.md` and
 `docs/agent-integration.md`.
 

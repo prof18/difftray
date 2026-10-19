@@ -26,7 +26,7 @@ it. The folder chooser can always be used again to choose another destination.
 **Check** runs that app's bundled `bin/difftray doctor --json` against the current
 profile with a 20-second timeout. It reports **Connected** or the CLI's error
 message. **Full guide** opens this guide. **Terminal** contains the optional
-command-line tool installer, moved from General.
+command-line tool installer.
 
 The app resolves its own location from the installed skill symlink, including
 Alpha and custom-named bundles. If the app moves, use **Repair** to update the
@@ -66,7 +66,7 @@ cover opening the current worktree, reading every feedback page, reviewing exact
 anchors, and submitting authorized single-line, inclusive-range, file, and overall findings. Loading a
 skill alone authorizes no write, code edit, other agent, or chat message.
 
-Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI now connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
+Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 
 A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch. Frames are bounded to 1 MiB for requests and 16 MiB for responses. Unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields are rejected.
 
@@ -76,9 +76,9 @@ A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests ca
 
 The protocol error codes are `invalid_request`, `unsupported_version`, `unauthorized`, `app_unavailable`, `profile_mismatch`, `repository_missing`, `invalid_target`, `context_missing`, `context_expired`, `stale_review`, `stale_diff`, `stale_feedback`, `note_conflict`, `idempotency_conflict`, `limit_exceeded`, `busy`, `request_timeout`, and `internal_error`. `request_timeout` maps to the CLI I/O exit category; `stale_feedback` maps to the conflict category. No token should appear in CLI output.
 
-The internal context service now persists snapshots without opening a repository tab. It pins commit contexts to a SHA, checks working-tree and branch identities before and after Git loads, and checks the context on every read. Commit and branch contexts are checked by re-resolving their target SHAs and fingerprinting the working-tree `.gitattributes`, `info/attributes`, the global attributes file (configured or Git's XDG default) and diff configuration, which together fix the diff; working-tree contexts reload the saved file manifest and visibility setting. Reads of repository content (`review file`, prompt `review export`, `feedback submit`) are checked again afterwards; manifest and feedback pages are checked once, since the manifest is frozen and feedback cursors carry their own version. `pnpm bench:agent-reads` measures these costs. The manifest includes hidden generated files. Replacing the repository directory invalidates its contexts even when its Git content is identical. Contexts expire after 24 hours; creating a context purges expired entries and rejects capacity beyond 128 live entries instead of evicting one.
+The internal context service persists snapshots without opening a repository tab. It pins commit contexts to a SHA, checks working-tree and branch identities before and after Git loads, and checks the context on every read. Commit and branch contexts are checked by re-resolving their target SHAs and fingerprinting the working-tree `.gitattributes`, `info/attributes`, the global attributes file (configured or Git's XDG default) and diff configuration, which together fix the diff; working-tree contexts reload the saved file manifest and visibility setting. Reads of repository content (`review file`, prompt `review export`, `feedback submit`) are checked again afterwards; manifest and feedback pages are checked once, since the manifest is frozen and feedback cursors carry their own version. `pnpm bench:agent-reads` measures these costs. The manifest includes hidden generated files. Replacing the repository directory invalidates its contexts even when its Git content is identical. Contexts expire after 24 hours; creating a context purges expired entries and rejects capacity beyond 128 live entries instead of evicting one.
 
-Desktop and companion note mutations now increment a persistent revision in the same SQLite transaction. Deleting a note retains that revision. The snapshot API returns the current note and an opaque version token together, so same-timestamp edits and delete/recreate cycles are distinguishable. Target-aware report excerpts use the report's recorded target and omit mismatched content. Agent reads and clipboard reports share the same target-aware formatter.
+Desktop and companion note mutations increment a persistent revision in the same SQLite transaction. Deleting a note retains that revision. The snapshot API returns the current note and an opaque version token together, so same-timestamp edits and delete/recreate cycles are distinguishable. Target-aware report excerpts use the report's recorded target and omit mismatched content. Agent reads and clipboard reports share the same target-aware formatter.
 
 ## Connecting and opening
 

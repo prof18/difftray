@@ -7,42 +7,27 @@
 - Keep UI state separate from persisted review state.
 - Share review behavior across the desktop, bundled CLI, and mobile companion.
 
-## Proposed Monorepo Shape
+## Workspace Layout
 
-Use pnpm workspaces.
+The repository is a pnpm workspace; package scripts are the only build
+orchestration.
 
 ```text
 apps/
-  desktop/
-    electron main process
-    React renderer
-    IPC adapters
-
+  desktop/                  Electron main process, React renderer, preload IPC,
+                            bundled agent CLI (src/cli)
 packages/
-  core/
-    Git status normalization
-    diff target modeling
-    diff hashing
-    review invalidation
-    generated-file detection
-
-  storage/
-    SQLite schema
-    migrations
-    repositories
-
-  git/
-    Git CLI adapter
-    parsing
-    worktree detection
-
-  ui/
-    shared React components, if useful
+  core/                     review targets, diff hashing, review invalidation,
+                            generated-file detection, agent report formatting
+  git/                      Git CLI adapter, diff and snapshot loading, worktrees
+  storage/                  SQLite schema, migrations and stores
+  companion-protocol/       shared wire types and validation for the phone app
+  companion-diff-surface/   single-file WebView diff renderer for the phone app
+integrations/
+  agents/                   the agent skill the app bundles and installs
 ```
 
-This split should stay pragmatic. Start with fewer packages if scaffolding overhead slows down v0, but keep the boundaries in code.
-
-Do not add Turborepo, Nx, or another monorepo task runner in v0. pnpm workspaces plus package scripts are enough until build orchestration becomes painful.
+Keep business logic in the packages so it can be tested without launching Electron.
 
 ## Process Boundaries
 
