@@ -69,10 +69,14 @@
 
 .imageStage img {
   display: block;
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: auto;
   max-height: calc(100vh - 190px);
   object-fit: contain;
+}
+
+.imageStage img[data-pixelated="true"] {
+  image-rendering: pixelated;
 }
 
 .loadingState {

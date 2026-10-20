@@ -64,6 +64,51 @@ describe("ImageDiff", () => {
     ).toBe("data:image/png;base64,bmV3");
   });
 
+  it("caps upscaling so tiny images are not stretched across the panel", async () => {
+    const loadImage = vi.fn((side: FileImageSide) =>
+      Promise.resolve({
+        ...imageResponse(side),
+        image: { ...imageResponse(side).image, height: 1, width: 1 }
+      })
+    );
+
+    await act(async () => {
+      root.render(
+        <ImageDiff
+          diffHash="hash-binary"
+          diffSideFocus="new"
+          fallback={<div>Binary fallback</div>}
+          loadImage={loadImage}
+          status="modified"
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const image = container.querySelector("img");
+    expect(image?.style.width).toBe("8px");
+    expect(image?.dataset.pixelated).toBe("true");
+  });
+
+  it("shows regular images at no more than twice their size", async () => {
+    await act(async () => {
+      root.render(
+        <ImageDiff
+          diffHash="hash-binary"
+          diffSideFocus="new"
+          fallback={<div>Binary fallback</div>}
+          loadImage={(side) => Promise.resolve(imageResponse(side))}
+          status="modified"
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const image = container.querySelector("img");
+    expect(image?.style.width).toBe("640px");
+    expect(image?.dataset.pixelated).toBeUndefined();
+  });
+
   it("loads only the focused image side", async () => {
     const loadImage = vi.fn((side: FileImageSide) =>
       Promise.resolve(imageResponse(side))
