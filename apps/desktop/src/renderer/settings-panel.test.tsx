@@ -866,6 +866,37 @@ describe("SettingsPanel", () => {
     expect(companion.textContent).not.toContain("Paired devices");
   });
 
+  it("renders on/off settings as switches", () => {
+    const review = renderSettingsPage("review");
+    const wrap = [...review.querySelectorAll<HTMLInputElement>("input")].find((input) =>
+      input.closest("label")?.textContent.includes("Wrap long lines")
+    );
+
+    expect(wrap?.getAttribute("role")).toBe("switch");
+
+    const companion = renderSettingsPage("companion");
+    const toggle = companion.querySelector<HTMLInputElement>(
+      'input[aria-label="Enable companion mode"]'
+    );
+
+    expect(toggle?.getAttribute("role")).toBe("switch");
+  });
+
+  it("says the server is starting while companion mode waits for it", () => {
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({ enabled: true, status: "stopped" })
+    });
+    const pairButton = [...companion.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent.includes("Pair new device")
+    );
+
+    expect(companion.textContent).toContain("Starting server…");
+    expect(companion.textContent).not.toContain("Server stopped");
+    expect(pairButton?.disabled).toBe(true);
+    expect(pairButton?.title).toBe("Available once the server is running");
+  });
+
   it("shows an optimistic companion disable while server state is catching up", () => {
     const companion = renderSettingsPage("companion", {
       appSettings: appSettings({ companionEnabled: false }),

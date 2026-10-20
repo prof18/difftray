@@ -303,13 +303,14 @@
 }
 
 .settingsPageHeader {
-  margin-bottom: 28px;
+  margin-bottom: 22px;
+  padding-inline: 14px;
 }
 
 .settingsPageHeader h2 {
   margin: 0;
   color: var(--text);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -324,14 +325,14 @@
 }
 
 .settingsSection > .sectionLabel {
-  margin-bottom: 9px;
+  margin-bottom: 6px;
+  padding-inline: 14px;
 }
 
 .settingsCard {
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .settingsCard[data-overflow="visible"] {
@@ -356,10 +357,61 @@
   border-bottom: 0;
 }
 
-.settingRow input[type="checkbox"] {
-  width: 36px;
-  height: 20px;
-  accent-color: var(--accent);
+.switch {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--elev);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  content: "";
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.switch:checked {
+  border-color: var(--primary-bg);
+  background: var(--primary-bg);
+}
+
+.switch:checked::after {
+  background: var(--primary-fg);
+  transform: translateX(12px);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::after {
+    transition: none;
+  }
 }
 
 .settingRow input[type="text"],
@@ -424,41 +476,6 @@
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.5;
-}
-
-.companionToggle {
-  position: relative;
-  display: grid;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-}
-
-.companionToggle input {
-  width: 22px;
-  height: 22px;
-  margin: 0;
-  appearance: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--elev);
-}
-
-.companionToggle input:checked {
-  border-color: var(--accent-2);
-  background: var(--accent);
-}
-
-.companionToggle input:checked::after {
-  display: block;
-  width: 8px;
-  height: 4px;
-  margin: 6px 0 0 5px;
-  transform: rotate(-45deg);
-  border-bottom: 2px solid var(--primary-fg);
-  border-left: 2px solid var(--primary-fg);
-  content: "";
 }
 
 .companionStatusRow {

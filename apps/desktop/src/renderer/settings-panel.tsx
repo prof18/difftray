@@ -910,17 +910,18 @@ function CompanionSettingsSection({
             </p>
           ) : null}
         </div>
-        <label className={styles.companionToggle} title="Enable companion mode">
-          <span className={styles.srOnly}>Enable companion mode</span>
-          <input
-            checked={enabled}
-            disabled={disabled}
-            onChange={(event) => {
-              onToggle(event.target.checked);
-            }}
-            type="checkbox"
-          />
-        </label>
+        <input
+          aria-label="Enable companion mode"
+          checked={enabled}
+          className={styles.switch}
+          disabled={disabled}
+          onChange={(event) => {
+            onToggle(event.target.checked);
+          }}
+          role="switch"
+          title="Enable companion mode"
+          type="checkbox"
+        />
       </div>
       {enabled ? (
         <>
@@ -950,6 +951,11 @@ function CompanionSettingsSection({
               className={styles.secondaryButton}
               disabled={disabled || companionState.status !== "running"}
               onClick={onStartPairing}
+              title={
+                companionState.status === "running"
+                  ? undefined
+                  : "Available once the server is running"
+              }
               type="button"
             >
               <QrCode size={14} strokeWidth={1.5} aria-hidden />
@@ -1537,10 +1543,12 @@ function ToggleRow({
       <span>{label}</span>
       <input
         checked={checked}
+        className={styles.switch}
         disabled={disabled}
         onChange={(event) => {
           onChange(event.target.checked);
         }}
+        role="switch"
         type="checkbox"
       />
     </label>
@@ -1556,7 +1564,9 @@ function companionStatusLabel(state: CompanionStateView): string {
     return "Server failed to start";
   }
 
-  return "Server stopped";
+  // The label only shows while companion mode is on, so a stopped server is
+  // still on its way up rather than switched off.
+  return "Starting server…";
 }
 
 function companionDiscoveryLabel(state: CompanionDiscoveryStateView): string {
