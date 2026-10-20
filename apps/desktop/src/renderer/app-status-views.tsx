@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Children, useEffect } from "react";
 import {
   AlertTriangle,
   Check,
@@ -67,6 +67,22 @@ export function EmptyState({
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function ToastStack({
+  children
+}: {
+  readonly children: React.ReactNode;
+}): React.JSX.Element | null {
+  if (Children.toArray(children).length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.toastStack} data-testid="toast-stack">
+      {children}
+    </div>
   );
 }
 

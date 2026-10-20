@@ -36,6 +36,7 @@ import {
   DriftToast,
   EmptyState,
   SimpleToast,
+  ToastStack,
   UpdateRestartBanner
 } from "./app-status-views.js";
 import {
@@ -4239,19 +4240,21 @@ export function App(): React.JSX.Element {
               )}
             </article>
 
-            {showDriftToast ? (
-              <DriftToast
-                files={attentionFiles}
-                onClose={() => {
-                  setToastDismissedFor(toastKey);
-                }}
-                onReviewNow={() => {
-                  selectPath(attentionFiles[0]?.path);
-                  setToastDismissedFor(toastKey);
-                }}
-              />
-            ) : null}
-            {commentToast ? <SimpleToast message={commentToast} /> : null}
+            <ToastStack>
+              {showDriftToast ? (
+                <DriftToast
+                  files={attentionFiles}
+                  onClose={() => {
+                    setToastDismissedFor(toastKey);
+                  }}
+                  onReviewNow={() => {
+                    selectPath(attentionFiles[0]?.path);
+                    setToastDismissedFor(toastKey);
+                  }}
+                />
+              ) : null}
+              {commentToast ? <SimpleToast message={commentToast} /> : null}
+            </ToastStack>
           </section>
         </section>
       ) : loadState === "loading" || !hasBootstrapped || recentProjects.length > 0 ? (

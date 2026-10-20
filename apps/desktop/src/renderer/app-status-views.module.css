@@ -201,12 +201,26 @@
   font-size: 11px;
 }
 
-.driftToast {
+.toastStack {
   position: absolute;
   right: 20px;
   bottom: 20px;
-  z-index: 4;
+  z-index: 5;
+  display: flex;
+  max-width: calc(100% - 40px);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toastStack > * {
+  pointer-events: auto;
+}
+
+.driftToast {
   width: 360px;
+  max-width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -215,10 +229,6 @@
 }
 
 .simpleToast {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 5;
   display: inline-flex;
   align-items: center;
   gap: 8px;

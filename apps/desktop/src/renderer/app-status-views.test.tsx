@@ -5,6 +5,7 @@ import {
   DriftToast,
   EmptyState,
   SimpleToast,
+  ToastStack,
   UpdateRestartBanner
 } from "./app-status-views.js";
 
@@ -72,6 +73,28 @@ describe("app status views", () => {
     );
 
     expect(html).toContain("1 file changed after review");
+  });
+
+  it("stacks toasts in one region instead of overlapping them", () => {
+    const html = renderToStaticMarkup(
+      <ToastStack>
+        <DriftToast
+          files={[reviewFile("src/App.tsx", { additions: 1, deletions: 1 })]}
+          onClose={vi.fn()}
+          onReviewNow={vi.fn()}
+        />
+        <SimpleToast message="Copied 1 review comment" />
+      </ToastStack>
+    );
+
+    expect(html).toContain('data-testid="toast-stack"');
+    expect(html.indexOf("changed after review")).toBeLessThan(
+      html.indexOf("Copied 1 review comment")
+    );
+  });
+
+  it("renders nothing for an empty toast stack", () => {
+    expect(renderToStaticMarkup(<ToastStack>{null}</ToastStack>)).toBe("");
   });
 
   it("renders a simple status toast", () => {
