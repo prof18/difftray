@@ -208,6 +208,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-settings.png")
   });
+  await captureDarkVariant(window, "desktop-settings");
   await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
   await expectSettingsDetailScrollable(window);
   await openSettingsPage(window, "General");
@@ -418,6 +419,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-workflow.png")
   });
+  await captureDarkVariant(window, "desktop-review-workflow");
   await window.keyboard.press("KeyR");
   await expectFileReviewState(window, "tracked.txt", "reviewed");
   await expectSelectedFile(window, "schema.generated.ts");
@@ -453,6 +455,8 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
+  await captureDarkVariant(window, "desktop-review-invalidated");
+  await captureNarrowVariant(app, window, "desktop-review-invalidated");
   await expectDismissibleOpenProjectError(app, window, nonGitPath);
   await window
     .locator('[data-project-tab-name="visual-secondary-repo"]')
@@ -1773,6 +1777,45 @@ async function moveMainWindow(app, deltaX, deltaY) {
     },
     { deltaX, deltaY }
   );
+}
+
+async function captureDarkVariant(window, name) {
+  const originalTheme = await window.evaluate(() => {
+    const theme = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "dark";
+    return theme;
+  });
+  await window.waitForTimeout(150);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, `${name}-dark.png`)
+  });
+  await window.evaluate((theme) => {
+    document.documentElement.dataset.theme = theme;
+  }, originalTheme);
+}
+
+async function captureNarrowVariant(app, window, name) {
+  const bounds = await app.evaluate(({ BrowserWindow }) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+
+    if (!mainWindow) {
+      throw new Error("Expected a main window to resize");
+    }
+
+    const original = mainWindow.getBounds();
+    mainWindow.setSize(1000, original.height);
+    return original;
+  });
+  await window.waitForTimeout(250);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, `${name}-narrow.png`)
+  });
+  await app.evaluate(({ BrowserWindow }, original) => {
+    BrowserWindow.getAllWindows()[0]?.setBounds(original);
+  }, bounds);
+  await window.waitForTimeout(250);
 }
 
 async function resizeMainWindow(app, widthDelta, heightDelta) {
