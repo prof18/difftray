@@ -98,6 +98,36 @@ describe("WorktreePicker", () => {
     expect(container.textContent).not.toContain("Git-recorded siblings");
   });
 
+  it("budgets the path around a custom label's branch prefix", () => {
+    act(() => {
+      root.render(
+        createElement(WorktreePicker, {
+          onClose: vi.fn(),
+          onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
+          onRefresh: vi.fn(),
+          onSelect: vi.fn(),
+          projectName: "Repository",
+          worktrees: [
+            {
+              ...worktree("sibling", "Release candidate"),
+              branchName: "main",
+              customLabel: "Release candidate",
+              displayPath:
+                "/private/var/folders/zw/zhy_56gn2155g5d156yh9ry40000gn/T/visual-repo-sibling"
+            }
+          ]
+        })
+      );
+    });
+
+    const pathLine = container.querySelector('[role="option"] small')?.textContent ?? "";
+    expect(pathLine.startsWith("main · ")).toBe(true);
+    expect(pathLine.length).toBeLessThanOrEqual(48);
+    expect(pathLine.endsWith("visual-repo-sibling")).toBe(true);
+  });
+
   it("keeps the leaf folder of long worktree paths visible", () => {
     const truncated = middleTruncatePath(
       "/private/var/folders/zw/zhy_56gn2155g5d156yh9ry40000gn/T/difftray-visual-sibling"

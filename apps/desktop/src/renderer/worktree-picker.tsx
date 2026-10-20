@@ -191,7 +191,10 @@ export function WorktreePicker({
                 <strong>{worktree.displayName}</strong>
                 <small title={worktree.displayPath}>
                   {worktree.customLabel
-                    ? `${gitWorktreeName(worktree)} · ${middleTruncatePath(worktree.displayPath)}`
+                    ? `${gitWorktreeName(worktree)} · ${middleTruncatePath(
+                        worktree.displayPath,
+                        Math.max(24, 48 - gitWorktreeName(worktree).length - 3)
+                      )}`
                     : middleTruncatePath(worktree.displayPath)}
                 </small>
               </span>
