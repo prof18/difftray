@@ -86,7 +86,7 @@
 
 .footer button[type="submit"] {
   border-color: var(--accent-2);
-  background: var(--accent);
+  background: var(--primary-bg);
   color: var(--primary-fg);
 }
 

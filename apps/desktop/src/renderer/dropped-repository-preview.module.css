@@ -29,9 +29,9 @@
 }
 
 .checkbox[data-checked="true"] {
-  background: var(--accent);
+  background: var(--primary-bg);
   border-color: var(--accent);
-  color: var(--panel);
+  color: var(--primary-fg);
 }
 
 .remember {
@@ -66,9 +66,9 @@
 }
 
 .footer button:last-child {
-  background: var(--accent);
+  background: var(--primary-bg);
   border-color: var(--accent);
-  color: var(--panel);
+  color: var(--primary-fg);
 }
 
 .footer button:disabled {

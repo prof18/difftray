@@ -159,7 +159,7 @@
 
 .primaryButton {
   border: 1px solid var(--accent-2);
-  background: var(--accent);
+  background: var(--primary-bg);
   color: var(--primary-fg);
 }
 
