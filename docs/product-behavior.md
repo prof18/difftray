@@ -37,7 +37,20 @@ files can show a different reviewed state.
 ## Files
 
 The file list shows modified, added, untracked, deleted and renamed files, with
-status, reviewed state and a changed-after-review marker.
+status, reviewed state and a changed-after-review marker. Each row reads left to
+right as change type, name, line counts and review state, using the file-state
+vocabulary shared with the phone ([0043](decisions/0043-file-state-vocabulary.md)):
+
+- Change type is a letter tile: `A` added, `M` modified or mode change, `R`
+  renamed, `D` deleted.
+- Review state is the trailing glyph: a hollow ring when unreviewed, a green check
+  when reviewed, an amber alert when the file changed after review.
+- A file that changed after review also gets an amber left rule. The header
+  progress line counts these as "needs attention".
+- Line counts read `+a -d`. Files with no line changes, such as images, show
+  neutral blocks instead of `+0 -0`.
+- Root-level files show no directory line. Long names truncate in the middle so
+  the end of the name stays visible.
 
 Generated files are hidden by default when detection is confident
 (`detectGeneratedFile` in `packages/core/src/index.ts`): a generated marker in the

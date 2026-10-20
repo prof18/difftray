@@ -265,6 +265,15 @@ describe("file list components", () => {
     expect(html).toContain(">2</span>");
     expect(html).toContain("+7");
     expect(html).toContain("-4");
+    expect(html).toContain('data-change-type="modified"');
+    expect(html).toContain('data-review-state="attention"');
+    expect(html).toContain('data-attention="true"');
+    expect(html.indexOf('data-change-type="modified"')).toBeLessThan(
+      html.indexOf(">App.tsx<")
+    );
+    expect(html.indexOf('data-review-state="attention"')).toBeGreaterThan(
+      html.indexOf("+7")
+    );
   });
 
   it("renders root files without a directory line", () => {

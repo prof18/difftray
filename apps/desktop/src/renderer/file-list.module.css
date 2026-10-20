@@ -413,7 +413,7 @@
 
 .fileItem {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto 14px;
   min-height: 52px;
   align-items: center;
   gap: 10px;
@@ -435,6 +435,10 @@
 .fileItem[data-selected="true"] {
   border-left-color: var(--accent);
   background: var(--selected);
+}
+
+.fileItem[data-attention="true"] {
+  border-left-color: var(--warn);
 }
 
 .statusDot {
@@ -469,7 +473,6 @@
   height: 5px;
   flex: 0 0 auto;
   border-radius: 999px;
-  animation: pulse 1.4s ease-in-out infinite;
   background: var(--warn);
   box-shadow: 0 0 0 4px var(--warn-soft);
 }
@@ -654,19 +657,6 @@
   height: 1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.65;
-    transform: scale(0.9);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
 }
 
 @keyframes tooltipIn {

@@ -31,6 +31,7 @@ import {
 
 import styles from "./file-list.module.css";
 import { ContextMenu } from "./context-menu.js";
+import { ChangeTypeTile, ReviewStateGlyph } from "./file-state.js";
 import {
   fileListRowHeight,
   fileListVisibleWindow,
@@ -972,6 +973,7 @@ export const FileButton = memo(function FileButton({
       aria-setsize={total}
       className={styles.fileItem}
       data-file-path={file.path}
+      data-attention={file.invalidated ? true : undefined}
       data-selected={isSelected}
       onClick={() => {
         onSelect(file.path);
@@ -981,13 +983,10 @@ export const FileButton = memo(function FileButton({
       }}
       type="button"
     >
-      <span className={styles.statusDot} data-state={reviewState(file)} />
+      <ChangeTypeTile status={file.status} />
       <span className={styles.fileCopy}>
         <span className={styles.fileNameLine}>
           <MiddleTruncatedName name={parts.filename} title={file.path} />
-          {file.invalidated ? (
-            <span className={styles.attentionPulse} aria-hidden />
-          ) : null}
           {commentCount > 0 ? (
             <span className={styles.commentBadge} title="Review comments">
               <MessageSquare size={11} strokeWidth={1.5} aria-hidden />
@@ -998,6 +997,7 @@ export const FileButton = memo(function FileButton({
         {parts.dirname ? <span className={styles.fileDir}>{parts.dirname}</span> : null}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
+      <ReviewStateGlyph state={reviewState(file)} />
     </button>
   );
 });

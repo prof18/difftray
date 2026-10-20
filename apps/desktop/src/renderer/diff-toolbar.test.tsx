@@ -32,7 +32,8 @@ describe("diff toolbar components", () => {
 
     expect(html).toContain("src/renderer");
     expect(html).toContain("App.tsx");
-    expect(html).toContain("Diff changed");
+    expect(html).toContain("Changed after review");
+    expect(html).toContain('data-review-state="attention"');
     expect(html).toContain("against origin/main");
     expect(html).toContain("+7");
     expect(html).toContain("-4");

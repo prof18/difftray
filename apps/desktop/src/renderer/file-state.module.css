@@ -1,0 +1,48 @@
+.changeTypeTile {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--diff-modified-fg) 40%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--diff-modified-fg) 10%, transparent);
+  color: var(--diff-modified-fg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.changeTypeTile[data-change-type="added"] {
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.changeTypeTile[data-change-type="deleted"] {
+  border-color: var(--border-strong);
+  background: var(--elev);
+  color: var(--text-muted);
+}
+
+.reviewGlyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.reviewGlyph[data-review-state="pending"],
+.reviewGlyph[data-review-state="unknown"] {
+  color: var(--text-dim);
+}
+
+.reviewGlyph[data-review-state="reviewed"] {
+  color: var(--ok);
+}
+
+.reviewGlyph[data-review-state="attention"] {
+  color: var(--warn);
+}

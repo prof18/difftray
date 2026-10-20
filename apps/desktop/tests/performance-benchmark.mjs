@@ -623,8 +623,9 @@ async function expectFileReviewState(window, filePath, state) {
       }
 
       return (
-        fileButton.querySelector("[data-state]")?.getAttribute("data-state") ===
-        targetState
+        fileButton
+          .querySelector("[data-review-state]")
+          ?.getAttribute("data-review-state") === targetState
       );
     },
     [filePath, state],

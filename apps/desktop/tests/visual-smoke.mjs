@@ -448,7 +448,7 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
-  await window.getByText(/changed after review/).waitFor({ timeout: 10_000 });
+  await window.getByText("1 file changed after review").waitFor({ timeout: 10_000 });
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
@@ -1076,7 +1076,7 @@ async function expectFileReviewState(window, filename, state) {
         button.textContent?.includes(targetFilename)
       );
 
-      return Boolean(fileButton?.querySelector(`[data-state="${expectedState}"]`));
+      return Boolean(fileButton?.querySelector(`[data-review-state="${expectedState}"]`));
     },
     { expectedState: state, targetFilename: filename }
   );

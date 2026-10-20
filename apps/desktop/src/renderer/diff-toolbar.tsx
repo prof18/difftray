@@ -14,6 +14,7 @@ import {
 
 import styles from "./diff-toolbar.module.css";
 import { type DiffSideFocus } from "./diffs-renderer.js";
+import { ReviewStateGlyph } from "./file-state.js";
 import { classList, reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export function DiffToolbar({
@@ -67,13 +68,13 @@ export function DiffToolbar({
     <div className={styles.diffToolbar}>
       <div className={styles.diffTitleBlock}>
         <div className={styles.diffFileTitle}>
-          <span className={styles.statusDot} data-state={reviewState(file)} />
+          <ReviewStateGlyph state={reviewState(file)} />
           {parts.dirname ? <span className={styles.diffDir}>{parts.dirname}</span> : null}
           <span className={styles.diffFileName}>{parts.filename}</span>
           {file.invalidated ? (
             <span className={styles.diffChangedPill}>
               <AlertTriangle size={12} strokeWidth={1.4} aria-hidden />
-              Diff changed
+              Changed after review
             </span>
           ) : null}
         </div>

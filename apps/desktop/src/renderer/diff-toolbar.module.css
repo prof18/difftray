@@ -31,32 +31,6 @@
   color: var(--text-2);
 }
 
-.statusDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-}
-
-.statusDot[data-state="pending"] {
-  border: 1.5px solid var(--text-dim);
-}
-
-.statusDot[data-state="unknown"] {
-  border: 1.5px solid var(--border-strong);
-}
-
-.statusDot[data-state="reviewed"] {
-  background: var(--ok);
-  box-shadow: 0 0 0 2px var(--ok-soft);
-}
-
-.statusDot[data-state="attention"] {
-  background: var(--warn);
-  box-shadow: 0 0 0 2px var(--warn-soft);
-}
-
 .commentBadge,
 .commentMeta {
   display: inline-flex;
