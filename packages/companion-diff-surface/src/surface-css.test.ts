@@ -10,9 +10,7 @@ const styles = readFileSync(
 
 describe("diff surface css", () => {
   it("sizes inline comments with the diff font setting", () => {
-    expect(styles).toMatch(
-      /\.diff-surface__annotation \{[^}]*font-size: inherit;/
-    );
+    expect(styles).toMatch(/\.diff-surface__annotation \{[^}]*font-size: inherit;/);
     expect(styles).toMatch(/\.diff-surface__annotation span \{[^}]*font-size: 0\.85em;/);
   });
 
