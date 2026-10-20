@@ -87,13 +87,6 @@ export function FileListHeader({
         <div className={styles.changedCount}>
           <span>{files.length}</span> changed
         </div>
-        {attentionCount > 0 ? (
-          <div className={styles.needAttention}>
-            <span className={styles.attentionPulse} aria-hidden />
-            <span>{attentionCount}</span> {attentionCount === 1 ? "needs" : "need"}{" "}
-            attention
-          </div>
-        ) : null}
         <div className={styles.headerActions}>
           <button
             aria-label="Refresh project"
@@ -152,10 +145,19 @@ export function FileListHeader({
           }}
         />
       </div>
-      <span className={styles.srOnly}>
-        {progress.reviewedVisibleFiles} of {progress.totalVisibleReviewableFiles} files
-        reviewed
-      </span>
+      <div className={styles.progressLabel} data-testid="file-list-progress">
+        <span className={styles.progressCount}>
+          <span>{progress.reviewedVisibleFiles}</span> of{" "}
+          <span>{progress.totalVisibleReviewableFiles}</span> reviewed
+        </span>
+        {attentionCount > 0 ? (
+          <span className={styles.needAttention}>
+            <span className={styles.attentionPulse} aria-hidden />
+            <span>{attentionCount}</span> {attentionCount === 1 ? "needs" : "need"}{" "}
+            attention
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

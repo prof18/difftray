@@ -60,9 +60,44 @@ describe("file list components", () => {
     expect(html).toContain("Choose diff target");
     expect(html).not.toContain("develop");
     expect(html).not.toContain("def456 Change file list");
-    expect(html).toContain("1 of 3 files reviewed");
+    expect(html).toContain('data-testid="file-list-progress"');
+    expect(html).toContain("<span>1</span> of <span>3</span> reviewed");
+    expect(html).not.toContain("srOnly");
+    expect(html.indexOf("needs attention")).toBeGreaterThan(
+      html.indexOf('data-testid="file-list-progress"')
+    );
     expect(html).toContain('aria-label="Refresh project"');
     expect(html).toContain('aria-label="Hide file list"');
+  });
+
+  it("hides the attention count when nothing needs another look", () => {
+    const html = renderToStaticMarkup(
+      <FileListHeader
+        attentionCount={0}
+        baseRefDraft="main"
+        branchRefs={["main"]}
+        commitRefDraft=""
+        disabled={false}
+        files={[reviewFile("src/pending.ts")]}
+        onBaseRefDraftChange={vi.fn()}
+        onCommitRefDraftChange={vi.fn()}
+        onCollapse={vi.fn()}
+        onRefresh={vi.fn()}
+        onUseBranchDiff={vi.fn()}
+        onUseCommitDiff={vi.fn()}
+        onUseWorkingTreeDiff={vi.fn()}
+        progress={{ reviewedVisibleFiles: 0, totalVisibleReviewableFiles: 1 }}
+        reviewTarget={{
+          headSha: "abc123",
+          id: "target-working-tree",
+          kind: "working_tree"
+        }}
+        recentCommits={[]}
+      />
+    );
+
+    expect(html).toContain("<span>0</span> of <span>1</span> reviewed");
+    expect(html).not.toContain("attention");
   });
 
   it("renders the target picker popover with separated modes", () => {
