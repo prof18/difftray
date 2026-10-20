@@ -239,6 +239,7 @@ export function App(): React.JSX.Element {
   >();
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: "idle" });
+  const [appVersion, setAppVersion] = useState<string | undefined>();
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const [worktreePickerProject, setWorktreePickerProject] = useState<
     RecentProjectView | undefined
@@ -515,6 +516,25 @@ export function App(): React.JSX.Element {
     return () => {
       cancelled = true;
       unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    window.difftray
+      .appVersion()
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(version);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        console.error("Failed to read app version", caughtError);
+      });
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -4115,9 +4135,6 @@ export function App(): React.JSX.Element {
                     diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
                     file={selectedFile}
-                    onCheckForUpdates={() => {
-                      void checkForUpdates();
-                    }}
                     onCopyCommentsReport={() => {
                       void copyReviewCommentsReport();
                     }}
@@ -4142,7 +4159,6 @@ export function App(): React.JSX.Element {
                     }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
                     reportCommentCount={reportItemCount(workspace)}
-                    updatePhase={updatePhase}
                   />
                   <FileCommentStack
                     comments={selectedFileComments}
@@ -4432,6 +4448,7 @@ export function App(): React.JSX.Element {
       {settingsOpen ? (
         <SettingsPanel
           appSettings={appSettings}
+          appVersion={appVersion}
           companionPairing={companionPairing}
           companionState={companionState}
           disabled={loadState === "loading"}
@@ -4439,6 +4456,9 @@ export function App(): React.JSX.Element {
           onClose={closeSettings}
           onCancelCompanionPairing={() => {
             void cancelCompanionPairing();
+          }}
+          onCheckForUpdates={() => {
+            void checkForUpdates();
           }}
           onChangeAppSettings={(patch) => {
             void persistAppSettings(patch);
@@ -4456,6 +4476,7 @@ export function App(): React.JSX.Element {
             void toggleCompanion(enabled);
           }}
           platform={window.difftray.platform}
+          updatePhase={updatePhase}
           repositorySearchRoots={repositorySearchRoots}
           repositorySearchRootSuggestions={repositorySearchRootSuggestions}
           onAddRepositorySearchRoot={() => {

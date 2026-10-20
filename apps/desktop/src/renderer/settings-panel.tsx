@@ -52,6 +52,7 @@ const settingsPages: readonly {
 
 export function SettingsPanel({
   appSettings,
+  appVersion,
   companionPairing,
   companionState,
   disabled,
@@ -59,11 +60,13 @@ export function SettingsPanel({
   onClose,
   onCancelCompanionPairing,
   onChangeAppSettings,
+  onCheckForUpdates,
   onRespondToCompanionPairRequest,
   onRevokeCompanionDevice,
   onStartCompanionPairing,
   onToggleCompanion,
   platform,
+  updatePhase = { kind: "idle" },
   repositorySearchRoots = [],
   repositorySearchRootSuggestions = [],
   onAddRepositorySearchRoot,
@@ -73,6 +76,7 @@ export function SettingsPanel({
   onRemoveRepositorySearchRoot
 }: {
   readonly appSettings: AppSettingsView;
+  readonly appVersion?: string | undefined;
   readonly companionPairing: CompanionPairingStateView | null;
   readonly companionState: CompanionStateView;
   readonly disabled: boolean;
@@ -80,6 +84,7 @@ export function SettingsPanel({
   readonly onClose: () => void;
   readonly onCancelCompanionPairing: () => void;
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+  readonly onCheckForUpdates?: () => void;
   readonly onRespondToCompanionPairRequest: (
     input: RespondToCompanionPairRequestInput
   ) => void;
@@ -87,6 +92,7 @@ export function SettingsPanel({
   readonly onStartCompanionPairing: () => void;
   readonly onToggleCompanion: (enabled: boolean) => void;
   readonly platform: string;
+  readonly updatePhase?: UpdatePhase;
   readonly repositorySearchRoots?: readonly RepositorySearchRootView[];
   readonly repositorySearchRootSuggestions?: readonly RepositorySearchRootSuggestionView[];
   readonly onAddRepositorySearchRoot?: () => void;
@@ -187,9 +193,12 @@ export function SettingsPanel({
                 {activePage === "general" ? (
                   <GeneralSettingsPage
                     appSettings={appSettings}
+                    appVersion={appVersion}
                     disabled={disabled}
                     editorOptions={editorOptions}
                     onChangeAppSettings={onChangeAppSettings}
+                    onCheckForUpdates={onCheckForUpdates}
+                    updatePhase={updatePhase}
                   />
                 ) : null}
 
@@ -281,15 +290,28 @@ function SettingsNavigationIcon({
 
 function GeneralSettingsPage({
   appSettings,
+  appVersion,
   disabled,
   editorOptions,
-  onChangeAppSettings
+  onChangeAppSettings,
+  onCheckForUpdates,
+  updatePhase
 }: {
   readonly appSettings: AppSettingsView;
+  readonly appVersion: string | undefined;
   readonly disabled: boolean;
   readonly editorOptions: readonly EditorPresetView[];
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+  readonly onCheckForUpdates: (() => void) | undefined;
+  readonly updatePhase: UpdatePhase;
 }): React.JSX.Element {
+  const [checkRequested, setCheckRequested] = useState(false);
+  const updateBusy =
+    updatePhase.kind === "checking" ||
+    updatePhase.kind === "available" ||
+    updatePhase.kind === "downloading" ||
+    updatePhase.kind === "downloaded";
+
   return (
     <>
       <SettingsSection title="Appearance">
@@ -323,8 +345,48 @@ function GeneralSettingsPage({
           />
         </div>
       </SettingsSection>
+
+      <SettingsSection title="Updates">
+        <div className={styles.settingRow}>
+          <span className={styles.updateCopy}>
+            <span>{appVersion ? `Version ${appVersion}` : "Difftray"}</span>
+            <span className={styles.updateStatus} role="status">
+              {updateStatusText(updatePhase, checkRequested)}
+            </span>
+          </span>
+          <button
+            aria-label="Check for updates"
+            className={styles.secondaryButton}
+            disabled={updateBusy || !onCheckForUpdates}
+            onClick={() => {
+              setCheckRequested(true);
+              onCheckForUpdates?.();
+            }}
+            type="button"
+          >
+            Check for updates
+          </button>
+        </div>
+      </SettingsSection>
     </>
   );
+}
+
+function updateStatusText(phase: UpdatePhase, checkRequested: boolean): string {
+  switch (phase.kind) {
+    case "checking":
+      return "Checking for updates…";
+    case "available":
+      return `Version ${phase.version} is available`;
+    case "downloading":
+      return `Downloading version ${phase.version}…`;
+    case "downloaded":
+      return `Version ${phase.version} is ready to install`;
+    case "error":
+      return phase.message;
+    case "idle":
+      return checkRequested ? "Difftray is up to date" : "";
+  }
 }
 
 const INTRO =

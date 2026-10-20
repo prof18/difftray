@@ -72,7 +72,6 @@ describe("DiffToolbar file comment button", () => {
             status: "modified",
             visible: true
           }}
-          onCheckForUpdates={vi.fn()}
           onCopyCommentsReport={vi.fn()}
           onDiffSideFocusChange={vi.fn()}
           onOpenEditor={vi.fn()}
@@ -80,7 +79,6 @@ describe("DiffToolbar file comment button", () => {
           onToggleReviewed={vi.fn()}
           refName="worktree"
           reportCommentCount={0}
-          updatePhase={{ kind: "idle" }}
         />
       );
     });

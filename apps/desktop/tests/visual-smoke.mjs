@@ -149,7 +149,7 @@ try {
     timeout: 10_000
   });
   await window
-    .getByRole("button", { name: "Copy comments report" })
+    .getByRole("button", { name: "Copy for agent" })
     .waitFor({ state: "detached", timeout: 10_000 });
   await window.getByRole("button", { name: "Show new version" }).click();
   await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
@@ -401,7 +401,7 @@ try {
     throw new Error("Command+Enter did not save the multiline review comment.");
   }
   await expectFileCommentCount(window, "tracked.txt", "1");
-  await window.getByRole("button", { name: "Copy comments report" }).click();
+  await window.getByRole("button", { name: "Copy for agent" }).click();
   await window
     .getByText("Copied 1 review comment", { exact: true })
     .waitFor({ timeout: 10_000 });

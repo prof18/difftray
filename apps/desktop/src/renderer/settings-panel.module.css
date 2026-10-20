@@ -377,6 +377,22 @@
   width: var(--settings-selector-width);
 }
 
+.updateCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.updateStatus {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.updateStatus:empty {
+  display: none;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;

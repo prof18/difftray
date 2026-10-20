@@ -541,7 +541,7 @@ describe("SettingsPanel", () => {
     expect(document.activeElement).toBe(backButton);
     expect(buttons.length).toBeGreaterThan(1);
 
-    const lastButton = buttons.at(-1);
+    const lastButton = buttons.filter((button) => !button.disabled).at(-1);
     lastButton?.focus();
     const tab = new KeyboardEvent("keydown", {
       bubbles: true,
@@ -649,6 +649,50 @@ describe("SettingsPanel", () => {
     expect(container.textContent).not.toContain("Cancel");
     expect(container.textContent).not.toContain("Save");
     expect(container.querySelector('[aria-label="Back to review"]')).not.toBeNull();
+  });
+
+  it("offers the update check on the General page", () => {
+    const onCheckForUpdates = vi.fn();
+    const general = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates,
+      updatePhase: { kind: "idle" }
+    });
+
+    expect(general.textContent).toContain("Updates");
+    expect(general.textContent).toContain("Version 1.4.2");
+    const button = general.querySelector<HTMLButtonElement>(
+      'button[aria-label="Check for updates"]'
+    );
+    expect(button?.disabled).toBe(false);
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("describes update progress and disables the check while it runs", () => {
+    const checking = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "checking" }
+    });
+
+    expect(checking.textContent).toContain("Checking for updates");
+    expect(
+      checking.querySelector<HTMLButtonElement>('button[aria-label="Check for updates"]')
+        ?.disabled
+    ).toBe(true);
+
+    const ready = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "downloaded", version: "1.5.0" }
+    });
+
+    expect(ready.textContent).toContain("Version 1.5.0 is ready to install");
   });
 
   it("disables controls while settings are saving", () => {

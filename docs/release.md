@@ -123,8 +123,8 @@ from. The repo must be public for `electron-updater` to fetch
 anonymously).
 
 Production builds check this feed shortly after launch, every 24 hours while the
-app remains open, and whenever the user presses the review toolbar update check
-button.
+app remains open, and whenever the user chooses Check for Updates in the app menu
+or in Settings › General.
 
 ```sh
 ./scripts/release-upload.sh v0.1.0

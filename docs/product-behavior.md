@@ -98,7 +98,7 @@ on the desktop and on paired phones; agents write it through the CLI, and agent
 feedback carries attribution.
 
 The agent report puts the active review note first, then each file's comments with
-file comments before line comments. "Copy comments report" puts it on the clipboard,
+file comments before line comments. "Copy for agent" in the diff toolbar puts it on the clipboard,
 and `difftray review export` returns the same text to an agent. The report names the reviewed
 change and explains the three scopes (`packages/core/src/review-comments-report-templates.ts`).
 
