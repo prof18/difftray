@@ -39,6 +39,7 @@ import {
 import {
   classList,
   fileListHeaderMetrics,
+  middleTruncationParts,
   reviewState,
   splitPath,
   type ReviewDiffTargetMode
@@ -983,7 +984,7 @@ export const FileButton = memo(function FileButton({
       <span className={styles.statusDot} data-state={reviewState(file)} />
       <span className={styles.fileCopy}>
         <span className={styles.fileNameLine}>
-          <span className={styles.fileName}>{parts.filename}</span>
+          <MiddleTruncatedName name={parts.filename} title={file.path} />
           {file.invalidated ? (
             <span className={styles.attentionPulse} aria-hidden />
           ) : null}
@@ -1000,6 +1001,23 @@ export const FileButton = memo(function FileButton({
     </button>
   );
 });
+
+function MiddleTruncatedName({
+  name,
+  title
+}: {
+  readonly name: string;
+  readonly title: string;
+}): React.JSX.Element {
+  const { head, tail } = middleTruncationParts(name);
+
+  return (
+    <span className={styles.fileName} title={title}>
+      <span className={styles.fileNameHead}>{head}</span>
+      {tail ? <span className={styles.fileNameTail}>{tail}</span> : null}
+    </span>
+  );
+}
 
 function DiffStats({
   additions,

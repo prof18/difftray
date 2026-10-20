@@ -283,6 +283,22 @@ describe("file list components", () => {
     expect(html).not.toContain("fileDir");
   });
 
+  it("keeps the end of long file names visible", () => {
+    const html = renderToStaticMarkup(
+      <FileButton
+        commentCount={0}
+        file={reviewFile("src/schema.generated.ts")}
+        isSelected={false}
+        onSelect={vi.fn()}
+        position={1}
+        total={1}
+      />
+    );
+
+    expect(html).toContain('title="src/schema.generated.ts"');
+    expect(html).toMatch(/>schema\.gene<\/span><span[^>]*>rated\.ts<\/span>/);
+  });
+
   it("renders neutral stats for files without line changes", () => {
     const html = renderToStaticMarkup(
       <FileButton

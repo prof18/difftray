@@ -14,6 +14,7 @@ import {
   reviewState,
   reviewSummariesEqual,
   reviewSummaryState,
+  middleTruncationParts,
   splitPath,
   suggestedBaseRef,
   themeModeFromValue,
@@ -190,6 +191,18 @@ describe("small view helpers", () => {
     expect(clampNumber(12.7, 0, 10)).toBe(10);
     expect(themeModeFromValue("dark")).toBe("dark");
     expect(themeModeFromValue("unexpected")).toBe("system");
+  });
+
+  it("splits long names so the end stays visible when truncated", () => {
+    expect(middleTruncationParts("App.tsx")).toEqual({ head: "App.tsx", tail: "" });
+    expect(middleTruncationParts("schema.generated.ts")).toEqual({
+      head: "schema.gene",
+      tail: "rated.ts"
+    });
+    expect(middleTruncationParts("abcdefghijkl")).toEqual({
+      head: "abcdefghijkl",
+      tail: ""
+    });
   });
 
   it("formats unknown errors safely", () => {

@@ -384,6 +384,7 @@
 
 .fileList {
   position: relative;
+  container-type: inline-size;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -507,7 +508,29 @@
   padding: 0 6px;
 }
 
-.fileName,
+.fileName {
+  display: flex;
+  min-width: 0;
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-feature-settings:
+    "zero" 1,
+    "ss02" 1;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fileNameHead {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileNameTail {
+  flex: 0 0 auto;
+}
+
 .diffFileName {
   overflow: hidden;
   color: var(--text);
@@ -551,6 +574,12 @@
 .statsBar {
   display: inline-flex;
   gap: 1.5px;
+}
+
+@container (max-width: 280px) {
+  .statsBar {
+    display: none;
+  }
 }
 
 .statsBar span {
