@@ -184,7 +184,7 @@ describe("small view helpers", () => {
       dirname: "src/renderer",
       filename: "App.tsx"
     });
-    expect(splitPath("App.tsx")).toEqual({ dirname: ".", filename: "App.tsx" });
+    expect(splitPath("App.tsx")).toEqual({ dirname: "", filename: "App.tsx" });
     expect(clampIndex(-1, 3)).toBe(2);
     expect(clampIndex(3, 3)).toBe(0);
     expect(clampNumber(12.7, 0, 10)).toBe(10);

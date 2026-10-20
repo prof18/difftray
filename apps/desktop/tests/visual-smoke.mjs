@@ -448,7 +448,7 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
-  await window.getByText("reviewed files drifted").waitFor({ timeout: 10_000 });
+  await window.getByText(/changed after review/).waitFor({ timeout: 10_000 });
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")

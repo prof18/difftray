@@ -95,7 +95,9 @@ export function DriftToast({
           <AlertTriangle size={16} strokeWidth={1.4} aria-hidden />
         </div>
         <div className={styles.toastContent}>
-          <strong>{files.length} reviewed files drifted</strong>
+          <strong>
+            {files.length} {files.length === 1 ? "file" : "files"} changed after review
+          </strong>
           <p>Previously reviewed diffs changed and need another look.</p>
           <div className={styles.toastFiles}>
             {files.slice(0, 3).map((file) => (

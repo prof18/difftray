@@ -90,7 +90,8 @@ export function FileListHeader({
         {attentionCount > 0 ? (
           <div className={styles.needAttention}>
             <span className={styles.attentionPulse} aria-hidden />
-            <span>{attentionCount}</span> need attention
+            <span>{attentionCount}</span> {attentionCount === 1 ? "needs" : "need"}{" "}
+            attention
           </div>
         ) : null}
         <div className={styles.headerActions}>
@@ -963,7 +964,7 @@ export const FileButton = memo(function FileButton({
 
   return (
     <button
-      aria-label={`${parts.filename} ${file.status}${file.invalidated ? " changed after review" : ""}`}
+      aria-label={`${parts.filename} ${file.status}${file.invalidated ? " changed after review" : ""}${parts.dirname ? `, in ${parts.dirname}` : ""}`}
       aria-posinset={position}
       aria-setsize={total}
       className={styles.fileItem}
@@ -991,7 +992,7 @@ export const FileButton = memo(function FileButton({
             </span>
           ) : null}
         </span>
-        <span className={styles.fileDir}>{parts.dirname}</span>
+        {parts.dirname ? <span className={styles.fileDir}>{parts.dirname}</span> : null}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
     </button>
@@ -1005,8 +1006,21 @@ function DiffStats({
   readonly additions: number;
   readonly deletions: number;
 }): React.JSX.Element {
-  const total = Math.max(additions + deletions, 1);
-  const addBlocks = Math.round((additions / total) * 5);
+  const changed = additions + deletions;
+
+  if (changed === 0) {
+    return (
+      <span className={styles.fileStats} title="No line changes">
+        <span className={styles.statsBar} aria-hidden>
+          {Array.from({ length: 5 }, (_, index) => (
+            <span data-kind="none" key={String(index)} />
+          ))}
+        </span>
+      </span>
+    );
+  }
+
+  const addBlocks = Math.round((additions / changed) * 5);
 
   return (
     <span className={styles.fileStats}>

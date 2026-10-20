@@ -51,7 +51,7 @@ describe("app status views", () => {
     );
 
     expect(html).toContain('role="status"');
-    expect(html).toContain("4 reviewed files drifted");
+    expect(html).toContain("4 files changed after review");
     expect(html).toContain("App.tsx");
     expect(html).toContain("README.md");
     expect(html).toContain("package.json");
@@ -60,6 +60,18 @@ describe("app status views", () => {
     expect(html).toContain("Review now");
     expect(html).toContain("Dismiss");
     expect(html).toContain('aria-label="Dismiss drift notification"');
+  });
+
+  it("uses the singular for one changed file", () => {
+    const html = renderToStaticMarkup(
+      <DriftToast
+        files={[reviewFile("src/App.tsx", { additions: 1, deletions: 1 })]}
+        onClose={vi.fn()}
+        onReviewNow={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("1 file changed after review");
   });
 
   it("renders a simple status toast", () => {

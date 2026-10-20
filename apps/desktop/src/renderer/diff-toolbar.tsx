@@ -68,7 +68,7 @@ export function DiffToolbar({
       <div className={styles.diffTitleBlock}>
         <div className={styles.diffFileTitle}>
           <span className={styles.statusDot} data-state={reviewState(file)} />
-          <span className={styles.diffDir}>{parts.dirname}</span>
+          {parts.dirname ? <span className={styles.diffDir}>{parts.dirname}</span> : null}
           <span className={styles.diffFileName}>{parts.filename}</span>
           {file.invalidated ? (
             <span className={styles.diffChangedPill}>
@@ -80,9 +80,13 @@ export function DiffToolbar({
         <div className={styles.diffMeta}>
           <GitBranch size={13} strokeWidth={1.4} aria-hidden />
           <span>{refName}</span>
-          <span>·</span>
-          <span className={styles.addText}>+{file.additions}</span>
-          <span className={styles.delText}>-{file.deletions}</span>
+          {file.additions + file.deletions > 0 ? (
+            <>
+              <span>·</span>
+              <span className={styles.addText}>+{file.additions}</span>
+              <span className={styles.delText}>-{file.deletions}</span>
+            </>
+          ) : null}
           {commentCount > 0 ? (
             <>
               <span>·</span>

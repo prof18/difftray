@@ -48,6 +48,34 @@ describe("diff toolbar components", () => {
     );
   });
 
+  it("omits the directory and line stats when they carry no information", () => {
+    const html = renderToStaticMarkup(
+      <DiffToolbar
+        commentCount={0}
+        copyDisabled={false}
+        copyPending={false}
+        diffMode="unified"
+        diffSideFocus="both"
+        disabled={false}
+        file={reviewFile("preview.png", { additions: 0, deletions: 0 })}
+        onCheckForUpdates={vi.fn()}
+        onCopyCommentsReport={vi.fn()}
+        onDiffSideFocusChange={vi.fn()}
+        onOpenEditor={vi.fn()}
+        onStartFileComment={vi.fn()}
+        onToggleReviewed={vi.fn()}
+        refName="Git changes"
+        reportCommentCount={0}
+        updatePhase={{ kind: "idle" }}
+      />
+    );
+
+    expect(html).toContain("preview.png");
+    expect(html).not.toContain("diffDir");
+    expect(html).not.toContain("+0");
+    expect(html).not.toContain("-0");
+  });
+
   it("omits split controls in unified mode and shows pending copy state", () => {
     const html = renderToStaticMarkup(
       <DiffToolbar

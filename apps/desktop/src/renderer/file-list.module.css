@@ -549,6 +549,10 @@
   background: var(--del-mark);
 }
 
+.statsBar span[data-kind="none"] {
+  background: var(--border-strong);
+}
+
 .collapsedRail {
   display: flex;
   width: 32px;

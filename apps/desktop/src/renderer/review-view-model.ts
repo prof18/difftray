@@ -169,10 +169,7 @@ export function splitPath(path: string): {
   const filename = segments.at(-1) ?? path;
   const dirname = segments.slice(0, -1).join("/");
 
-  return {
-    dirname: dirname.length > 0 ? dirname : ".",
-    filename
-  };
+  return { dirname, filename };
 }
 
 export function clampIndex(index: number, length: number): number {
