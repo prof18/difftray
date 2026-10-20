@@ -244,17 +244,22 @@ export function WorktreePicker({
             top={contextMenu.top}
           />
         ) : null}
-        <div className={paletteStyles.paletteFooter}>
-          Git-recorded siblings · paths distinguish identical folder names
-        </div>
       </section>
     </div>
   );
 }
 
-export function middleTruncatePath(pathName: string, maxLength = 72): string {
+/**
+ * Shortens a path from the middle so it fits the row before CSS clips its end.
+ * The tail keeps the leaf folder, which is what tells sibling worktrees apart.
+ */
+export function middleTruncatePath(pathName: string, maxLength = 48): string {
   if (pathName.length <= maxLength) return pathName;
-  const tailLength = Math.ceil((maxLength - 1) * 0.65);
+  const leafLength = pathName.length - pathName.lastIndexOf("/");
+  const tailLength = Math.min(
+    maxLength - 10,
+    Math.max(Math.ceil((maxLength - 1) * 0.65), leafLength)
+  );
   const headLength = maxLength - tailLength - 1;
   return `${pathName.slice(0, headLength)}…${pathName.slice(-tailLength)}`;
 }
