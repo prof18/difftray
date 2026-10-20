@@ -260,8 +260,8 @@ current workspace. Set `DIFFTRAY_WINDOW_PRESENTATION=active` when debugging a
 visual test and intentionally interacting with the app window.
 
 The review, changed-after-review and phone companion screens are also captured
-in dark mode (`*-dark.png`), and the changed-after-review screen at a 1000px-wide
-window (`*-narrow.png`). The dark captures switch the app chrome by setting the
+in dark mode (`*-dark.png`), and the changed-after-review screen at the 900px minimum
+window width (`*-narrow.png`). The dark captures switch the app chrome by setting the
 root `data-theme` and then restore it. The diff canvas keeps its light syntax
 theme in those images, so use them to check app chrome, not code colours.
 

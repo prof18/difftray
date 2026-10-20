@@ -1804,7 +1804,7 @@ async function captureNarrowVariant(app, window, name) {
     }
 
     const original = mainWindow.getBounds();
-    mainWindow.setSize(1000, original.height);
+    mainWindow.setSize(900, original.height);
     return original;
   });
   await window.waitForTimeout(250);
