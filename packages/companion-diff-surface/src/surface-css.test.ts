@@ -9,6 +9,13 @@ const styles = readFileSync(
 );
 
 describe("diff surface css", () => {
+  it("sizes inline comments with the diff font setting", () => {
+    expect(styles).toMatch(
+      /\.diff-surface__annotation \{[^}]*font-size: inherit;/
+    );
+    expect(styles).toMatch(/\.diff-surface__annotation span \{[^}]*font-size: 0\.85em;/);
+  });
+
   it("uses the design elevated background for unified and split hunk bars", () => {
     expect(styles).toContain(
       '.diff-surface__row[data-row-kind="hunk"] {\n  background: var(--diff-hunk-bg);'

@@ -278,7 +278,7 @@ body {
   color: var(--diff-surface-fg);
   display: grid;
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
+  font-size: inherit;
   gap: 4px;
   margin: 4px 8px;
   padding: 8px 10px;
@@ -288,7 +288,7 @@ body {
 
 .diff-surface__annotation span {
   color: var(--diff-surface-muted);
-  font-size: 11px;
+  font-size: 0.85em;
   font-weight: 700;
 }
 
