@@ -20,6 +20,19 @@ export function changeTypeLetter(status: ChangeStatus): "A" | "D" | "M" | "R" {
   }
 }
 
+/** User-facing words for a review state, following ADR 0043. */
+export function reviewStateLabel(state: ReviewState): string {
+  switch (state) {
+    case "attention":
+      return "Changed after review";
+    case "reviewed":
+      return "Reviewed";
+    case "pending":
+    case "unknown":
+      return "Unreviewed";
+  }
+}
+
 export function ChangeTypeTile({
   status
 }: {

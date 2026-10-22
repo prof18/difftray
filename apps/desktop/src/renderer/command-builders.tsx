@@ -2,7 +2,6 @@ import {
   Check,
   Code2,
   ExternalLink,
-  FileCode2,
   Folder,
   FolderOpen,
   PanelLeftClose,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 
 import type { CommandItem } from "./command-palette.js";
+import { ChangeTypeTile, reviewStateLabel } from "./file-state.js";
 import { reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export type BuildCommandsInput = {
@@ -177,8 +177,8 @@ export function buildCommands({
 
   for (const file of files) {
     items.push({
-      hint: reviewState(file),
-      icon: <FileCode2 size={14} strokeWidth={1.4} aria-hidden />,
+      hint: reviewStateLabel(reviewState(file)),
+      icon: <ChangeTypeTile status={file.status} />,
       id: `file-${file.path}`,
       kind: "file",
       label: splitPath(file.path).filename,

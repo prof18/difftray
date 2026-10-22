@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { ChangeTypeTile, ReviewStateGlyph, changeTypeLetter } from "./file-state.js";
+import {
+  ChangeTypeTile,
+  ReviewStateGlyph,
+  changeTypeLetter,
+  reviewStateLabel
+} from "./file-state.js";
 
 describe("file state indicators", () => {
   it("maps every change status to one letter", () => {
@@ -30,5 +35,12 @@ describe("file state indicators", () => {
     expect(attention).toContain('data-review-state="attention"');
     expect(new Set([pending, reviewed, attention]).size).toBe(3);
     expect(attention).not.toContain("pulse");
+  });
+
+  it("names review states in user-facing words", () => {
+    expect(reviewStateLabel("pending")).toBe("Unreviewed");
+    expect(reviewStateLabel("unknown")).toBe("Unreviewed");
+    expect(reviewStateLabel("reviewed")).toBe("Reviewed");
+    expect(reviewStateLabel("attention")).toBe("Changed after review");
   });
 });

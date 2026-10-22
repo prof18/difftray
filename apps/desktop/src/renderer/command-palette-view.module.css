@@ -125,8 +125,7 @@
 }
 
 .paletteItem[data-kind="file"] .paletteItemIcon {
-  background: var(--ok-soft);
-  color: var(--ok);
+  background: transparent;
 }
 
 .paletteItemCopy {

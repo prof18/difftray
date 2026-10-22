@@ -36,6 +36,10 @@ describe("buildCommands", () => {
       ["file-src/App.tsx", "App.tsx"]
     ]);
 
+    expect(commands.find((command) => command.id === "file-src/App.tsx")?.hint).toBe(
+      "Unreviewed"
+    );
+
     commands.find((command) => command.id === "action-refresh")?.run();
     commands.find((command) => command.id === "action-open-file-in-editor")?.run();
     commands.find((command) => command.id === "action-show-file-in-finder")?.run();
