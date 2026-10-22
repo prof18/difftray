@@ -30,8 +30,8 @@ describe("filterCommands", () => {
     ];
 
     expect(filterCommands(commands, "all", "app").map((item) => item.id)).toEqual([
-      "exact",
-      "file"
+      "file",
+      "exact"
     ]);
     expect(filterCommands(commands, "all", "workspace").map((item) => item.id)).toEqual([
       "sub"
@@ -41,17 +41,39 @@ describe("filterCommands", () => {
     ]);
   });
 
-  it("uses file, project, action as the tie-breaker order", () => {
+  it("returns results in the order the palette draws them", () => {
     const commands = [
       command("action", "action", "Open", "same"),
       command("project", "project", "Open", "same"),
-      command("file", "file", "Open", "same")
+      command("file", "file", "Open", "same"),
+      command("second-action", "action", "Refresh", "same")
     ];
 
-    expect(filterCommands(commands, "all", "open").map((item) => item.id)).toEqual([
-      "file",
+    expect(filterCommands(commands, "all", "").map((item) => item.id)).toEqual([
       "project",
+      "file",
+      "action",
+      "second-action"
+    ]);
+    expect(filterCommands(commands, "all", "open").map((item) => item.id)).toEqual([
+      "project",
+      "file",
       "action"
+    ]);
+    expect(filterCommands(commands, "all", "").map((item) => item.id)).toEqual(
+      groupCommands(commands).flatMap((group) => group.items.map((item) => item.id))
+    );
+  });
+
+  it("orders matches by rank within each drawn group", () => {
+    const commands = [
+      command("contains", "file", "MyApp.tsx", "src/MyApp.tsx"),
+      command("prefix", "file", "App.tsx", "src/App.tsx")
+    ];
+
+    expect(filterCommands(commands, "all", "app").map((item) => item.id)).toEqual([
+      "prefix",
+      "contains"
     ]);
   });
 });

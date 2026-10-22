@@ -38,10 +38,10 @@ export function filterCommands(
     mode === "files" ? commands.filter((command) => command.kind === "file") : commands;
 
   if (normalizedQuery.length === 0) {
-    return modeCommands;
+    return inDisplayOrder(modeCommands);
   }
 
-  return modeCommands
+  const ranked = modeCommands
     .map((command) => ({
       command,
       rank: commandSearchRank(command, normalizedQuery)
@@ -55,6 +55,17 @@ export function filterCommands(
         left.command.label.localeCompare(right.command.label)
     )
     .map((result) => result.command);
+
+  return inDisplayOrder(ranked);
+}
+
+/**
+ * The palette draws commands grouped by kind, so the list the selected index and
+ * Enter work on must be in that same order, or the highlighted row and the command
+ * that runs drift apart from what is on screen.
+ */
+function inDisplayOrder(commands: readonly CommandItem[]): readonly CommandItem[] {
+  return groupCommands(commands).flatMap((group) => group.items);
 }
 
 export function commandSearchRank(command: CommandItem, query: string): number {

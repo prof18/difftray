@@ -127,7 +127,9 @@ and free-form editor commands are not supported.
 | `Cmd+Shift+W`                      | Close the window                                                  |
 | `Escape`                           | Dismiss the drift notification or close the active overlay        |
 
-Inside the command palette, arrows move, `Enter` runs the item and `Escape` closes
-it. Single-key shortcuts do not fire while a button or field has focus. Refresh,
+The command palette groups results as projects, files, then actions, with the best
+matches first inside each group. Arrows move through the rows in that drawn order,
+`Enter` runs the highlighted row (the first row when the palette opens) and
+`Escape` closes it. Single-key shortcuts do not fire while a button or field has focus. Refresh,
 project switching and diff-mode switching are available from visible controls and
 the palette.
