@@ -14,7 +14,8 @@ describe("CommandPalette view", () => {
             id: "project",
             kind: "project",
             label: "Difftray",
-            sub: "/repo/difftray"
+            sub: "/repo/difftray",
+            subLabel: "/repo/…/difftray"
           }),
           command({
             hint: "⌘R",
@@ -42,6 +43,8 @@ describe("CommandPalette view", () => {
     );
 
     expect(html).toContain('aria-label="Command palette"');
+    expect(html).toContain("/repo/…/difftray");
+    expect(html).not.toContain(">/repo/difftray<");
     expect(html).toContain('value="app"');
     expect(html).toContain(">All</span>");
     expect(html).toContain("project");

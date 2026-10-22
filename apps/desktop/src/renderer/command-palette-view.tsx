@@ -67,7 +67,7 @@ export function CommandPalette({
                     <span className={styles.paletteItemIcon}>{item.icon}</span>
                     <span className={styles.paletteItemCopy}>
                       <strong>{item.label}</strong>
-                      <small>{item.sub}</small>
+                      <small title={item.sub}>{item.subLabel ?? item.sub}</small>
                     </span>
                     {item.hint ? (
                       <span className={styles.paletteHint}>{item.hint}</span>

@@ -121,6 +121,21 @@ describe("buildCommands", () => {
     expect(input.closePalette).toHaveBeenCalledOnce();
     expect(input.loadProject).toHaveBeenCalledWith("project-1");
   });
+
+  it("shortens long project paths for display but keeps them searchable", () => {
+    const longPath =
+      "/private/var/folders/zw/zhy_56gn2155g5d156yh9ry40000gn/T/difftray-audit-x/audit-repo";
+    const commands = buildCommands(
+      buildCommandsInput({
+        projects: [{ id: "project-2", name: "audit-repo", path: longPath }]
+      })
+    );
+    const projectCommand = commands.find((command) => command.id === "project-project-2");
+
+    expect(projectCommand?.sub).toBe(longPath);
+    expect(projectCommand?.subLabel?.length).toBeLessThanOrEqual(56);
+    expect(projectCommand?.subLabel?.endsWith("/audit-repo")).toBe(true);
+  });
 });
 
 function buildCommandsInput(input: Partial<BuildCommandsInput> = {}): BuildCommandsInput {

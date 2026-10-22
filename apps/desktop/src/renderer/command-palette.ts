@@ -12,6 +12,8 @@ export type CommandItem = {
   readonly run: () => void;
   readonly shortcut?: string;
   readonly sub: string;
+  /** Shorter text to draw instead of `sub`; search still matches the full `sub`. */
+  readonly subLabel?: string;
 };
 
 export type CommandGroup = {

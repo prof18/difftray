@@ -12,6 +12,7 @@ import {
 
 import type { CommandItem } from "./command-palette.js";
 import { ChangeTypeTile, reviewStateLabel } from "./file-state.js";
+import { middleTruncatePath } from "./worktree-picker.js";
 import { reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export type BuildCommandsInput = {
@@ -171,7 +172,8 @@ export function buildCommands({
         closePalette();
         void loadProject(project.id);
       },
-      sub: project.path
+      sub: project.path,
+      subLabel: middleTruncatePath(project.path, 56)
     });
   }
 
