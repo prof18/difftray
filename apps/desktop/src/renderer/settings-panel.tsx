@@ -349,7 +349,7 @@ function GeneralSettingsPage({
       <SettingsSection title="Updates">
         <div className={styles.settingRow}>
           <span className={styles.updateCopy}>
-            <span>{appVersion ? `Version ${appVersion}` : "Difftray"}</span>
+            <span>{appVersionLabel(appVersion)}</span>
             <span className={styles.updateStatus} role="status">
               {updateStatusText(updatePhase, checkRequested)}
             </span>
@@ -370,6 +370,13 @@ function GeneralSettingsPage({
       </SettingsSection>
     </>
   );
+}
+
+/** The main process reports "development" for unpackaged builds. */
+function appVersionLabel(appVersion: string | undefined): string {
+  if (!appVersion) return "Difftray";
+  if (appVersion === "development") return "Development build";
+  return `Version ${appVersion}`;
 }
 
 function updateStatusText(phase: UpdatePhase, checkRequested: boolean): string {
@@ -741,7 +748,7 @@ function ReviewSettingsPage({
         <ToggleRow
           checked={appSettings.notifyOnDrift}
           disabled={disabled}
-          label="Notify when reviewed file drifts"
+          label="Notify when a reviewed file changes"
           onChange={(checked) => {
             onChangeAppSettings({ notifyOnDrift: checked });
           }}

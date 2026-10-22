@@ -632,7 +632,7 @@ describe("SettingsPanel", () => {
     expect(review.textContent).toContain("Unified");
     expect(review.textContent).toContain("Wrap long lines");
     expect(review.textContent).toContain("Show generated files");
-    expect(review.textContent).toContain("Notify when reviewed file drifts");
+    expect(review.textContent).toContain("Notify when a reviewed file changes");
 
     const repositories = renderSettingsPage("repositories", input);
 
@@ -671,6 +671,17 @@ describe("SettingsPanel", () => {
     });
 
     expect(onCheckForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels unpackaged builds instead of showing a version", () => {
+    const general = renderSettingsPage("general", {
+      appVersion: "development",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "idle" }
+    });
+
+    expect(general.textContent).toContain("Development build");
+    expect(general.textContent).not.toContain("Version development");
   });
 
   it("describes update progress and disables the check while it runs", () => {

@@ -709,7 +709,8 @@ handleTrusted("agents:check", () => {
 handleTrusted("agents:openGuide", () => shell.openExternal(GUIDE_URL));
 handleTrusted("cli:getInstallStatus", (): CliInstallStatus => cliInstaller().getStatus());
 handleTrusted("cli:install", (): CliInstallStatus => cliInstaller().install());
-handleTrusted("app:version", () => app.getVersion());
+// Unpackaged builds report Electron's own version, so name them instead.
+handleTrusted("app:version", () => (app.isPackaged ? app.getVersion() : "development"));
 handleTrusted("app:setSelectedFileAvailable", (_event, input): void => {
   applicationMenuController?.setSelectedFileAvailable(
     readBooleanProperty(input, "available")

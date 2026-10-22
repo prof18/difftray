@@ -29,6 +29,8 @@ describe("app status views", () => {
 
     expect(html).toContain('aria-label="No repository open"');
     expect(html).toContain("No repository open");
+    expect(html).toContain("flags files that change after review");
+    expect(html).not.toContain("drifts");
     expect(html).toContain("Open Repository");
     expect(html).toContain("<kbd>⌘O</kbd>");
     expect(html).toContain("Recent");

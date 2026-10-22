@@ -32,7 +32,7 @@ export function EmptyState({
       <h1>No repository open</h1>
       <p>
         Open a Git repository to start reviewing local changes. Difftray tracks what
-        you&apos;ve reviewed and re-flags files when the diff drifts.
+        you&apos;ve reviewed and flags files that change after review.
       </p>
       <button
         className={styles.primaryButton}
