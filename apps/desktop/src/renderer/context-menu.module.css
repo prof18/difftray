@@ -13,7 +13,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--panel-2);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  box-shadow: var(--shadow-md);
   padding: 5px;
 }
 

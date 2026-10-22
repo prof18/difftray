@@ -350,7 +350,7 @@
   overflow: hidden;
   gap: 1px;
   border-radius: 2px;
-  background: var(--hover);
+  background: var(--elev);
 }
 
 .progressReviewed {
