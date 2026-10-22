@@ -46,14 +46,18 @@ export function DiffToolbar({
 }): React.JSX.Element {
   const parts = splitPath(file.path);
   const canFocusSides = file.status !== "added" && file.status !== "deleted";
-  const showSideFocusControls = diffMode === "split";
+  const showSideFocusControls = diffMode === "split" && canFocusSides;
   return (
     <div className={styles.diffToolbar}>
       <div className={styles.diffTitleBlock}>
         <div className={styles.diffFileTitle}>
           <ReviewStateGlyph state={reviewState(file)} />
-          {parts.dirname ? <span className={styles.diffDir}>{parts.dirname}</span> : null}
-          <span className={styles.diffFileName}>{parts.filename}</span>
+          <span className={styles.diffPath}>
+            {parts.dirname ? (
+              <span className={styles.diffDir}>{parts.dirname}/</span>
+            ) : null}
+            <span className={styles.diffFileName}>{parts.filename}</span>
+          </span>
           {file.invalidated ? (
             <span className={styles.diffChangedPill}>
               <AlertTriangle size={12} strokeWidth={1.4} aria-hidden />

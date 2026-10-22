@@ -28,7 +28,7 @@ describe("diff toolbar components", () => {
       />
     );
 
-    expect(html).toContain("src/renderer");
+    expect(html).toMatch(/src\/renderer\/<\/span><span[^>]*>App\.tsx</);
     expect(html).toContain("App.tsx");
     expect(html).toContain("Changed after review");
     expect(html).toContain('data-review-state="attention"');
@@ -75,6 +75,31 @@ describe("diff toolbar components", () => {
     expect(html).not.toContain("diffDir");
     expect(html).not.toContain("+0");
     expect(html).not.toContain("-0");
+  });
+
+  it("hides the side controls for files that only have one side", () => {
+    for (const status of ["added", "deleted"] as const) {
+      const html = renderToStaticMarkup(
+        <DiffToolbar
+          commentCount={0}
+          copyDisabled={false}
+          copyPending={false}
+          diffMode="split"
+          diffSideFocus="both"
+          disabled={false}
+          file={reviewFile("src/New.tsx", { status })}
+          onCopyCommentsReport={vi.fn()}
+          onDiffSideFocusChange={vi.fn()}
+          onOpenEditor={vi.fn()}
+          onStartFileComment={vi.fn()}
+          onToggleReviewed={vi.fn()}
+          refName="Git changes"
+          reportCommentCount={0}
+        />
+      );
+
+      expect(html).not.toContain('aria-label="Diff side focus"');
+    }
   });
 
   it("omits split controls in unified mode and shows pending copy state", () => {
