@@ -280,8 +280,8 @@ body {
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   font-size: inherit;
   gap: 4px;
-  margin: 4px 8px;
-  padding: 8px 10px;
+  margin: 8px;
+  padding: 10px 12px;
   text-align: left;
   width: calc(100% - 16px);
 }
