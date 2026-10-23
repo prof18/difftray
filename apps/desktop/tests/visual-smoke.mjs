@@ -1977,11 +1977,17 @@ async function expectNoDragRegion(locator, label) {
 }
 
 async function expectNoOuterFocusOutline(locator, label) {
-  const outlineStyle = await locator.evaluate(
-    (element) => getComputedStyle(element).outlineStyle
-  );
+  // The shared focus ring is drawn inset (negative offset) inside the tab bar, which
+  // keeps it from spilling past the button the way an outer outline would.
+  const { outlineOffset, outlineStyle } = await locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      outlineOffset: parseFloat(style.outlineOffset),
+      outlineStyle: style.outlineStyle
+    };
+  });
 
-  if (outlineStyle !== "none") {
+  if (outlineStyle !== "none" && !(outlineOffset < 0)) {
     throw new Error(
       `Expected ${label} to avoid an outer focus outline, got "${outlineStyle}"`
     );
