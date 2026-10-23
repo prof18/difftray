@@ -225,6 +225,19 @@ Rules:
 - Use 1 px borders and subtle separators.
 - Prefer flush panels over floating surfaces.
 
+### Shared Tokens And Recipes
+
+The renderer keeps shared styling in `apps/desktop/src/renderer/styles`.
+`global.css` defines `--font-sans` and `--font-mono`, `--accent-text` for accent text
+that must reach 4.5:1, `--danger` for every error, `--focus-ring` (a 2px accent
+outline, inset by 2px inside lists and menus), and `--disabled-opacity` (0.52), and
+holds the one reduced-motion rule. `buttons.module.css` owns the 28px primary,
+secondary, ghost and icon buttons, and `motion.module.css` the one loading spin;
+components compose them instead of copying them. Fields are 32px with a 6px radius,
+menus share an 8px `--panel-2` surface with 30px items, cards, toasts and banners use
+an 8px radius, dialogs 12px, icon tiles 6px, and icons a 1.4 stroke.
+`styles/design-system.css.test.ts` checks these rules.
+
 ### Icons
 
 Use lucide-react for common actions and status where it improves scan speed.
