@@ -36,6 +36,7 @@
   --accent-soft: rgba(52, 116, 240, 0.15);
   --accent-line: rgba(93, 169, 255, 0.42);
   --focus-ring: 2px solid var(--accent);
+  --disabled-opacity: 0.52;
   --primary-bg: #2d68e0;
   --primary-fg: #ffffff;
   --ok: #73bd79;

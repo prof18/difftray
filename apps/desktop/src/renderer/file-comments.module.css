@@ -74,7 +74,7 @@
 }
 
 .textarea:disabled {
-  opacity: 0.72;
+  opacity: var(--disabled-opacity);
   resize: none;
 }
 
@@ -126,7 +126,7 @@
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .iconButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .attribution {

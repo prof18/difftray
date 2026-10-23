@@ -179,7 +179,7 @@
 
 .diffSideSegmented button:disabled {
   cursor: default;
-  opacity: 0.45;
+  opacity: var(--disabled-opacity);
 }
 
 .diffSideSegmented button:hover:not(:disabled) {
@@ -298,7 +298,7 @@
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .iconButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .diffPreparingState {

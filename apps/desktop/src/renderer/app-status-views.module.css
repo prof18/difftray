@@ -102,7 +102,7 @@
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .iconButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .emptyState {

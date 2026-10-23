@@ -43,8 +43,7 @@
 }
 
 .menu button:disabled {
-  color: var(--text-dim);
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
 }
 
 .menu svg {

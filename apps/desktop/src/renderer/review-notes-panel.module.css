@@ -98,7 +98,7 @@
 }
 
 .textarea:disabled {
-  opacity: 0.72;
+  opacity: var(--disabled-opacity);
   resize: none;
 }
 
@@ -173,7 +173,7 @@
 .secondaryButton:disabled,
 .iconButton:disabled,
 .addButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .attribution {

@@ -136,7 +136,7 @@
 }
 
 .diffTargetTrigger:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
 }
 
 .diffTargetPopover {
@@ -240,7 +240,7 @@
 }
 
 .diffTargetUseButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .diffTargetOptions {
@@ -683,7 +683,7 @@
 }
 
 .iconButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 @keyframes tooltipIn {

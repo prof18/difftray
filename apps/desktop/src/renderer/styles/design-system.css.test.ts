@@ -192,3 +192,18 @@ describe("focus ring", () => {
     }
   });
 });
+
+describe("disabled state", () => {
+  it("dims every disabled control by the same amount", () => {
+    expect(rootBlock("dark")).toContain("--disabled-opacity: 0.52;");
+    for (const [name, css] of moduleSheets) {
+      for (const { selector, body } of rules(css)) {
+        if (!/:disabled|\[aria-disabled/.test(selector)) continue;
+        const opacity = /opacity: ([^;]+);/.exec(body);
+        if (opacity) {
+          expect(opacity[1], `${name} ${selector}`).toBe("var(--disabled-opacity)");
+        }
+      }
+    }
+  });
+});

@@ -47,7 +47,7 @@
 }
 
 .settingsBackButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .settingsBackButton > svg {
@@ -148,7 +148,7 @@
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .iconButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .sectionLabel {
@@ -416,7 +416,7 @@
 
 .switch:disabled {
   cursor: default;
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -667,7 +667,7 @@
 }
 
 .companionRevokeButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .companionHelp {
