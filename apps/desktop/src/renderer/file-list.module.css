@@ -278,7 +278,7 @@
   display: inline-grid;
   width: 16px;
   place-items: center;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .diffTargetOptionMain,
@@ -439,6 +439,16 @@
   border-left-color: var(--warn);
 }
 
+/* Accent and muted text lose contrast on the selected row's fill. */
+.fileItem[data-selected="true"] .commentBadge,
+.fileItem[data-selected="true"] .commentMeta {
+  color: var(--text);
+}
+
+.fileItem[data-selected="true"] .fileDir {
+  color: var(--text-2);
+}
+
 .statusDot {
   display: inline-block;
   width: 8px;
@@ -495,7 +505,7 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;

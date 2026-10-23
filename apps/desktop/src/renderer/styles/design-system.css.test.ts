@@ -119,3 +119,39 @@ describe("custom properties", () => {
     );
   });
 });
+
+describe("accent text contrast", () => {
+  // Dark --accent is 4.07:1 on the panel and 2.29:1 on the selected row, too low for
+  // 11px text, so accent-coloured text uses --accent-text instead.
+  it("defines a readable accent for text in both themes", () => {
+    expect(rootBlock("dark")).toContain("--accent-text: #5da9ff;");
+    expect(rootBlock("light")).toContain("--accent-text: var(--accent);");
+  });
+
+  it("colours small accent text with --accent-text", () => {
+    const checks: [string, string][] = [
+      ["file-list.module.css", ".commentBadge,\n.commentMeta"],
+      ["diff-toolbar.module.css", ".commentBadge,\n.commentMeta"],
+      ["command-palette-view.module.css", ".paletteScope"],
+      ["diff-toolbar.module.css", ".reportButtonCount"]
+    ];
+    for (const [name, selector] of checks) {
+      expect(rule(sheet(name), selector), `${name} ${selector}`).toContain(
+        "color: var(--accent-text);"
+      );
+    }
+  });
+
+  it("keeps the selected file row's secondary text readable on --selected", () => {
+    const fileList = sheet("file-list.module.css");
+    expect(
+      rule(
+        fileList,
+        '.fileItem[data-selected="true"] .commentBadge,\n.fileItem[data-selected="true"] .commentMeta'
+      )
+    ).toContain("color: var(--text);");
+    expect(rule(fileList, '.fileItem[data-selected="true"] .fileDir')).toContain(
+      "color: var(--text-2);"
+    );
+  });
+});
