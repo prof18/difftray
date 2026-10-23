@@ -140,16 +140,18 @@
     minmax(max-content, 1.35fr)
     repeat(2, minmax(max-content, 1fr));
   gap: 2px;
-  border-bottom: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--panel);
-  padding: 4px;
+  margin: 6px 6px 0;
+  padding: 2px;
 }
 
 .diffTargetTab {
   -webkit-app-region: no-drag;
-  height: 26px;
+  height: 28px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -480,9 +482,9 @@
 
 .commentBadge {
   height: 18px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border: 1px solid var(--accent-line);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--accent-soft);
   padding: 0 6px;
 }
 

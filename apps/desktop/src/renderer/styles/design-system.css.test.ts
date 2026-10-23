@@ -446,3 +446,65 @@ describe("cards, toasts and dialogs", () => {
     }
   });
 });
+
+describe("segmented controls and chips", () => {
+  it("shares one segmented control shape", () => {
+    const groups: [string, string, string, string][] = [
+      [
+        "diff-toolbar.module.css",
+        ".diffSideSegmented",
+        ".diffSideSegmented button",
+        "24px"
+      ],
+      [
+        "settings-panel.module.css",
+        ".settingsSegmented",
+        ".settingsSegmented button",
+        "28px"
+      ],
+      ["file-list.module.css", ".diffTargetTabs", ".diffTargetTab", "28px"]
+    ];
+    for (const [name, outer, inner, height] of groups) {
+      const css = sheet(name);
+      expect(rule(css, outer), `${name} ${outer}`).toContain("border-radius: 8px;");
+      expect(rule(css, outer), `${name} ${outer}`).toContain("padding: 2px;");
+      expect(rule(css, inner), `${name} ${inner}`).toContain("border-radius: 6px;");
+      expect(rule(css, inner), `${name} ${inner}`).toContain(`height: ${height};`);
+    }
+  });
+
+  it("draws count badges as small sans pills with token tints", () => {
+    const badges: [string, string][] = [
+      ["file-list.module.css", ".commentBadge"],
+      ["diff-toolbar.module.css", ".reportButtonCount"]
+    ];
+    for (const [name, selector] of badges) {
+      const body = rule(sheet(name), selector);
+      expect(body, selector).toContain("height: 18px;");
+      expect(body, selector).toContain("border-radius: 999px;");
+      expect(body, selector).toContain("background: var(--accent-soft);");
+      expect(body, selector).not.toContain("color-mix");
+      expect(body, selector).not.toContain("--font-mono");
+      expect(body, selector).not.toContain("font-weight: 700;");
+    }
+    expect(rule(sheet("file-list.module.css"), ".commentBadge")).toContain(
+      "border: 1px solid var(--accent-line);"
+    );
+    expect(rule(sheet("diff-toolbar.module.css"), ".reportButtonCount")).toContain(
+      "font-weight: 600;"
+    );
+  });
+
+  it("draws label chips 20px high with a 4px radius", () => {
+    const chips: [string, string][] = [
+      ["diff-toolbar.module.css", ".diffChangedPill"],
+      ["command-palette-view.module.css", ".paletteScope"]
+    ];
+    for (const [name, selector] of chips) {
+      const body = rule(sheet(name), selector);
+      expect(body, selector).toContain("height: 20px;");
+      expect(body, selector).toContain("border-radius: 4px;");
+      expect(body, selector).toContain("padding: 0 6px;");
+    }
+  });
+});

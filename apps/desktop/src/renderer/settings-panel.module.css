@@ -56,7 +56,7 @@
 .settingsSegmented button {
   display: inline-flex;
   min-width: 68px;
-  height: 30px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
