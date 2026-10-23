@@ -625,3 +625,11 @@ describe("icons", () => {
     }
   });
 });
+
+describe("hit targets", () => {
+  it("makes collapsed-rail files at least 24px square", () => {
+    const railFile = rule(sheet("file-list.module.css"), ".railFile");
+    expect(railFile).toContain("width: 24px;");
+    expect(railFile).toContain("height: 24px;");
+  });
+});

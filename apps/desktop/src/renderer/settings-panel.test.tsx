@@ -921,6 +921,26 @@ describe("SettingsPanel", () => {
     expect(toggle?.getAttribute("role")).toBe("switch");
   });
 
+  // Every other switch row toggles from its label; the companion row did not.
+  it("toggles companion mode from its row label", () => {
+    const onToggleCompanion = vi.fn();
+    const companion = renderSettingsPage("companion", { onToggleCompanion });
+    const title = [...companion.querySelectorAll<HTMLElement>("*")].find(
+      (element) => element.textContent === "Companion mode"
+    );
+    const toggle = companion.querySelector<HTMLInputElement>(
+      'input[aria-label="Enable companion mode"]'
+    );
+
+    expect(toggle?.closest("label")).not.toBeNull();
+    expect(toggle?.closest("label")).toBe(title?.closest("label"));
+    act(() => {
+      title?.click();
+    });
+
+    expect(onToggleCompanion).toHaveBeenCalledWith(true);
+  });
+
   it("says the server is starting while companion mode waits for it", () => {
     const companion = renderSettingsPage("companion", {
       appSettings: appSettings({ companionEnabled: true }),

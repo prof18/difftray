@@ -931,17 +931,17 @@ function CompanionSettingsSection({
 
   return (
     <SettingsSection title="Connection">
-      <div className={styles.companionIntro}>
-        <div>
-          <div className={styles.companionTitle}>Companion mode</div>
+      <label className={styles.companionIntro}>
+        <span className={styles.companionIntroCopy}>
+          <span className={styles.companionTitle}>Companion mode</span>
           {!hasPairedDevices ? (
-            <p className={styles.companionDescription}>
+            <span className={styles.companionDescription}>
               Review your changes from your phone. Browse projects, read diffs, and mark
               files reviewed while you&apos;re away from your desk — everything stays on
               your own devices.
-            </p>
+            </span>
           ) : null}
-        </div>
+        </span>
         <input
           aria-label="Enable companion mode"
           checked={enabled}
@@ -954,7 +954,7 @@ function CompanionSettingsSection({
           title="Enable companion mode"
           type="checkbox"
         />
-      </div>
+      </label>
       {enabled ? (
         <>
           <div className={styles.companionStatusRow}>

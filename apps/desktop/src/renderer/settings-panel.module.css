@@ -409,13 +409,20 @@
   padding: 14px;
 }
 
+.companionIntroCopy {
+  display: block;
+  min-width: 0;
+}
+
 .companionTitle {
+  display: block;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 400;
 }
 
 .companionDescription {
+  display: block;
   max-width: 500px;
   margin: 6px 0 0;
   color: var(--text-muted);
