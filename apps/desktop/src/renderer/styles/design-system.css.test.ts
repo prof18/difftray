@@ -84,13 +84,14 @@ describe("custom properties", () => {
   it("only uses properties that something defines", () => {
     const defined = new Set<string>();
     for (const [, css] of allSheets()) {
-      for (const match of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(match[1]!);
+      for (const match of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(match[1] ?? "");
     }
-    for (const match of sources.matchAll(/["'`](--[\w-]+)["'`]/g)) defined.add(match[1]!);
+    for (const match of sources.matchAll(/["'`](--[\w-]+)["'`]/g))
+      defined.add(match[1] ?? "");
 
     for (const [name, css] of allSheets()) {
       for (const match of css.matchAll(/var\((--[\w-]+)/g)) {
-        expect(defined.has(match[1]!), `${name} uses ${match[1]!}`).toBe(true);
+        expect(defined.has(match[1] ?? ""), `${name} uses ${match[1] ?? ""}`).toBe(true);
       }
     }
   });
@@ -160,8 +161,8 @@ describe("accent text contrast", () => {
 function rules(css: string): { selector: string; body: string }[] {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
   return [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
-    selector: match[1]!.trim(),
-    body: match[2]!
+    selector: (match[1] ?? "").trim(),
+    body: match[2] ?? ""
   }));
 }
 
@@ -527,7 +528,9 @@ describe("type scale", () => {
         // The phone pairing code is a display number read across the room.
         if (selector === ".companionCodeBlock strong") continue;
         for (const match of body.matchAll(/font-size: ([^;]+);/g)) {
-          expect(scale.has(match[1]!), `${name} ${selector} ${match[1]!}`).toBe(true);
+          expect(scale.has(match[1] ?? ""), `${name} ${selector} ${match[1] ?? ""}`).toBe(
+            true
+          );
         }
       }
     }
@@ -585,14 +588,14 @@ describe("icons", () => {
   function lucideElements(source: string): { name: string; props: string }[] {
     const imports = /import \{([^}]+)\} from "lucide-react";/.exec(source);
     if (!imports) return [];
-    const names = imports[1]!
+    const names = (imports[1] ?? "")
       .split(",")
       .map((name) => name.trim())
       .filter((name) => /^[A-Z]/.test(name));
     return names.flatMap((name) =>
       [...source.matchAll(new RegExp(`<${name}\\b([^>]*)/>`, "g"))].map((match) => ({
         name,
-        props: match[1]!
+        props: match[1] ?? ""
       }))
     );
   }
