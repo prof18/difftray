@@ -138,7 +138,7 @@ export function WorktreePicker({
               onClick={onRefresh}
               type="button"
             >
-              <RefreshCw size={14} aria-hidden />
+              <RefreshCw size={14} strokeWidth={1.4} aria-hidden />
             </button>
             <button
               aria-label="Close worktrees"
@@ -146,7 +146,7 @@ export function WorktreePicker({
               onClick={onClose}
               type="button"
             >
-              <X size={14} aria-hidden />
+              <X size={14} strokeWidth={1.4} aria-hidden />
             </button>
           </div>
         </header>
@@ -211,7 +211,7 @@ export function WorktreePicker({
               </span>
               {worktree.locked ? (
                 <span className={styles.locked}>
-                  <LockKeyhole size={11} aria-hidden /> Locked
+                  <LockKeyhole size={11} strokeWidth={1.4} aria-hidden /> Locked
                 </span>
               ) : null}
               <span className={paletteStyles.paletteHint}>

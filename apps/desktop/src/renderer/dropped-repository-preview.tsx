@@ -49,7 +49,7 @@ export function DroppedRepositoryPreview({
         ref={dialogRef}
       >
         <header className={styles.header}>
-          <FolderSearch size={18} aria-hidden />
+          <FolderSearch size={18} strokeWidth={1.4} aria-hidden />
           <div>
             <strong>Choose repositories to open</strong>
             <span>{candidates.length} found in dropped folders</span>
@@ -74,7 +74,7 @@ export function DroppedRepositoryPreview({
                 type="button"
               >
                 <span className={styles.checkbox} data-checked={selected}>
-                  {selected ? <Check size={12} aria-hidden /> : null}
+                  {selected ? <Check size={12} strokeWidth={1.4} aria-hidden /> : null}
                 </span>
                 <span className={paletteStyles.paletteItemCopy}>
                   <strong>{candidate.name}</strong>

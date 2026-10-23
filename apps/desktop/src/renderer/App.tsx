@@ -4011,7 +4011,7 @@ export function App(): React.JSX.Element {
               setError(undefined);
             }}
           >
-            <X size={14} aria-hidden />
+            <X size={14} strokeWidth={1.4} aria-hidden />
           </button>
         </div>
       ) : null}

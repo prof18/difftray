@@ -29,7 +29,7 @@ export function EmptyState({
   return (
     <section className={styles.emptyState} aria-label="No repository open">
       <div className={styles.emptyIcon}>
-        <Diff size={30} strokeWidth={1.35} aria-hidden />
+        <Diff size={30} strokeWidth={1.4} aria-hidden />
       </div>
       <h1>No repository open</h1>
       <p>
@@ -42,7 +42,7 @@ export function EmptyState({
         onClick={onOpenProject}
         type="button"
       >
-        <FolderOpen size={15} strokeWidth={1.4} aria-hidden />
+        <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
         Open Repository
         <kbd>⌘O</kbd>
       </button>
@@ -53,7 +53,7 @@ export function EmptyState({
           onClick={onScanFolder}
           type="button"
         >
-          <Folder size={15} strokeWidth={1.4} aria-hidden />
+          <Folder size={14} strokeWidth={1.4} aria-hidden />
           Scan a folder…
         </button>
       ) : null}
@@ -174,7 +174,7 @@ export function SimpleToast({
 }): React.JSX.Element {
   return (
     <aside className={styles.simpleToast} role="status">
-      <Check size={15} strokeWidth={1.5} aria-hidden />
+      <Check size={16} strokeWidth={1.4} aria-hidden />
       <span>{message}</span>
     </aside>
   );
@@ -190,14 +190,14 @@ export function UpdateRestartBanner({
   return (
     <aside className={styles.updateBanner} role="status">
       <div className={styles.updateIcon}>
-        <RefreshCw size={15} strokeWidth={1.5} aria-hidden />
+        <RefreshCw size={16} strokeWidth={1.4} aria-hidden />
       </div>
       <div className={styles.updateContent}>
         <strong>Update ready</strong>
         <span>Difftray {version} is ready.</span>
       </div>
       <button className={styles.primaryButton} onClick={onRestart} type="button">
-        <RefreshCw size={14} strokeWidth={1.5} aria-hidden />
+        <RefreshCw size={14} strokeWidth={1.4} aria-hidden />
         Restart to update
       </button>
     </aside>

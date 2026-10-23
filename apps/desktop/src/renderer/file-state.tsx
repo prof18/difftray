@@ -57,7 +57,7 @@ export function ReviewStateGlyph({
 
   return (
     <span aria-hidden="true" className={styles.reviewGlyph} data-review-state={state}>
-      <Icon size={size} strokeWidth={state === "pending" ? 1.4 : 1.8} />
+      <Icon size={size} strokeWidth={1.4} />
     </span>
   );
 }

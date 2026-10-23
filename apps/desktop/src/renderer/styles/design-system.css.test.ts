@@ -576,3 +576,52 @@ describe("type scale", () => {
     );
   });
 });
+
+describe("icons", () => {
+  const components = readdirSync(rendererDir).filter(
+    (name) => name.endsWith(".tsx") && !name.includes(".test.")
+  );
+
+  function lucideElements(source: string): { name: string; props: string }[] {
+    const imports = /import \{([^}]+)\} from "lucide-react";/.exec(source);
+    if (!imports) return [];
+    const names = imports[1]!
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => /^[A-Z]/.test(name));
+    return names.flatMap((name) =>
+      [...source.matchAll(new RegExp(`<${name}\\b([^>]*)/>`, "g"))].map((match) => ({
+        name,
+        props: match[1]!
+      }))
+    );
+  }
+
+  it("draws every lucide icon with the 1.4 stroke", () => {
+    let count = 0;
+    for (const component of components) {
+      for (const { name, props } of lucideElements(read(join(rendererDir, component)))) {
+        count += 1;
+        // Spread props are covered by the strokeWidth scan below.
+        if (props.includes("{...")) continue;
+        expect(props, `${component} <${name}>`).toContain("strokeWidth={1.4}");
+      }
+    }
+    expect(count).toBeGreaterThan(50);
+    for (const component of components) {
+      const source = read(join(rendererDir, component));
+      for (const match of source.matchAll(/strokeWidth(?:=\{|: )([^},\n]+)/g)) {
+        expect(match[1], `${component} strokeWidth`).toBe("1.4");
+      }
+    }
+  });
+
+  it("draws close icons at 14px", () => {
+    for (const component of components) {
+      for (const { name, props } of lucideElements(read(join(rendererDir, component)))) {
+        if (name !== "X") continue;
+        expect(props, `${component} <X>`).toContain("size={14}");
+      }
+    }
+  });
+});

@@ -618,7 +618,7 @@ export function ProjectTabBar({
                     title="Close Repository"
                     type="button"
                   >
-                    <X size={13} strokeWidth={1.4} aria-hidden />
+                    <X size={14} strokeWidth={1.4} aria-hidden />
                   </button>
                 ) : null}
               </div>
@@ -635,7 +635,7 @@ export function ProjectTabBar({
             title="Open Repository"
             type="button"
           >
-            <Plus size={15} strokeWidth={1.4} aria-hidden />
+            <Plus size={14} strokeWidth={1.4} aria-hidden />
           </button>
         </div>
       </div>
@@ -650,7 +650,7 @@ export function ProjectTabBar({
           title="Open Repository"
           type="button"
         >
-          <Plus size={15} strokeWidth={1.4} aria-hidden />
+          <Plus size={14} strokeWidth={1.4} aria-hidden />
         </button>
         {activeProjectHasWorktreeSiblings ? (
           <button
@@ -661,7 +661,7 @@ export function ProjectTabBar({
             title="Worktrees"
             type="button"
           >
-            <FolderGit2 size={15} strokeWidth={1.4} aria-hidden />
+            <FolderGit2 size={14} strokeWidth={1.4} aria-hidden />
             <span>Worktrees</span>
           </button>
         ) : null}
@@ -680,7 +680,7 @@ export function ProjectTabBar({
             title="Repository actions"
             type="button"
           >
-            <MoreHorizontal size={16} strokeWidth={1.4} aria-hidden />
+            <MoreHorizontal size={14} strokeWidth={1.4} aria-hidden />
           </button>
           <div
             aria-label={`Repository actions for ${activeProjectName ?? "active repository"}`}

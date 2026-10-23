@@ -133,7 +133,7 @@ export function SettingsPanel({
               onClick={onClose}
               type="button"
             >
-              <ArrowLeft size={15} strokeWidth={1.6} aria-hidden />
+              <ArrowLeft size={14} strokeWidth={1.4} aria-hidden />
               <span>Back to review</span>
             </button>
             <nav aria-label="Settings sections" className={styles.settingsNavigation}>
@@ -156,7 +156,7 @@ export function SettingsPanel({
                       aria-hidden="true"
                       className={styles.settingsNavigationSpinner}
                       size={13}
-                      strokeWidth={1.7}
+                      strokeWidth={1.4}
                     />
                   ) : null}
                   {page.id === "companion" && companionState.status === "running" ? (
@@ -268,7 +268,7 @@ function SettingsNavigationIcon({
   const iconProps = {
     "aria-hidden": true,
     size: 16,
-    strokeWidth: 1.5
+    strokeWidth: 1.4
   } as const;
 
   if (page === "review") {
@@ -851,7 +851,7 @@ function RepositorySettingsPage({
             <strong title={root.path}>{root.path}</strong>
             {root.scanning ? (
               <small className={styles.repositoryScanStatus} role="status">
-                <LoaderCircle aria-hidden size={13} strokeWidth={1.7} />
+                <LoaderCircle aria-hidden size={13} strokeWidth={1.4} />
                 <span>
                   Scanning folders
                   {root.scannedDirectories
@@ -881,9 +881,9 @@ function RepositorySettingsPage({
               type="button"
             >
               {root.scanning ? (
-                <X aria-hidden size={13} strokeWidth={1.7} />
+                <X aria-hidden size={14} strokeWidth={1.4} />
               ) : (
-                <RefreshCw aria-hidden size={13} strokeWidth={1.7} />
+                <RefreshCw aria-hidden size={13} strokeWidth={1.4} />
               )}
               {root.scanning ? "Cancel" : "Refresh"}
             </button>
@@ -897,7 +897,7 @@ function RepositorySettingsPage({
               onClick={() => onRemoveRepositorySearchRoot?.(root.id)}
               type="button"
             >
-              <Trash2 size={13} aria-hidden />
+              <Trash2 size={13} strokeWidth={1.4} aria-hidden />
             </button>
           </div>
         </div>
@@ -990,7 +990,7 @@ function CompanionSettingsSection({
               }
               type="button"
             >
-              <QrCode size={14} strokeWidth={1.5} aria-hidden />
+              <QrCode size={14} strokeWidth={1.4} aria-hidden />
               Pair new device
             </button>
           </div>
@@ -1067,7 +1067,7 @@ function CompanionSettingsSection({
               companionState.devices.map((device) => (
                 <div className={styles.companionDeviceRow} key={device.id}>
                   <span className={styles.companionDeviceIcon}>
-                    <Smartphone size={14} strokeWidth={1.5} aria-hidden />
+                    <Smartphone size={14} strokeWidth={1.4} aria-hidden />
                   </span>
                   <div>
                     <div className={styles.companionDeviceTitle}>{device.name}</div>
@@ -1085,7 +1085,7 @@ function CompanionSettingsSection({
                     title="Revoke"
                     type="button"
                   >
-                    <Trash2 size={13} strokeWidth={1.5} aria-hidden />
+                    <Trash2 size={13} strokeWidth={1.4} aria-hidden />
                     Revoke
                   </button>
                 </div>
@@ -1099,12 +1099,12 @@ function CompanionSettingsSection({
           {hasPairedDevices ? (
             <details className={styles.companionHelp}>
               <summary>
-                <CircleHelp size={16} strokeWidth={1.6} aria-hidden />
+                <CircleHelp size={16} strokeWidth={1.4} aria-hidden />
                 <span>How to connect a phone</span>
                 <ChevronRight
                   className={styles.companionHelpChevron}
                   size={16}
-                  strokeWidth={1.6}
+                  strokeWidth={1.4}
                   aria-hidden
                 />
               </summary>
@@ -1258,7 +1258,7 @@ function CompanionStoreDialog({
             onClick={onClose}
             type="button"
           >
-            <X size={14} strokeWidth={1.5} aria-hidden />
+            <X size={14} strokeWidth={1.4} aria-hidden />
           </button>
         </div>
         <div className={styles.companionStoreQrFrame}>
@@ -1278,7 +1278,7 @@ function CompanionStoreDialog({
             }}
           >
             Open in {details.label}
-            <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+            <ExternalLink size={12} strokeWidth={1.4} aria-hidden />
           </a>
           <button
             className={styles.secondaryButton}
@@ -1290,9 +1290,9 @@ function CompanionStoreDialog({
             type="button"
           >
             {copied ? (
-              <Check size={13} strokeWidth={1.6} aria-hidden />
+              <Check size={13} strokeWidth={1.4} aria-hidden />
             ) : (
-              <Copy size={13} strokeWidth={1.5} aria-hidden />
+              <Copy size={13} strokeWidth={1.4} aria-hidden />
             )}
             {copied ? "Copied" : "Copy link"}
           </button>
@@ -1506,7 +1506,7 @@ function EditorPicker({
       >
         <EditorChoiceIcon choice={selectedChoice} />
         <span>{selectedChoice.label}</span>
-        <ChevronDown size={14} strokeWidth={1.5} aria-hidden />
+        <ChevronDown size={14} strokeWidth={1.4} aria-hidden />
       </button>
       {open ? (
         <div aria-label="Editor" className={styles.editorPickerMenu} role="listbox">
@@ -1526,7 +1526,7 @@ function EditorPicker({
               <EditorChoiceIcon choice={choice} />
               <span>{choice.label}</span>
               {choice.value === selectedValue ? (
-                <Check size={13} strokeWidth={1.6} aria-hidden />
+                <Check size={13} strokeWidth={1.4} aria-hidden />
               ) : null}
             </button>
           ))}
@@ -1554,7 +1554,7 @@ function EditorChoiceIcon({
 
   return (
     <span className={styles.editorPickerIcon} data-fallback="true">
-      <Code2 size={14} strokeWidth={1.5} aria-hidden />
+      <Code2 size={14} strokeWidth={1.4} aria-hidden />
     </span>
   );
 }

@@ -340,7 +340,7 @@ export function DiffTargetControl({
               type="button"
             >
               <span>{triggerLabel}</span>
-              <ChevronDown size={13} strokeWidth={1.5} aria-hidden />
+              <ChevronDown size={13} strokeWidth={1.4} aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipPortal>
@@ -441,7 +441,7 @@ export function DiffTargetControl({
                   >
                     <span className={styles.diffTargetOptionIcon}>
                       {mode === "branch" && branchRef === baseRefDraft ? (
-                        <Check size={13} strokeWidth={1.6} aria-hidden />
+                        <Check size={13} strokeWidth={1.4} aria-hidden />
                       ) : null}
                     </span>
                     <span className={styles.diffTargetOptionMain}>{branchRef}</span>
@@ -496,7 +496,7 @@ export function DiffTargetControl({
                         >
                           <span className={styles.diffTargetOptionIcon}>
                             {mode === "commit" && commit.sha === commitRefDraft ? (
-                              <Check size={13} strokeWidth={1.6} aria-hidden />
+                              <Check size={13} strokeWidth={1.4} aria-hidden />
                             ) : null}
                           </span>
                           <span className={styles.diffTargetCommitText}>
@@ -1006,7 +1006,7 @@ export const FileButton = memo(function FileButton({
           <MiddleTruncatedName name={parts.filename} title={file.path} />
           {commentCount > 0 ? (
             <span className={styles.commentBadge} title="Review comments">
-              <MessageSquare size={11} strokeWidth={1.5} aria-hidden />
+              <MessageSquare size={11} strokeWidth={1.4} aria-hidden />
               {commentCount}
             </span>
           ) : null}
