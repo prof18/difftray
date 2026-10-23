@@ -17,26 +17,3 @@
   font-size: 11px;
   padding: 7px 12px;
 }
-
-.footer button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  padding: 7px 10px;
-}
-
-.footer button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.footer button:disabled {
-  cursor: default;
-  opacity: var(--disabled-opacity);
-}

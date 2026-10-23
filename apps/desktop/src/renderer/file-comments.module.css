@@ -1,3 +1,15 @@
+.iconButton {
+  composes: iconButton from "./styles/buttons.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
+}
+
 .stack {
   display: grid;
   max-height: 40vh;
@@ -76,57 +88,6 @@
 .textarea:disabled {
   opacity: var(--disabled-opacity);
   resize: none;
-}
-
-.iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-}
-
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--primary-bg);
-  color: var(--primary-fg);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: var(--disabled-opacity);
 }
 
 .attribution {

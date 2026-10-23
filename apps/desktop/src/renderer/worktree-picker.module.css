@@ -33,28 +33,6 @@
   gap: 6px;
 }
 
-.actions button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel-2);
-  color: var(--text-muted);
-}
-
-.actions button:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  background: var(--hover);
-  color: var(--text);
-}
-
-.actions button:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .locked {
   display: inline-flex;
   align-items: center;

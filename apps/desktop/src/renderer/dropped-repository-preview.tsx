@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
 import styles from "./dropped-repository-preview.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
 
 export function DroppedRepositoryPreview({
@@ -95,10 +96,15 @@ export function DroppedRepositoryPreview({
         ) : null}
         <footer className={styles.footer}>
           <span aria-live="polite">{selectedIds.length} selected</span>
-          <button onClick={onCancel} type="button">
+          <button
+            className={buttonStyles.secondaryButton}
+            onClick={onCancel}
+            type="button"
+          >
             Cancel
           </button>
           <button
+            className={buttonStyles.primaryButton}
             disabled={selectedIds.length === 0}
             onClick={() => onOpen(selectedIds, remember)}
             type="button"

@@ -57,8 +57,7 @@
 
 .projectTab,
 .projectTabSelect,
-.tabCloseButton,
-.tabIconButton {
+.tabCloseButton {
   -webkit-app-region: no-drag;
   display: inline-grid;
   place-items: center;
@@ -207,10 +206,7 @@
 }
 
 .tabIconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
 .inlineTabOpenButton {
@@ -241,32 +237,8 @@
   padding-left: 7px;
 }
 
-.tabIconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
-}
-
 .worktreesButton {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 9px;
-}
-
-.worktreesButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
+  composes: ghostButton from "./styles/buttons.module.css";
 }
 
 .repositoryMenuAnchor {

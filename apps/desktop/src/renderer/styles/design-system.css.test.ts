@@ -207,3 +207,104 @@ describe("disabled state", () => {
     }
   });
 });
+
+describe("buttons", () => {
+  const shared = "styles/buttons.module.css";
+  const composesFrom = (name: string) =>
+    `composes: ${name} from "./styles/buttons.module.css";`;
+
+  it("keeps one button recipe with hover states", () => {
+    const buttons = sheet(shared);
+    const base = rule(buttons, ".button");
+    for (const declaration of [
+      "height: 28px;",
+      "border-radius: 6px;",
+      "font-weight: 600;",
+      "padding: 0 12px;"
+    ]) {
+      expect(base).toContain(declaration);
+    }
+    for (const variant of [".primaryButton", ".secondaryButton", ".ghostButton"]) {
+      expect(rule(buttons, variant)).toContain("composes: button;");
+      expect(rule(buttons, `${variant}:hover:not(:disabled)`)).toContain("background:");
+    }
+    expect(rule(buttons, ".primaryButton:hover:not(:disabled)")).toContain("color-mix(");
+    expect(rule(buttons, ".secondaryButton:hover:not(:disabled)")).toContain(
+      "border-color: var(--border-strong);"
+    );
+    const icon = rule(buttons, ".iconButton");
+    expect(icon).toContain("width: 28px;");
+    expect(icon).toContain("height: 28px;");
+    expect(icon).toContain("background: transparent;");
+    expect(rule(buttons, ".iconButton:hover:not(:disabled)")).toContain(
+      "background: var(--hover);"
+    );
+  });
+
+  it("makes component buttons compose the shared recipe instead of copying it", () => {
+    for (const [name, css] of moduleSheets) {
+      if (name === shared) continue;
+      for (const { selector, body } of rules(css)) {
+        for (const variant of [
+          "primaryButton",
+          "secondaryButton",
+          "ghostButton",
+          "iconButton"
+        ]) {
+          if (selector === `.${variant}`) {
+            expect(body.trim(), `${name} ${selector}`).toBe(composesFrom(variant));
+          }
+        }
+        expect(selector, `${name} copies the button recipe`).not.toMatch(
+          /^\.primaryButton,\s*\.secondaryButton/
+        );
+      }
+    }
+  });
+
+  it("brings one-off buttons onto the standard", () => {
+    const expectations: [string, string, string][] = [
+      ["review-notes-panel.module.css", ".addButton", "secondaryButton"],
+      ["file-list.module.css", ".diffTargetUseButton", "secondaryButton"],
+      ["file-list.module.css", ".railButton", "iconButton"],
+      ["settings-panel.module.css", ".companionRevokeButton", "ghostButton"],
+      ["project-tab-bar.module.css", ".worktreesButton", "ghostButton"],
+      ["project-tab-bar.module.css", ".tabIconButton", "iconButton"],
+      ["App.module.css", ".errorBannerClose", "iconButton"]
+    ];
+    for (const [name, selector, variant] of expectations) {
+      expect(rule(sheet(name), selector), `${name} ${selector}`).toContain(
+        composesFrom(variant)
+      );
+    }
+    for (const component of [
+      "dropped-repository-preview.tsx",
+      "repository-picker.tsx",
+      "worktree-label-dialog.tsx",
+      "worktree-picker.tsx"
+    ]) {
+      expect(read(join(rendererDir, component)), component).toContain(
+        'from "./styles/buttons.module.css"'
+      );
+    }
+    for (const name of [
+      "dropped-repository-preview.module.css",
+      "repository-picker.module.css",
+      "worktree-label-dialog.module.css",
+      "worktree-picker.module.css"
+    ]) {
+      for (const { selector } of rules(sheet(name))) {
+        expect(selector, name).not.toMatch(/ button/);
+      }
+    }
+  });
+
+  it("gives the rail files and the editor picker the shared hover", () => {
+    expect(
+      rule(sheet("file-list.module.css"), ".railFile:hover:not(:disabled)")
+    ).toContain("background: var(--hover);");
+    expect(
+      rule(sheet("settings-panel.module.css"), ".editorPickerButton:hover:not(:disabled)")
+    ).toContain("background: var(--hover);");
+  });
+});

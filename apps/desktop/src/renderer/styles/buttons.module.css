@@ -1,0 +1,88 @@
+/* The app's one button recipe. Component stylesheets compose these classes
+   (`composes: primaryButton from "./styles/buttons.module.css";`) and only add
+   what is specific to them, such as the reviewed state of the review button. */
+
+.button {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  composes: button;
+  border: 1px solid var(--accent-2);
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary-bg) 88%, #ffffff);
+}
+
+.primaryButton kbd {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--primary-fg);
+}
+
+.secondaryButton {
+  composes: button;
+  border: 1px solid var(--border);
+  background: var(--elev);
+  color: var(--text-2);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.ghostButton {
+  composes: button;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.ghostButton:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.iconButton {
+  -webkit-app-region: no-drag;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 0;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.button:disabled,
+.iconButton:disabled {
+  opacity: var(--disabled-opacity);
+}

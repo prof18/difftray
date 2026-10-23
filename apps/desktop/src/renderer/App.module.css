@@ -181,7 +181,7 @@
   top: 10px;
   left: 50%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 10px;
   max-width: min(680px, calc(100vw - 48px));
@@ -203,22 +203,7 @@
 }
 
 .errorBannerClose {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-}
-
-.errorBannerClose:hover {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text);
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
 @keyframes loadingSpin {

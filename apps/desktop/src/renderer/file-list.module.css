@@ -1,27 +1,9 @@
-.iconButton,
-.railButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
+.iconButton {
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
-.iconButton,
 .railButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-}
-
-.iconButton:hover:not(:disabled),
-.railButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
 .fileHeader {
@@ -217,30 +199,13 @@
 
 .diffTargetCommitForm {
   display: grid;
+  align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
 }
 
 .diffTargetUseButton {
-  -webkit-app-region: no-drag;
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--selected);
-  color: var(--text);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 0 10px;
-}
-
-.diffTargetUseButton:hover:not(:disabled) {
-  border-color: var(--accent-2);
-  background: var(--accent-soft);
-}
-
-.diffTargetUseButton:disabled {
-  opacity: var(--disabled-opacity);
+  composes: secondaryButton from "./styles/buttons.module.css";
 }
 
 .diffTargetOptions {
@@ -659,7 +624,7 @@
 }
 
 .railFile:hover:not(:disabled) {
-  background: var(--elev);
+  background: var(--hover);
 }
 
 .railFile[data-selected="true"] {
@@ -680,10 +645,6 @@
   transform: rotate(180deg);
   white-space: nowrap;
   writing-mode: vertical-rl;
-}
-
-.iconButton:disabled {
-  opacity: var(--disabled-opacity);
 }
 
 @keyframes tooltipIn {

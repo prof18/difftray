@@ -67,28 +67,3 @@
   gap: 8px;
   justify-content: flex-end;
 }
-
-/* Same size as the app's primary/secondary buttons (review comments, notes). */
-.footer button {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--elev);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.footer button[type="submit"] {
-  border-color: var(--accent-2);
-  background: var(--primary-bg);
-  color: var(--primary-fg);
-}
-
-.footer button:disabled {
-  opacity: var(--disabled-opacity);
-}

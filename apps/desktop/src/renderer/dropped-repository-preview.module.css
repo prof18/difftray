@@ -55,22 +55,3 @@
 .footer span {
   margin-right: auto;
 }
-
-.footer button {
-  background: var(--panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-  padding: 7px 10px;
-}
-
-.footer button:last-child {
-  background: var(--primary-bg);
-  border-color: var(--accent);
-  color: var(--primary-fg);
-}
-
-.footer button:disabled {
-  opacity: var(--disabled-opacity);
-}

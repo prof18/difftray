@@ -1,24 +1,13 @@
 .iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
-.iconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
 }
 
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
 }
 
 .settingsBackButton {
@@ -88,67 +77,6 @@
   border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--text);
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--primary-bg);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] {
-  border-color: var(--ok);
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.primaryButton kbd {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] kbd {
-  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
-  background: color-mix(in srgb, var(--ok) 12%, transparent);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) kbd {
-  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  color: var(--warn);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: var(--disabled-opacity);
 }
 
 .sectionLabel {
@@ -648,26 +576,11 @@
 }
 
 .companionRevokeButton {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 9px;
+  composes: ghostButton from "./styles/buttons.module.css";
 }
 
 .companionRevokeButton:hover:not(:disabled) {
-  background: var(--hover);
   color: var(--danger);
-}
-
-.companionRevokeButton:disabled {
-  opacity: var(--disabled-opacity);
 }
 
 .companionHelp {
@@ -989,6 +902,11 @@
   text-align: left;
 }
 
+.editorPickerButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
 .editorPickerButton span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1111,12 +1029,14 @@
   display: inline-flex;
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   white-space: nowrap;
 }
 
 .repositoryRootSuggestions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
   background: var(--hover);
   color: var(--text);
 }

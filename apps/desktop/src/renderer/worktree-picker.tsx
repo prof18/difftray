@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import paletteStyles from "./command-palette-view.module.css";
 import { ContextMenu } from "./context-menu.js";
 import styles from "./worktree-picker.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js";
 
 export function WorktreePicker({
@@ -131,10 +132,20 @@ export function WorktreePicker({
             <strong>Worktrees for {projectName}</strong>
           </div>
           <div className={styles.actions}>
-            <button aria-label="Refresh worktrees" onClick={onRefresh} type="button">
+            <button
+              aria-label="Refresh worktrees"
+              className={buttonStyles.iconButton}
+              onClick={onRefresh}
+              type="button"
+            >
               <RefreshCw size={14} aria-hidden />
             </button>
-            <button aria-label="Close worktrees" onClick={onClose} type="button">
+            <button
+              aria-label="Close worktrees"
+              className={buttonStyles.iconButton}
+              onClick={onClose}
+              type="button"
+            >
               <X size={14} aria-hidden />
             </button>
           </div>

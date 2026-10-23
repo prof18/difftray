@@ -4,6 +4,7 @@ import paletteStyles from "./command-palette-view.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
 import { classList } from "./review-view-model.js";
 import styles from "./worktree-label-dialog.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 
 export type WorktreeLabelDialogProps = {
   readonly initialLabel?: string;
@@ -126,11 +127,16 @@ export function WorktreeLabelDialog({
           ) : null}
           <div className={styles.footer}>
             {targetError && onRetryTarget ? (
-              <button onClick={onRetryTarget} type="button">
+              <button
+                className={buttonStyles.secondaryButton}
+                onClick={onRetryTarget}
+                type="button"
+              >
                 Retry
               </button>
             ) : null}
             <button
+              className={buttonStyles.secondaryButton}
               data-testid="worktree-label-cancel"
               disabled={saving}
               onClick={onCancel}
@@ -139,6 +145,7 @@ export function WorktreeLabelDialog({
               Cancel
             </button>
             <button
+              className={buttonStyles.primaryButton}
               data-testid="worktree-label-save"
               disabled={saving || !targetReady}
               type="submit"

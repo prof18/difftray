@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
 import styles from "./repository-picker.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js";
 
 export type RepositoryPickerItem = {
@@ -272,13 +273,21 @@ export function RepositoryPicker({
           )}
         </div>
         <div className={styles.footer}>
-          <button onClick={onBrowse} type="button">
+          <button
+            className={buttonStyles.secondaryButton}
+            onClick={onBrowse}
+            type="button"
+          >
             Open Repositories…
           </button>
-          <button onClick={onScan} type="button">
+          <button className={buttonStyles.secondaryButton} onClick={onScan} type="button">
             Scan a folder…
           </button>
-          <button onClick={onRefresh} type="button">
+          <button
+            className={buttonStyles.secondaryButton}
+            onClick={onRefresh}
+            type="button"
+          >
             Refresh catalog
           </button>
           <span>↑ ↓ navigate · ↵ select · ⌘O</span>
