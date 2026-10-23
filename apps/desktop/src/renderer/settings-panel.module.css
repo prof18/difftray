@@ -924,25 +924,26 @@
   width: min(320px, 78vw);
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--panel);
+  border-radius: 8px;
+  background: var(--panel-2);
   box-shadow: var(--shadow-pop);
-  padding: 6px;
+  padding: 5px;
 }
 
 .editorPickerOption {
   display: grid;
   width: 100%;
-  min-height: 34px;
+  min-height: 30px;
   grid-template-columns: 22px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  padding: 6px 8px;
+  font-size: 12.5px;
+  padding: 0 9px;
   text-align: left;
 }
 

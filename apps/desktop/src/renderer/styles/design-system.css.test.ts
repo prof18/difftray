@@ -348,3 +348,60 @@ describe("fields", () => {
     }
   });
 });
+
+describe("menus", () => {
+  const menus: [string, string][] = [
+    ["context-menu.module.css", ".menu"],
+    ["project-tab-bar.module.css", ".repositoryMenu"],
+    ["settings-panel.module.css", ".editorPickerMenu"],
+    ["file-list.module.css", ".diffTargetPopover"]
+  ];
+  const items: [string, string][] = [
+    ["context-menu.module.css", ".menu button"],
+    ["project-tab-bar.module.css", ".repositoryMenu button"],
+    ["settings-panel.module.css", ".editorPickerOption"],
+    ["file-list.module.css", ".diffTargetOption"]
+  ];
+
+  it("draws every menu surface with one recipe", () => {
+    for (const [name, selector] of menus) {
+      const body = rule(sheet(name), selector);
+      for (const declaration of [
+        "border: 1px solid var(--border-strong);",
+        "border-radius: 8px;",
+        "background: var(--panel-2);",
+        "box-shadow: var(--shadow-pop);"
+      ]) {
+        expect(body, `${name} ${selector}`).toContain(declaration);
+      }
+      if (selector !== ".diffTargetPopover") {
+        expect(body, `${name} ${selector}`).toContain("padding: 5px;");
+      }
+    }
+  });
+
+  it("sizes menu items the same and hovers them with --hover", () => {
+    for (const [name, selector] of items) {
+      const body = rule(sheet(name), selector);
+      for (const declaration of [
+        "min-height: 30px;",
+        "border-radius: 4px;",
+        "font-size: 12.5px;",
+        "padding: 0 9px;"
+      ]) {
+        expect(body, `${name} ${selector}`).toContain(declaration);
+      }
+      const hover = rules(sheet(name)).find(
+        (candidate) =>
+          candidate.selector.startsWith(`${selector}:hover`) &&
+          candidate.body.includes("background")
+      );
+      expect(hover?.body, `${name} ${selector}:hover`).toContain(
+        "background: var(--hover);"
+      );
+    }
+    expect(
+      rule(sheet("command-palette-view.module.css"), ".paletteItem:hover:not(:disabled)")
+    ).toContain("background: var(--hover);");
+  });
+});

@@ -128,9 +128,9 @@
   left: 0;
   width: min(420px, 100%, calc(100vw - 24px));
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--elev);
+  background: var(--panel-2);
   box-shadow: var(--shadow-pop);
 }
 
@@ -219,16 +219,17 @@
 .diffTargetOption {
   -webkit-app-region: no-drag;
   display: grid;
-  min-height: 28px;
+  min-height: 30px;
   grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  padding: 4px 7px;
+  font-size: 12.5px;
+  padding: 0 9px;
   text-align: left;
 }
 

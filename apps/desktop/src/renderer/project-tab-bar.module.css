@@ -268,7 +268,7 @@
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--panel);
+  background: var(--panel-2);
   box-shadow: var(--shadow-pop);
   padding: 5px;
 }
@@ -283,7 +283,7 @@
   min-height: 30px;
   align-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
