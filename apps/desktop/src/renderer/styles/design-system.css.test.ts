@@ -633,3 +633,34 @@ describe("hit targets", () => {
     expect(railFile).toContain("height: 24px;");
   });
 });
+
+describe("selection, cursors and pane edges", () => {
+  // The file list and palette mark the current row with a left accent rule and the
+  // selected fill; the settings sidebar drew a full accent outline instead.
+  it("marks the selected settings page like the file list", () => {
+    const active = rule(
+      sheet("settings-panel.module.css"),
+      '.settingsNavigation > button[data-active="true"]'
+    );
+    expect(active).toContain("border-color: transparent;");
+    expect(active).toContain("background: var(--selected);");
+    expect(active).toContain("box-shadow: inset 2px 0 0 var(--accent);");
+  });
+
+  it("keeps the default cursor on controls", () => {
+    for (const [name, css] of moduleSheets) {
+      for (const { selector, body } of rules(css)) {
+        expect(body, `${name} ${selector}`).not.toContain("cursor: pointer;");
+      }
+    }
+  });
+
+  it("draws both pane header rules with --border", () => {
+    expect(rule(sheet("file-list.module.css"), ".fileHeader")).toContain(
+      "border-bottom: 1px solid var(--border);"
+    );
+    expect(rule(sheet("diff-toolbar.module.css"), ".diffToolbar")).toContain(
+      "border-bottom: 1px solid var(--border);"
+    );
+  });
+});

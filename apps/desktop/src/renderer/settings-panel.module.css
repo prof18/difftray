@@ -181,8 +181,8 @@
 }
 
 .settingsNavigation > button[data-active="true"] {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
+  border-color: transparent;
+  background: var(--selected);
   box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
 }
@@ -307,7 +307,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--elev);
-  cursor: pointer;
+  cursor: default;
   transition:
     background-color 120ms ease,
     border-color 120ms ease;
@@ -343,7 +343,6 @@
 }
 
 .switch:disabled {
-  cursor: default;
   opacity: var(--disabled-opacity);
 }
 

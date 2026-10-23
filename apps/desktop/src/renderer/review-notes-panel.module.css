@@ -70,7 +70,7 @@
   border: 0;
   background: transparent;
   color: var(--text-2);
-  cursor: pointer;
+  cursor: default;
   font: inherit;
   font-size: 12.5px;
   line-height: 1.45;

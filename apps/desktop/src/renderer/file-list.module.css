@@ -11,7 +11,7 @@
   flex: 0 0 auto;
   flex-direction: column;
   gap: 10px;
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border);
   background: var(--bg);
   padding: 12px 14px 10px;
 }

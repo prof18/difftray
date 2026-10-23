@@ -40,7 +40,7 @@
   min-width: 0;
   border-radius: 999px;
   background: var(--border);
-  cursor: pointer;
+  cursor: default;
   touch-action: none;
 }
 
