@@ -1,6 +1,8 @@
 /* The app's one button recipe. Component stylesheets compose these classes
    (`composes: primaryButton from "./styles/buttons.module.css";`) and only add
-   what is specific to them, such as the reviewed state of the review button. */
+   what is specific to them, such as the reviewed state of the review button.
+   Hover states sit in :where() so a component's own :hover rule always wins,
+   whatever order the bundled stylesheets end up in. */
 
 .button {
   -webkit-app-region: no-drag;
@@ -26,7 +28,7 @@
   color: var(--primary-fg);
 }
 
-.primaryButton:hover:not(:disabled) {
+.primaryButton:where(:hover:not(:disabled)) {
   background: color-mix(in srgb, var(--primary-bg) 88%, #ffffff);
 }
 
@@ -43,7 +45,7 @@
   color: var(--text-2);
 }
 
-.secondaryButton:hover:not(:disabled) {
+.secondaryButton:where(:hover:not(:disabled)) {
   border-color: var(--border-strong);
   background: var(--hover);
   color: var(--text);
@@ -56,7 +58,7 @@
   color: var(--text-muted);
 }
 
-.ghostButton:hover:not(:disabled) {
+.ghostButton:where(:hover:not(:disabled)) {
   background: var(--hover);
   color: var(--text-2);
 }
@@ -76,7 +78,7 @@
   padding: 0;
 }
 
-.iconButton:hover:not(:disabled) {
+.iconButton:where(:hover:not(:disabled)) {
   border-color: var(--border);
   background: var(--hover);
   color: var(--text-2);

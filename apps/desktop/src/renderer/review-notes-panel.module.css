@@ -116,8 +116,6 @@
 
 .addButton {
   composes: secondaryButton from "./styles/buttons.module.css";
-  display: flex;
-  justify-content: flex-start;
   margin: 8px 10px 6px;
 }
 

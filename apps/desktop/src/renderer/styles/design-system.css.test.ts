@@ -227,17 +227,21 @@ describe("buttons", () => {
     }
     for (const variant of [".primaryButton", ".secondaryButton", ".ghostButton"]) {
       expect(rule(buttons, variant)).toContain("composes: button;");
-      expect(rule(buttons, `${variant}:hover:not(:disabled)`)).toContain("background:");
+      expect(rule(buttons, `${variant}:where(:hover:not(:disabled))`)).toContain(
+        "background:"
+      );
     }
-    expect(rule(buttons, ".primaryButton:hover:not(:disabled)")).toContain("color-mix(");
-    expect(rule(buttons, ".secondaryButton:hover:not(:disabled)")).toContain(
+    expect(rule(buttons, ".primaryButton:where(:hover:not(:disabled))")).toContain(
+      "color-mix("
+    );
+    expect(rule(buttons, ".secondaryButton:where(:hover:not(:disabled))")).toContain(
       "border-color: var(--border-strong);"
     );
     const icon = rule(buttons, ".iconButton");
     expect(icon).toContain("width: 28px;");
     expect(icon).toContain("height: 28px;");
     expect(icon).toContain("background: transparent;");
-    expect(rule(buttons, ".iconButton:hover:not(:disabled)")).toContain(
+    expect(rule(buttons, ".iconButton:where(:hover:not(:disabled))")).toContain(
       "background: var(--hover);"
     );
   });
@@ -261,6 +265,20 @@ describe("buttons", () => {
         );
       }
     }
+  });
+
+  // The bundle may place the shared recipe after a component stylesheet, so a
+  // modifier class that changes the recipe must out-rank it rather than rely on order.
+  it("lets modifier classes out-rank the shared recipe", () => {
+    expect(
+      rule(sheet("diff-toolbar.module.css"), ".secondaryButton.reportButton")
+    ).toContain("border-color:");
+    expect(
+      rule(
+        sheet("settings-panel.module.css"),
+        ".secondaryButton.repositoryRootIconButton"
+      )
+    ).toContain("padding: 0;");
   });
 
   it("brings one-off buttons onto the standard", () => {

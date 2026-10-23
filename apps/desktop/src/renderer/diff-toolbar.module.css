@@ -212,7 +212,8 @@
   color: var(--warn);
 }
 
-.reportButton {
+/* Qualified so it out-ranks the shared recipe wherever the bundle places it. */
+.secondaryButton.reportButton {
   flex: 0 0 auto;
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
   color: var(--text);
