@@ -664,3 +664,28 @@ describe("selection, cursors and pane edges", () => {
     );
   });
 });
+
+describe("motion", () => {
+  it("turns transitions and animations off for reduced motion in one place", () => {
+    const start = globalCss.indexOf("@media (prefers-reduced-motion: reduce)");
+    expect(start).toBeGreaterThan(-1);
+    const block = globalCss.slice(start);
+    expect(block).toContain("animation-duration: 0.01ms !important;");
+    expect(block).toContain("animation-iteration-count: 1 !important;");
+    expect(block).toContain("transition-duration: 0.01ms !important;");
+    for (const [name, css] of moduleSheets) {
+      expect(css, name).not.toContain("prefers-reduced-motion");
+    }
+  });
+
+  it("keeps one spin keyframe that every spinner composes", () => {
+    const spinKeyframes = allSheets().filter(([, css]) =>
+      /@keyframes [\w-]+ \{\s*to \{\s*transform: rotate\(360deg\);/.test(css)
+    );
+    expect(spinKeyframes.map(([name]) => name)).toEqual(["styles/motion.module.css"]);
+    for (const [name, css] of moduleSheets) {
+      if (name === "styles/motion.module.css") continue;
+      expect(css, name).not.toMatch(/animation: [\w-]*[sS]pin/);
+    }
+  });
+});

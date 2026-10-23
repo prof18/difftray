@@ -661,10 +661,3 @@
     transform: translateX(0) scale(1);
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .diffTargetCommitTooltip[data-state="delayed-open"],
-  .diffTargetCommitTooltip[data-state="instant-open"] {
-    animation: none;
-  }
-}

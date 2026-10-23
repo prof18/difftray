@@ -851,7 +851,12 @@ function RepositorySettingsPage({
             <strong title={root.path}>{root.path}</strong>
             {root.scanning ? (
               <small className={styles.repositoryScanStatus} role="status">
-                <LoaderCircle aria-hidden size={13} strokeWidth={1.4} />
+                <LoaderCircle
+                  aria-hidden
+                  className={styles.repositoryScanSpinner}
+                  size={13}
+                  strokeWidth={1.4}
+                />
                 <span>
                   Scanning folders
                   {root.scannedDirectories

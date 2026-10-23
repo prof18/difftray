@@ -153,12 +153,12 @@
 }
 
 .loadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 34px;
   height: 34px;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
   margin-bottom: 16px;
 }
 
@@ -204,10 +204,4 @@
 
 .errorBannerClose {
   composes: iconButton from "./styles/buttons.module.css";
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }

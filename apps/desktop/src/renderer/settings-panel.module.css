@@ -196,7 +196,7 @@
 }
 
 .settingsNavigationSpinner {
-  animation: repositoryScanSpin 900ms linear infinite;
+  composes: spin from "./styles/motion.module.css";
   color: var(--accent);
 }
 
@@ -344,13 +344,6 @@
 
 .switch:disabled {
   opacity: var(--disabled-opacity);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .switch,
-  .switch::after {
-    transition: none;
-  }
 }
 
 .settingRow input[type="text"] {
@@ -1082,20 +1075,14 @@
   gap: 6px;
 }
 
-.repositoryScanStatus svg {
-  animation: repositoryScanSpin 900ms linear infinite;
+.repositoryScanSpinner {
+  composes: spin from "./styles/motion.module.css";
   color: var(--accent);
 }
 
 .repositoryRootIconButton {
   width: 28px;
   padding: 0;
-}
-
-@keyframes repositoryScanSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 980px) {

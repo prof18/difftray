@@ -91,19 +91,13 @@
 }
 
 .loadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loading-spin 900ms linear infinite;
-}
-
-@keyframes loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 780px) {

@@ -11,13 +11,13 @@
 }
 
 .loadingMiniMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
 }
 
 .commentBadge,
@@ -245,13 +245,13 @@
 }
 
 .reportButtonSpinner {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border-strong));
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
 }
 
 .diffPreparingState {
@@ -273,12 +273,6 @@
   font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @container (max-width: 860px) {

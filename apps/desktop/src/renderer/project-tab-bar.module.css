@@ -195,10 +195,14 @@
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
+}
+
+.tabLoadingMark {
+  composes: spin from "./styles/motion.module.css";
 }
 
 .tabSummaryLoadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 8px;
   height: 8px;
   border-color: var(--border-strong);
@@ -334,10 +338,4 @@
 .statusDot[data-state="attention"] {
   background: var(--warn);
   box-shadow: 0 0 0 2px var(--warn-soft);
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }

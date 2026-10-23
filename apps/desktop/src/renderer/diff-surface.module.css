@@ -1,11 +1,11 @@
 .loadingMiniMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
 }
 
 .diffSurface {
@@ -115,10 +115,4 @@
 
 .diffEndSpacer {
   height: var(--diff-bottom-review-padding);
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
