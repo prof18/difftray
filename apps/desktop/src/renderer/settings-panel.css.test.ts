@@ -22,10 +22,10 @@ describe("settings panel css", () => {
     const picker = rule(".editorPickerButton");
 
     expect(select).toContain("appearance: none;");
-    expect(select).toContain("height: 34px;");
-    expect(picker).toContain("height: 34px;");
-    expect(select).toContain("border-radius: 8px;");
-    expect(picker).toContain("border-radius: 8px;");
+    expect(select).toContain("height: 32px;");
+    expect(picker).toContain("height: 32px;");
+    expect(select).toContain("border-radius: 6px;");
+    expect(picker).toContain("border-radius: 6px;");
   });
 
   // Rows with a description (Companion mode, Approved folders) used bold titles,

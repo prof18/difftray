@@ -31,13 +31,14 @@
 }
 
 .input {
-  border: 1px solid var(--border-strong);
+  height: 32px;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
+  font-size: 12.5px;
+  padding: 0 10px;
 }
 
 .input:focus-visible {

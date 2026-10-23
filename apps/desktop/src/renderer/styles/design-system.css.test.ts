@@ -308,3 +308,43 @@ describe("buttons", () => {
     ).toContain("background: var(--hover);");
   });
 });
+
+describe("fields", () => {
+  it("draws every single-line field the same way", () => {
+    const fields: [string, string][] = [
+      ["settings-panel.module.css", '.settingRow input[type="text"]'],
+      ["settings-panel.module.css", ".settingRow select"],
+      ["settings-panel.module.css", ".editorPickerButton"],
+      ["settings-panel.module.css", ".cliInstallDetails input"],
+      ["worktree-label-dialog.module.css", ".input"],
+      ["file-list.module.css", ".diffTargetSearch"]
+    ];
+    for (const [name, selector] of fields) {
+      const body = rule(sheet(name), selector);
+      for (const declaration of [
+        "height: 32px;",
+        "border: 1px solid var(--border);",
+        "border-radius: 6px;",
+        "font-size: 12.5px;"
+      ]) {
+        expect(body, `${name} ${selector}`).toContain(declaration);
+      }
+      expect(body, `${name} ${selector}`).toMatch(/background(-color)?: var\(--bg\);/);
+      expect(body, `${name} ${selector}`).toMatch(/padding: 0 (30px 0 )?10px;/);
+    }
+  });
+
+  it("pads every textarea the same way", () => {
+    const textareas: [string, string][] = [
+      ["file-comments.module.css", ".textarea"],
+      ["review-notes-panel.module.css", ".textarea"],
+      ["review-comment-annotation.module.css", ".reviewCommentTextarea"]
+    ];
+    for (const [name, selector] of textareas) {
+      const body = rule(sheet(name), selector);
+      expect(body, `${name} ${selector}`).toContain("padding: 9px 10px;");
+      expect(body, `${name} ${selector}`).toContain("border-radius: 6px;");
+      expect(body, `${name} ${selector}`).toContain("background: var(--bg);");
+    }
+  });
+});
