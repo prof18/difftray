@@ -29,6 +29,14 @@ describe("diff toolbar components", () => {
     );
 
     expect(html).toMatch(/src\/renderer\/<\/span><span[^>]*>App\.tsx</);
+    // The header leads with the same change-type tile as the file list (ADR 0043).
+    expect(html.indexOf('data-change-type="modified"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-change-type="modified"')).toBeLessThan(
+      html.indexOf("App.tsx")
+    );
+    // The review button keeps its name when its label is hidden in a narrow pane.
+    expect(html).toContain('aria-label="Mark reviewed"');
+    expect(html).toMatch(/class="[^"]*reviewButtonLabel[^"]*">Mark reviewed</);
     expect(html).toContain("App.tsx");
     expect(html).toContain("Changed after review");
     expect(html).toContain('data-review-state="attention"');

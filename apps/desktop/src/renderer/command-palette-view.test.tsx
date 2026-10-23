@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -55,8 +58,24 @@ describe("CommandPalette view", () => {
     expect(html).toContain("Refresh");
     expect(html).toContain("Reload repository");
     expect(html).toContain('data-selected="true"');
-    expect(html).toContain("⌘K");
+    // Every footer shortcut says what it does; ⌘K alone gave no hint.
+    expect(html).toContain("⌘K all");
     expect(html).toContain("⌘P files only");
+  });
+
+  // Action icons used the warning amber, a colour that means "needs attention"
+  // everywhere else in the app.
+  it("draws action icons on a neutral tile, not the warning colour", () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "command-palette-view.module.css"),
+      "utf8"
+    );
+    const actionRule = css.slice(
+      css.indexOf('.paletteItem[data-kind="action"] .paletteItemIcon {'),
+      css.indexOf("}", css.indexOf('.paletteItem[data-kind="action"] .paletteItemIcon {'))
+    );
+
+    expect(actionRule).not.toContain("--warn");
   });
 
   it("renders files scope when opened in file mode", () => {

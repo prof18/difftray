@@ -4034,7 +4034,9 @@ export function App(): React.JSX.Element {
                 disabled={showActiveWorkspaceLoading}
                 files={visibleFiles}
                 onExpand={toggleFileListCollapsed}
+                onSelect={selectPath}
                 progress={workspace.progress}
+                selectedPath={selectedFile?.path}
               />
             ) : (
               <nav
@@ -4285,6 +4287,11 @@ export function App(): React.JSX.Element {
           disabled={false}
           onOpenProject={() => {
             void openRepositoryPicker();
+          }}
+          onScanFolder={() => {
+            void window.difftray
+              .addRepositorySearchRoot()
+              .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
           }}
           onSelectProject={(projectId) => {
             void loadProject(projectId);

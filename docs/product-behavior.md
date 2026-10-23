@@ -18,6 +18,10 @@ as tabs; each tab shows the project name, its path as a tooltip, the current rev
 target and review progress. Difftray remembers recent projects, watches every open
 project for changes, and keeps each project's own base ref and last review target.
 
+With no project open, the window offers Open Repository, Scan a folder… (adds an
+approved search folder) and recent projects, and notes that a folder can be
+dropped onto the window.
+
 ## Review targets
 
 Each project reviews one target at a time (`ReviewTarget` in
@@ -61,9 +65,16 @@ do.
 
 Progress is reviewed visible files over all visible reviewable files.
 
+With the file list hidden, a narrow rail keeps one mark per file showing its
+review state; each mark opens its file, names it for assistive technology, and the
+open file is ringed.
+
 ## Diff viewer
 
-Diffs render side by side or unified (a setting), with syntax highlighting.
+Diffs render side by side or unified (a setting), with syntax highlighting. The
+diff header leads with the same change-type tile as the file list. When the diff
+pane is narrower than 640 px, the review button shows only its check and `R`
+shortcut so the toolbar stays inside the window.
 Deleted, added, untracked, renamed, binary, symlink, submodule-pointer and
 mode-only changes each have their own presentation. Static PNG, JPEG and WebP
 changes show bounded, lazy image previews; other binaries show a summary.
@@ -130,6 +141,8 @@ and free-form editor commands are not supported.
 The command palette groups results as projects, files, then actions, with the best
 matches first inside each group. Arrows move through the rows in that drawn order,
 `Enter` runs the highlighted row (the first row when the palette opens) and
-`Escape` closes it. Single-key shortcuts do not fire while a button or field has focus. Refresh,
+`Escape` closes it. Its footer names each shortcut (`Cmd+K` all, `Cmd+P` files
+only), and action rows use neutral icons, keeping colour for change type and review
+state. Single-key shortcuts do not fire while a button or field has focus. Refresh,
 project switching and diff-mode switching are available from visible controls and
 the palette.

@@ -221,13 +221,20 @@ describe("file list components", () => {
           reviewFile("changed.ts", { invalidated: true, reviewed: true })
         ]}
         onExpand={vi.fn()}
+        onSelect={vi.fn()}
         progress={{
           reviewedVisibleFiles: 1,
           totalVisibleReviewableFiles: 3
         }}
+        selectedPath="reviewed.ts"
       />
     );
 
+    // Each mark opens its file and names it; the open file is marked as current.
+    expect(html).toContain('aria-label="reviewed.ts, Reviewed"');
+    expect(html).toMatch(
+      /<button[^>]*aria-current="true"[^>]*aria-label="reviewed.ts, Reviewed"/
+    );
     expect(html).toContain('aria-label="Collapsed file list"');
     expect(html).toContain('aria-label="Show file list"');
     expect(html).toContain('data-state="pending"');

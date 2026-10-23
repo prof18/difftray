@@ -333,3 +333,20 @@
     display: none;
   }
 }
+
+/* A narrow diff pane (small window, wide file list): the review button keeps its
+   check and shortcut, the side control and gaps tighten, so the actions stay inside
+   the toolbar's padding instead of running into the window edge. */
+@container (max-width: 640px) {
+  .diffActions {
+    gap: 6px;
+  }
+
+  .reviewButtonLabel {
+    display: none;
+  }
+
+  .diffSideSegmented button {
+    padding: 0 6px;
+  }
+}

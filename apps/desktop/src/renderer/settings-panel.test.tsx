@@ -316,6 +316,32 @@ describe("SettingsPanel", () => {
     });
     expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith("other");
   });
+  // The section and its only row were both "Status", with nothing shown before the
+  // first check; the row now names what it checks and says it has not run yet.
+  it("names the connection row and says when it has not been checked", async () => {
+    const status = section(await readyAgents(), "Status");
+
+    expect(status.textContent).toContain("Agent connection");
+    expect(status.textContent).toContain("Not checked yet");
+  });
+  // The command-line row had no control in builds without an installer, so it read
+  // as an empty row; it always shows its state now.
+  it("shows the command-line tool state in its row", async () => {
+    vi.mocked(window.difftray.getCliInstallStatus).mockResolvedValue({
+      kind: "unavailable",
+      command: "difftray",
+      destination: "/Users/test/.local/bin/difftray",
+      invocation: "/repo/node_modules/electron/dist/Electron.app",
+      onPath: false,
+      pathInstruction: null,
+      reason: "Terminal installation is available in packaged Difftray."
+    });
+    const terminal = section(await readyAgents(), "Terminal");
+
+    expect(terminal.querySelector('[data-cli-state="unavailable"]')?.textContent).toBe(
+      "Packaged builds only"
+    );
+  });
   it("checks the connection and displays connected or the CLI error in Status", async () => {
     const status = section(await readyAgents(), "Status");
     await act(async () => {
@@ -391,7 +417,9 @@ describe("SettingsPanel", () => {
       await Promise.resolve();
     });
     expect(window.difftray.installCli).toHaveBeenCalledOnce();
-    expect(general.textContent).toContain("Command-line tool installed");
+    expect(general.querySelector('[data-cli-state="installed"]')?.textContent).toBe(
+      "Installed"
+    );
     expect(
       general.querySelector<HTMLInputElement>('input[aria-label="Absolute command path"]')
         ?.value

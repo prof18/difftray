@@ -31,7 +31,7 @@ import {
 
 import styles from "./file-list.module.css";
 import { ContextMenu } from "./context-menu.js";
-import { ChangeTypeTile, ReviewStateGlyph } from "./file-state.js";
+import { ChangeTypeTile, ReviewStateGlyph, reviewStateLabel } from "./file-state.js";
 import {
   fileListRowHeight,
   fileListVisibleWindow,
@@ -630,12 +630,16 @@ export function CollapsedRail({
   disabled = false,
   files,
   onExpand,
-  progress
+  onSelect,
+  progress,
+  selectedPath
 }: {
   readonly disabled?: boolean;
   readonly files: readonly ReviewFileView[];
   readonly onExpand: () => void;
+  readonly onSelect: (path: string) => void;
   readonly progress: ReviewWorkspaceView["progress"];
+  readonly selectedPath: string | undefined;
 }): React.JSX.Element {
   return (
     <aside
@@ -653,15 +657,28 @@ export function CollapsedRail({
         <PanelLeftOpen size={14} strokeWidth={1.4} aria-hidden />
       </button>
       <div className={styles.railDivider} />
+      {/* One mark per file: it opens the file, and the open file is ringed. */}
       <div className={styles.railDots}>
-        {files.map((file) => (
-          <span
-            className={styles.statusDot}
-            data-state={reviewState(file)}
-            key={file.path}
-            title={file.path}
-          />
-        ))}
+        {files.map((file) => {
+          const state = reviewState(file);
+          return (
+            <button
+              aria-current={file.path === selectedPath ? true : undefined}
+              aria-label={`${file.path}, ${reviewStateLabel(state)}`}
+              className={styles.railFile}
+              data-selected={file.path === selectedPath}
+              disabled={disabled}
+              key={file.path}
+              onClick={() => {
+                onSelect(file.path);
+              }}
+              title={file.path}
+              type="button"
+            >
+              <span className={styles.statusDot} data-state={state} />
+            </button>
+          );
+        })}
       </div>
       <div className={styles.railReviewLabel}>
         {progress.reviewedVisibleFiles} / {progress.totalVisibleReviewableFiles} reviewed

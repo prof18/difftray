@@ -10,7 +10,7 @@ import {
 
 import styles from "./diff-toolbar.module.css";
 import { type DiffSideFocus } from "./diffs-renderer.js";
-import { ReviewStateGlyph } from "./file-state.js";
+import { ChangeTypeTile, ReviewStateGlyph } from "./file-state.js";
 import { classList, reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export function DiffToolbar({
@@ -51,6 +51,7 @@ export function DiffToolbar({
     <div className={styles.diffToolbar}>
       <div className={styles.diffTitleBlock}>
         <div className={styles.diffFileTitle}>
+          <ChangeTypeTile status={file.status} />
           <ReviewStateGlyph state={reviewState(file)} />
           <span className={styles.diffPath}>
             {parts.dirname ? (
@@ -185,6 +186,7 @@ export function DiffToolbar({
         </button>
         <span className={styles.verticalDivider} />
         <button
+          aria-label={file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
           className={styles.primaryButton}
           data-reviewed={file.reviewed}
           disabled={disabled}
@@ -192,7 +194,9 @@ export function DiffToolbar({
           type="button"
         >
           <Check size={14} strokeWidth={1.4} aria-hidden />
-          {file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
+          <span className={styles.reviewButtonLabel}>
+            {file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
+          </span>
           <kbd>R</kbd>
         </button>
       </div>

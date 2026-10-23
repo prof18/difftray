@@ -39,6 +39,23 @@ describe("app status views", () => {
     expect(html).not.toContain("Six");
   });
 
+  // The empty window offered only Open Repository; folder scanning and dropping a
+  // folder on the window were not mentioned.
+  it("offers scanning a folder and dropping one, besides opening a repository", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        disabled={false}
+        onOpenProject={vi.fn()}
+        onScanFolder={vi.fn()}
+        onSelectProject={vi.fn()}
+        projects={[]}
+      />
+    );
+
+    expect(html).toContain("Scan a folder…");
+    expect(html).toContain("Or drop a folder onto this window.");
+  });
+
   it("renders reviewed drift notification with the actionable files", () => {
     const html = renderToStaticMarkup(
       <DriftToast

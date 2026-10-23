@@ -119,9 +119,10 @@
   color: var(--accent);
 }
 
+/* Neutral: colour in the palette is kept for state (change type, review state). */
 .paletteItem[data-kind="action"] .paletteItemIcon {
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--elev);
+  color: var(--text-2);
 }
 
 .paletteItem[data-kind="file"] .paletteItemIcon {

@@ -83,7 +83,7 @@ export function CommandPalette({
           <span>↑ ↓ navigate</span>
           <span>↵ select</span>
           <span>⌘P files only</span>
-          <span>⌘K</span>
+          <span>⌘K all</span>
         </div>
       </section>
     </div>

@@ -16,11 +16,13 @@ import { splitPath } from "./review-view-model.js";
 export function EmptyState({
   disabled,
   onOpenProject,
+  onScanFolder,
   onSelectProject,
   projects
 }: {
   readonly disabled: boolean;
   readonly onOpenProject: () => void;
+  readonly onScanFolder?: () => void;
   readonly onSelectProject: (projectId: string) => void;
   readonly projects: readonly RecentProjectView[];
 }): React.JSX.Element {
@@ -44,6 +46,18 @@ export function EmptyState({
         Open Repository
         <kbd>⌘O</kbd>
       </button>
+      {onScanFolder ? (
+        <button
+          className={styles.secondaryButton}
+          disabled={disabled}
+          onClick={onScanFolder}
+          type="button"
+        >
+          <Folder size={15} strokeWidth={1.4} aria-hidden />
+          Scan a folder…
+        </button>
+      ) : null}
+      <p className={styles.dropHint}>Or drop a folder onto this window.</p>
       {projects.length > 0 ? (
         <div className={styles.recentBox}>
           <div className={styles.sectionLabel}>Recent</div>

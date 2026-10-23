@@ -27,6 +27,7 @@
   --text-2: #bcbec4;
   --text-muted: #aaacb2;
   --text-dim: #8a8e96;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8e96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --accent: #3474f0;
   --accent-2: #5da9ff;
   --accent-soft: rgba(52, 116, 240, 0.15);
@@ -86,6 +87,7 @@
   --text-2: #30333b;
   --text-muted: #55585e;
   --text-dim: #6c707e;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c707e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --accent: #0033b3;
   --accent-2: #0043d3;
   --accent-soft: rgba(0, 51, 179, 0.1);
@@ -104,7 +106,7 @@
   --diff-bg-gutter: #f5f8fe;
   --diff-bg-context: #f5f8fe;
   --diff-bg-buffer: #ebecf0;
-  --diff-bg-separator: #e1eaff;
+  --diff-bg-separator: #e5e5e8;
   --diff-hover: #ebecf0;
   --diff-selection: #a6d2ff;
   --diff-fg: #080808;
@@ -190,4 +192,11 @@ kbd {
   border-radius: 999px;
   background: var(--border-strong);
   background-clip: padding-box;
+}
+
+/* The first control a dialog focuses when it was opened with the pointer or the app
+   menu; dialog-focus.ts removes the marker as soon as the keyboard is used. */
+[data-dialog-pointer-focus]:focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
 }

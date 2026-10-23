@@ -19,10 +19,6 @@
   padding: 10px;
 }
 
-.card[data-draft="true"] {
-  border-color: var(--accent);
-}
-
 .header,
 .header span,
 .iconActions,

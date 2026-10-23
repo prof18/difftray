@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -29,6 +32,21 @@ describe("FileCommentStack", () => {
     expect(html).toContain("First\nSecond");
     expect(html).toContain('aria-label="Edit file comment"');
     expect(html).toContain('aria-label="Delete file comment"');
+  });
+
+  // The composer opened as an empty field with an accent border on both the card
+  // and the field. It now says what to write, and only the field shows focus.
+  it("prompts for whole-file feedback and keeps one focus ring", () => {
+    const html = render({ comments: [], draft: { body: "" } });
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "file-comments.module.css"),
+      "utf8"
+    );
+
+    expect(html).toContain('placeholder="Feedback on this file as a whole"');
+    expect(css).not.toContain(
+      '.card[data-draft="true"] {\n  border-color: var(--accent);'
+    );
   });
 
   it("renders the draft editor before saved cards", () => {

@@ -409,6 +409,25 @@ const GUIDE_LABEL = "Full guide";
 const CHECK_LABEL = "Check";
 const CHECKING_LABEL = "Checking…";
 const CONNECTED_LABEL = "Connected";
+const CONNECTION_LABEL = "Agent connection";
+const NOT_CHECKED_LABEL = "Not checked yet";
+
+// The command-line row always states where the tool stands, so it never reads as an
+// empty row when there is nothing to install.
+function cliStateLabel(kind: CliInstallStatus["kind"]): string {
+  switch (kind) {
+    case "installed":
+      return "Installed";
+    case "absent":
+      return "Not installed";
+    case "repairable":
+      return "Needs repair";
+    case "blocked":
+      return "Blocked";
+    case "unavailable":
+      return "Packaged builds only";
+  }
+}
 
 function AgentsSettingsPage({
   disabled
@@ -600,23 +619,26 @@ function AgentsSettingsPage({
       </SettingsSection>
       <SettingsSection title={STATUS_TITLE}>
         <div className={styles.settingRow}>
-          <span>
-            {checkResult?.status === "connected" ? (
-              <span role="status">{CONNECTED_LABEL}</span>
-            ) : (
-              STATUS_TITLE
-            )}
+          <span>{CONNECTION_LABEL}</span>
+          <span className={styles.rowValueGroup}>
+            <span className={styles.rowValue} role="status">
+              {checkResult?.status === "connected"
+                ? CONNECTED_LABEL
+                : checkResult?.status === "failed"
+                  ? "Not connected"
+                  : NOT_CHECKED_LABEL}
+            </span>
+            <button
+              className={styles.secondaryButton}
+              disabled={disabled || checkBusy || !setup?.available}
+              onClick={() => {
+                void runCheck();
+              }}
+              type="button"
+            >
+              {checkBusy ? CHECKING_LABEL : CHECK_LABEL}
+            </button>
           </span>
-          <button
-            className={styles.secondaryButton}
-            disabled={disabled || checkBusy || !setup?.available}
-            onClick={() => {
-              void runCheck();
-            }}
-            type="button"
-          >
-            {checkBusy ? CHECKING_LABEL : CHECK_LABEL}
-          </button>
         </div>
         {checkResult?.status === "failed" ? (
           <p className={styles.cliInstallError} role="alert">
@@ -626,24 +648,27 @@ function AgentsSettingsPage({
       </SettingsSection>
       <SettingsSection title={TERMINAL_TITLE}>
         <div className={styles.settingRow}>
-          <span>
-            {cliStatus?.kind === "installed"
-              ? "Command-line tool installed"
-              : "Command-line tool"}
-          </span>
-          {cliStatus?.kind === "absent" || cliStatus?.kind === "repairable" ? (
-            <button
-              className={styles.secondaryButton}
-              disabled={disabled || cliBusy}
-              onClick={() => {
-                void installCli();
-              }}
-              type="button"
-            >
-              {cliStatus.kind === "repairable"
-                ? "Repair command-line tool"
-                : "Install command-line tool"}
-            </button>
+          <span>Command-line tool</span>
+          {cliStatus ? (
+            <span className={styles.rowValueGroup}>
+              <span className={styles.rowValue} data-cli-state={cliStatus.kind}>
+                {cliStateLabel(cliStatus.kind)}
+              </span>
+              {cliStatus.kind === "absent" || cliStatus.kind === "repairable" ? (
+                <button
+                  className={styles.secondaryButton}
+                  disabled={disabled || cliBusy}
+                  onClick={() => {
+                    void installCli();
+                  }}
+                  type="button"
+                >
+                  {cliStatus.kind === "repairable"
+                    ? "Repair command-line tool"
+                    : "Install command-line tool"}
+                </button>
+              ) : null}
+            </span>
           ) : null}
         </div>
         {cliStatus ? (
