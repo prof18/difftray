@@ -72,3 +72,50 @@ describe("font tokens", () => {
     expect(diffsRenderer).not.toContain('"IBM Plex Sans"');
   });
 });
+
+describe("custom properties", () => {
+  const sources = readdirSync(rendererDir)
+    .filter((name) => /\.tsx?$/.test(name) && !name.includes(".test."))
+    .map((name) => read(join(rendererDir, name)))
+    .join("\n");
+
+  // A var() of an undefined property makes the whole declaration invalid at computed
+  // time, which is how the diff-target popover lost its shadow.
+  it("only uses properties that something defines", () => {
+    const defined = new Set<string>();
+    for (const [, css] of allSheets()) {
+      for (const match of css.matchAll(/(--[\w-]+)\s*:/g)) defined.add(match[1]!);
+    }
+    for (const match of sources.matchAll(/["'`](--[\w-]+)["'`]/g)) defined.add(match[1]!);
+
+    for (const [name, css] of allSheets()) {
+      for (const match of css.matchAll(/var\((--[\w-]+)/g)) {
+        expect(defined.has(match[1]!), `${name} uses ${match[1]!}`).toBe(true);
+      }
+    }
+  });
+
+  it("gives the diff-target popover and commit tooltip the shared shadows", () => {
+    const fileList = sheet("file-list.module.css");
+    expect(rule(fileList, ".diffTargetPopover")).toContain(
+      "box-shadow: var(--shadow-pop);"
+    );
+    expect(rule(fileList, ".diffTargetCommitTooltip")).toContain(
+      "box-shadow: var(--shadow-md);"
+    );
+  });
+
+  it("draws every error in the danger colour", () => {
+    expect(rootBlock("dark")).toContain("--danger: #ff7a70;");
+    expect(rootBlock("light")).toContain("--danger: #a00e1b;");
+    const settings = sheet("settings-panel.module.css");
+    expect(rule(settings, ".companionError")).toContain("color: var(--danger);");
+    expect(rule(settings, ".cliInstallError")).toContain("color: var(--danger);");
+    expect(rule(sheet("worktree-label-dialog.module.css"), ".error")).toContain(
+      "color: var(--danger);"
+    );
+    expect(rule(sheet("App.module.css"), ".errorBanner")).toContain(
+      "border: 1px solid var(--danger);"
+    );
+  });
+});

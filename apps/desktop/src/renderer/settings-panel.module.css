@@ -540,7 +540,7 @@
 
 .companionError {
   margin-top: 4px;
-  color: var(--danger, var(--warn));
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -668,7 +668,7 @@
 
 .companionRevokeButton:hover:not(:disabled) {
   background: var(--hover);
-  color: var(--del-mark);
+  color: var(--danger);
 }
 
 .companionRevokeButton:disabled {
@@ -1218,7 +1218,7 @@
 .cliInstallError {
   margin: 0;
   padding: 12px 14px;
-  color: var(--danger, var(--warn));
+  color: var(--danger);
   font-size: 12.5px;
   line-height: 1.5;
 }

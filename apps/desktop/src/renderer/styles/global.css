@@ -44,6 +44,7 @@
   --add-mark: #73bd79;
   --del-bg: rgba(205, 49, 49, 0.13);
   --del-mark: #ff7a70;
+  --danger: #ff7a70;
   --diff-bg: #191a1c;
   --diff-bg-gutter: #17181a;
   --diff-bg-context: #1f2024;
@@ -104,6 +105,7 @@
   --add-mark: #056614;
   --del-bg: rgba(222, 27, 46, 0.1);
   --del-mark: #a00e1b;
+  --danger: #a00e1b;
   --diff-bg: #ffffff;
   --diff-bg-gutter: #f5f8fe;
   --diff-bg-context: #f5f8fe;

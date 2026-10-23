@@ -186,7 +186,7 @@
   gap: 10px;
   max-width: min(680px, calc(100vw - 48px));
   transform: translateX(-50%);
-  border: 1px solid var(--del-mark);
+  border: 1px solid var(--danger);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
