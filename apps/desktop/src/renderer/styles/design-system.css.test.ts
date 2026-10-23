@@ -508,3 +508,71 @@ describe("segmented controls and chips", () => {
     }
   });
 });
+
+describe("type scale", () => {
+  const scale = new Set([
+    "11px",
+    "11.5px",
+    "12px",
+    "12.5px",
+    "13px",
+    "15px",
+    "18px",
+    "20px"
+  ]);
+
+  it("keeps every font size on the scale", () => {
+    for (const [name, css] of allSheets()) {
+      for (const { selector, body } of rules(css)) {
+        // The phone pairing code is a display number read across the room.
+        if (selector === ".companionCodeBlock strong") continue;
+        for (const match of body.matchAll(/font-size: ([^;]+);/g)) {
+          expect(scale.has(match[1]!), `${name} ${selector} ${match[1]!}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  // Only IBM Plex Sans 400-700 and JetBrains Mono 400-600 are bundled.
+  it("only uses font weights that are loaded", () => {
+    for (const [name, css] of allSheets()) {
+      for (const { selector, body } of rules(css)) {
+        const weight = /font-weight: ([^;]+);/.exec(body)?.[1];
+        if (weight === undefined) continue;
+        expect(["400", "500", "600", "700"], `${name} ${selector}`).toContain(weight);
+        if (body.includes("var(--font-mono)")) {
+          expect(weight, `${name} ${selector} mono`).not.toBe("700");
+        }
+      }
+    }
+  });
+
+  it("styles every uppercase section label the same way", () => {
+    for (const [name, css] of moduleSheets) {
+      for (const { selector, body } of rules(css)) {
+        if (!body.includes("text-transform: uppercase;")) continue;
+        expect(body, `${name} ${selector}`).toContain("font-size: 11px;");
+        expect(body, `${name} ${selector}`).toContain("font-weight: 600;");
+        expect(body, `${name} ${selector}`).toContain("letter-spacing: 0;");
+      }
+    }
+  });
+
+  it("rounds icon tiles by 6px and inline code like kbd", () => {
+    const tiles: [string, string][] = [
+      ["command-palette-view.module.css", ".paletteItemIcon"],
+      ["settings-panel.module.css", ".editorPickerIcon"],
+      ["settings-panel.module.css", ".companionDeviceIcon"],
+      ["app-status-views.module.css", ".updateIcon"],
+      ["app-status-views.module.css", ".toastIcon"]
+    ];
+    for (const [name, selector] of tiles) {
+      expect(rule(sheet(name), selector), `${name} ${selector}`).toContain(
+        "border-radius: 6px;"
+      );
+    }
+    expect(rule(sheet("settings-panel.module.css"), ".companionSteps code")).toContain(
+      "border-radius: 4px;"
+    );
+  });
+});
