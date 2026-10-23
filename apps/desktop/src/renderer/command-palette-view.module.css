@@ -53,6 +53,11 @@
   outline: 0;
 }
 
+/* The search row is the field, so the input itself draws no inner ring. */
+.paletteSearch input:focus-visible {
+  outline: none;
+}
+
 .paletteScope {
   display: inline-flex;
   height: 20px;

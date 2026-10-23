@@ -186,6 +186,11 @@ describe("focus ring", () => {
         );
         if (!selector.includes(":focus-visible")) continue;
         if (selector.includes("[data-dialog-focus-restored]")) continue;
+        // The palette's search row is the field; a ring inside it would box the text.
+        if (selector === ".paletteSearch input:focus-visible") {
+          expect(body).toContain("outline: none;");
+          continue;
+        }
         expect(body, `${name} ${selector}`).toContain("outline: var(--focus-ring);");
         expect(body, `${name} ${selector}`).toMatch(/outline-offset: -?2px;/);
         expect(body, `${name} ${selector}`).not.toContain("box-shadow");
