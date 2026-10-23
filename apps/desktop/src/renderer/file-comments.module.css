@@ -15,7 +15,7 @@
   border-radius: 7px;
   background: color-mix(in srgb, var(--panel) 92%, var(--accent));
   color: var(--text);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   padding: 10px;
 }
 

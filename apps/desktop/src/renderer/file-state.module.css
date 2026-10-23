@@ -9,7 +9,7 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--diff-modified-fg) 10%, transparent);
   color: var(--diff-modified-fg);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;

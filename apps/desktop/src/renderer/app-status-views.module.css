@@ -202,7 +202,7 @@
 
 .recentRow small {
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -358,7 +358,7 @@
   border-radius: 5px;
   background: var(--warn-soft);
   color: var(--text-2);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 4px 8px;
 }

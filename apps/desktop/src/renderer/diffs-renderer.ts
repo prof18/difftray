@@ -59,8 +59,8 @@ export const diffsWorkerHighlighterOptions = {
 
 const difftrayDiffUnsafeCSS = `
 :host {
-  --diffs-font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --diffs-header-font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --diffs-font-family: var(--font-mono);
+  --diffs-header-font-family: var(--font-sans);
   --diffs-font-size: 13px;
   --diffs-line-height: 22px;
   --diffs-font-features: "zero" 1, "ss02" 1;

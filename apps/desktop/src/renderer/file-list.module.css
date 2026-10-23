@@ -52,7 +52,7 @@
 .progressCount span,
 .needAttention span:not(.attentionPulse) {
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
@@ -105,7 +105,7 @@
   border-radius: 6px;
   background: var(--elev);
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-feature-settings:
     "zero" 1,
@@ -202,7 +202,7 @@
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-feature-settings:
     "zero" 1,
@@ -294,7 +294,7 @@
 
 .diffTargetOptionMain,
 .diffTargetCommitText {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-feature-settings:
     "zero" 1,
@@ -325,7 +325,7 @@
   background: var(--panel-2);
   box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow) 38%, transparent);
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -498,7 +498,7 @@
   align-items: center;
   gap: 4px;
   color: var(--accent);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
 }
@@ -515,7 +515,7 @@
   display: flex;
   min-width: 0;
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-feature-settings:
     "zero" 1,
@@ -537,7 +537,7 @@
 .diffFileName {
   overflow: hidden;
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-feature-settings:
     "zero" 1,
@@ -551,7 +551,7 @@
 .diffDir {
   overflow: hidden;
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -561,7 +561,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -664,7 +664,7 @@
 
 .railReviewLabel {
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1;
   margin-bottom: 8px;

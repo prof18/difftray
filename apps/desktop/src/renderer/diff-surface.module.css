@@ -73,7 +73,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--text-muted);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12.5px;
 }
 
@@ -81,7 +81,7 @@
   max-width: min(520px, 64vw);
   overflow: hidden;
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -91,7 +91,7 @@
   gap: 10px;
   padding: 28px;
   color: var(--text-muted);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12.5px;
 }
 
@@ -105,7 +105,7 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   margin: 0;
