@@ -70,7 +70,6 @@
   --kbd-bg: #2b2d30;
   --kbd-border: #3a3d42;
   --overlay: rgba(0, 0, 0, 0.4);
-  --overlay-soft: rgba(0, 0, 0, 0.34);
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35);
@@ -132,7 +131,6 @@
   --kbd-bg: #ebecf0;
   --kbd-border: #aeb3c2;
   --overlay: rgba(8, 8, 8, 0.36);
-  --overlay-soft: rgba(8, 8, 8, 0.3);
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.04);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.06);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);

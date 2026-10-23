@@ -25,7 +25,7 @@
   max-width: min(760px, calc(100vw - 96px));
   gap: 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  border-radius: 7px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 92%, var(--accent));
   box-shadow: var(--shadow-md);
   color: var(--text);

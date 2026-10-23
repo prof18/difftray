@@ -14,11 +14,11 @@
   display: grid;
   gap: 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  border-radius: 7px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 92%, var(--accent));
   color: var(--text);
   margin: 8px 10px 6px;
-  padding: 9px 10px;
+  padding: 10px;
 }
 
 .panel[data-state="editing"] {

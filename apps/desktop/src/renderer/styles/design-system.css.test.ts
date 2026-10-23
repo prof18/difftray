@@ -405,3 +405,44 @@ describe("menus", () => {
     ).toContain("background: var(--hover);");
   });
 });
+
+describe("cards, toasts and dialogs", () => {
+  it("rounds and pads cards and toasts the same way", () => {
+    const cards: [string, string, boolean][] = [
+      ["app-status-views.module.css", ".driftToast", false],
+      ["app-status-views.module.css", ".simpleToast", true],
+      ["app-status-views.module.css", ".recentBox", true],
+      ["app-status-views.module.css", ".toastBody", true],
+      ["file-comments.module.css", ".card", true],
+      ["review-comment-annotation.module.css", ".reviewCommentCard", true],
+      ["review-notes-panel.module.css", ".panel", true],
+      ["image-diff.module.css", ".imageStage", false],
+      ["App.module.css", ".errorBanner", false]
+    ];
+    for (const [name, selector, padded] of cards) {
+      const body = rule(sheet(name), selector);
+      if (selector !== ".toastBody") {
+        expect(body, `${name} ${selector}`).toContain("border-radius: 8px;");
+      }
+      if (padded) expect(body, `${name} ${selector}`).toContain("padding: 10px;");
+    }
+  });
+
+  it("gives every dialog the palette radius, overlay and title size", () => {
+    const settings = sheet("settings-panel.module.css");
+    for (const panel of [".companionStorePanel", ".companionPairingPanel"]) {
+      expect(rule(settings, panel)).toContain("border-radius: 12px;");
+    }
+    for (const overlay of [".companionStoreDialog", ".companionPairingDialog"]) {
+      expect(rule(settings, overlay)).toContain("background: var(--overlay);");
+      expect(rule(settings, overlay)).toContain("backdrop-filter: blur(2px);");
+    }
+    for (const title of [".companionStoreHeader h3", ".companionPairingPanel h3"]) {
+      expect(rule(settings, title)).toContain("font-size: 15px;");
+      expect(rule(settings, title)).toContain("font-weight: 600;");
+    }
+    for (const [name, css] of allSheets()) {
+      expect(css, name).not.toContain("--overlay-soft");
+    }
+  });
+});

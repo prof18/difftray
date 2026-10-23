@@ -705,7 +705,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--overlay-soft);
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
 }
 
 .companionStorePanel {
@@ -713,7 +714,7 @@
   width: min(340px, calc(100vw - 64px));
   gap: 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
   padding: 20px;
@@ -729,8 +730,8 @@
 .companionStoreHeader h3 {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .companionStoreQrFrame {
@@ -793,7 +794,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--overlay-soft);
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
 }
 
 .companionPairingPanel {
@@ -801,7 +803,7 @@
   width: min(360px, calc(100vw - 64px));
   gap: 16px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
   padding: 20px;
@@ -810,8 +812,8 @@
 .companionPairingPanel h3 {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .companionQrFrame {
