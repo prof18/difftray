@@ -32,10 +32,14 @@
   text-align: left;
 }
 
-.menu button:hover,
+.menu button:hover {
+  background: var(--hover);
+}
+
 .menu button:focus-visible {
-  background: var(--selected);
-  outline: none;
+  background: var(--hover);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .menu button:disabled {

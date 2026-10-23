@@ -410,7 +410,7 @@
 }
 
 .switch:focus-visible {
-  outline: 2px solid var(--accent-line);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -452,11 +452,6 @@
   color: var(--text);
   font: inherit;
   padding: 0 30px 0 10px;
-}
-
-.settingRow select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .updateCopy {
@@ -994,11 +989,6 @@
   text-align: left;
 }
 
-.editorPickerButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .editorPickerButton span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1035,10 +1025,18 @@
   text-align: left;
 }
 
-.editorPickerOption:hover,
-.editorPickerOption:focus-visible,
-.editorPickerOption[data-selected="true"] {
+.editorPickerOption:hover {
   background: var(--hover);
+}
+
+.editorPickerOption[data-selected="true"] {
+  background: var(--selected);
+}
+
+.editorPickerOption:focus-visible {
+  background: var(--hover);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .editorPickerOption span {

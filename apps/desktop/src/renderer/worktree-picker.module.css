@@ -51,8 +51,8 @@
 }
 
 .actions button:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--accent-line);
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .locked {

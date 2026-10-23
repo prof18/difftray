@@ -95,9 +95,9 @@
   padding: 9px 10px;
 }
 
-.reviewCommentTextarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.reviewCommentTextarea:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .reviewCommentTextarea:disabled {

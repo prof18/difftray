@@ -111,7 +111,6 @@
     "zero" 1,
     "ss02" 1;
   font-weight: 500;
-  outline: 0;
   padding: 0 8px;
 }
 
@@ -127,10 +126,13 @@
   background: var(--hover);
 }
 
-.diffTargetTrigger:focus,
 .diffTargetTrigger[aria-expanded="true"] {
   border-color: var(--accent-2);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.diffTargetTrigger:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .diffTargetTrigger:disabled {
@@ -205,13 +207,12 @@
   font-feature-settings:
     "zero" 1,
     "ss02" 1;
-  outline: 0;
   padding: 0 8px;
 }
 
-.diffTargetSearch:focus {
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+.diffTargetSearch:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .diffTargetCommitForm {
@@ -666,8 +667,8 @@
 }
 
 .railFile:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .railReviewLabel {

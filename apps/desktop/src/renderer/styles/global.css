@@ -35,6 +35,7 @@
   --accent-text: #5da9ff;
   --accent-soft: rgba(52, 116, 240, 0.15);
   --accent-line: rgba(93, 169, 255, 0.42);
+  --focus-ring: 2px solid var(--accent);
   --primary-bg: #2d68e0;
   --primary-fg: #ffffff;
   --ok: #73bd79;
@@ -167,8 +168,11 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--accent);
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 

@@ -155,3 +155,40 @@ describe("accent text contrast", () => {
     );
   });
 });
+
+/** Every innermost `selector { body }` rule in a sheet, @media contents included. */
+function rules(css: string): { selector: string; body: string }[] {
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
+    selector: match[1]!.trim(),
+    body: match[2]!
+  }));
+}
+
+describe("focus ring", () => {
+  it("defines one focus ring and applies it to every native control", () => {
+    expect(rootBlock("dark")).toContain("--focus-ring: 2px solid var(--accent);");
+    const global = rule(
+      globalCss,
+      "button:focus-visible,\ninput:focus-visible,\nselect:focus-visible,\ntextarea:focus-visible,\nsummary:focus-visible,\na:focus-visible"
+    );
+    expect(global).toContain("outline: var(--focus-ring);");
+    expect(global).toContain("outline-offset: 2px;");
+  });
+
+  // Rings drawn with --accent-line or a 2px --accent-soft halo measured under 3:1.
+  it("draws component focus states with the shared ring", () => {
+    for (const [name, css] of moduleSheets) {
+      for (const { selector, body } of rules(css)) {
+        expect(selector, `${name} uses :focus instead of :focus-visible`).not.toMatch(
+          /:focus(?![-\w])/
+        );
+        if (!selector.includes(":focus-visible")) continue;
+        if (selector.includes("[data-dialog-focus-restored]")) continue;
+        expect(body, `${name} ${selector}`).toContain("outline: var(--focus-ring);");
+        expect(body, `${name} ${selector}`).toMatch(/outline-offset: -?2px;/);
+        expect(body, `${name} ${selector}`).not.toContain("box-shadow");
+      }
+    }
+  });
+});
