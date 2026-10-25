@@ -273,24 +273,29 @@ export function RepositoryPicker({
           )}
         </div>
         <div className={styles.footer}>
-          <button
-            className={buttonStyles.secondaryButton}
-            onClick={onBrowse}
-            type="button"
-          >
-            Open Repositories…
-          </button>
-          <button className={buttonStyles.secondaryButton} onClick={onScan} type="button">
-            Scan a folder…
-          </button>
-          <button
-            className={buttonStyles.secondaryButton}
-            onClick={onRefresh}
-            type="button"
-          >
-            Refresh catalog
-          </button>
-          <span>↑ ↓ navigate · ↵ select · ⌘O</span>
+          <div className={styles.footerActions}>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onBrowse}
+              type="button"
+            >
+              Open Repositories…
+            </button>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onScan}
+              type="button"
+            >
+              Scan a folder…
+            </button>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onRefresh}
+              type="button"
+            >
+              Refresh catalog
+            </button>
+          </div>
         </div>
       </section>
     </div>

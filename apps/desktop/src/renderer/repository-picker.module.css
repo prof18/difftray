@@ -17,3 +17,12 @@
   font-size: 11px;
   padding: 7px 12px;
 }
+
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
+}
+
+/* Qualified so it out-ranks the recipe's max-content width in any bundle order. */
+.footer .footerActions {
+  width: 100%;
+}

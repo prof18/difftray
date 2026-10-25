@@ -36,27 +36,29 @@ export function EmptyState({
         Open a Git repository to start reviewing local changes. Difftray tracks what
         you&apos;ve reviewed and flags files that change after review.
       </p>
-      <button
-        className={styles.primaryButton}
-        disabled={disabled}
-        onClick={onOpenProject}
-        type="button"
-      >
-        <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
-        Open Repository
-        <kbd>⌘O</kbd>
-      </button>
-      {onScanFolder ? (
+      <div className={styles.emptyActions} data-testid="empty-state-actions">
         <button
-          className={styles.secondaryButton}
+          className={styles.primaryButton}
           disabled={disabled}
-          onClick={onScanFolder}
+          onClick={onOpenProject}
           type="button"
         >
-          <Folder size={14} strokeWidth={1.4} aria-hidden />
-          Scan a folder…
+          <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
+          Open Repository
+          <kbd>⌘O</kbd>
         </button>
-      ) : null}
+        {onScanFolder ? (
+          <button
+            className={styles.secondaryButton}
+            disabled={disabled}
+            onClick={onScanFolder}
+            type="button"
+          >
+            <Folder size={14} strokeWidth={1.4} aria-hidden />
+            Scan a folder…
+          </button>
+        ) : null}
+      </div>
       <p className={styles.dropHint}>Or drop a folder onto this window.</p>
       {projects.length > 0 ? (
         <div className={styles.recentBox}>

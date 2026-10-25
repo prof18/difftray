@@ -28,6 +28,13 @@ describe("settings panel css", () => {
     expect(picker).toContain("border-radius: 6px;");
   });
 
+  // The companion switch sat on the title line while Approved folders, the other
+  // row with a description, centres its button on the whole row.
+  it("centres the companion switch on its row like the other settings rows", () => {
+    expect(rule(".companionIntro")).toContain("align-items: center;");
+    expect(rule(".settingRow")).toContain("align-items: center;");
+  });
+
   // Rows with a description (Companion mode, Approved folders) used bold titles,
   // unlike every other settings row.
   it("gives described rows the same title weight as plain rows", () => {

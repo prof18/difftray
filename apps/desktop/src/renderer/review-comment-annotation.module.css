@@ -40,8 +40,7 @@
 
 .reviewCommentHeader,
 .reviewCommentHeader span,
-.reviewCommentIconActions,
-.reviewCommentActions {
+.reviewCommentIconActions {
   display: flex;
   align-items: center;
 }
@@ -58,8 +57,7 @@
   gap: 6px;
 }
 
-.reviewCommentIconActions,
-.reviewCommentActions {
+.reviewCommentIconActions {
   gap: 6px;
 }
 
@@ -95,7 +93,8 @@
 }
 
 .reviewCommentActions {
-  justify-content: flex-end;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .attribution {

@@ -56,6 +56,26 @@ describe("app status views", () => {
     expect(html).toContain("Or drop a folder onto this window.");
   });
 
+  // The two buttons were loose children of the centred column: stacked with no
+  // gap and centred on different widths, they read as one lopsided block.
+  it("groups the empty-state actions in one row", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        disabled={false}
+        onOpenProject={vi.fn()}
+        onScanFolder={vi.fn()}
+        onSelectProject={vi.fn()}
+        projects={[]}
+      />
+    );
+
+    const group = /<div[^>]*data-testid="empty-state-actions"[^>]*>(.*?)<\/div>/s.exec(
+      html
+    );
+    expect(group?.[1]).toContain("Open Repository");
+    expect(group?.[1]).toContain("Scan a folder…");
+  });
+
   it("renders reviewed drift notification with the actionable files", () => {
     const html = renderToStaticMarkup(
       <DriftToast

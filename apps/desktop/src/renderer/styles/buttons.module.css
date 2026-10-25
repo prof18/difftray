@@ -21,6 +21,19 @@
   white-space: nowrap;
 }
 
+/* Peer buttons shown together (Cancel and Save, Deny and Approve) all take the
+   width of the widest label, so a pair reads as balanced. The group is only as
+   wide as its buttons; place it with margins (margin-left: auto for the end). */
+.buttonGroup {
+  display: grid;
+  width: max-content;
+  max-width: 100%;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 8px;
+}
+
 .primaryButton {
   composes: button;
   border: 1px solid var(--accent-2);

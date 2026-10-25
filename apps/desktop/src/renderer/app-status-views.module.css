@@ -24,10 +24,15 @@
   box-shadow: 0 0 0 4px var(--warn-soft);
 }
 
-.dropHint {
+.emptyActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
+}
+
+/* Out-ranks `.emptyState p`, which sets the paragraph margins of the empty state. */
+.emptyState .dropHint {
   color: var(--text-dim);
   font-size: 12px;
-  margin: 0;
+  margin: 14px 0 0;
 }
 
 .emptyState {
@@ -299,7 +304,6 @@
 }
 
 .toastActions {
-  display: flex;
-  gap: 8px;
+  composes: buttonGroup from "./styles/buttons.module.css";
   margin-top: 10px;
 }

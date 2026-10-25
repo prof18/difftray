@@ -55,3 +55,7 @@
 .footer span {
   margin-right: auto;
 }
+
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
+}

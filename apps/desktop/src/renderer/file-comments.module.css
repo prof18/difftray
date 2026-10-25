@@ -33,8 +33,7 @@
 
 .header,
 .header span,
-.iconActions,
-.actions {
+.iconActions {
   display: flex;
   align-items: center;
 }
@@ -51,13 +50,13 @@
   gap: 6px;
 }
 
-.iconActions,
-.actions {
+.iconActions {
   gap: 6px;
 }
 
 .actions {
-  justify-content: flex-end;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .body {

@@ -96,22 +96,24 @@ export function DroppedRepositoryPreview({
         ) : null}
         <footer className={styles.footer}>
           <span aria-live="polite">{selectedIds.length} selected</span>
-          <button
-            className={buttonStyles.secondaryButton}
-            onClick={onCancel}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            className={buttonStyles.primaryButton}
-            disabled={selectedIds.length === 0}
-            onClick={() => onOpen(selectedIds, remember)}
-            type="button"
-          >
-            Open {selectedIds.length}{" "}
-            {selectedIds.length === 1 ? "repository" : "repositories"}
-          </button>
+          <div className={styles.footerActions}>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onCancel}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className={buttonStyles.primaryButton}
+              disabled={selectedIds.length === 0}
+              onClick={() => onOpen(selectedIds, remember)}
+              type="button"
+            >
+              Open {selectedIds.length}{" "}
+              {selectedIds.length === 1 ? "repository" : "repositories"}
+            </button>
+          </div>
         </footer>
       </section>
     </div>

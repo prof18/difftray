@@ -32,8 +32,7 @@
 
 .headerRow,
 .header,
-.iconActions,
-.actions {
+.iconActions {
   display: flex;
   align-items: center;
 }
@@ -55,13 +54,13 @@
   color: var(--text-2);
 }
 
-.iconActions,
-.actions {
+.iconActions {
   gap: 6px;
 }
 
 .actions {
-  justify-content: flex-end;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .body {

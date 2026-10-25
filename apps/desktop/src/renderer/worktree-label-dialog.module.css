@@ -65,6 +65,9 @@
 
 .footer {
   display: flex;
-  gap: 8px;
   justify-content: flex-end;
+}
+
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
 }

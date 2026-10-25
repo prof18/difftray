@@ -394,7 +394,7 @@
 
 .companionIntro {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--border-soft);
@@ -543,9 +543,7 @@
 }
 
 .companionActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  composes: buttonGroup from "./styles/buttons.module.css";
 }
 
 .companionDevices {
@@ -640,9 +638,7 @@
 }
 
 .companionStores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  composes: buttonGroup from "./styles/buttons.module.css";
 }
 
 .companionStores .secondaryButton {
@@ -880,9 +876,8 @@
 }
 
 .companionDialogActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .editorPicker {

@@ -126,32 +126,34 @@ export function WorktreeLabelDialog({
             </span>
           ) : null}
           <div className={styles.footer}>
-            {targetError && onRetryTarget ? (
+            <div className={styles.footerActions}>
+              {targetError && onRetryTarget ? (
+                <button
+                  className={buttonStyles.secondaryButton}
+                  onClick={onRetryTarget}
+                  type="button"
+                >
+                  Retry
+                </button>
+              ) : null}
               <button
                 className={buttonStyles.secondaryButton}
-                onClick={onRetryTarget}
+                data-testid="worktree-label-cancel"
+                disabled={saving}
+                onClick={onCancel}
                 type="button"
               >
-                Retry
+                Cancel
               </button>
-            ) : null}
-            <button
-              className={buttonStyles.secondaryButton}
-              data-testid="worktree-label-cancel"
-              disabled={saving}
-              onClick={onCancel}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className={buttonStyles.primaryButton}
-              data-testid="worktree-label-save"
-              disabled={saving || !targetReady}
-              type="submit"
-            >
-              Save
-            </button>
+              <button
+                className={buttonStyles.primaryButton}
+                data-testid="worktree-label-save"
+                disabled={saving || !targetReady}
+                type="submit"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </form>
       </section>
