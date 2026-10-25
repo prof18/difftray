@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.0.16 - 2026-10-25
+
+### Added
+
+- Let local coding agents read a review and write feedback through the bundled
+  `difftray` CLI and agent skills, installed and repaired from a new Agents
+  settings page.
+- Show which agent wrote or last edited a comment on desktop and on paired phones.
+- Give worktrees display names, editable in the app, through the CLI and from
+  paired phones.
+- Show the scanned folder's results in the repository picker after Scan a folder.
+
+### Improved
+
+- Draw buttons, fields, menus, segmented controls, cards and icons from one shared
+  style, with one focus ring and WCAG AA contrast for secondary text.
+- Group settings into panels with real switches.
+- Use the file-state vocabulary shared with the phone in the file list and command
+  palette, and show review progress in the file list header.
+- Stack toasts, keep the end of long file names visible, and honour Reduce Motion
+  everywhere.
+- Size inline comments with the diff font setting.
+
+### Fixed
+
+- Stop stretching small images in the image diff and drop misleading binary stats.
+- Run the command palette row that is highlighted on screen.
+
 ## 0.0.15 - 2026-10-12
 
 ### Added
