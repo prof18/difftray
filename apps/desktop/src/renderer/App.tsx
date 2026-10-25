@@ -127,7 +127,10 @@ import {
   withProjectLabel,
   type WorktreeLabelEditorState
 } from "./worktree-label-editor.js";
-import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
+import {
+  addRepositorySearchRootThen,
+  scanFolderForRepositories
+} from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
 import { createRepositoryDropZone } from "./repository-drop-zone.js";
 import { requestDroppedRepositoryPreview } from "./dropped-repository-preview-request.js";
@@ -663,10 +666,11 @@ export function App(): React.JSX.Element {
       runApplicationCommandIfAllowed(
         loadStateRef.current,
         () => {
-          void addRepositorySearchRootThen(
-            window.difftray.addRepositorySearchRoot,
-            () => void openRepositoryPicker()
-          ).catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+          void scanFolderForRepositories({
+            addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+            onError: (caughtError) => setError(errorMessage(caughtError)),
+            openRepositoryPicker: () => void openRepositoryPicker()
+          });
         },
         settingsOpenRef.current
       );
@@ -1301,9 +1305,11 @@ export function App(): React.JSX.Element {
         },
         scanRepositoryFolder: () => {
           closePalette();
-          void window.difftray
-            .addRepositorySearchRoot()
-            .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+          void scanFolderForRepositories({
+            addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+            onError: (caughtError) => setError(errorMessage(caughtError)),
+            openRepositoryPicker: () => void openRepositoryPicker()
+          });
         },
         selectFile: selectPath,
         setDiffMode: setAndPersistDiffMode,
@@ -4289,9 +4295,11 @@ export function App(): React.JSX.Element {
             void openRepositoryPicker();
           }}
           onScanFolder={() => {
-            void window.difftray
-              .addRepositorySearchRoot()
-              .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+            void scanFolderForRepositories({
+              addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+              onError: (caughtError) => setError(errorMessage(caughtError)),
+              openRepositoryPicker: () => void openRepositoryPicker()
+            });
           }}
           onSelectProject={(projectId) => {
             void loadProject(projectId);
