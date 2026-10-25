@@ -159,6 +159,7 @@
 
 .settingsNavigation > button {
   -webkit-app-region: no-drag;
+  position: relative;
   display: grid;
   width: 100%;
   min-height: 38px;
@@ -166,7 +167,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -175,16 +176,30 @@
   text-align: left;
 }
 
+/* The same marker as the file list's selected row: clear of the rounded corners. */
+.settingsNavigation > button::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  content: "";
+}
+
 .settingsNavigation > button:hover {
   background: var(--hover);
   color: var(--text-2);
 }
 
 .settingsNavigation > button[data-active="true"] {
-  border-color: transparent;
   background: var(--selected);
-  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
+}
+
+.settingsNavigation > button[data-active="true"]::before {
+  background: var(--accent);
 }
 
 .settingsNavigation > button > svg:first-child {
@@ -257,10 +272,18 @@
   padding-inline: 14px;
 }
 
+/* One rounded panel per section, with dividers only between its rows: the section
+   heading above it needs no rule of its own. */
 .settingsCard {
   overflow: hidden;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+/* The same height as the pickers sharing the right-hand column. */
+.settingsCard .secondaryButton {
+  height: 32px;
 }
 
 .settingsCard[data-overflow="visible"] {
@@ -1077,7 +1100,7 @@
 
 /* Qualified so it out-ranks the shared recipe wherever the bundle places it. */
 .secondaryButton.repositoryRootIconButton {
-  width: 28px;
+  width: 32px;
   padding: 0;
 }
 

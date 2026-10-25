@@ -109,10 +109,13 @@
   right: -2px;
 }
 
+.projectTab:not([data-active="true"]):hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
 .projectTab[data-active="true"] {
-  margin-bottom: -1px;
   border-color: var(--border);
-  border-bottom-color: var(--panel);
   background: var(--tab-active-bg);
   color: var(--text);
   font-weight: 500;
@@ -124,7 +127,12 @@
   min-width: 0;
   align-items: center;
   gap: 7px;
-  padding: 0 9px 0 12px;
+  padding: 0 6px 0 10px;
+}
+
+/* Inactive tabs have no close control: the same 10px on both sides. */
+.projectTabSelect:last-child {
+  padding-right: 10px;
 }
 
 .projectTab[data-active="true"] .projectTabSelect {
@@ -168,11 +176,14 @@
   color: var(--text);
 }
 
+/* A square inset 4px from the tab's top, right and bottom edges. */
 .tabCloseButton {
-  width: 24px;
-  height: 100%;
-  border-left-color: var(--border-soft);
-  border-radius: 0;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
 }
 
 .tabCloseButton:hover:not(:disabled) {

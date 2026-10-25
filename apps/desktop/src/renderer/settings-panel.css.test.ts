@@ -28,6 +28,25 @@ describe("settings panel css", () => {
     expect(picker).toContain("border-radius: 6px;");
   });
 
+  // Each section drew a full-width rule above and below its rows plus one under
+  // every row, so a page of three settings showed six lines. Sections are now one
+  // rounded panel each, with dividers only between rows inside it.
+  it("groups each section's rows in one rounded panel", () => {
+    const card = rule(".settingsCard");
+    expect(card).toContain("border: 1px solid var(--border);");
+    expect(card).toContain("border-radius: 8px;");
+    expect(card).not.toContain("border-top:");
+    expect(card).not.toContain("border-bottom:");
+    expect(rule(".settingRow:last-child")).toContain("border-bottom: 0;");
+  });
+
+  // Check for updates was 28px tall beside 32px pickers in the same column.
+  it("draws settings buttons at the pickers' height", () => {
+    expect(rule(".settingsCard .secondaryButton")).toContain("height: 32px;");
+    // The remove-folder icon button stays square at the new height.
+    expect(rule(".secondaryButton.repositoryRootIconButton")).toContain("width: 32px;");
+  });
+
   // The companion switch sat on the title line while Approved folders, the other
   // row with a description, centres its button on the whole row.
   it("centres the companion switch on its row like the other settings rows", () => {

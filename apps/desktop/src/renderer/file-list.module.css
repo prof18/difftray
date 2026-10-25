@@ -378,21 +378,35 @@
   will-change: transform;
 }
 
+/* Inset 10px like the Add review notes button above the list. */
 .fileItem {
+  position: relative;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto 14px;
   min-height: 52px;
   align-items: center;
   gap: 10px;
   border: 0;
-  border-left: 2px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: inherit;
   font: inherit;
-  margin: 0 6px;
-  padding: 6px 8px;
+  margin: 0 10px;
+  padding: 6px 10px;
   text-align: left;
+}
+
+/* The selected / needs-attention marker: a bar on the left edge that stops short
+   of the rounded corners instead of a border bending around them. */
+.fileItem::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  content: "";
 }
 
 .fileItem:hover {
@@ -400,12 +414,15 @@
 }
 
 .fileItem[data-selected="true"] {
-  border-left-color: var(--accent);
   background: var(--selected);
 }
 
-.fileItem[data-attention="true"] {
-  border-left-color: var(--warn);
+.fileItem[data-selected="true"]::before {
+  background: var(--accent);
+}
+
+.fileItem[data-attention="true"]::before {
+  background: var(--warn);
 }
 
 /* Accent and muted text lose contrast on the selected row's fill. */

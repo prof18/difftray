@@ -661,16 +661,29 @@ describe("hit targets", () => {
 });
 
 describe("selection, cursors and pane edges", () => {
-  // The file list and palette mark the current row with a left accent rule and the
-  // selected fill; the settings sidebar drew a full accent outline instead.
+  // The file list marks the current row with the selected fill and an accent bar
+  // that stops short of the rounded corners; the settings sidebar drew a 2px inset
+  // shadow that bent around them instead.
   it("marks the selected settings page like the file list", () => {
-    const active = rule(
-      sheet("settings-panel.module.css"),
-      '.settingsNavigation > button[data-active="true"]'
-    );
-    expect(active).toContain("border-color: transparent;");
+    const settings = sheet("settings-panel.module.css");
+    const active = rule(settings, '.settingsNavigation > button[data-active="true"]');
     expect(active).toContain("background: var(--selected);");
-    expect(active).toContain("box-shadow: inset 2px 0 0 var(--accent);");
+    expect(active).not.toContain("box-shadow");
+    expect(rule(settings, ".settingsNavigation > button::before")).toContain(
+      "top: 10px;"
+    );
+    expect(
+      rule(settings, '.settingsNavigation > button[data-active="true"]::before')
+    ).toContain("background: var(--accent);");
+  });
+
+  it("marks the selected palette and repository picker row the same way", () => {
+    const palette = sheet("command-palette-view.module.css");
+    expect(rule(palette, ".paletteItem")).not.toContain("border-left");
+    expect(rule(palette, ".paletteItem::before")).toContain("top: 10px;");
+    expect(rule(palette, '.paletteItem[data-selected="true"]::before')).toContain(
+      "background: var(--accent);"
+    );
   });
 
   it("keeps the default cursor on controls", () => {
