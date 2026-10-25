@@ -229,6 +229,8 @@ export function App(): React.JSX.Element {
     readonly RepositorySearchRootSuggestionView[]
   >([]);
   const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
+  // Set after "Scan a folder…": the picker then lists only that folder's results.
+  const [repositoryPickerFolder, setRepositoryPickerFolder] = useState<string>();
   const [tabDragCancelKey, setTabDragCancelKey] = useState(0);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
@@ -669,7 +671,7 @@ export function App(): React.JSX.Element {
           void scanFolderForRepositories({
             addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
             onError: (caughtError) => setError(errorMessage(caughtError)),
-            openRepositoryPicker: () => void openRepositoryPicker()
+            openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
           });
         },
         settingsOpenRef.current
@@ -1308,7 +1310,7 @@ export function App(): React.JSX.Element {
           void scanFolderForRepositories({
             addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
             onError: (caughtError) => setError(errorMessage(caughtError)),
-            openRepositoryPicker: () => void openRepositoryPicker()
+            openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
           });
         },
         selectFile: selectPath,
@@ -1734,19 +1736,24 @@ export function App(): React.JSX.Element {
     });
   }
 
-  async function openRepositoryPicker(): Promise<void> {
+  async function openRepositoryPicker(folderPath?: string): Promise<void> {
     setError(undefined);
     closeTransientOverlays();
     const requestId = ++repositoryPickerRequestRef.current;
 
     try {
-      const [known, catalog] = await Promise.all([
+      const [known, catalog, roots] = await Promise.all([
         window.difftray.listKnownProjects(),
-        window.difftray.listRepositoryCatalog()
+        window.difftray.listRepositoryCatalog(),
+        // A folder added a moment ago is not in the roots state yet; its scan
+        // status comes from here.
+        folderPath ? window.difftray.listRepositorySearchRoots() : undefined
       ]);
       if (requestId !== repositoryPickerRequestRef.current) return;
       setKnownProjects(known);
       setRepositoryCatalog(catalog);
+      if (roots) setRepositorySearchRoots(roots);
+      setRepositoryPickerFolder(folderPath);
       setRepositoryPickerOpen(true);
     } catch (caughtError) {
       if (requestId === repositoryPickerRequestRef.current) {
@@ -1758,6 +1765,7 @@ export function App(): React.JSX.Element {
   function closeRepositoryPicker(): void {
     repositoryPickerRequestRef.current += 1;
     setRepositoryPickerOpen(false);
+    setRepositoryPickerFolder(undefined);
   }
 
   async function selectRepositoryPickerItem(item: RepositoryPickerItem): Promise<void> {
@@ -2566,6 +2574,7 @@ export function App(): React.JSX.Element {
     setPaletteOpen(false);
     setSettingsOpen(false);
     setRepositoryPickerOpen(false);
+    setRepositoryPickerFolder(undefined);
     setWorktreePickerProject(undefined);
     setDroppedRepositoryPreview([]);
   }
@@ -4298,7 +4307,7 @@ export function App(): React.JSX.Element {
             void scanFolderForRepositories({
               addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
               onError: (caughtError) => setError(errorMessage(caughtError)),
-              openRepositoryPicker: () => void openRepositoryPicker()
+              openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
             });
           }}
           onSelectProject={(projectId) => {
@@ -4347,9 +4356,9 @@ export function App(): React.JSX.Element {
             const requestId = repositoryPickerRequestRef.current;
             void addRepositorySearchRootThen(
               window.difftray.addRepositorySearchRoot,
-              () => {
+              (folderPath) => {
                 if (requestId === repositoryPickerRequestRef.current) {
-                  void openRepositoryPicker();
+                  void openRepositoryPicker(folderPath);
                 }
               }
             ).catch((caughtError: unknown) => {
@@ -4360,11 +4369,12 @@ export function App(): React.JSX.Element {
           }}
           onRefresh={() => {
             const requestId = repositoryPickerRequestRef.current;
+            const folderPath = repositoryPickerFolder;
             void window.difftray
               .refreshRepositoryCatalog()
               .then(() => {
                 if (requestId === repositoryPickerRequestRef.current) {
-                  void openRepositoryPicker();
+                  void openRepositoryPicker(folderPath);
                 }
               })
               .catch((caughtError: unknown) => {
@@ -4373,7 +4383,21 @@ export function App(): React.JSX.Element {
                 }
               });
           }}
+          onShowAllRepositories={() => {
+            setRepositoryPickerFolder(undefined);
+          }}
           openProjects={recentProjects}
+          scanFolder={
+            repositoryPickerFolder
+              ? {
+                  path: repositoryPickerFolder,
+                  scanning: repositorySearchRoots.some(
+                    (searchRoot) =>
+                      searchRoot.path === repositoryPickerFolder && searchRoot.scanning
+                  )
+                }
+              : undefined
+          }
         />
       ) : null}
 

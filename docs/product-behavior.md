@@ -22,6 +22,11 @@ With no project open, the window offers Open Repository, Scan a folder… (adds 
 approved search folder) and recent projects, and notes that a folder can be
 dropped onto the window.
 
+Scan a folder…, from the empty window, the menu, the command palette or the
+repository picker, approves the chosen folder, scans it, and opens the repository
+picker limited to that folder: it says it is scanning, then lists the repositories
+found there or says none were found. Show all returns to every repository.
+
 ## Review targets
 
 Each project reviews one target at a time (`ReviewTarget` in

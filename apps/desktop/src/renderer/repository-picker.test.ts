@@ -187,6 +187,76 @@ describe("RepositoryPicker", () => {
     expect(projectToShowWhileLoading(known)).toBe(known.project);
   });
 
+  // After "Scan a folder…" the picker showed every repository from every folder,
+  // so the scan's own results were lost among them.
+  describe("after scanning a folder", () => {
+    const folder = { path: "/workspace/scan", scanning: false };
+
+    it("says it is scanning that folder while the scan runs", () => {
+      act(() => {
+        root.render(
+          createElement(
+            RepositoryPicker,
+            pickerProps({ scanFolder: { ...folder, scanning: true } })
+          )
+        );
+      });
+
+      expect(container.textContent).toContain("Scanning scan…");
+      expect(container.textContent).not.toContain("No matching repositories");
+    });
+
+    it("lists only the repositories found in that folder", () => {
+      act(() => {
+        root.render(
+          createElement(
+            RepositoryPicker,
+            pickerProps({
+              knownProjects: [
+                project("inside", "/workspace/scan/inside"),
+                project("elsewhere", "/workspace/elsewhere")
+              ],
+              scanFolder: folder
+            })
+          )
+        );
+      });
+
+      expect(container.textContent).toContain("Repositories in scan");
+      expect(container.textContent).toContain("inside");
+      expect(container.textContent).not.toContain("elsewhere");
+    });
+
+    it("says plainly when the folder holds no repositories", () => {
+      act(() => {
+        root.render(createElement(RepositoryPicker, pickerProps({ scanFolder: folder })));
+      });
+
+      expect(container.textContent).toContain("No Git repositories found in scan");
+    });
+
+    it("can go back to every repository", () => {
+      const onShowAllRepositories = vi.fn();
+      act(() => {
+        root.render(
+          createElement(
+            RepositoryPicker,
+            pickerProps({ onShowAllRepositories, scanFolder: folder })
+          )
+        );
+      });
+
+      const showAll = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "Show all"
+      );
+      act(() => {
+        showAll?.click();
+      });
+
+      expect(onShowAllRepositories).toHaveBeenCalledOnce();
+    });
+  });
+
   function pickerProps(
     overrides: Partial<React.ComponentProps<typeof RepositoryPicker>> = {}
   ): React.ComponentProps<typeof RepositoryPicker> {
@@ -205,6 +275,34 @@ describe("RepositoryPicker", () => {
 });
 
 describe("repositoryPickerItems", () => {
+  it("keeps only repositories inside the scanned folder when one is given", () => {
+    const items = repositoryPickerItems(
+      [project("open-inside", "/workspace/scan/open")],
+      [
+        project("known-inside", "/workspace/scan/known"),
+        project("sibling", "/workspace/scanner/known")
+      ],
+      [
+        {
+          available: true,
+          id: "catalog-inside",
+          lastSeenAt: "2026-10-25T00:00:00.000Z",
+          name: "catalog-inside",
+          path: "/workspace/scan/deep/repo",
+          rootId: "root"
+        }
+      ],
+      "",
+      "/workspace/scan"
+    );
+
+    expect(items.map(({ project: item }) => item.name)).toEqual([
+      "open-inside",
+      "known-inside",
+      "catalog-inside"
+    ]);
+  });
+
   it("groups open tabs before closed known repositories without duplicates", () => {
     const open = [project("difftray", "/workspace/difftray")];
     const known = [...open, project("feed-flow", "/workspace/feed-flow")];

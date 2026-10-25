@@ -915,7 +915,9 @@ handleTrusted("repositories:listSearchRoots", () => {
 handleTrusted("repositories:listSearchRootSuggestions", () =>
   repositorySearchRootSuggestions()
 );
-handleTrusted("repositories:addSearchRoot", async (): Promise<boolean> => {
+// Resolves to the approved folder's stored path, so the renderer can show that
+// folder's scan results, or null when the dialog is cancelled.
+handleTrusted("repositories:addSearchRoot", async (): Promise<string | null> => {
   const options: OpenDialogOptions = {
     buttonLabel: "Scan for Repositories",
     message: "Choose a folder to search for Git repositories.",
@@ -929,9 +931,9 @@ handleTrusted("repositories:addSearchRoot", async (): Promise<boolean> => {
   if (!result.canceled && rootPath) {
     const root = getStorage().addRepositorySearchRoot(rootPath);
     void scanRepositoryRoot(root.id).catch(() => undefined);
-    return true;
+    return root.path;
   }
-  return false;
+  return null;
 });
 handleTrusted(
   "repositories:addSuggestedSearchRoot",

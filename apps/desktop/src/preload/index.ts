@@ -206,7 +206,7 @@ export type DifftrayApi = {
     readonly knownProjectIds: readonly string[];
     readonly repositoryIds: readonly string[];
   }) => Promise<ReviewWorkspaceView | null>;
-  readonly addRepositorySearchRoot: () => Promise<boolean>;
+  readonly addRepositorySearchRoot: () => Promise<string | null>;
   readonly addSuggestedRepositorySearchRoot: (suggestionId: string) => Promise<void>;
   readonly refreshRepositoryCatalog: () => Promise<void>;
   readonly refreshRepositorySearchRoot: (rootId: string) => Promise<void>;
@@ -1121,7 +1121,7 @@ const api: DifftrayApi = {
       input
     ) as Promise<ReviewWorkspaceView | null>,
   addRepositorySearchRoot: async () =>
-    ipcRenderer.invoke("repositories:addSearchRoot") as Promise<boolean>,
+    ipcRenderer.invoke("repositories:addSearchRoot") as Promise<string | null>,
   addSuggestedRepositorySearchRoot: async (suggestionId) =>
     ipcRenderer.invoke("repositories:addSuggestedSearchRoot", {
       suggestionId

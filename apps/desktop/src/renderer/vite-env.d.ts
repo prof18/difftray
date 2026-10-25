@@ -164,7 +164,7 @@ declare global {
       readonly knownProjectIds: readonly string[];
       readonly repositoryIds: readonly string[];
     }) => Promise<ReviewWorkspaceView | null>;
-    readonly addRepositorySearchRoot: () => Promise<boolean>;
+    readonly addRepositorySearchRoot: () => Promise<string | null>;
     readonly addSuggestedRepositorySearchRoot: (suggestionId: string) => Promise<void>;
     readonly refreshRepositoryCatalog: () => Promise<void>;
     readonly refreshRepositorySearchRoot: (rootId: string) => Promise<void>;
