@@ -495,26 +495,26 @@ function AgentsSettingsPage({
         {setup?.available ? (
           <>
             {setup.skills.map((skill) => (
-              <div key={skill.target}>
-                <div className={styles.settingRow}>
+              <div
+                className={[styles.settingRow, styles.agentSkillRow].join(" ")}
+                key={skill.target}
+              >
+                <div className={styles.agentSkillInfo}>
                   <span>{skill.target === "other" ? OTHER_LABEL : skill.label}</span>
-                  {skillAction(skill)}
+                  {skill.destination ? (
+                    <input
+                      aria-label={`${skill.label} skill destination`}
+                      className={styles.agentSkillPath}
+                      readOnly
+                      value={skill.destination}
+                    />
+                  ) : null}
+                  {skill.reason ? <p>{skill.reason}</p> : null}
                 </div>
-                {skill.destination || skill.reason ? (
-                  <div className={styles.cliInstallDetails}>
-                    {skill.destination ? (
-                      <input
-                        aria-label={`${skill.label} skill destination`}
-                        readOnly
-                        value={skill.destination}
-                      />
-                    ) : null}
-                    {skill.reason ? <p>{skill.reason}</p> : null}
-                  </div>
-                ) : null}
+                {skillAction(skill)}
               </div>
             ))}
-            <div className={styles.cliInstallDetails}>
+            <div className={styles.agentInstallNote}>
               <p>{INSTALL_NOTE}</p>
             </div>
           </>

@@ -1176,3 +1176,56 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.agentSkillRow {
+  min-height: 52px;
+  padding: 10px 14px;
+}
+
+.agentSkillRow:has(+ .agentInstallNote) {
+  min-height: 44px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.agentSkillInfo {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+  line-height: 1.5;
+}
+
+.agentSkillInfo p {
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.agentSkillPath {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+.agentSkillPath:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.agentInstallNote {
+  padding: 4px 14px 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.agentInstallNote p {
+  margin: 0;
+}

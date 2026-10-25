@@ -28,6 +28,11 @@ repaired after the app moves, while custom destinations can always be chosen
 again. Links follow skill changes when the app updates at its current path; an
 agent host may need a restart or reload to see an update.
 
+Keep each agent's name and selectable destination together in one compact row,
+with its action aligned on the right. Destinations use secondary text rather
+than separate full-width field panels. Installation guidance appears once below
+the rows, using the same typography and control sizes as the other settings.
+
 The app resolves its owning bundle from the installed skill symlink, including
 Alpha and custom-named bundles. An explicit `DIFFTRAY_APP_PATH` remains the
 highest-priority override for manual or developer use. Repository-source use
