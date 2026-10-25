@@ -1207,7 +1207,7 @@
 }
 
 .agentSkillPath:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
