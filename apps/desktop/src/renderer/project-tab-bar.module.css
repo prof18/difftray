@@ -7,7 +7,7 @@
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
-  padding: 0 8px;
+  padding: 0 14px;
 }
 
 .tabStrip {
@@ -57,8 +57,7 @@
 
 .projectTab,
 .projectTabSelect,
-.tabCloseButton,
-.tabIconButton {
+.tabCloseButton {
   -webkit-app-region: no-drag;
   display: inline-grid;
   place-items: center;
@@ -110,10 +109,13 @@
   right: -2px;
 }
 
+.projectTab:not([data-active="true"]):hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
 .projectTab[data-active="true"] {
-  margin-bottom: -1px;
   border-color: var(--border);
-  border-bottom-color: var(--panel);
   background: var(--tab-active-bg);
   color: var(--text);
   font-weight: 500;
@@ -125,7 +127,12 @@
   min-width: 0;
   align-items: center;
   gap: 7px;
-  padding: 0 9px 0 12px;
+  padding: 0 6px 0 10px;
+}
+
+/* Inactive tabs have no close control: the same 10px on both sides. */
+.projectTabSelect:last-child {
+  padding-right: 10px;
 }
 
 .projectTab[data-active="true"] .projectTabSelect {
@@ -169,11 +176,14 @@
   color: var(--text);
 }
 
+/* A square inset 4px from the tab's top, right and bottom edges. */
 .tabCloseButton {
-  width: 24px;
-  height: 100%;
-  border-left-color: var(--border-soft);
-  border-radius: 0;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
 }
 
 .tabCloseButton:hover:not(:disabled) {
@@ -183,7 +193,7 @@
 
 .tabCount {
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -196,10 +206,14 @@
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
+}
+
+.tabLoadingMark {
+  composes: spin from "./styles/motion.module.css";
 }
 
 .tabSummaryLoadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 8px;
   height: 8px;
   border-color: var(--border-strong);
@@ -207,10 +221,7 @@
 }
 
 .tabIconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
 .inlineTabOpenButton {
@@ -241,32 +252,8 @@
   padding-left: 7px;
 }
 
-.tabIconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
-}
-
 .worktreesButton {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  height: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 9px;
-}
-
-.worktreesButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
+  composes: ghostButton from "./styles/buttons.module.css";
 }
 
 .repositoryMenuAnchor {
@@ -276,12 +263,13 @@
 }
 
 .repositoryActions button:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--accent-line);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
+/* Focus handed back after the repository menu or a dialog closes stays quiet. */
 .repositoryActions button[data-dialog-focus-restored]:focus-visible {
-  box-shadow: none;
+  outline: none;
 }
 
 .repositoryMenu {
@@ -295,7 +283,7 @@
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--panel);
+  background: var(--panel-2);
   box-shadow: var(--shadow-pop);
   padding: 5px;
 }
@@ -310,7 +298,7 @@
   min-height: 30px;
   align-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
@@ -319,10 +307,16 @@
   text-align: left;
 }
 
-.repositoryMenu button:hover:not(:disabled),
-.repositoryMenu button:focus-visible {
-  background: var(--selected);
+.repositoryMenu button:hover:not(:disabled) {
+  background: var(--hover);
   color: var(--text);
+}
+
+.repositoryMenu button:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .repositoryMenuDivider {
@@ -355,10 +349,4 @@
 .statusDot[data-state="attention"] {
   background: var(--warn);
   box-shadow: 0 0 0 2px var(--warn-soft);
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }

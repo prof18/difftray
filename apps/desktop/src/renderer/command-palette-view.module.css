@@ -53,13 +53,21 @@
   outline: 0;
 }
 
+/* The search row is the field, so the input itself draws no inner ring. */
+.paletteSearch input:focus-visible {
+  outline: none;
+}
+
 .paletteScope {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
   border-radius: 4px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 6px;
+  padding: 0 6px;
 }
 
 .paletteResults {
@@ -76,13 +84,13 @@
 }
 
 .paletteItem {
+  position: relative;
   display: grid;
   width: calc(100% - 12px);
   grid-template-columns: 22px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   border: 0;
-  border-left: 2px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--text);
@@ -97,13 +105,28 @@
 }
 
 .paletteItem:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--accent-line);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* The same marker as the file list's selected row: clear of the rounded corners. */
+.paletteItem::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  content: "";
 }
 
 .paletteItem[data-selected="true"] {
-  border-left-color: var(--accent);
   background: var(--selected);
+}
+
+.paletteItem[data-selected="true"]::before {
+  background: var(--accent);
 }
 
 .paletteItemIcon {
@@ -111,7 +134,7 @@
   width: 22px;
   height: 22px;
   place-items: center;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 .paletteItem[data-kind="project"] .paletteItemIcon {
@@ -119,14 +142,14 @@
   color: var(--accent);
 }
 
+/* Neutral: colour in the palette is kept for state (change type, review state). */
 .paletteItem[data-kind="action"] .paletteItemIcon {
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--elev);
+  color: var(--text-2);
 }
 
 .paletteItem[data-kind="file"] .paletteItemIcon {
-  background: var(--ok-soft);
-  color: var(--ok);
+  background: transparent;
 }
 
 .paletteItemCopy {
@@ -148,7 +171,7 @@
 .paletteHint {
   overflow: hidden;
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;

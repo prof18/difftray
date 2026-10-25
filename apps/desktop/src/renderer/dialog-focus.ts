@@ -17,8 +17,18 @@ export function useDialogFocusTrap(dialogRef: RefObject<HTMLElement | null>): vo
       Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter(
         (element) => !element.hasAttribute("disabled")
       );
-    focusables()[0]?.focus();
+    const firstControl = focusables()[0];
+    firstControl?.focus();
+    // Opened by pointer or the app menu: focus still moves in, but the first control
+    // shows no ring until the keyboard is used, as with a mouse click.
+    const clearPointerFocus = () =>
+      firstControl?.removeAttribute("data-dialog-pointer-focus");
+    if (firstControl && !previouslyShowedFocus) {
+      firstControl.setAttribute("data-dialog-pointer-focus", "");
+      firstControl.addEventListener("blur", clearPointerFocus, { once: true });
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
+      clearPointerFocus();
       if (event.key !== "Tab") return;
       const items = focusables();
       if (items.length === 0) return;
@@ -36,6 +46,7 @@ export function useDialogFocusTrap(dialogRef: RefObject<HTMLElement | null>): vo
     dialog.addEventListener("keydown", handleKeyDown);
     return () => {
       dialog.removeEventListener("keydown", handleKeyDown);
+      clearPointerFocus();
       if (!previouslyFocused) return;
       if (!previouslyShowedFocus) {
         previouslyFocused.setAttribute("data-dialog-focus-restored", "");

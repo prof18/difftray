@@ -18,6 +18,15 @@ as tabs; each tab shows the project name, its path as a tooltip, the current rev
 target and review progress. Difftray remembers recent projects, watches every open
 project for changes, and keeps each project's own base ref and last review target.
 
+With no project open, the window offers Open Repository, Scan a folder… (adds an
+approved search folder) and recent projects, and notes that a folder can be
+dropped onto the window.
+
+Scan a folder…, from the empty window, the menu, the command palette or the
+repository picker, approves the chosen folder, scans it, and opens the repository
+picker limited to that folder: it says it is scanning, then lists the repositories
+found there or says none were found. Show all returns to every repository.
+
 ## Review targets
 
 Each project reviews one target at a time (`ReviewTarget` in
@@ -37,7 +46,20 @@ files can show a different reviewed state.
 ## Files
 
 The file list shows modified, added, untracked, deleted and renamed files, with
-status, reviewed state and a changed-after-review marker.
+status, reviewed state and a changed-after-review marker. Each row reads left to
+right as change type, name, line counts and review state, using the file-state
+vocabulary shared with the phone ([0043](decisions/0043-file-state-vocabulary.md)):
+
+- Change type is a letter tile: `A` added, `M` modified or mode change, `R`
+  renamed, `D` deleted.
+- Review state is the trailing glyph: a hollow ring when unreviewed, a green check
+  when reviewed, an amber alert when the file changed after review.
+- A file that changed after review also gets an amber left rule. The header
+  progress line counts these as "needs attention".
+- Line counts read `+a -d`. Files with no line changes, such as images, show
+  neutral blocks instead of `+0 -0`.
+- Root-level files show no directory line. Long names truncate in the middle so
+  the end of the name stays visible.
 
 Generated files are hidden by default when detection is confident
 (`detectGeneratedFile` in `packages/core/src/index.ts`): a generated marker in the
@@ -48,9 +70,16 @@ do.
 
 Progress is reviewed visible files over all visible reviewable files.
 
+With the file list hidden, a narrow rail keeps one mark per file showing its
+review state; each mark opens its file, names it for assistive technology, and the
+open file is ringed.
+
 ## Diff viewer
 
-Diffs render side by side or unified (a setting), with syntax highlighting.
+Diffs render side by side or unified (a setting), with syntax highlighting. The
+diff header leads with the same change-type tile as the file list. When the diff
+pane is narrower than 640 px, the review button shows only its check and `R`
+shortcut so the toolbar stays inside the window.
 Deleted, added, untracked, renamed, binary, symlink, submodule-pointer and
 mode-only changes each have their own presentation. Static PNG, JPEG and WebP
 changes show bounded, lazy image previews; other binaries show a summary.
@@ -85,7 +114,7 @@ on the desktop and on paired phones; agents write it through the CLI, and agent
 feedback carries attribution.
 
 The agent report puts the active review note first, then each file's comments with
-file comments before line comments. "Copy comments report" puts it on the clipboard,
+file comments before line comments. "Copy for agent" in the diff toolbar puts it on the clipboard,
 and `difftray review export` returns the same text to an agent. The report names the reviewed
 change and explains the three scopes (`packages/core/src/review-comments-report-templates.ts`).
 
@@ -114,7 +143,11 @@ and free-form editor commands are not supported.
 | `Cmd+Shift+W`                      | Close the window                                                  |
 | `Escape`                           | Dismiss the drift notification or close the active overlay        |
 
-Inside the command palette, arrows move, `Enter` runs the item and `Escape` closes
-it. Single-key shortcuts do not fire while a button or field has focus. Refresh,
+The command palette groups results as projects, files, then actions, with the best
+matches first inside each group. Arrows move through the rows in that drawn order,
+`Enter` runs the highlighted row (the first row when the palette opens) and
+`Escape` closes it. Its footer names each shortcut (`Cmd+K` all, `Cmd+P` files
+only), and action rows use neutral icons, keeping colour for change type and review
+state. Single-key shortcuts do not fire while a button or field has focus. Refresh,
 project switching and diff-mode switching are available from visible controls and
 the palette.

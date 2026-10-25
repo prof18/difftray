@@ -9,6 +9,17 @@ const styles = readFileSync(
 );
 
 describe("diff surface css", () => {
+  // At 4 px the comment card pressed against the code rows around it.
+  it("leaves room between inline comments and the code rows around them", () => {
+    expect(styles).toMatch(/\.diff-surface__annotation \{[^}]*margin: 8px;/);
+    expect(styles).toMatch(/\.diff-surface__annotation \{[^}]*padding: 10px 12px;/);
+  });
+
+  it("sizes inline comments with the diff font setting", () => {
+    expect(styles).toMatch(/\.diff-surface__annotation \{[^}]*font-size: inherit;/);
+    expect(styles).toMatch(/\.diff-surface__annotation span \{[^}]*font-size: 0\.85em;/);
+  });
+
   it("uses the design elevated background for unified and split hunk bars", () => {
     expect(styles).toContain(
       '.diff-surface__row[data-row-kind="hunk"] {\n  background: var(--diff-hunk-bg);'

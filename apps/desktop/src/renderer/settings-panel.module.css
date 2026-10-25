@@ -1,24 +1,13 @@
 .iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
+  composes: iconButton from "./styles/buttons.module.css";
 }
 
-.iconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
 }
 
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
 }
 
 .settingsBackButton {
@@ -47,7 +36,7 @@
 }
 
 .settingsBackButton:disabled {
-  opacity: 0.52;
+  opacity: var(--disabled-opacity);
 }
 
 .settingsBackButton > svg {
@@ -67,7 +56,7 @@
 .settingsSegmented button {
   display: inline-flex;
   min-width: 68px;
-  height: 30px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -88,67 +77,6 @@
   border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--text);
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--accent);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] {
-  border-color: var(--ok);
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.primaryButton kbd {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] kbd {
-  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
-  background: color-mix(in srgb, var(--ok) 12%, transparent);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) kbd {
-  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  color: var(--warn);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: 0.52;
 }
 
 .sectionLabel {
@@ -220,7 +148,7 @@
 .settingsTopline h1 {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -231,6 +159,7 @@
 
 .settingsNavigation > button {
   -webkit-app-region: no-drag;
+  position: relative;
   display: grid;
   width: 100%;
   min-height: 38px;
@@ -238,7 +167,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -247,16 +176,30 @@
   text-align: left;
 }
 
+/* The same marker as the file list's selected row: clear of the rounded corners. */
+.settingsNavigation > button::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  content: "";
+}
+
 .settingsNavigation > button:hover {
   background: var(--hover);
   color: var(--text-2);
 }
 
 .settingsNavigation > button[data-active="true"] {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--selected);
   color: var(--text);
+}
+
+.settingsNavigation > button[data-active="true"]::before {
+  background: var(--accent);
 }
 
 .settingsNavigation > button > svg:first-child {
@@ -268,7 +211,7 @@
 }
 
 .settingsNavigationSpinner {
-  animation: repositoryScanSpin 900ms linear infinite;
+  composes: spin from "./styles/motion.module.css";
   color: var(--accent);
 }
 
@@ -303,13 +246,14 @@
 }
 
 .settingsPageHeader {
-  margin-bottom: 28px;
+  margin-bottom: 22px;
+  padding-inline: 14px;
 }
 
 .settingsPageHeader h2 {
   margin: 0;
   color: var(--text);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -324,14 +268,22 @@
 }
 
 .settingsSection > .sectionLabel {
-  margin-bottom: 9px;
+  margin-bottom: 6px;
+  padding-inline: 14px;
 }
 
+/* One rounded panel per section, with dividers only between its rows: the section
+   heading above it needs no rule of its own. */
 .settingsCard {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-2);
+}
+
+/* The same height as the pickers sharing the right-hand column. */
+.settingsCard .secondaryButton {
+  height: 32px;
 }
 
 .settingsCard[data-overflow="visible"] {
@@ -352,97 +304,145 @@
   padding: 12px 14px;
 }
 
+/* A row's current value before its action button, e.g. "Not checked yet". */
+.rowValueGroup {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.rowValue {
+  color: var(--text-dim);
+}
+
 .settingRow:last-child {
   border-bottom: 0;
 }
 
-.settingRow input[type="checkbox"] {
-  width: 36px;
-  height: 20px;
-  accent-color: var(--accent);
+.switch {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--elev);
+  cursor: default;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
-.settingRow input[type="text"],
-.settingRow select {
+.switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  content: "";
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.switch:checked {
+  border-color: var(--primary-bg);
+  background: var(--primary-bg);
+}
+
+.switch:checked::after {
+  background: var(--primary-fg);
+  transform: translateX(12px);
+}
+
+.switch:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  opacity: var(--disabled-opacity);
+}
+
+.settingRow input[type="text"] {
   min-width: 160px;
-  height: 28px;
+  height: 32px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--elev);
+  background: var(--bg);
   color: var(--text);
-  padding: 0 8px;
+  font-size: 12.5px;
+  padding: 0 10px;
 }
 
+/* Drawn like the editor picker beside it: same height, radius and chevron. */
 .settingRow select {
   width: var(--settings-selector-width);
+  min-width: 160px;
+  height: 32px;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--bg);
+  background-image: var(--select-chevron);
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 30px 0 10px;
 }
 
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+.updateCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.updateStatus {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.updateStatus:empty {
+  display: none;
 }
 
 .companionIntro {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--border-soft);
   padding: 14px;
 }
 
+.companionIntroCopy {
+  display: block;
+  min-width: 0;
+}
+
 .companionTitle {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+  display: block;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 400;
 }
 
 .companionDescription {
+  display: block;
   max-width: 500px;
   margin: 6px 0 0;
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.5;
-}
-
-.companionToggle {
-  position: relative;
-  display: grid;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-}
-
-.companionToggle input {
-  width: 22px;
-  height: 22px;
-  margin: 0;
-  appearance: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--elev);
-}
-
-.companionToggle input:checked {
-  border-color: var(--accent-2);
-  background: var(--accent);
-}
-
-.companionToggle input:checked::after {
-  display: block;
-  width: 8px;
-  height: 4px;
-  margin: 6px 0 0 5px;
-  transform: rotate(-45deg);
-  border-bottom: 2px solid var(--primary-fg);
-  border-left: 2px solid var(--primary-fg);
-  content: "";
 }
 
 .companionStatusRow {
@@ -487,7 +487,7 @@
 
 .companionError {
   margin-top: 4px;
-  color: var(--danger, var(--warn));
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -536,7 +536,7 @@
 .companionDevicesHeader {
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -566,9 +566,7 @@
 }
 
 .companionActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  composes: buttonGroup from "./styles/buttons.module.css";
 }
 
 .companionDevices {
@@ -594,32 +592,17 @@
   height: 34px;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--elev);
   color: var(--text-muted);
 }
 
 .companionRevokeButton {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  padding: 0 9px;
+  composes: ghostButton from "./styles/buttons.module.css";
 }
 
 .companionRevokeButton:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--del-mark);
-}
-
-.companionRevokeButton:disabled {
-  opacity: 0.52;
+  color: var(--danger);
 }
 
 .companionHelp {
@@ -672,14 +655,13 @@
   margin-bottom: 11px;
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .companionStores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  composes: buttonGroup from "./styles/buttons.module.css";
 }
 
 .companionStores .secondaryButton {
@@ -728,7 +710,7 @@
 
 .companionSteps code {
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--panel);
   color: var(--text-2);
   font-family: var(--font-mono);
@@ -742,7 +724,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--overlay-soft);
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
 }
 
 .companionStorePanel {
@@ -750,7 +733,7 @@
   width: min(340px, calc(100vw - 64px));
   gap: 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
   padding: 20px;
@@ -766,8 +749,8 @@
 .companionStoreHeader h3 {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .companionStoreQrFrame {
@@ -830,7 +813,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--overlay-soft);
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
 }
 
 .companionPairingPanel {
@@ -838,7 +822,7 @@
   width: min(360px, calc(100vw - 64px));
   gap: 16px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
   padding: 20px;
@@ -847,8 +831,8 @@
 .companionPairingPanel h3 {
   margin: 4px 0 0;
   color: var(--text);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .companionQrFrame {
@@ -897,7 +881,7 @@
 .companionCodeBlock strong {
   color: var(--text);
   font-size: 32px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -915,9 +899,8 @@
 }
 
 .companionDialogActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .editorPicker {
@@ -928,22 +911,23 @@
 .editorPickerButton {
   display: grid;
   width: 100%;
-  height: 34px;
+  height: 32px;
   grid-template-columns: 20px minmax(0, 1fr) 14px;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--elev);
+  border-radius: 6px;
+  background: var(--bg);
   color: var(--text);
   font: inherit;
-  padding: 0 9px;
+  font-size: 12.5px;
+  padding: 0 10px;
   text-align: left;
 }
 
-.editorPickerButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.editorPickerButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover);
 }
 
 .editorPickerButton span {
@@ -960,32 +944,41 @@
   width: min(320px, 78vw);
   overflow: hidden;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--panel);
+  border-radius: 8px;
+  background: var(--panel-2);
   box-shadow: var(--shadow-pop);
-  padding: 6px;
+  padding: 5px;
 }
 
 .editorPickerOption {
   display: grid;
   width: 100%;
-  min-height: 34px;
+  min-height: 30px;
   grid-template-columns: 22px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  padding: 6px 8px;
+  font-size: 12.5px;
+  padding: 0 9px;
   text-align: left;
 }
 
-.editorPickerOption:hover,
-.editorPickerOption:focus-visible,
-.editorPickerOption[data-selected="true"] {
+.editorPickerOption:hover {
   background: var(--hover);
+}
+
+.editorPickerOption[data-selected="true"] {
+  background: var(--selected);
+}
+
+.editorPickerOption:focus-visible {
+  background: var(--hover);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .editorPickerOption span {
@@ -1000,7 +993,7 @@
   height: 20px;
   align-items: center;
   justify-items: center;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--text-muted);
 }
 
@@ -1016,7 +1009,7 @@
 .repositoryRootTitle {
   color: var(--text-2);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .repositoryRootIntro p {
@@ -1060,12 +1053,14 @@
   display: inline-flex;
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   white-space: nowrap;
 }
 
 .repositoryRootSuggestions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
   background: var(--hover);
   color: var(--text);
 }
@@ -1098,20 +1093,15 @@
   gap: 6px;
 }
 
-.repositoryScanStatus svg {
-  animation: repositoryScanSpin 900ms linear infinite;
+.repositoryScanSpinner {
+  composes: spin from "./styles/motion.module.css";
   color: var(--accent);
 }
 
-.repositoryRootIconButton {
-  width: 28px;
+/* Qualified so it out-ranks the shared recipe wherever the bundle places it. */
+.secondaryButton.repositoryRootIconButton {
+  width: 32px;
   padding: 0;
-}
-
-@keyframes repositoryScanSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 980px) {
@@ -1153,19 +1143,21 @@
 
 .cliInstallDetails input {
   width: 100%;
+  height: 32px;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 0 10px;
   color: var(--text);
-  background: var(--panel);
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font: inherit;
+  font-size: 12.5px;
 }
 
 .cliInstallError {
   margin: 0;
   padding: 12px 14px;
-  color: var(--danger, var(--warn));
+  color: var(--danger);
   font-size: 12.5px;
   line-height: 1.5;
 }

@@ -2,7 +2,6 @@ import {
   Check,
   Code2,
   ExternalLink,
-  FileCode2,
   Folder,
   FolderOpen,
   PanelLeftClose,
@@ -12,6 +11,8 @@ import {
 } from "lucide-react";
 
 import type { CommandItem } from "./command-palette.js";
+import { ChangeTypeTile, reviewStateLabel } from "./file-state.js";
+import { middleTruncatePath } from "./worktree-picker.js";
 import { reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export type BuildCommandsInput = {
@@ -171,14 +172,15 @@ export function buildCommands({
         closePalette();
         void loadProject(project.id);
       },
-      sub: project.path
+      sub: project.path,
+      subLabel: middleTruncatePath(project.path, 56)
     });
   }
 
   for (const file of files) {
     items.push({
-      hint: reviewState(file),
-      icon: <FileCode2 size={14} strokeWidth={1.4} aria-hidden />,
+      hint: reviewStateLabel(reviewState(file)),
+      icon: <ChangeTypeTile status={file.status} />,
       id: `file-${file.path}`,
       kind: "file",
       label: splitPath(file.path).filename,

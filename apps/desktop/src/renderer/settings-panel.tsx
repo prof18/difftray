@@ -52,6 +52,7 @@ const settingsPages: readonly {
 
 export function SettingsPanel({
   appSettings,
+  appVersion,
   companionPairing,
   companionState,
   disabled,
@@ -59,11 +60,13 @@ export function SettingsPanel({
   onClose,
   onCancelCompanionPairing,
   onChangeAppSettings,
+  onCheckForUpdates,
   onRespondToCompanionPairRequest,
   onRevokeCompanionDevice,
   onStartCompanionPairing,
   onToggleCompanion,
   platform,
+  updatePhase = { kind: "idle" },
   repositorySearchRoots = [],
   repositorySearchRootSuggestions = [],
   onAddRepositorySearchRoot,
@@ -73,6 +76,7 @@ export function SettingsPanel({
   onRemoveRepositorySearchRoot
 }: {
   readonly appSettings: AppSettingsView;
+  readonly appVersion?: string | undefined;
   readonly companionPairing: CompanionPairingStateView | null;
   readonly companionState: CompanionStateView;
   readonly disabled: boolean;
@@ -80,6 +84,7 @@ export function SettingsPanel({
   readonly onClose: () => void;
   readonly onCancelCompanionPairing: () => void;
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+  readonly onCheckForUpdates?: () => void;
   readonly onRespondToCompanionPairRequest: (
     input: RespondToCompanionPairRequestInput
   ) => void;
@@ -87,6 +92,7 @@ export function SettingsPanel({
   readonly onStartCompanionPairing: () => void;
   readonly onToggleCompanion: (enabled: boolean) => void;
   readonly platform: string;
+  readonly updatePhase?: UpdatePhase;
   readonly repositorySearchRoots?: readonly RepositorySearchRootView[];
   readonly repositorySearchRootSuggestions?: readonly RepositorySearchRootSuggestionView[];
   readonly onAddRepositorySearchRoot?: () => void;
@@ -127,7 +133,7 @@ export function SettingsPanel({
               onClick={onClose}
               type="button"
             >
-              <ArrowLeft size={15} strokeWidth={1.6} aria-hidden />
+              <ArrowLeft size={14} strokeWidth={1.4} aria-hidden />
               <span>Back to review</span>
             </button>
             <nav aria-label="Settings sections" className={styles.settingsNavigation}>
@@ -150,7 +156,7 @@ export function SettingsPanel({
                       aria-hidden="true"
                       className={styles.settingsNavigationSpinner}
                       size={13}
-                      strokeWidth={1.7}
+                      strokeWidth={1.4}
                     />
                   ) : null}
                   {page.id === "companion" && companionState.status === "running" ? (
@@ -187,9 +193,12 @@ export function SettingsPanel({
                 {activePage === "general" ? (
                   <GeneralSettingsPage
                     appSettings={appSettings}
+                    appVersion={appVersion}
                     disabled={disabled}
                     editorOptions={editorOptions}
                     onChangeAppSettings={onChangeAppSettings}
+                    onCheckForUpdates={onCheckForUpdates}
+                    updatePhase={updatePhase}
                   />
                 ) : null}
 
@@ -259,7 +268,7 @@ function SettingsNavigationIcon({
   const iconProps = {
     "aria-hidden": true,
     size: 16,
-    strokeWidth: 1.5
+    strokeWidth: 1.4
   } as const;
 
   if (page === "review") {
@@ -281,15 +290,28 @@ function SettingsNavigationIcon({
 
 function GeneralSettingsPage({
   appSettings,
+  appVersion,
   disabled,
   editorOptions,
-  onChangeAppSettings
+  onChangeAppSettings,
+  onCheckForUpdates,
+  updatePhase
 }: {
   readonly appSettings: AppSettingsView;
+  readonly appVersion: string | undefined;
   readonly disabled: boolean;
   readonly editorOptions: readonly EditorPresetView[];
   readonly onChangeAppSettings: (patch: Partial<AppSettingsView>) => void;
+  readonly onCheckForUpdates: (() => void) | undefined;
+  readonly updatePhase: UpdatePhase;
 }): React.JSX.Element {
+  const [checkRequested, setCheckRequested] = useState(false);
+  const updateBusy =
+    updatePhase.kind === "checking" ||
+    updatePhase.kind === "available" ||
+    updatePhase.kind === "downloading" ||
+    updatePhase.kind === "downloaded";
+
   return (
     <>
       <SettingsSection title="Appearance">
@@ -323,8 +345,55 @@ function GeneralSettingsPage({
           />
         </div>
       </SettingsSection>
+
+      <SettingsSection title="Updates">
+        <div className={styles.settingRow}>
+          <span className={styles.updateCopy}>
+            <span>{appVersionLabel(appVersion)}</span>
+            <span className={styles.updateStatus} role="status">
+              {updateStatusText(updatePhase, checkRequested)}
+            </span>
+          </span>
+          <button
+            aria-label="Check for updates"
+            className={styles.secondaryButton}
+            disabled={updateBusy || !onCheckForUpdates}
+            onClick={() => {
+              setCheckRequested(true);
+              onCheckForUpdates?.();
+            }}
+            type="button"
+          >
+            Check for updates
+          </button>
+        </div>
+      </SettingsSection>
     </>
   );
+}
+
+/** The main process reports "development" for unpackaged builds. */
+function appVersionLabel(appVersion: string | undefined): string {
+  if (!appVersion) return "Difftray";
+  if (appVersion === "development") return "Development build";
+  return `Version ${appVersion}`;
+}
+
+function updateStatusText(phase: UpdatePhase, checkRequested: boolean): string {
+  switch (phase.kind) {
+    case "checking":
+      return "Checking for updates…";
+    case "available":
+      return `Version ${phase.version} is available`;
+    case "downloading":
+      return `Downloading version ${phase.version}…`;
+    case "downloaded":
+      return `Version ${phase.version} is ready to install`;
+    case "error":
+      return phase.message;
+    case "idle":
+      return checkRequested ? "Difftray is up to date" : "";
+  }
 }
 
 const INTRO =
@@ -340,6 +409,25 @@ const GUIDE_LABEL = "Full guide";
 const CHECK_LABEL = "Check";
 const CHECKING_LABEL = "Checking…";
 const CONNECTED_LABEL = "Connected";
+const CONNECTION_LABEL = "Agent connection";
+const NOT_CHECKED_LABEL = "Not checked yet";
+
+// The command-line row always states where the tool stands, so it never reads as an
+// empty row when there is nothing to install.
+function cliStateLabel(kind: CliInstallStatus["kind"]): string {
+  switch (kind) {
+    case "installed":
+      return "Installed";
+    case "absent":
+      return "Not installed";
+    case "repairable":
+      return "Needs repair";
+    case "blocked":
+      return "Blocked";
+    case "unavailable":
+      return "Packaged builds only";
+  }
+}
 
 function AgentsSettingsPage({
   disabled
@@ -531,23 +619,26 @@ function AgentsSettingsPage({
       </SettingsSection>
       <SettingsSection title={STATUS_TITLE}>
         <div className={styles.settingRow}>
-          <span>
-            {checkResult?.status === "connected" ? (
-              <span role="status">{CONNECTED_LABEL}</span>
-            ) : (
-              STATUS_TITLE
-            )}
+          <span>{CONNECTION_LABEL}</span>
+          <span className={styles.rowValueGroup}>
+            <span className={styles.rowValue} role="status">
+              {checkResult?.status === "connected"
+                ? CONNECTED_LABEL
+                : checkResult?.status === "failed"
+                  ? "Not connected"
+                  : NOT_CHECKED_LABEL}
+            </span>
+            <button
+              className={styles.secondaryButton}
+              disabled={disabled || checkBusy || !setup?.available}
+              onClick={() => {
+                void runCheck();
+              }}
+              type="button"
+            >
+              {checkBusy ? CHECKING_LABEL : CHECK_LABEL}
+            </button>
           </span>
-          <button
-            className={styles.secondaryButton}
-            disabled={disabled || checkBusy || !setup?.available}
-            onClick={() => {
-              void runCheck();
-            }}
-            type="button"
-          >
-            {checkBusy ? CHECKING_LABEL : CHECK_LABEL}
-          </button>
         </div>
         {checkResult?.status === "failed" ? (
           <p className={styles.cliInstallError} role="alert">
@@ -557,24 +648,27 @@ function AgentsSettingsPage({
       </SettingsSection>
       <SettingsSection title={TERMINAL_TITLE}>
         <div className={styles.settingRow}>
-          <span>
-            {cliStatus?.kind === "installed"
-              ? "Command-line tool installed"
-              : "Command-line tool"}
-          </span>
-          {cliStatus?.kind === "absent" || cliStatus?.kind === "repairable" ? (
-            <button
-              className={styles.secondaryButton}
-              disabled={disabled || cliBusy}
-              onClick={() => {
-                void installCli();
-              }}
-              type="button"
-            >
-              {cliStatus.kind === "repairable"
-                ? "Repair command-line tool"
-                : "Install command-line tool"}
-            </button>
+          <span>Command-line tool</span>
+          {cliStatus ? (
+            <span className={styles.rowValueGroup}>
+              <span className={styles.rowValue} data-cli-state={cliStatus.kind}>
+                {cliStateLabel(cliStatus.kind)}
+              </span>
+              {cliStatus.kind === "absent" || cliStatus.kind === "repairable" ? (
+                <button
+                  className={styles.secondaryButton}
+                  disabled={disabled || cliBusy}
+                  onClick={() => {
+                    void installCli();
+                  }}
+                  type="button"
+                >
+                  {cliStatus.kind === "repairable"
+                    ? "Repair command-line tool"
+                    : "Install command-line tool"}
+                </button>
+              ) : null}
+            </span>
           ) : null}
         </div>
         {cliStatus ? (
@@ -679,7 +773,7 @@ function ReviewSettingsPage({
         <ToggleRow
           checked={appSettings.notifyOnDrift}
           disabled={disabled}
-          label="Notify when reviewed file drifts"
+          label="Notify when a reviewed file changes"
           onChange={(checked) => {
             onChangeAppSettings({ notifyOnDrift: checked });
           }}
@@ -757,7 +851,12 @@ function RepositorySettingsPage({
             <strong title={root.path}>{root.path}</strong>
             {root.scanning ? (
               <small className={styles.repositoryScanStatus} role="status">
-                <LoaderCircle aria-hidden size={13} strokeWidth={1.7} />
+                <LoaderCircle
+                  aria-hidden
+                  className={styles.repositoryScanSpinner}
+                  size={13}
+                  strokeWidth={1.4}
+                />
                 <span>
                   Scanning folders
                   {root.scannedDirectories
@@ -787,9 +886,9 @@ function RepositorySettingsPage({
               type="button"
             >
               {root.scanning ? (
-                <X aria-hidden size={13} strokeWidth={1.7} />
+                <X aria-hidden size={14} strokeWidth={1.4} />
               ) : (
-                <RefreshCw aria-hidden size={13} strokeWidth={1.7} />
+                <RefreshCw aria-hidden size={13} strokeWidth={1.4} />
               )}
               {root.scanning ? "Cancel" : "Refresh"}
             </button>
@@ -803,7 +902,7 @@ function RepositorySettingsPage({
               onClick={() => onRemoveRepositorySearchRoot?.(root.id)}
               type="button"
             >
-              <Trash2 size={13} aria-hidden />
+              <Trash2 size={13} strokeWidth={1.4} aria-hidden />
             </button>
           </div>
         </div>
@@ -837,29 +936,30 @@ function CompanionSettingsSection({
 
   return (
     <SettingsSection title="Connection">
-      <div className={styles.companionIntro}>
-        <div>
-          <div className={styles.companionTitle}>Companion mode</div>
+      <label className={styles.companionIntro}>
+        <span className={styles.companionIntroCopy}>
+          <span className={styles.companionTitle}>Companion mode</span>
           {!hasPairedDevices ? (
-            <p className={styles.companionDescription}>
+            <span className={styles.companionDescription}>
               Review your changes from your phone. Browse projects, read diffs, and mark
               files reviewed while you&apos;re away from your desk — everything stays on
               your own devices.
-            </p>
+            </span>
           ) : null}
-        </div>
-        <label className={styles.companionToggle} title="Enable companion mode">
-          <span className={styles.srOnly}>Enable companion mode</span>
-          <input
-            checked={enabled}
-            disabled={disabled}
-            onChange={(event) => {
-              onToggle(event.target.checked);
-            }}
-            type="checkbox"
-          />
-        </label>
-      </div>
+        </span>
+        <input
+          aria-label="Enable companion mode"
+          checked={enabled}
+          className={styles.switch}
+          disabled={disabled}
+          onChange={(event) => {
+            onToggle(event.target.checked);
+          }}
+          role="switch"
+          title="Enable companion mode"
+          type="checkbox"
+        />
+      </label>
       {enabled ? (
         <>
           <div className={styles.companionStatusRow}>
@@ -888,9 +988,14 @@ function CompanionSettingsSection({
               className={styles.secondaryButton}
               disabled={disabled || companionState.status !== "running"}
               onClick={onStartPairing}
+              title={
+                companionState.status === "running"
+                  ? undefined
+                  : "Available once the server is running"
+              }
               type="button"
             >
-              <QrCode size={14} strokeWidth={1.5} aria-hidden />
+              <QrCode size={14} strokeWidth={1.4} aria-hidden />
               Pair new device
             </button>
           </div>
@@ -967,7 +1072,7 @@ function CompanionSettingsSection({
               companionState.devices.map((device) => (
                 <div className={styles.companionDeviceRow} key={device.id}>
                   <span className={styles.companionDeviceIcon}>
-                    <Smartphone size={14} strokeWidth={1.5} aria-hidden />
+                    <Smartphone size={14} strokeWidth={1.4} aria-hidden />
                   </span>
                   <div>
                     <div className={styles.companionDeviceTitle}>{device.name}</div>
@@ -985,7 +1090,7 @@ function CompanionSettingsSection({
                     title="Revoke"
                     type="button"
                   >
-                    <Trash2 size={13} strokeWidth={1.5} aria-hidden />
+                    <Trash2 size={13} strokeWidth={1.4} aria-hidden />
                     Revoke
                   </button>
                 </div>
@@ -999,12 +1104,12 @@ function CompanionSettingsSection({
           {hasPairedDevices ? (
             <details className={styles.companionHelp}>
               <summary>
-                <CircleHelp size={16} strokeWidth={1.6} aria-hidden />
+                <CircleHelp size={16} strokeWidth={1.4} aria-hidden />
                 <span>How to connect a phone</span>
                 <ChevronRight
                   className={styles.companionHelpChevron}
                   size={16}
-                  strokeWidth={1.6}
+                  strokeWidth={1.4}
                   aria-hidden
                 />
               </summary>
@@ -1158,7 +1263,7 @@ function CompanionStoreDialog({
             onClick={onClose}
             type="button"
           >
-            <X size={14} strokeWidth={1.5} aria-hidden />
+            <X size={14} strokeWidth={1.4} aria-hidden />
           </button>
         </div>
         <div className={styles.companionStoreQrFrame}>
@@ -1178,7 +1283,7 @@ function CompanionStoreDialog({
             }}
           >
             Open in {details.label}
-            <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+            <ExternalLink size={12} strokeWidth={1.4} aria-hidden />
           </a>
           <button
             className={styles.secondaryButton}
@@ -1190,9 +1295,9 @@ function CompanionStoreDialog({
             type="button"
           >
             {copied ? (
-              <Check size={13} strokeWidth={1.6} aria-hidden />
+              <Check size={13} strokeWidth={1.4} aria-hidden />
             ) : (
-              <Copy size={13} strokeWidth={1.5} aria-hidden />
+              <Copy size={13} strokeWidth={1.4} aria-hidden />
             )}
             {copied ? "Copied" : "Copy link"}
           </button>
@@ -1406,7 +1511,7 @@ function EditorPicker({
       >
         <EditorChoiceIcon choice={selectedChoice} />
         <span>{selectedChoice.label}</span>
-        <ChevronDown size={14} strokeWidth={1.5} aria-hidden />
+        <ChevronDown size={14} strokeWidth={1.4} aria-hidden />
       </button>
       {open ? (
         <div aria-label="Editor" className={styles.editorPickerMenu} role="listbox">
@@ -1426,7 +1531,7 @@ function EditorPicker({
               <EditorChoiceIcon choice={choice} />
               <span>{choice.label}</span>
               {choice.value === selectedValue ? (
-                <Check size={13} strokeWidth={1.6} aria-hidden />
+                <Check size={13} strokeWidth={1.4} aria-hidden />
               ) : null}
             </button>
           ))}
@@ -1454,7 +1559,7 @@ function EditorChoiceIcon({
 
   return (
     <span className={styles.editorPickerIcon} data-fallback="true">
-      <Code2 size={14} strokeWidth={1.5} aria-hidden />
+      <Code2 size={14} strokeWidth={1.4} aria-hidden />
     </span>
   );
 }
@@ -1475,10 +1580,12 @@ function ToggleRow({
       <span>{label}</span>
       <input
         checked={checked}
+        className={styles.switch}
         disabled={disabled}
         onChange={(event) => {
           onChange(event.target.checked);
         }}
+        role="switch"
         type="checkbox"
       />
     </label>
@@ -1494,7 +1601,9 @@ function companionStatusLabel(state: CompanionStateView): string {
     return "Server failed to start";
   }
 
-  return "Server stopped";
+  // The label only shows while companion mode is on, so a stopped server is
+  // still on its way up rather than switched off.
+  return "Starting server…";
 }
 
 function companionDiscoveryLabel(state: CompanionDiscoveryStateView): string {

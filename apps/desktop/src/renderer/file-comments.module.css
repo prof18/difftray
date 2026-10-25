@@ -1,3 +1,15 @@
+.iconButton {
+  composes: iconButton from "./styles/buttons.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
+}
+
 .stack {
   display: grid;
   max-height: 40vh;
@@ -12,21 +24,16 @@
   max-width: min(760px, calc(100vw - 96px));
   gap: 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  border-radius: 7px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 92%, var(--accent));
   color: var(--text);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   padding: 10px;
-}
-
-.card[data-draft="true"] {
-  border-color: var(--accent);
 }
 
 .header,
 .header span,
-.iconActions,
-.actions {
+.iconActions {
   display: flex;
   align-items: center;
 }
@@ -43,13 +50,13 @@
   gap: 6px;
 }
 
-.iconActions,
-.actions {
+.iconActions {
   gap: 6px;
 }
 
 .actions {
-  justify-content: flex-end;
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .body {
@@ -72,65 +79,14 @@
   padding: 9px 10px;
 }
 
-.textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.textarea:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .textarea:disabled {
-  opacity: 0.72;
+  opacity: var(--disabled-opacity);
   resize: none;
-}
-
-.iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-}
-
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--accent);
-  color: var(--primary-fg);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: 0.52;
 }
 
 .attribution {

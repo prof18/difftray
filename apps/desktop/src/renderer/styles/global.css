@@ -8,7 +8,9 @@
 
 :root {
   color-scheme: dark;
-  font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+  --font-sans: "IBM Plex Sans", "Avenir Next", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-sans);
   font-feature-settings:
     "cv11" 1,
     "ss01" 1;
@@ -26,11 +28,16 @@
   --text: #d1d3da;
   --text-2: #bcbec4;
   --text-muted: #aaacb2;
-  --text-dim: #7b7f87;
+  --text-dim: #8a8e96;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8e96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --accent: #3474f0;
   --accent-2: #5da9ff;
+  --accent-text: #5da9ff;
   --accent-soft: rgba(52, 116, 240, 0.15);
   --accent-line: rgba(93, 169, 255, 0.42);
+  --focus-ring: 2px solid var(--accent);
+  --disabled-opacity: 0.52;
+  --primary-bg: #2d68e0;
   --primary-fg: #ffffff;
   --ok: #73bd79;
   --ok-soft: rgba(115, 189, 121, 0.16);
@@ -40,6 +47,7 @@
   --add-mark: #73bd79;
   --del-bg: rgba(205, 49, 49, 0.13);
   --del-mark: #ff7a70;
+  --danger: #ff7a70;
   --diff-bg: #191a1c;
   --diff-bg-gutter: #17181a;
   --diff-bg-context: #1f2024;
@@ -62,7 +70,6 @@
   --kbd-bg: #2b2d30;
   --kbd-border: #3a3d42;
   --overlay: rgba(0, 0, 0, 0.4);
-  --overlay-soft: rgba(0, 0, 0, 0.34);
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35);
@@ -83,12 +90,15 @@
   --border-strong: #aeb3c2;
   --text: #080808;
   --text-2: #30333b;
-  --text-muted: #6c707e;
-  --text-dim: #7b7e85;
+  --text-muted: #55585e;
+  --text-dim: #6c707e;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c707e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --accent: #0033b3;
   --accent-2: #0043d3;
+  --accent-text: var(--accent);
   --accent-soft: rgba(0, 51, 179, 0.1);
   --accent-line: rgba(0, 51, 179, 0.34);
+  --primary-bg: var(--accent);
   --primary-fg: #ffffff;
   --ok: #056614;
   --ok-soft: rgba(6, 125, 23, 0.12);
@@ -98,11 +108,12 @@
   --add-mark: #056614;
   --del-bg: rgba(222, 27, 46, 0.1);
   --del-mark: #a00e1b;
+  --danger: #a00e1b;
   --diff-bg: #ffffff;
   --diff-bg-gutter: #f5f8fe;
   --diff-bg-context: #f5f8fe;
   --diff-bg-buffer: #ebecf0;
-  --diff-bg-separator: #e1eaff;
+  --diff-bg-separator: #e5e5e8;
   --diff-hover: #ebecf0;
   --diff-selection: #a6d2ff;
   --diff-fg: #080808;
@@ -120,7 +131,6 @@
   --kbd-bg: #ebecf0;
   --kbd-border: #aeb3c2;
   --overlay: rgba(8, 8, 8, 0.36);
-  --overlay-soft: rgba(8, 8, 8, 0.3);
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.04);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.06);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -157,8 +167,11 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--accent);
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -171,7 +184,7 @@ kbd {
   border-radius: 4px;
   background: var(--kbd-bg);
   color: var(--text-2);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
@@ -188,4 +201,24 @@ kbd {
   border-radius: 999px;
   background: var(--border-strong);
   background-clip: padding-box;
+}
+
+/* The first control a dialog focuses when it was opened with the pointer or the app
+   menu; dialog-focus.ts removes the marker as soon as the keyboard is used. */
+[data-dialog-pointer-focus]:focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* One switch for reduced motion: transitions and animations finish at once. Spinners
+   stop on their first frame, which still shows the loading ring. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

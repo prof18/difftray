@@ -149,7 +149,7 @@ try {
     timeout: 10_000
   });
   await window
-    .getByRole("button", { name: "Copy comments report" })
+    .getByRole("button", { name: "Copy for agent" })
     .waitFor({ state: "detached", timeout: 10_000 });
   await window.getByRole("button", { name: "Show new version" }).click();
   await window.locator('[data-diff-layout="single"]').waitFor({ timeout: 10_000 });
@@ -208,6 +208,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-settings.png")
   });
+  await captureDarkVariant(window, "desktop-settings");
   await window.getByText("How to connect your phone").waitFor({ timeout: 10_000 });
   await expectSettingsDetailScrollable(window);
   await openSettingsPage(window, "General");
@@ -400,7 +401,7 @@ try {
     throw new Error("Command+Enter did not save the multiline review comment.");
   }
   await expectFileCommentCount(window, "tracked.txt", "1");
-  await window.getByRole("button", { name: "Copy comments report" }).click();
+  await window.getByRole("button", { name: "Copy for agent" }).click();
   await window
     .getByText("Copied 1 review comment", { exact: true })
     .waitFor({ timeout: 10_000 });
@@ -418,6 +419,7 @@ try {
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-workflow.png")
   });
+  await captureDarkVariant(window, "desktop-review-workflow");
   await window.keyboard.press("KeyR");
   await expectFileReviewState(window, "tracked.txt", "reviewed");
   await expectSelectedFile(window, "schema.generated.ts");
@@ -448,11 +450,13 @@ try {
   await window
     .getByRole("button", { name: /tracked\.txt modified.*changed after review/ })
     .waitFor({ timeout: 10_000 });
-  await window.getByText("reviewed files drifted").waitFor({ timeout: 10_000 });
+  await window.getByText("1 file changed after review").waitFor({ timeout: 10_000 });
   await window.screenshot({
     fullPage: true,
     path: path.join(artifactsDir, "desktop-review-invalidated.png")
   });
+  await captureDarkVariant(window, "desktop-review-invalidated");
+  await captureNarrowVariant(app, window, "desktop-review-invalidated");
   await expectDismissibleOpenProjectError(app, window, nonGitPath);
   await window
     .locator('[data-project-tab-name="visual-secondary-repo"]')
@@ -1076,7 +1080,7 @@ async function expectFileReviewState(window, filename, state) {
         button.textContent?.includes(targetFilename)
       );
 
-      return Boolean(fileButton?.querySelector(`[data-state="${expectedState}"]`));
+      return Boolean(fileButton?.querySelector(`[data-review-state="${expectedState}"]`));
     },
     { expectedState: state, targetFilename: filename }
   );
@@ -1775,6 +1779,45 @@ async function moveMainWindow(app, deltaX, deltaY) {
   );
 }
 
+async function captureDarkVariant(window, name) {
+  const originalTheme = await window.evaluate(() => {
+    const theme = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "dark";
+    return theme;
+  });
+  await window.waitForTimeout(150);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, `${name}-dark.png`)
+  });
+  await window.evaluate((theme) => {
+    document.documentElement.dataset.theme = theme;
+  }, originalTheme);
+}
+
+async function captureNarrowVariant(app, window, name) {
+  const bounds = await app.evaluate(({ BrowserWindow }) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+
+    if (!mainWindow) {
+      throw new Error("Expected a main window to resize");
+    }
+
+    const original = mainWindow.getBounds();
+    mainWindow.setSize(900, original.height);
+    return original;
+  });
+  await window.waitForTimeout(250);
+  await window.screenshot({
+    fullPage: true,
+    path: path.join(artifactsDir, `${name}-narrow.png`)
+  });
+  await app.evaluate(({ BrowserWindow }, original) => {
+    BrowserWindow.getAllWindows()[0]?.setBounds(original);
+  }, bounds);
+  await window.waitForTimeout(250);
+}
+
 async function resizeMainWindow(app, widthDelta, heightDelta) {
   return app.evaluate(
     ({ BrowserWindow }, deltas) => {
@@ -1934,11 +1977,17 @@ async function expectNoDragRegion(locator, label) {
 }
 
 async function expectNoOuterFocusOutline(locator, label) {
-  const outlineStyle = await locator.evaluate(
-    (element) => getComputedStyle(element).outlineStyle
-  );
+  // The shared focus ring is drawn inset (negative offset) inside the tab bar, which
+  // keeps it from spilling past the button the way an outer outline would.
+  const { outlineOffset, outlineStyle } = await locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      outlineOffset: parseFloat(style.outlineOffset),
+      outlineStyle: style.outlineStyle
+    };
+  });
 
-  if (outlineStyle !== "none") {
+  if (outlineStyle !== "none" && !(outlineOffset < 0)) {
     throw new Error(
       `Expected ${label} to avoid an outer focus outline, got "${outlineStyle}"`
     );

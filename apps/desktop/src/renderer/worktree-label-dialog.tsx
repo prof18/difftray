@@ -4,6 +4,7 @@ import paletteStyles from "./command-palette-view.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
 import { classList } from "./review-view-model.js";
 import styles from "./worktree-label-dialog.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 
 export type WorktreeLabelDialogProps = {
   readonly initialLabel?: string;
@@ -125,26 +126,34 @@ export function WorktreeLabelDialog({
             </span>
           ) : null}
           <div className={styles.footer}>
-            {targetError && onRetryTarget ? (
-              <button onClick={onRetryTarget} type="button">
-                Retry
+            <div className={styles.footerActions}>
+              {targetError && onRetryTarget ? (
+                <button
+                  className={buttonStyles.secondaryButton}
+                  onClick={onRetryTarget}
+                  type="button"
+                >
+                  Retry
+                </button>
+              ) : null}
+              <button
+                className={buttonStyles.secondaryButton}
+                data-testid="worktree-label-cancel"
+                disabled={saving}
+                onClick={onCancel}
+                type="button"
+              >
+                Cancel
               </button>
-            ) : null}
-            <button
-              data-testid="worktree-label-cancel"
-              disabled={saving}
-              onClick={onCancel}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              data-testid="worktree-label-save"
-              disabled={saving || !targetReady}
-              type="submit"
-            >
-              Save
-            </button>
+              <button
+                className={buttonStyles.primaryButton}
+                data-testid="worktree-label-save"
+                disabled={saving || !targetReady}
+                type="submit"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </form>
       </section>

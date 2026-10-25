@@ -16,6 +16,11 @@ method. Split view requests and displays Before and After side by side; the
 existing old-side and new-side focus controls request only the chosen side. Added
 and deleted files request their sole available side.
 
+Previews shrink to fit their panel but never stretch far past their real size,
+because upscaling only blurs detail. Regular images stop at twice their size.
+Images 64px wide or smaller may grow to eight times their size, rendered with
+pixelated scaling, so icons stay inspectable.
+
 The complete existing binary summary remains the fallback when any requested side
 is unsupported, animated, oversized, malformed, or unavailable. Image responses are
 accepted only when their diff hash, review target, and requested side match the

@@ -139,12 +139,29 @@ function ImagePanel({
       <div className={styles.imageStage}>
         <img
           alt={`${label} image, ${String(response.image.width)} by ${String(response.image.height)} pixels`}
+          data-pixelated={isSmallImage(response.image.width) ? true : undefined}
           onError={onDecodeError}
           src={`data:${response.image.mimeType};base64,${response.image.dataBase64}`}
+          style={{ width: `${String(maxDisplayWidth(response.image.width))}px` }}
         />
       </div>
     </article>
   );
+}
+
+const smallImageMaxSize = 64;
+
+function isSmallImage(width: number): boolean {
+  return width <= smallImageMaxSize;
+}
+
+/**
+ * Upscaling past a small factor only blurs the image, so regular images stop at
+ * twice their size. Icon-sized images may grow further, rendered pixelated, so
+ * their pixels stay inspectable. CSS still shrinks anything wider than the panel.
+ */
+function maxDisplayWidth(width: number): number {
+  return width * (isSmallImage(width) ? 8 : 2);
 }
 
 function visibleImageSides(

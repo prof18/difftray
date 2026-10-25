@@ -31,23 +31,23 @@
 }
 
 .input {
-  border: 1px solid var(--border-strong);
+  height: 32px;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
-  outline: 0;
+  font-size: 12.5px;
+  padding: 0 10px;
 }
 
 .input:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .input:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
 }
 
 .help {
@@ -57,39 +57,17 @@
 
 .error {
   border-radius: 6px;
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--del-bg);
+  color: var(--danger);
   font-size: 12px;
   padding: 6px 8px;
 }
 
 .footer {
   display: flex;
-  gap: 8px;
   justify-content: flex-end;
 }
 
-/* Same size as the app's primary/secondary buttons (review comments, notes). */
-.footer button {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--elev);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.footer button[type="submit"] {
-  border-color: var(--accent-2);
-  background: var(--accent);
-  color: var(--primary-fg);
-}
-
-.footer button:disabled {
-  opacity: 0.52;
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
 }

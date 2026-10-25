@@ -1,34 +1,23 @@
 .iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
+  composes: iconButton from "./styles/buttons.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
 }
 
 .loadingMiniMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
-}
-
-.iconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-}
-
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
 }
 
 .reviewCommentCard {
@@ -36,11 +25,11 @@
   max-width: min(760px, calc(100vw - 96px));
   gap: 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  border-radius: 7px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 92%, var(--accent));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-md);
   color: var(--text);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   margin: 6px 12px 8px;
   padding: 10px;
 }
@@ -51,8 +40,7 @@
 
 .reviewCommentHeader,
 .reviewCommentHeader span,
-.reviewCommentIconActions,
-.reviewCommentActions {
+.reviewCommentIconActions {
   display: flex;
   align-items: center;
 }
@@ -69,8 +57,7 @@
   gap: 6px;
 }
 
-.reviewCommentIconActions,
-.reviewCommentActions {
+.reviewCommentIconActions {
   gap: 6px;
 }
 
@@ -95,85 +82,19 @@
   padding: 9px 10px;
 }
 
-.reviewCommentTextarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.reviewCommentTextarea:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .reviewCommentTextarea:disabled {
-  opacity: 0.72;
+  opacity: var(--disabled-opacity);
   resize: none;
 }
 
 .reviewCommentActions {
-  justify-content: flex-end;
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--accent);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] {
-  border-color: var(--ok);
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.primaryButton kbd {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--primary-fg);
-}
-
-.primaryButton[data-reviewed="true"] kbd {
-  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
-  background: color-mix(in srgb, var(--ok) 12%, transparent);
-  color: var(--ok);
-}
-
-.primaryButton[data-reviewed="true"]:hover:not(:disabled) kbd {
-  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  color: var(--warn);
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: 0.52;
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
+  composes: buttonGroup from "./styles/buttons.module.css";
+  margin-left: auto;
 }
 
 .attribution {

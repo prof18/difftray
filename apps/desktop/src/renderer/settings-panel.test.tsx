@@ -316,6 +316,32 @@ describe("SettingsPanel", () => {
     });
     expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith("other");
   });
+  // The section and its only row were both "Status", with nothing shown before the
+  // first check; the row now names what it checks and says it has not run yet.
+  it("names the connection row and says when it has not been checked", async () => {
+    const status = section(await readyAgents(), "Status");
+
+    expect(status.textContent).toContain("Agent connection");
+    expect(status.textContent).toContain("Not checked yet");
+  });
+  // The command-line row had no control in builds without an installer, so it read
+  // as an empty row; it always shows its state now.
+  it("shows the command-line tool state in its row", async () => {
+    vi.mocked(window.difftray.getCliInstallStatus).mockResolvedValue({
+      kind: "unavailable",
+      command: "difftray",
+      destination: "/Users/test/.local/bin/difftray",
+      invocation: "/repo/node_modules/electron/dist/Electron.app",
+      onPath: false,
+      pathInstruction: null,
+      reason: "Terminal installation is available in packaged Difftray."
+    });
+    const terminal = section(await readyAgents(), "Terminal");
+
+    expect(terminal.querySelector('[data-cli-state="unavailable"]')?.textContent).toBe(
+      "Packaged builds only"
+    );
+  });
   it("checks the connection and displays connected or the CLI error in Status", async () => {
     const status = section(await readyAgents(), "Status");
     await act(async () => {
@@ -391,7 +417,9 @@ describe("SettingsPanel", () => {
       await Promise.resolve();
     });
     expect(window.difftray.installCli).toHaveBeenCalledOnce();
-    expect(general.textContent).toContain("Command-line tool installed");
+    expect(general.querySelector('[data-cli-state="installed"]')?.textContent).toBe(
+      "Installed"
+    );
     expect(
       general.querySelector<HTMLInputElement>('input[aria-label="Absolute command path"]')
         ?.value
@@ -541,7 +569,7 @@ describe("SettingsPanel", () => {
     expect(document.activeElement).toBe(backButton);
     expect(buttons.length).toBeGreaterThan(1);
 
-    const lastButton = buttons.at(-1);
+    const lastButton = buttons.filter((button) => !button.disabled).at(-1);
     lastButton?.focus();
     const tab = new KeyboardEvent("keydown", {
       bubbles: true,
@@ -632,7 +660,7 @@ describe("SettingsPanel", () => {
     expect(review.textContent).toContain("Unified");
     expect(review.textContent).toContain("Wrap long lines");
     expect(review.textContent).toContain("Show generated files");
-    expect(review.textContent).toContain("Notify when reviewed file drifts");
+    expect(review.textContent).toContain("Notify when a reviewed file changes");
 
     const repositories = renderSettingsPage("repositories", input);
 
@@ -649,6 +677,61 @@ describe("SettingsPanel", () => {
     expect(container.textContent).not.toContain("Cancel");
     expect(container.textContent).not.toContain("Save");
     expect(container.querySelector('[aria-label="Back to review"]')).not.toBeNull();
+  });
+
+  it("offers the update check on the General page", () => {
+    const onCheckForUpdates = vi.fn();
+    const general = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates,
+      updatePhase: { kind: "idle" }
+    });
+
+    expect(general.textContent).toContain("Updates");
+    expect(general.textContent).toContain("Version 1.4.2");
+    const button = general.querySelector<HTMLButtonElement>(
+      'button[aria-label="Check for updates"]'
+    );
+    expect(button?.disabled).toBe(false);
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels unpackaged builds instead of showing a version", () => {
+    const general = renderSettingsPage("general", {
+      appVersion: "development",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "idle" }
+    });
+
+    expect(general.textContent).toContain("Development build");
+    expect(general.textContent).not.toContain("Version development");
+  });
+
+  it("describes update progress and disables the check while it runs", () => {
+    const checking = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "checking" }
+    });
+
+    expect(checking.textContent).toContain("Checking for updates");
+    expect(
+      checking.querySelector<HTMLButtonElement>('button[aria-label="Check for updates"]')
+        ?.disabled
+    ).toBe(true);
+
+    const ready = renderSettingsPage("general", {
+      appVersion: "1.4.2",
+      onCheckForUpdates: vi.fn(),
+      updatePhase: { kind: "downloaded", version: "1.5.0" }
+    });
+
+    expect(ready.textContent).toContain("Version 1.5.0 is ready to install");
   });
 
   it("disables controls while settings are saving", () => {
@@ -820,6 +903,57 @@ describe("SettingsPanel", () => {
     expect(companion.textContent).toContain("Companion mode");
     expect(companion.textContent).not.toContain("Pair new device");
     expect(companion.textContent).not.toContain("Paired devices");
+  });
+
+  it("renders on/off settings as switches", () => {
+    const review = renderSettingsPage("review");
+    const wrap = [...review.querySelectorAll<HTMLInputElement>("input")].find((input) =>
+      input.closest("label")?.textContent.includes("Wrap long lines")
+    );
+
+    expect(wrap?.getAttribute("role")).toBe("switch");
+
+    const companion = renderSettingsPage("companion");
+    const toggle = companion.querySelector<HTMLInputElement>(
+      'input[aria-label="Enable companion mode"]'
+    );
+
+    expect(toggle?.getAttribute("role")).toBe("switch");
+  });
+
+  // Every other switch row toggles from its label; the companion row did not.
+  it("toggles companion mode from its row label", () => {
+    const onToggleCompanion = vi.fn();
+    const companion = renderSettingsPage("companion", { onToggleCompanion });
+    const title = [...companion.querySelectorAll<HTMLElement>("*")].find(
+      (element) => element.textContent === "Companion mode"
+    );
+    const toggle = companion.querySelector<HTMLInputElement>(
+      'input[aria-label="Enable companion mode"]'
+    );
+
+    expect(toggle?.closest("label")).not.toBeNull();
+    expect(toggle?.closest("label")).toBe(title?.closest("label"));
+    act(() => {
+      title?.click();
+    });
+
+    expect(onToggleCompanion).toHaveBeenCalledWith(true);
+  });
+
+  it("says the server is starting while companion mode waits for it", () => {
+    const companion = renderSettingsPage("companion", {
+      appSettings: appSettings({ companionEnabled: true }),
+      companionState: companionState({ enabled: true, status: "stopped" })
+    });
+    const pairButton = [...companion.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent.includes("Pair new device")
+    );
+
+    expect(companion.textContent).toContain("Starting server…");
+    expect(companion.textContent).not.toContain("Server stopped");
+    expect(pairButton?.disabled).toBe(true);
+    expect(pairButton?.title).toBe("Available once the server is running");
   });
 
   it("shows an optimistic companion disable while server state is catching up", () => {

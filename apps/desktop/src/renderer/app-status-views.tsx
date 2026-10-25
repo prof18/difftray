@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Children, useEffect } from "react";
 import {
   AlertTriangle,
   Check,
@@ -16,34 +16,50 @@ import { splitPath } from "./review-view-model.js";
 export function EmptyState({
   disabled,
   onOpenProject,
+  onScanFolder,
   onSelectProject,
   projects
 }: {
   readonly disabled: boolean;
   readonly onOpenProject: () => void;
+  readonly onScanFolder?: () => void;
   readonly onSelectProject: (projectId: string) => void;
   readonly projects: readonly RecentProjectView[];
 }): React.JSX.Element {
   return (
     <section className={styles.emptyState} aria-label="No repository open">
       <div className={styles.emptyIcon}>
-        <Diff size={30} strokeWidth={1.35} aria-hidden />
+        <Diff size={30} strokeWidth={1.4} aria-hidden />
       </div>
       <h1>No repository open</h1>
       <p>
         Open a Git repository to start reviewing local changes. Difftray tracks what
-        you&apos;ve reviewed and re-flags files when the diff drifts.
+        you&apos;ve reviewed and flags files that change after review.
       </p>
-      <button
-        className={styles.primaryButton}
-        disabled={disabled}
-        onClick={onOpenProject}
-        type="button"
-      >
-        <FolderOpen size={15} strokeWidth={1.4} aria-hidden />
-        Open Repository
-        <kbd>⌘O</kbd>
-      </button>
+      <div className={styles.emptyActions} data-testid="empty-state-actions">
+        <button
+          className={styles.primaryButton}
+          disabled={disabled}
+          onClick={onOpenProject}
+          type="button"
+        >
+          <FolderOpen size={14} strokeWidth={1.4} aria-hidden />
+          Open Repository
+          <kbd>⌘O</kbd>
+        </button>
+        {onScanFolder ? (
+          <button
+            className={styles.secondaryButton}
+            disabled={disabled}
+            onClick={onScanFolder}
+            type="button"
+          >
+            <Folder size={14} strokeWidth={1.4} aria-hidden />
+            Scan a folder…
+          </button>
+        ) : null}
+      </div>
+      <p className={styles.dropHint}>Or drop a folder onto this window.</p>
       {projects.length > 0 ? (
         <div className={styles.recentBox}>
           <div className={styles.sectionLabel}>Recent</div>
@@ -67,6 +83,22 @@ export function EmptyState({
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function ToastStack({
+  children
+}: {
+  readonly children: React.ReactNode;
+}): React.JSX.Element | null {
+  if (Children.toArray(children).length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.toastStack} data-testid="toast-stack">
+      {children}
+    </div>
   );
 }
 
@@ -95,7 +127,9 @@ export function DriftToast({
           <AlertTriangle size={16} strokeWidth={1.4} aria-hidden />
         </div>
         <div className={styles.toastContent}>
-          <strong>{files.length} reviewed files drifted</strong>
+          <strong>
+            {files.length} {files.length === 1 ? "file" : "files"} changed after review
+          </strong>
           <p>Previously reviewed diffs changed and need another look.</p>
           <div className={styles.toastFiles}>
             {files.slice(0, 3).map((file) => (
@@ -142,7 +176,7 @@ export function SimpleToast({
 }): React.JSX.Element {
   return (
     <aside className={styles.simpleToast} role="status">
-      <Check size={15} strokeWidth={1.5} aria-hidden />
+      <Check size={16} strokeWidth={1.4} aria-hidden />
       <span>{message}</span>
     </aside>
   );
@@ -158,14 +192,14 @@ export function UpdateRestartBanner({
   return (
     <aside className={styles.updateBanner} role="status">
       <div className={styles.updateIcon}>
-        <RefreshCw size={15} strokeWidth={1.5} aria-hidden />
+        <RefreshCw size={16} strokeWidth={1.4} aria-hidden />
       </div>
       <div className={styles.updateContent}>
         <strong>Update ready</strong>
         <span>Difftray {version} is ready.</span>
       </div>
       <button className={styles.primaryButton} onClick={onRestart} type="button">
-        <RefreshCw size={14} strokeWidth={1.5} aria-hidden />
+        <RefreshCw size={14} strokeWidth={1.4} aria-hidden />
         Restart to update
       </button>
     </aside>

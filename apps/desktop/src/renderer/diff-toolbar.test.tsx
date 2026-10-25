@@ -18,7 +18,6 @@ describe("diff toolbar components", () => {
           deletions: 4,
           invalidated: true
         })}
-        onCheckForUpdates={vi.fn()}
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
@@ -26,26 +25,89 @@ describe("diff toolbar components", () => {
         onToggleReviewed={vi.fn()}
         refName="against origin/main"
         reportCommentCount={3}
-        updatePhase={{ kind: "idle" }}
       />
     );
 
-    expect(html).toContain("src/renderer");
+    expect(html).toMatch(/src\/renderer\/<\/span><span[^>]*>App\.tsx</);
+    // The header leads with the same change-type tile as the file list (ADR 0043).
+    expect(html.indexOf('data-change-type="modified"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-change-type="modified"')).toBeLessThan(
+      html.indexOf("App.tsx")
+    );
+    // The review button keeps its name when its label is hidden in a narrow pane.
+    expect(html).toContain('aria-label="Mark reviewed"');
+    expect(html).toMatch(/class="[^"]*reviewButtonLabel[^"]*">Mark reviewed</);
     expect(html).toContain("App.tsx");
-    expect(html).toContain("Diff changed");
+    expect(html).toContain("Changed after review");
+    expect(html).toContain('data-review-state="attention"');
     expect(html).toContain("against origin/main");
     expect(html).toContain("+7");
     expect(html).toContain("-4");
-    expect(html).toContain("Copy comments report");
-    expect(html).toContain('aria-label="Check for updates"');
+    expect(html).toContain('aria-label="Copy for agent"');
+    expect(html).toContain(">Copy for agent<");
+    expect(html).not.toContain("updates");
+    expect(html).toContain(">Old<");
+    expect(html).toContain(">Both<");
+    expect(html).toContain(">New<");
     expect(html).toContain('aria-label="Diff side focus"');
     expect(html).toContain('aria-label="Show new version"');
     expect(html).toContain('data-active="true"');
     expect(html).toContain("Mark reviewed");
     expect(html).toContain('aria-label="Comment on file"');
     expect(html.indexOf('aria-label="Comment on file"')).toBeLessThan(
-      html.indexOf('aria-label="Copy comments report"')
+      html.indexOf('aria-label="Copy for agent"')
     );
+  });
+
+  it("omits the directory and line stats when they carry no information", () => {
+    const html = renderToStaticMarkup(
+      <DiffToolbar
+        commentCount={0}
+        copyDisabled={false}
+        copyPending={false}
+        diffMode="unified"
+        diffSideFocus="both"
+        disabled={false}
+        file={reviewFile("preview.png", { additions: 0, deletions: 0 })}
+        onCopyCommentsReport={vi.fn()}
+        onDiffSideFocusChange={vi.fn()}
+        onOpenEditor={vi.fn()}
+        onStartFileComment={vi.fn()}
+        onToggleReviewed={vi.fn()}
+        refName="Git changes"
+        reportCommentCount={0}
+      />
+    );
+
+    expect(html).toContain("preview.png");
+    expect(html).not.toContain("diffDir");
+    expect(html).not.toContain("+0");
+    expect(html).not.toContain("-0");
+  });
+
+  it("hides the side controls for files that only have one side", () => {
+    for (const status of ["added", "deleted"] as const) {
+      const html = renderToStaticMarkup(
+        <DiffToolbar
+          commentCount={0}
+          copyDisabled={false}
+          copyPending={false}
+          diffMode="split"
+          diffSideFocus="both"
+          disabled={false}
+          file={reviewFile("src/New.tsx", { status })}
+          onCopyCommentsReport={vi.fn()}
+          onDiffSideFocusChange={vi.fn()}
+          onOpenEditor={vi.fn()}
+          onStartFileComment={vi.fn()}
+          onToggleReviewed={vi.fn()}
+          refName="Git changes"
+          reportCommentCount={0}
+        />
+      );
+
+      expect(html).not.toContain('aria-label="Diff side focus"');
+    }
   });
 
   it("omits split controls in unified mode and shows pending copy state", () => {
@@ -58,7 +120,6 @@ describe("diff toolbar components", () => {
         diffSideFocus="both"
         disabled={true}
         file={reviewFile("README.md", { reviewed: true })}
-        onCheckForUpdates={vi.fn()}
         onCopyCommentsReport={vi.fn()}
         onDiffSideFocusChange={vi.fn()}
         onOpenEditor={vi.fn()}
@@ -66,41 +127,13 @@ describe("diff toolbar components", () => {
         onToggleReviewed={vi.fn()}
         refName="worktree"
         reportCommentCount={1}
-        updatePhase={{ kind: "checking" }}
       />
     );
 
     expect(html).not.toContain('aria-label="Diff side focus"');
     expect(html).toContain("Generating message");
     expect(html).toContain('aria-busy="true"');
-    expect(html).toContain('aria-label="Checking for updates"');
     expect(html).toContain("Unmark reviewed");
-    expect(html).toContain('disabled=""');
-  });
-
-  it("disables update checks when an update is ready to install", () => {
-    const html = renderToStaticMarkup(
-      <DiffToolbar
-        commentCount={0}
-        copyDisabled={false}
-        copyPending={false}
-        diffMode="split"
-        diffSideFocus="both"
-        disabled={false}
-        file={reviewFile("README.md")}
-        onCheckForUpdates={vi.fn()}
-        onCopyCommentsReport={vi.fn()}
-        onDiffSideFocusChange={vi.fn()}
-        onOpenEditor={vi.fn()}
-        onStartFileComment={vi.fn()}
-        onToggleReviewed={vi.fn()}
-        refName="worktree"
-        reportCommentCount={0}
-        updatePhase={{ kind: "downloaded", version: "1.2.3" }}
-      />
-    );
-
-    expect(html).toContain('aria-label="Update ready to install"');
     expect(html).toContain('disabled=""');
   });
 

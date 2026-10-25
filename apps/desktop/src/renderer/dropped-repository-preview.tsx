@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
 import styles from "./dropped-repository-preview.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
 
 export function DroppedRepositoryPreview({
@@ -48,7 +49,7 @@ export function DroppedRepositoryPreview({
         ref={dialogRef}
       >
         <header className={styles.header}>
-          <FolderSearch size={18} aria-hidden />
+          <FolderSearch size={18} strokeWidth={1.4} aria-hidden />
           <div>
             <strong>Choose repositories to open</strong>
             <span>{candidates.length} found in dropped folders</span>
@@ -73,7 +74,7 @@ export function DroppedRepositoryPreview({
                 type="button"
               >
                 <span className={styles.checkbox} data-checked={selected}>
-                  {selected ? <Check size={12} aria-hidden /> : null}
+                  {selected ? <Check size={12} strokeWidth={1.4} aria-hidden /> : null}
                 </span>
                 <span className={paletteStyles.paletteItemCopy}>
                   <strong>{candidate.name}</strong>
@@ -95,17 +96,24 @@ export function DroppedRepositoryPreview({
         ) : null}
         <footer className={styles.footer}>
           <span aria-live="polite">{selectedIds.length} selected</span>
-          <button onClick={onCancel} type="button">
-            Cancel
-          </button>
-          <button
-            disabled={selectedIds.length === 0}
-            onClick={() => onOpen(selectedIds, remember)}
-            type="button"
-          >
-            Open {selectedIds.length}{" "}
-            {selectedIds.length === 1 ? "repository" : "repositories"}
-          </button>
+          <div className={styles.footerActions}>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onCancel}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className={buttonStyles.primaryButton}
+              disabled={selectedIds.length === 0}
+              onClick={() => onOpen(selectedIds, remember)}
+              type="button"
+            >
+              Open {selectedIds.length}{" "}
+              {selectedIds.length === 1 ? "repository" : "repositories"}
+            </button>
+          </div>
         </footer>
       </section>
     </div>

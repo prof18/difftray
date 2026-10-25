@@ -29,9 +29,9 @@
 }
 
 .checkbox[data-checked="true"] {
-  background: var(--accent);
+  background: var(--primary-bg);
   border-color: var(--accent);
-  color: var(--panel);
+  color: var(--primary-fg);
 }
 
 .remember {
@@ -56,21 +56,6 @@
   margin-right: auto;
 }
 
-.footer button {
-  background: var(--panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-  padding: 7px 10px;
-}
-
-.footer button:last-child {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--panel);
-}
-
-.footer button:disabled {
-  opacity: 0.45;
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
 }

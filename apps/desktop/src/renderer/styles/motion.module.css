@@ -1,0 +1,13 @@
+/* The one loading spin. Spinner classes compose it
+   (`composes: spin from "./styles/motion.module.css";`); the reduced-motion rule in
+   global.css stops it on the first frame, which still shows the spinner ring. */
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

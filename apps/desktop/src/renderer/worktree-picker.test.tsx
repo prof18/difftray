@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WorktreePicker } from "./worktree-picker.js";
+import { WorktreePicker, middleTruncatePath } from "./worktree-picker.js";
 
 describe("WorktreePicker", () => {
   let container: HTMLDivElement;
@@ -95,6 +95,47 @@ describe("WorktreePicker", () => {
     expect(rows[0]?.textContent).toContain("codex/checkout");
     expect(rows[0]?.textContent).toContain("/workspace/one");
     expect(rows[1]?.textContent).toContain("Detached @ 2222222");
+    expect(container.textContent).not.toContain("Git-recorded siblings");
+  });
+
+  it("budgets the path around a custom label's branch prefix", () => {
+    act(() => {
+      root.render(
+        createElement(WorktreePicker, {
+          onClose: vi.fn(),
+          onCopyPath: vi.fn(),
+          onEditLabel: vi.fn(),
+          onResetLabel: vi.fn(),
+          onRefresh: vi.fn(),
+          onSelect: vi.fn(),
+          projectName: "Repository",
+          worktrees: [
+            {
+              ...worktree("sibling", "Release candidate"),
+              branchName: "main",
+              customLabel: "Release candidate",
+              displayPath:
+                "/private/var/folders/zw/zhy_56gn2155g5d156yh9ry40000gn/T/visual-repo-sibling"
+            }
+          ]
+        })
+      );
+    });
+
+    const pathLine = container.querySelector('[role="option"] small')?.textContent ?? "";
+    expect(pathLine.startsWith("main · ")).toBe(true);
+    expect(pathLine.length).toBeLessThanOrEqual(48);
+    expect(pathLine.endsWith("visual-repo-sibling")).toBe(true);
+  });
+
+  it("keeps the leaf folder of long worktree paths visible", () => {
+    const truncated = middleTruncatePath(
+      "/private/var/folders/zw/zhy_56gn2155g5d156yh9ry40000gn/T/difftray-visual-sibling"
+    );
+
+    expect(truncated.length).toBeLessThanOrEqual(48);
+    expect(truncated.endsWith("difftray-visual-sibling")).toBe(true);
+    expect(truncated.startsWith("/private/")).toBe(true);
   });
 
   it("offers set, edit and reset display name actions", () => {

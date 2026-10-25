@@ -153,12 +153,12 @@
 }
 
 .loadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 34px;
   height: 34px;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
   margin-bottom: 16px;
 }
 
@@ -181,12 +181,12 @@
   top: 10px;
   left: 50%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 10px;
   max-width: min(680px, calc(100vw - 48px));
   transform: translateX(-50%);
-  border: 1px solid var(--del-mark);
+  border: 1px solid var(--danger);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
@@ -203,26 +203,5 @@
 }
 
 .errorBannerClose {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-}
-
-.errorBannerClose:hover {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text);
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
+  composes: iconButton from "./styles/buttons.module.css";
 }

@@ -5,6 +5,7 @@ import {
   DriftToast,
   EmptyState,
   SimpleToast,
+  ToastStack,
   UpdateRestartBanner
 } from "./app-status-views.js";
 
@@ -28,12 +29,51 @@ describe("app status views", () => {
 
     expect(html).toContain('aria-label="No repository open"');
     expect(html).toContain("No repository open");
+    expect(html).toContain("flags files that change after review");
+    expect(html).not.toContain("drifts");
     expect(html).toContain("Open Repository");
     expect(html).toContain("<kbd>⌘O</kbd>");
     expect(html).toContain("Recent");
     expect(html).toContain("One");
     expect(html).toContain("Five");
     expect(html).not.toContain("Six");
+  });
+
+  // The empty window offered only Open Repository; folder scanning and dropping a
+  // folder on the window were not mentioned.
+  it("offers scanning a folder and dropping one, besides opening a repository", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        disabled={false}
+        onOpenProject={vi.fn()}
+        onScanFolder={vi.fn()}
+        onSelectProject={vi.fn()}
+        projects={[]}
+      />
+    );
+
+    expect(html).toContain("Scan a folder…");
+    expect(html).toContain("Or drop a folder onto this window.");
+  });
+
+  // The two buttons were loose children of the centred column: stacked with no
+  // gap and centred on different widths, they read as one lopsided block.
+  it("groups the empty-state actions in one row", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState
+        disabled={false}
+        onOpenProject={vi.fn()}
+        onScanFolder={vi.fn()}
+        onSelectProject={vi.fn()}
+        projects={[]}
+      />
+    );
+
+    const group = /<div[^>]*data-testid="empty-state-actions"[^>]*>(.*?)<\/div>/s.exec(
+      html
+    );
+    expect(group?.[1]).toContain("Open Repository");
+    expect(group?.[1]).toContain("Scan a folder…");
   });
 
   it("renders reviewed drift notification with the actionable files", () => {
@@ -51,7 +91,7 @@ describe("app status views", () => {
     );
 
     expect(html).toContain('role="status"');
-    expect(html).toContain("4 reviewed files drifted");
+    expect(html).toContain("4 files changed after review");
     expect(html).toContain("App.tsx");
     expect(html).toContain("README.md");
     expect(html).toContain("package.json");
@@ -60,6 +100,40 @@ describe("app status views", () => {
     expect(html).toContain("Review now");
     expect(html).toContain("Dismiss");
     expect(html).toContain('aria-label="Dismiss drift notification"');
+  });
+
+  it("uses the singular for one changed file", () => {
+    const html = renderToStaticMarkup(
+      <DriftToast
+        files={[reviewFile("src/App.tsx", { additions: 1, deletions: 1 })]}
+        onClose={vi.fn()}
+        onReviewNow={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("1 file changed after review");
+  });
+
+  it("stacks toasts in one region instead of overlapping them", () => {
+    const html = renderToStaticMarkup(
+      <ToastStack>
+        <DriftToast
+          files={[reviewFile("src/App.tsx", { additions: 1, deletions: 1 })]}
+          onClose={vi.fn()}
+          onReviewNow={vi.fn()}
+        />
+        <SimpleToast message="Copied 1 review comment" />
+      </ToastStack>
+    );
+
+    expect(html).toContain('data-testid="toast-stack"');
+    expect(html.indexOf("changed after review")).toBeLessThan(
+      html.indexOf("Copied 1 review comment")
+    );
+  });
+
+  it("renders nothing for an empty toast stack", () => {
+    expect(renderToStaticMarkup(<ToastStack>{null}</ToastStack>)).toBe("");
   });
 
   it("renders a simple status toast", () => {

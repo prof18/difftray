@@ -1,11 +1,11 @@
 .loadingMiniMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
 }
 
 .tabLoadBanner {
@@ -57,10 +57,4 @@
   border-radius: inherit;
   background: var(--accent);
   transition: width 120ms ease;
-}
-
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }

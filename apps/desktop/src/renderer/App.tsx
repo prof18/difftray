@@ -36,6 +36,7 @@ import {
   DriftToast,
   EmptyState,
   SimpleToast,
+  ToastStack,
   UpdateRestartBanner
 } from "./app-status-views.js";
 import {
@@ -126,7 +127,10 @@ import {
   withProjectLabel,
   type WorktreeLabelEditorState
 } from "./worktree-label-editor.js";
-import { addRepositorySearchRootThen } from "./repository-search-root-flow.js";
+import {
+  addRepositorySearchRootThen,
+  scanFolderForRepositories
+} from "./repository-search-root-flow.js";
 import { DroppedRepositoryPreview } from "./dropped-repository-preview.js";
 import { createRepositoryDropZone } from "./repository-drop-zone.js";
 import { requestDroppedRepositoryPreview } from "./dropped-repository-preview-request.js";
@@ -225,6 +229,8 @@ export function App(): React.JSX.Element {
     readonly RepositorySearchRootSuggestionView[]
   >([]);
   const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
+  // Set after "Scan a folder…": the picker then lists only that folder's results.
+  const [repositoryPickerFolder, setRepositoryPickerFolder] = useState<string>();
   const [tabDragCancelKey, setTabDragCancelKey] = useState(0);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
   const [selectedPath, setSelectedPath] = useState<string | undefined>();
@@ -238,6 +244,7 @@ export function App(): React.JSX.Element {
   >();
   const [toastDismissedFor, setToastDismissedFor] = useState<string | undefined>();
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: "idle" });
+  const [appVersion, setAppVersion] = useState<string | undefined>();
   const [workspace, setWorkspace] = useState<ReviewWorkspaceView | undefined>();
   const [worktreePickerProject, setWorktreePickerProject] = useState<
     RecentProjectView | undefined
@@ -518,6 +525,25 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    window.difftray
+      .appVersion()
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(version);
+        }
+      })
+      .catch((caughtError: unknown) => {
+        console.error("Failed to read app version", caughtError);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!commentToast) {
       return;
     }
@@ -642,10 +668,11 @@ export function App(): React.JSX.Element {
       runApplicationCommandIfAllowed(
         loadStateRef.current,
         () => {
-          void addRepositorySearchRootThen(
-            window.difftray.addRepositorySearchRoot,
-            () => void openRepositoryPicker()
-          ).catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+          void scanFolderForRepositories({
+            addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+            onError: (caughtError) => setError(errorMessage(caughtError)),
+            openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
+          });
         },
         settingsOpenRef.current
       );
@@ -1280,9 +1307,11 @@ export function App(): React.JSX.Element {
         },
         scanRepositoryFolder: () => {
           closePalette();
-          void window.difftray
-            .addRepositorySearchRoot()
-            .catch((caughtError: unknown) => setError(errorMessage(caughtError)));
+          void scanFolderForRepositories({
+            addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+            onError: (caughtError) => setError(errorMessage(caughtError)),
+            openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
+          });
         },
         selectFile: selectPath,
         setDiffMode: setAndPersistDiffMode,
@@ -1707,19 +1736,24 @@ export function App(): React.JSX.Element {
     });
   }
 
-  async function openRepositoryPicker(): Promise<void> {
+  async function openRepositoryPicker(folderPath?: string): Promise<void> {
     setError(undefined);
     closeTransientOverlays();
     const requestId = ++repositoryPickerRequestRef.current;
 
     try {
-      const [known, catalog] = await Promise.all([
+      const [known, catalog, roots] = await Promise.all([
         window.difftray.listKnownProjects(),
-        window.difftray.listRepositoryCatalog()
+        window.difftray.listRepositoryCatalog(),
+        // A folder added a moment ago is not in the roots state yet; its scan
+        // status comes from here.
+        folderPath ? window.difftray.listRepositorySearchRoots() : undefined
       ]);
       if (requestId !== repositoryPickerRequestRef.current) return;
       setKnownProjects(known);
       setRepositoryCatalog(catalog);
+      if (roots) setRepositorySearchRoots(roots);
+      setRepositoryPickerFolder(folderPath);
       setRepositoryPickerOpen(true);
     } catch (caughtError) {
       if (requestId === repositoryPickerRequestRef.current) {
@@ -1731,6 +1765,7 @@ export function App(): React.JSX.Element {
   function closeRepositoryPicker(): void {
     repositoryPickerRequestRef.current += 1;
     setRepositoryPickerOpen(false);
+    setRepositoryPickerFolder(undefined);
   }
 
   async function selectRepositoryPickerItem(item: RepositoryPickerItem): Promise<void> {
@@ -2539,6 +2574,7 @@ export function App(): React.JSX.Element {
     setPaletteOpen(false);
     setSettingsOpen(false);
     setRepositoryPickerOpen(false);
+    setRepositoryPickerFolder(undefined);
     setWorktreePickerProject(undefined);
     setDroppedRepositoryPreview([]);
   }
@@ -3990,7 +4026,7 @@ export function App(): React.JSX.Element {
               setError(undefined);
             }}
           >
-            <X size={14} aria-hidden />
+            <X size={14} strokeWidth={1.4} aria-hidden />
           </button>
         </div>
       ) : null}
@@ -4013,7 +4049,9 @@ export function App(): React.JSX.Element {
                 disabled={showActiveWorkspaceLoading}
                 files={visibleFiles}
                 onExpand={toggleFileListCollapsed}
+                onSelect={selectPath}
                 progress={workspace.progress}
+                selectedPath={selectedFile?.path}
               />
             ) : (
               <nav
@@ -4114,9 +4152,6 @@ export function App(): React.JSX.Element {
                     diffSideFocus={selectedDiffSideFocus}
                     disabled={loadState === "loading" || !selectedFile.diffLoaded}
                     file={selectedFile}
-                    onCheckForUpdates={() => {
-                      void checkForUpdates();
-                    }}
                     onCopyCommentsReport={() => {
                       void copyReviewCommentsReport();
                     }}
@@ -4141,7 +4176,6 @@ export function App(): React.JSX.Element {
                     }}
                     refName={diffTargetLabel(workspace.reviewTarget)}
                     reportCommentCount={reportItemCount(workspace)}
-                    updatePhase={updatePhase}
                   />
                   <FileCommentStack
                     comments={selectedFileComments}
@@ -4239,19 +4273,21 @@ export function App(): React.JSX.Element {
               )}
             </article>
 
-            {showDriftToast ? (
-              <DriftToast
-                files={attentionFiles}
-                onClose={() => {
-                  setToastDismissedFor(toastKey);
-                }}
-                onReviewNow={() => {
-                  selectPath(attentionFiles[0]?.path);
-                  setToastDismissedFor(toastKey);
-                }}
-              />
-            ) : null}
-            {commentToast ? <SimpleToast message={commentToast} /> : null}
+            <ToastStack>
+              {showDriftToast ? (
+                <DriftToast
+                  files={attentionFiles}
+                  onClose={() => {
+                    setToastDismissedFor(toastKey);
+                  }}
+                  onReviewNow={() => {
+                    selectPath(attentionFiles[0]?.path);
+                    setToastDismissedFor(toastKey);
+                  }}
+                />
+              ) : null}
+              {commentToast ? <SimpleToast message={commentToast} /> : null}
+            </ToastStack>
           </section>
         </section>
       ) : loadState === "loading" || !hasBootstrapped || recentProjects.length > 0 ? (
@@ -4266,6 +4302,13 @@ export function App(): React.JSX.Element {
           disabled={false}
           onOpenProject={() => {
             void openRepositoryPicker();
+          }}
+          onScanFolder={() => {
+            void scanFolderForRepositories({
+              addRepositorySearchRoot: window.difftray.addRepositorySearchRoot,
+              onError: (caughtError) => setError(errorMessage(caughtError)),
+              openRepositoryPicker: (folderPath) => void openRepositoryPicker(folderPath)
+            });
           }}
           onSelectProject={(projectId) => {
             void loadProject(projectId);
@@ -4313,9 +4356,9 @@ export function App(): React.JSX.Element {
             const requestId = repositoryPickerRequestRef.current;
             void addRepositorySearchRootThen(
               window.difftray.addRepositorySearchRoot,
-              () => {
+              (folderPath) => {
                 if (requestId === repositoryPickerRequestRef.current) {
-                  void openRepositoryPicker();
+                  void openRepositoryPicker(folderPath);
                 }
               }
             ).catch((caughtError: unknown) => {
@@ -4326,11 +4369,12 @@ export function App(): React.JSX.Element {
           }}
           onRefresh={() => {
             const requestId = repositoryPickerRequestRef.current;
+            const folderPath = repositoryPickerFolder;
             void window.difftray
               .refreshRepositoryCatalog()
               .then(() => {
                 if (requestId === repositoryPickerRequestRef.current) {
-                  void openRepositoryPicker();
+                  void openRepositoryPicker(folderPath);
                 }
               })
               .catch((caughtError: unknown) => {
@@ -4339,7 +4383,21 @@ export function App(): React.JSX.Element {
                 }
               });
           }}
+          onShowAllRepositories={() => {
+            setRepositoryPickerFolder(undefined);
+          }}
           openProjects={recentProjects}
+          scanFolder={
+            repositoryPickerFolder
+              ? {
+                  path: repositoryPickerFolder,
+                  scanning: repositorySearchRoots.some(
+                    (searchRoot) =>
+                      searchRoot.path === repositoryPickerFolder && searchRoot.scanning
+                  )
+                }
+              : undefined
+          }
         />
       ) : null}
 
@@ -4429,6 +4487,7 @@ export function App(): React.JSX.Element {
       {settingsOpen ? (
         <SettingsPanel
           appSettings={appSettings}
+          appVersion={appVersion}
           companionPairing={companionPairing}
           companionState={companionState}
           disabled={loadState === "loading"}
@@ -4436,6 +4495,9 @@ export function App(): React.JSX.Element {
           onClose={closeSettings}
           onCancelCompanionPairing={() => {
             void cancelCompanionPairing();
+          }}
+          onCheckForUpdates={() => {
+            void checkForUpdates();
           }}
           onChangeAppSettings={(patch) => {
             void persistAppSettings(patch);
@@ -4453,6 +4515,7 @@ export function App(): React.JSX.Element {
             void toggleCompanion(enabled);
           }}
           platform={window.difftray.platform}
+          updatePhase={updatePhase}
           repositorySearchRoots={repositorySearchRoots}
           repositorySearchRootSuggestions={repositorySearchRootSuggestions}
           onAddRepositorySearchRoot={() => {

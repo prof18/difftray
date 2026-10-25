@@ -185,6 +185,7 @@ function FileCommentEditor({
         onChange={(event) => {
           onBodyChange(event.target.value);
         }}
+        placeholder="Feedback on this file as a whole"
         onKeyDown={(event) => {
           const shortcut = commentEditorShortcut(event);
 

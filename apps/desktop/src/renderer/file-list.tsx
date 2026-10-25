@@ -31,6 +31,7 @@ import {
 
 import styles from "./file-list.module.css";
 import { ContextMenu } from "./context-menu.js";
+import { ChangeTypeTile, ReviewStateGlyph, reviewStateLabel } from "./file-state.js";
 import {
   fileListRowHeight,
   fileListVisibleWindow,
@@ -39,6 +40,7 @@ import {
 import {
   classList,
   fileListHeaderMetrics,
+  middleTruncationParts,
   reviewState,
   splitPath,
   type ReviewDiffTargetMode
@@ -87,12 +89,6 @@ export function FileListHeader({
         <div className={styles.changedCount}>
           <span>{files.length}</span> changed
         </div>
-        {attentionCount > 0 ? (
-          <div className={styles.needAttention}>
-            <span className={styles.attentionPulse} aria-hidden />
-            <span>{attentionCount}</span> need attention
-          </div>
-        ) : null}
         <div className={styles.headerActions}>
           <button
             aria-label="Refresh project"
@@ -151,10 +147,19 @@ export function FileListHeader({
           }}
         />
       </div>
-      <span className={styles.srOnly}>
-        {progress.reviewedVisibleFiles} of {progress.totalVisibleReviewableFiles} files
-        reviewed
-      </span>
+      <div className={styles.progressLabel} data-testid="file-list-progress">
+        <span className={styles.progressCount}>
+          <span>{progress.reviewedVisibleFiles}</span> of{" "}
+          <span>{progress.totalVisibleReviewableFiles}</span> reviewed
+        </span>
+        {attentionCount > 0 ? (
+          <span className={styles.needAttention}>
+            <span className={styles.attentionPulse} aria-hidden />
+            <span>{attentionCount}</span> {attentionCount === 1 ? "needs" : "need"}{" "}
+            attention
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -335,7 +340,7 @@ export function DiffTargetControl({
               type="button"
             >
               <span>{triggerLabel}</span>
-              <ChevronDown size={13} strokeWidth={1.5} aria-hidden />
+              <ChevronDown size={13} strokeWidth={1.4} aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipPortal>
@@ -436,7 +441,7 @@ export function DiffTargetControl({
                   >
                     <span className={styles.diffTargetOptionIcon}>
                       {mode === "branch" && branchRef === baseRefDraft ? (
-                        <Check size={13} strokeWidth={1.6} aria-hidden />
+                        <Check size={13} strokeWidth={1.4} aria-hidden />
                       ) : null}
                     </span>
                     <span className={styles.diffTargetOptionMain}>{branchRef}</span>
@@ -491,7 +496,7 @@ export function DiffTargetControl({
                         >
                           <span className={styles.diffTargetOptionIcon}>
                             {mode === "commit" && commit.sha === commitRefDraft ? (
-                              <Check size={13} strokeWidth={1.6} aria-hidden />
+                              <Check size={13} strokeWidth={1.4} aria-hidden />
                             ) : null}
                           </span>
                           <span className={styles.diffTargetCommitText}>
@@ -625,12 +630,16 @@ export function CollapsedRail({
   disabled = false,
   files,
   onExpand,
-  progress
+  onSelect,
+  progress,
+  selectedPath
 }: {
   readonly disabled?: boolean;
   readonly files: readonly ReviewFileView[];
   readonly onExpand: () => void;
+  readonly onSelect: (path: string) => void;
   readonly progress: ReviewWorkspaceView["progress"];
+  readonly selectedPath: string | undefined;
 }): React.JSX.Element {
   return (
     <aside
@@ -648,15 +657,28 @@ export function CollapsedRail({
         <PanelLeftOpen size={14} strokeWidth={1.4} aria-hidden />
       </button>
       <div className={styles.railDivider} />
+      {/* One mark per file: it opens the file, and the open file is ringed. */}
       <div className={styles.railDots}>
-        {files.map((file) => (
-          <span
-            className={styles.statusDot}
-            data-state={reviewState(file)}
-            key={file.path}
-            title={file.path}
-          />
-        ))}
+        {files.map((file) => {
+          const state = reviewState(file);
+          return (
+            <button
+              aria-current={file.path === selectedPath ? true : undefined}
+              aria-label={`${file.path}, ${reviewStateLabel(state)}`}
+              className={styles.railFile}
+              data-selected={file.path === selectedPath}
+              disabled={disabled}
+              key={file.path}
+              onClick={() => {
+                onSelect(file.path);
+              }}
+              title={file.path}
+              type="button"
+            >
+              <span className={styles.statusDot} data-state={state} />
+            </button>
+          );
+        })}
       </div>
       <div className={styles.railReviewLabel}>
         {progress.reviewedVisibleFiles} / {progress.totalVisibleReviewableFiles} reviewed
@@ -963,11 +985,12 @@ export const FileButton = memo(function FileButton({
 
   return (
     <button
-      aria-label={`${parts.filename} ${file.status}${file.invalidated ? " changed after review" : ""}`}
+      aria-label={`${parts.filename} ${file.status}${file.invalidated ? " changed after review" : ""}${parts.dirname ? `, in ${parts.dirname}` : ""}`}
       aria-posinset={position}
       aria-setsize={total}
       className={styles.fileItem}
       data-file-path={file.path}
+      data-attention={file.invalidated ? true : undefined}
       data-selected={isSelected}
       onClick={() => {
         onSelect(file.path);
@@ -977,26 +1000,41 @@ export const FileButton = memo(function FileButton({
       }}
       type="button"
     >
-      <span className={styles.statusDot} data-state={reviewState(file)} />
+      <ChangeTypeTile status={file.status} />
       <span className={styles.fileCopy}>
         <span className={styles.fileNameLine}>
-          <span className={styles.fileName}>{parts.filename}</span>
-          {file.invalidated ? (
-            <span className={styles.attentionPulse} aria-hidden />
-          ) : null}
+          <MiddleTruncatedName name={parts.filename} title={file.path} />
           {commentCount > 0 ? (
             <span className={styles.commentBadge} title="Review comments">
-              <MessageSquare size={11} strokeWidth={1.5} aria-hidden />
+              <MessageSquare size={11} strokeWidth={1.4} aria-hidden />
               {commentCount}
             </span>
           ) : null}
         </span>
-        <span className={styles.fileDir}>{parts.dirname}</span>
+        {parts.dirname ? <span className={styles.fileDir}>{parts.dirname}</span> : null}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
+      <ReviewStateGlyph state={reviewState(file)} />
     </button>
   );
 });
+
+function MiddleTruncatedName({
+  name,
+  title
+}: {
+  readonly name: string;
+  readonly title: string;
+}): React.JSX.Element {
+  const { head, tail } = middleTruncationParts(name);
+
+  return (
+    <span className={styles.fileName} title={title}>
+      <span className={styles.fileNameHead}>{head}</span>
+      {tail ? <span className={styles.fileNameTail}>{tail}</span> : null}
+    </span>
+  );
+}
 
 function DiffStats({
   additions,
@@ -1005,8 +1043,21 @@ function DiffStats({
   readonly additions: number;
   readonly deletions: number;
 }): React.JSX.Element {
-  const total = Math.max(additions + deletions, 1);
-  const addBlocks = Math.round((additions / total) * 5);
+  const changed = additions + deletions;
+
+  if (changed === 0) {
+    return (
+      <span className={styles.fileStats} title="No line changes">
+        <span className={styles.statsBar} aria-hidden>
+          {Array.from({ length: 5 }, (_, index) => (
+            <span data-kind="none" key={String(index)} />
+          ))}
+        </span>
+      </span>
+    );
+  }
+
+  const addBlocks = Math.round((additions / changed) * 5);
 
   return (
     <span className={styles.fileStats}>

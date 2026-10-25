@@ -13,7 +13,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--panel-2);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  box-shadow: var(--shadow-pop);
   padding: 5px;
 }
 
@@ -23,24 +23,27 @@
   align-items: center;
   gap: 9px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
-  padding: 5px 9px;
+  font-size: 12.5px;
+  padding: 0 9px;
   text-align: left;
 }
 
-.menu button:hover,
+.menu button:hover {
+  background: var(--hover);
+}
+
 .menu button:focus-visible {
-  background: var(--selected);
-  outline: none;
+  background: var(--hover);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .menu button:disabled {
-  color: var(--text-dim);
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
 }
 
 .menu svg {

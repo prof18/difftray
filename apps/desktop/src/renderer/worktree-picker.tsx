@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import paletteStyles from "./command-palette-view.module.css";
 import { ContextMenu } from "./context-menu.js";
 import styles from "./worktree-picker.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js";
 
 export function WorktreePicker({
@@ -131,11 +132,21 @@ export function WorktreePicker({
             <strong>Worktrees for {projectName}</strong>
           </div>
           <div className={styles.actions}>
-            <button aria-label="Refresh worktrees" onClick={onRefresh} type="button">
-              <RefreshCw size={14} aria-hidden />
+            <button
+              aria-label="Refresh worktrees"
+              className={buttonStyles.iconButton}
+              onClick={onRefresh}
+              type="button"
+            >
+              <RefreshCw size={14} strokeWidth={1.4} aria-hidden />
             </button>
-            <button aria-label="Close worktrees" onClick={onClose} type="button">
-              <X size={14} aria-hidden />
+            <button
+              aria-label="Close worktrees"
+              className={buttonStyles.iconButton}
+              onClick={onClose}
+              type="button"
+            >
+              <X size={14} strokeWidth={1.4} aria-hidden />
             </button>
           </div>
         </header>
@@ -191,13 +202,16 @@ export function WorktreePicker({
                 <strong>{worktree.displayName}</strong>
                 <small title={worktree.displayPath}>
                   {worktree.customLabel
-                    ? `${gitWorktreeName(worktree)} · ${middleTruncatePath(worktree.displayPath)}`
+                    ? `${gitWorktreeName(worktree)} · ${middleTruncatePath(
+                        worktree.displayPath,
+                        Math.max(24, 48 - gitWorktreeName(worktree).length - 3)
+                      )}`
                     : middleTruncatePath(worktree.displayPath)}
                 </small>
               </span>
               {worktree.locked ? (
                 <span className={styles.locked}>
-                  <LockKeyhole size={11} aria-hidden /> Locked
+                  <LockKeyhole size={11} strokeWidth={1.4} aria-hidden /> Locked
                 </span>
               ) : null}
               <span className={paletteStyles.paletteHint}>
@@ -244,17 +258,22 @@ export function WorktreePicker({
             top={contextMenu.top}
           />
         ) : null}
-        <div className={paletteStyles.paletteFooter}>
-          Git-recorded siblings · paths distinguish identical folder names
-        </div>
       </section>
     </div>
   );
 }
 
-export function middleTruncatePath(pathName: string, maxLength = 72): string {
+/**
+ * Shortens a path from the middle so it fits the row before CSS clips its end.
+ * The tail keeps the leaf folder, which is what tells sibling worktrees apart.
+ */
+export function middleTruncatePath(pathName: string, maxLength = 48): string {
   if (pathName.length <= maxLength) return pathName;
-  const tailLength = Math.ceil((maxLength - 1) * 0.65);
+  const leafLength = pathName.length - pathName.lastIndexOf("/");
+  const tailLength = Math.min(
+    maxLength - 10,
+    Math.max(Math.ceil((maxLength - 1) * 0.65), leafLength)
+  );
   const headLength = maxLength - tailLength - 1;
   return `${pathName.slice(0, headLength)}…${pathName.slice(-tailLength)}`;
 }

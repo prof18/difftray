@@ -1,0 +1,103 @@
+/* The app's one button recipe. Component stylesheets compose these classes
+   (`composes: primaryButton from "./styles/buttons.module.css";`) and only add
+   what is specific to them, such as the reviewed state of the review button.
+   Hover states sit in :where() so a component's own :hover rule always wins,
+   whatever order the bundled stylesheets end up in. */
+
+.button {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Peer buttons shown together (Cancel and Save, Deny and Approve) all take the
+   width of the widest label, so a pair reads as balanced. The group is only as
+   wide as its buttons; place it with margins (margin-left: auto for the end). */
+.buttonGroup {
+  display: grid;
+  width: max-content;
+  max-width: 100%;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.primaryButton {
+  composes: button;
+  border: 1px solid var(--accent-2);
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+}
+
+.primaryButton:where(:hover:not(:disabled)) {
+  background: color-mix(in srgb, var(--primary-bg) 88%, #ffffff);
+}
+
+.primaryButton kbd {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--primary-fg);
+}
+
+.secondaryButton {
+  composes: button;
+  border: 1px solid var(--border);
+  background: var(--elev);
+  color: var(--text-2);
+}
+
+.secondaryButton:where(:hover:not(:disabled)) {
+  border-color: var(--border-strong);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.ghostButton {
+  composes: button;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.ghostButton:where(:hover:not(:disabled)) {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.iconButton {
+  -webkit-app-region: no-drag;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 0;
+}
+
+.iconButton:where(:hover:not(:disabled)) {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.button:disabled,
+.iconButton:disabled {
+  opacity: var(--disabled-opacity);
+}

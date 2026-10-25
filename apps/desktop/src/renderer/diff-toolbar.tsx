@@ -2,18 +2,15 @@ import {
   AlertTriangle,
   Check,
   ClipboardList,
-  Columns2,
   ExternalLink,
   GitBranch,
   MessageSquare,
-  MessageSquarePlus,
-  PanelLeft,
-  PanelRight,
-  RefreshCw
+  MessageSquarePlus
 } from "lucide-react";
 
 import styles from "./diff-toolbar.module.css";
 import { type DiffSideFocus } from "./diffs-renderer.js";
+import { ChangeTypeTile, ReviewStateGlyph } from "./file-state.js";
 import { classList, reviewState, splitPath, type DiffMode } from "./review-view-model.js";
 
 export function DiffToolbar({
@@ -24,15 +21,13 @@ export function DiffToolbar({
   diffSideFocus,
   disabled,
   file,
-  onCheckForUpdates,
   onCopyCommentsReport,
   onDiffSideFocusChange,
   onOpenEditor,
   onStartFileComment,
   onToggleReviewed,
   refName,
-  reportCommentCount,
-  updatePhase
+  reportCommentCount
 }: {
   readonly commentCount: number;
   readonly copyDisabled: boolean;
@@ -41,7 +36,6 @@ export function DiffToolbar({
   readonly diffSideFocus: DiffSideFocus;
   readonly disabled: boolean;
   readonly file: ReviewFileView;
-  readonly onCheckForUpdates: () => void;
   readonly onCopyCommentsReport: () => void;
   readonly onDiffSideFocusChange: (sideFocus: DiffSideFocus) => void;
   readonly onOpenEditor: () => void;
@@ -49,40 +43,39 @@ export function DiffToolbar({
   readonly onToggleReviewed: () => void;
   readonly refName: string;
   readonly reportCommentCount: number;
-  readonly updatePhase: UpdatePhase;
 }): React.JSX.Element {
   const parts = splitPath(file.path);
   const canFocusSides = file.status !== "added" && file.status !== "deleted";
-  const showSideFocusControls = diffMode === "split";
-  const updateCheckRunning =
-    updatePhase.kind === "checking" || updatePhase.kind === "downloading";
-  const updateCheckReady = updatePhase.kind === "downloaded";
-  const updateCheckLabel = updateCheckReady
-    ? "Update ready to install"
-    : updateCheckRunning
-      ? "Checking for updates"
-      : "Check for updates";
-
+  const showSideFocusControls = diffMode === "split" && canFocusSides;
   return (
     <div className={styles.diffToolbar}>
       <div className={styles.diffTitleBlock}>
         <div className={styles.diffFileTitle}>
-          <span className={styles.statusDot} data-state={reviewState(file)} />
-          <span className={styles.diffDir}>{parts.dirname}</span>
-          <span className={styles.diffFileName}>{parts.filename}</span>
+          <ChangeTypeTile status={file.status} />
+          <ReviewStateGlyph state={reviewState(file)} />
+          <span className={styles.diffPath}>
+            {parts.dirname ? (
+              <span className={styles.diffDir}>{parts.dirname}/</span>
+            ) : null}
+            <span className={styles.diffFileName}>{parts.filename}</span>
+          </span>
           {file.invalidated ? (
             <span className={styles.diffChangedPill}>
               <AlertTriangle size={12} strokeWidth={1.4} aria-hidden />
-              Diff changed
+              Changed after review
             </span>
           ) : null}
         </div>
         <div className={styles.diffMeta}>
           <GitBranch size={13} strokeWidth={1.4} aria-hidden />
           <span>{refName}</span>
-          <span>·</span>
-          <span className={styles.addText}>+{file.additions}</span>
-          <span className={styles.delText}>-{file.deletions}</span>
+          {file.additions + file.deletions > 0 ? (
+            <>
+              <span>·</span>
+              <span className={styles.addText}>+{file.additions}</span>
+              <span className={styles.delText}>-{file.deletions}</span>
+            </>
+          ) : null}
           {commentCount > 0 ? (
             <>
               <span>·</span>
@@ -112,7 +105,7 @@ export function DiffToolbar({
                 title="Show old version"
                 type="button"
               >
-                <PanelLeft size={14} strokeWidth={1.4} aria-hidden />
+                <span>Old</span>
               </button>
               <button
                 aria-label="Show both diff sides"
@@ -124,7 +117,7 @@ export function DiffToolbar({
                 title="Show both sides"
                 type="button"
               >
-                <Columns2 size={14} strokeWidth={1.4} aria-hidden />
+                <span>Both</span>
               </button>
               <button
                 aria-label="Show new version"
@@ -136,7 +129,7 @@ export function DiffToolbar({
                 title="Show new version"
                 type="button"
               >
-                <PanelRight size={14} strokeWidth={1.4} aria-hidden />
+                <span>New</span>
               </button>
             </div>
             <span className={styles.verticalDivider} />
@@ -155,9 +148,7 @@ export function DiffToolbar({
         {reportCommentCount > 0 ? (
           <button
             aria-busy={copyPending}
-            aria-label={
-              copyPending ? "Generating comments message" : "Copy comments report"
-            }
+            aria-label={copyPending ? "Generating comments message" : "Copy for agent"}
             className={classList(styles.secondaryButton, styles.reportButton)}
             disabled={copyDisabled}
             onClick={onCopyCommentsReport}
@@ -174,7 +165,7 @@ export function DiffToolbar({
               <ClipboardList size={14} strokeWidth={1.4} aria-hidden />
             )}
             <span className={styles.reportButtonLabel}>
-              {copyPending ? "Generating message" : "Copy comments report"}
+              {copyPending ? "Generating message" : "Copy for agent"}
             </span>
             {copyPending ? null : (
               <span className={styles.reportButtonCount} aria-hidden>
@@ -183,22 +174,6 @@ export function DiffToolbar({
             )}
           </button>
         ) : null}
-        <button
-          aria-busy={updateCheckRunning}
-          aria-label={updateCheckLabel}
-          className={styles.iconButton}
-          disabled={updateCheckRunning || updateCheckReady}
-          onClick={onCheckForUpdates}
-          title={updateCheckLabel}
-          type="button"
-        >
-          <RefreshCw
-            className={updateCheckRunning ? styles.spinningIcon : undefined}
-            size={14}
-            strokeWidth={1.4}
-            aria-hidden
-          />
-        </button>
         <button
           aria-label="Open selected file in editor"
           className={styles.iconButton}
@@ -211,6 +186,7 @@ export function DiffToolbar({
         </button>
         <span className={styles.verticalDivider} />
         <button
+          aria-label={file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
           className={styles.primaryButton}
           data-reviewed={file.reviewed}
           disabled={disabled}
@@ -218,7 +194,9 @@ export function DiffToolbar({
           type="button"
         >
           <Check size={14} strokeWidth={1.4} aria-hidden />
-          {file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
+          <span className={styles.reviewButtonLabel}>
+            {file.reviewed ? "Unmark reviewed" : "Mark reviewed"}
+          </span>
           <kbd>R</kbd>
         </button>
       </div>

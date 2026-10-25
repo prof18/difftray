@@ -41,6 +41,31 @@ describe("useDialogFocusTrap", () => {
     expect(opener.hasAttribute("data-dialog-focus-restored")).toBe(false);
   });
 
+  // Opening a dialog with the mouse (or the app menu) moved focus to its first
+  // control with a full focus ring before any keyboard use.
+  it("hides the ring on the first control when the dialog opened without the keyboard", () => {
+    vi.spyOn(opener, "matches").mockReturnValue(false);
+    act(() => root.render(<Dialog />));
+    const inside = container.querySelector("button");
+
+    expect(document.activeElement).toBe(inside);
+    expect(inside?.hasAttribute("data-dialog-pointer-focus")).toBe(true);
+
+    act(() => {
+      inside?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    });
+    expect(inside?.hasAttribute("data-dialog-pointer-focus")).toBe(false);
+  });
+
+  it("keeps the ring on the first control when the dialog opened from the keyboard", () => {
+    vi.spyOn(opener, "matches").mockReturnValue(true);
+    act(() => root.render(<Dialog />));
+
+    expect(
+      container.querySelector("button")?.hasAttribute("data-dialog-pointer-focus")
+    ).toBe(false);
+  });
+
   it("keeps the normal focus indicator for keyboard-focused controls", () => {
     vi.spyOn(opener, "matches").mockReturnValue(true);
     act(() => root.render(<Dialog />));

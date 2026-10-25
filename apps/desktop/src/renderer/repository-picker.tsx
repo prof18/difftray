@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import paletteStyles from "./command-palette-view.module.css";
 import styles from "./repository-picker.module.css";
+import buttonStyles from "./styles/buttons.module.css";
 import { isDialogButtonEventTarget, useDialogFocusTrap } from "./dialog-focus.js";
 
 export type RepositoryPickerItem = {
@@ -17,11 +18,29 @@ export function projectToShowWhileLoading(
   return item.state === "catalog" ? undefined : item.project;
 }
 
+/** A folder the user just scanned; the picker then shows only what is inside it. */
+export type RepositoryPickerScanFolder = {
+  readonly path: string;
+  readonly scanning: boolean;
+};
+
+function isInsideFolder(projectPath: string, folderPath: string): boolean {
+  const prefix = folderPath.endsWith("/") ? folderPath : `${folderPath}/`;
+  return projectPath === folderPath || projectPath.startsWith(prefix);
+}
+
+function folderName(folderPath: string): string {
+  // The last segment, or the whole path for "/" whose last segment is empty.
+  const name = folderPath.replace(/\/+$/, "").split("/").pop() ?? "";
+  return name.length > 0 ? name : folderPath;
+}
+
 export function repositoryPickerItems(
   openProjects: readonly RecentProjectView[],
   knownProjects: readonly RecentProjectView[],
   catalog: readonly RepositoryCatalogView[],
-  query: string
+  query: string,
+  folderPath?: string
 ): readonly RepositoryPickerItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const openIds = new Set(openProjects.map(({ id }) => id));
@@ -30,6 +49,7 @@ export function repositoryPickerItems(
     projects: readonly Project[]
   ): readonly Project[] =>
     projects
+      .filter(({ path }) => folderPath === undefined || isInsideFolder(path, folderPath))
       .map((project) => ({
         project,
         score:
@@ -89,7 +109,9 @@ export function RepositoryPicker({
   onSelect,
   onScan,
   onRefresh,
-  openProjects
+  onShowAllRepositories,
+  openProjects,
+  scanFolder
 }: {
   readonly catalog: readonly RepositoryCatalogView[];
   readonly knownProjects: readonly RecentProjectView[];
@@ -98,7 +120,9 @@ export function RepositoryPicker({
   readonly onSelect: (item: RepositoryPickerItem) => void;
   readonly onScan: () => void;
   readonly onRefresh: () => void;
+  readonly onShowAllRepositories?: () => void;
   readonly openProjects: readonly RecentProjectView[];
+  readonly scanFolder?: RepositoryPickerScanFolder | undefined;
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -108,9 +132,17 @@ export function RepositoryPicker({
   const listboxId = `repository-picker-listbox-${useId().replaceAll(":", "")}`;
   useDialogFocusTrap(dialogRef);
   const items = useMemo(
-    () => repositoryPickerItems(openProjects, knownProjects, catalog, query),
-    [catalog, knownProjects, openProjects, query]
+    () =>
+      repositoryPickerItems(
+        openProjects,
+        knownProjects,
+        catalog,
+        query,
+        scanFolder?.path
+      ),
+    [catalog, knownProjects, openProjects, query, scanFolder?.path]
   );
+  const scanFolderName = scanFolder ? folderName(scanFolder.path) : undefined;
   const activeIndex = items.length === 0 ? 0 : Math.min(selectedIndex, items.length - 1);
   const activeItemId =
     items.length === 0 ? undefined : `${listboxId}-option-${String(activeIndex)}`;
@@ -208,9 +240,32 @@ export function RepositoryPicker({
             role="combobox"
             value={query}
           />
-          <span className={paletteStyles.paletteScope}>Repositories</span>
+          <span className={paletteStyles.paletteScope}>
+            {scanFolderName ?? "Repositories"}
+          </span>
           <kbd>esc</kbd>
         </label>
+        {scanFolder && scanFolderName ? (
+          <div className={styles.scanStatus} role="status">
+            {scanFolder.scanning ? (
+              <span aria-hidden className={styles.scanSpinner} />
+            ) : null}
+            <span className={styles.scanStatusText} title={scanFolder.path}>
+              {scanFolder.scanning
+                ? `Scanning ${scanFolderName}…`
+                : `Repositories in ${scanFolderName}`}
+            </span>
+            {onShowAllRepositories ? (
+              <button
+                className={buttonStyles.ghostButton}
+                onClick={onShowAllRepositories}
+                type="button"
+              >
+                Show all
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div
           aria-label="Repository results"
           className={paletteStyles.paletteResults}
@@ -219,7 +274,13 @@ export function RepositoryPicker({
           role="listbox"
         >
           {items.length === 0 ? (
-            <div className={styles.empty}>No matching repositories</div>
+            <div className={styles.empty}>
+              {!scanFolderName || query.trim().length > 0
+                ? "No matching repositories"
+                : scanFolder?.scanning
+                  ? "Repositories appear here when the scan finishes."
+                  : `No Git repositories found in ${scanFolderName}`}
+            </div>
           ) : (
             ["open", "known", "catalog"].map((state) => {
               const sectionItems = groupedItems.get(
@@ -272,16 +333,29 @@ export function RepositoryPicker({
           )}
         </div>
         <div className={styles.footer}>
-          <button onClick={onBrowse} type="button">
-            Open Repositories…
-          </button>
-          <button onClick={onScan} type="button">
-            Scan a folder…
-          </button>
-          <button onClick={onRefresh} type="button">
-            Refresh catalog
-          </button>
-          <span>↑ ↓ navigate · ↵ select · ⌘O</span>
+          <div className={styles.footerActions}>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onBrowse}
+              type="button"
+            >
+              Open Repositories…
+            </button>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onScan}
+              type="button"
+            >
+              Scan a folder…
+            </button>
+            <button
+              className={buttonStyles.secondaryButton}
+              onClick={onRefresh}
+              type="button"
+            >
+              Refresh catalog
+            </button>
+          </div>
         </div>
       </section>
     </div>

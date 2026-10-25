@@ -14,6 +14,7 @@ import {
   reviewState,
   reviewSummariesEqual,
   reviewSummaryState,
+  middleTruncationParts,
   splitPath,
   suggestedBaseRef,
   themeModeFromValue,
@@ -184,12 +185,24 @@ describe("small view helpers", () => {
       dirname: "src/renderer",
       filename: "App.tsx"
     });
-    expect(splitPath("App.tsx")).toEqual({ dirname: ".", filename: "App.tsx" });
+    expect(splitPath("App.tsx")).toEqual({ dirname: "", filename: "App.tsx" });
     expect(clampIndex(-1, 3)).toBe(2);
     expect(clampIndex(3, 3)).toBe(0);
     expect(clampNumber(12.7, 0, 10)).toBe(10);
     expect(themeModeFromValue("dark")).toBe("dark");
     expect(themeModeFromValue("unexpected")).toBe("system");
+  });
+
+  it("splits long names so the end stays visible when truncated", () => {
+    expect(middleTruncationParts("App.tsx")).toEqual({ head: "App.tsx", tail: "" });
+    expect(middleTruncationParts("schema.generated.ts")).toEqual({
+      head: "schema.gene",
+      tail: "rated.ts"
+    });
+    expect(middleTruncationParts("abcdefghijkl")).toEqual({
+      head: "abcdefghijkl",
+      tail: ""
+    });
   });
 
   it("formats unknown errors safely", () => {

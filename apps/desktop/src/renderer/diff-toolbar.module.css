@@ -1,60 +1,23 @@
 .iconButton {
-  -webkit-app-region: no-drag;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
+  composes: iconButton from "./styles/buttons.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "./styles/buttons.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "./styles/buttons.module.css";
 }
 
 .loadingMiniMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
-}
-
-.iconButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-}
-
-.iconButton:hover:not(:disabled) {
-  border-color: var(--border);
-  background: var(--hover);
-  color: var(--text-2);
-}
-
-.statusDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-}
-
-.statusDot[data-state="pending"] {
-  border: 1.5px solid var(--text-dim);
-}
-
-.statusDot[data-state="unknown"] {
-  border: 1.5px solid var(--border-strong);
-}
-
-.statusDot[data-state="reviewed"] {
-  background: var(--ok);
-  box-shadow: 0 0 0 2px var(--ok-soft);
-}
-
-.statusDot[data-state="attention"] {
-  background: var(--warn);
-  box-shadow: 0 0 0 2px var(--warn-soft);
 }
 
 .commentBadge,
@@ -63,8 +26,8 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  color: var(--accent);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  color: var(--accent-text);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
 }
@@ -73,7 +36,7 @@
 .diffFileName {
   overflow: hidden;
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-feature-settings:
     "zero" 1,
@@ -87,7 +50,7 @@
 .diffDir {
   overflow: hidden;
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -102,6 +65,7 @@
 }
 
 .diffToolbar {
+  container-type: inline-size;
   display: flex;
   min-height: 68px;
   flex: 0 0 auto;
@@ -115,7 +79,7 @@
 
 .diffTitleBlock {
   display: flex;
-  min-width: 0;
+  min-width: min(160px, 30%);
   flex: 1;
   flex-direction: column;
   gap: 3px;
@@ -131,6 +95,12 @@
 
 .diffFileTitle {
   gap: 7px;
+}
+
+.diffPath {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
 }
 
 .diffDir {
@@ -161,7 +131,7 @@
   gap: 6px;
   overflow: hidden;
   color: var(--text-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -175,20 +145,30 @@
 .diffSideSegmented {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 2px;
 }
 
 .diffSideSegmented button {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  gap: 5px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   font-size: 11.5px;
-  padding: 0;
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.diffSideSegmented button:disabled {
+  cursor: default;
+  opacity: var(--disabled-opacity);
 }
 
 .diffSideSegmented button:hover:not(:disabled) {
@@ -208,25 +188,6 @@
   background: var(--border);
 }
 
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 12px;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent-2);
-  background: var(--accent);
-  color: var(--primary-fg);
-}
-
 .primaryButton[data-reviewed="true"] {
   border-color: var(--ok);
   background: var(--ok-soft);
@@ -237,12 +198,6 @@
   border-color: var(--warn);
   background: var(--warn-soft);
   color: var(--warn);
-}
-
-.primaryButton kbd {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--primary-fg);
 }
 
 .primaryButton[data-reviewed="true"] kbd {
@@ -257,15 +212,9 @@
   color: var(--warn);
 }
 
-.secondaryButton {
-  border: 1px solid var(--border);
-  background: var(--elev);
-  color: var(--text-2);
-}
-
-.reportButton {
-  width: 190px;
-  min-width: 0;
+/* Qualified so it out-ranks the shared recipe wherever the bundle places it. */
+.secondaryButton.reportButton {
+  flex: 0 0 auto;
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
   color: var(--text);
 }
@@ -288,31 +237,22 @@
   place-items: center;
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: var(--accent-text);
+  font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   padding: 0 5px;
 }
 
 .reportButtonSpinner {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border-strong));
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loadingSpin 900ms linear infinite;
-}
-
-.spinningIcon {
-  animation: loadingSpin 900ms linear infinite;
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled,
-.iconButton:disabled {
-  opacity: 0.52;
 }
 
 .diffPreparingState {
@@ -323,7 +263,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--text-muted);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12.5px;
 }
 
@@ -331,13 +271,30 @@
   max-width: min(520px, 64vw);
   overflow: hidden;
   color: var(--text);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@keyframes loadingSpin {
-  to {
-    transform: rotate(360deg);
+@container (max-width: 860px) {
+  .reportButtonLabel {
+    display: none;
+  }
+}
+
+/* A narrow diff pane (small window, wide file list): the review button keeps its
+   check and shortcut, the side control and gaps tighten, so the actions stay inside
+   the toolbar's padding instead of running into the window edge. */
+@container (max-width: 640px) {
+  .diffActions {
+    gap: 6px;
+  }
+
+  .reviewButtonLabel {
+    display: none;
+  }
+
+  .diffSideSegmented button {
+    padding: 0 6px;
   }
 }

@@ -169,9 +169,26 @@ export function splitPath(path: string): {
   const filename = segments.at(-1) ?? path;
   const dirname = segments.slice(0, -1).join("/");
 
+  return { dirname, filename };
+}
+
+const middleTruncationTailLength = 8;
+
+/**
+ * Splits a name into a head that may ellipsize and a tail that always stays
+ * visible, so truncated names keep their distinguishing end and extension.
+ */
+export function middleTruncationParts(name: string): {
+  readonly head: string;
+  readonly tail: string;
+} {
+  if (name.length <= middleTruncationTailLength + 4) {
+    return { head: name, tail: "" };
+  }
+
   return {
-    dirname: dirname.length > 0 ? dirname : ".",
-    filename
+    head: name.slice(0, -middleTruncationTailLength),
+    tail: name.slice(-middleTruncationTailLength)
   };
 }
 

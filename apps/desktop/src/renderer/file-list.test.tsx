@@ -55,14 +55,49 @@ describe("file list components", () => {
     );
 
     expect(html).toContain("<span>3</span> changed");
-    expect(html).toContain("<span>1</span> need attention");
+    expect(html).toContain("<span>1</span> needs attention");
     expect(html).toContain("origin/main");
     expect(html).toContain("Choose diff target");
     expect(html).not.toContain("develop");
     expect(html).not.toContain("def456 Change file list");
-    expect(html).toContain("1 of 3 files reviewed");
+    expect(html).toContain('data-testid="file-list-progress"');
+    expect(html).toContain("<span>1</span> of <span>3</span> reviewed");
+    expect(html).not.toContain("srOnly");
+    expect(html.indexOf("needs attention")).toBeGreaterThan(
+      html.indexOf('data-testid="file-list-progress"')
+    );
     expect(html).toContain('aria-label="Refresh project"');
     expect(html).toContain('aria-label="Hide file list"');
+  });
+
+  it("hides the attention count when nothing needs another look", () => {
+    const html = renderToStaticMarkup(
+      <FileListHeader
+        attentionCount={0}
+        baseRefDraft="main"
+        branchRefs={["main"]}
+        commitRefDraft=""
+        disabled={false}
+        files={[reviewFile("src/pending.ts")]}
+        onBaseRefDraftChange={vi.fn()}
+        onCommitRefDraftChange={vi.fn()}
+        onCollapse={vi.fn()}
+        onRefresh={vi.fn()}
+        onUseBranchDiff={vi.fn()}
+        onUseCommitDiff={vi.fn()}
+        onUseWorkingTreeDiff={vi.fn()}
+        progress={{ reviewedVisibleFiles: 0, totalVisibleReviewableFiles: 1 }}
+        reviewTarget={{
+          headSha: "abc123",
+          id: "target-working-tree",
+          kind: "working_tree"
+        }}
+        recentCommits={[]}
+      />
+    );
+
+    expect(html).toContain("<span>0</span> of <span>1</span> reviewed");
+    expect(html).not.toContain("attention");
   });
 
   it("renders the target picker popover with separated modes", () => {
@@ -186,13 +221,20 @@ describe("file list components", () => {
           reviewFile("changed.ts", { invalidated: true, reviewed: true })
         ]}
         onExpand={vi.fn()}
+        onSelect={vi.fn()}
         progress={{
           reviewedVisibleFiles: 1,
           totalVisibleReviewableFiles: 3
         }}
+        selectedPath="reviewed.ts"
       />
     );
 
+    // Each mark opens its file and names it; the open file is marked as current.
+    expect(html).toContain('aria-label="reviewed.ts, Reviewed"');
+    expect(html).toMatch(
+      /<button[^>]*aria-current="true"[^>]*aria-label="reviewed.ts, Reviewed"/
+    );
     expect(html).toContain('aria-label="Collapsed file list"');
     expect(html).toContain('aria-label="Show file list"');
     expect(html).toContain('data-state="pending"');
@@ -218,7 +260,9 @@ describe("file list components", () => {
       />
     );
 
-    expect(html).toContain('aria-label="App.tsx modified changed after review"');
+    expect(html).toContain(
+      'aria-label="App.tsx modified changed after review, in src/renderer"'
+    );
     expect(html).toContain('aria-posinset="2"');
     expect(html).toContain('aria-setsize="5"');
     expect(html).toContain('data-selected="true"');
@@ -228,6 +272,65 @@ describe("file list components", () => {
     expect(html).toContain(">2</span>");
     expect(html).toContain("+7");
     expect(html).toContain("-4");
+    expect(html).toContain('data-change-type="modified"');
+    expect(html).toContain('data-review-state="attention"');
+    expect(html).toContain('data-attention="true"');
+    expect(html.indexOf('data-change-type="modified"')).toBeLessThan(
+      html.indexOf(">App.tsx<")
+    );
+    expect(html.indexOf('data-review-state="attention"')).toBeGreaterThan(
+      html.indexOf("+7")
+    );
+  });
+
+  it("renders root files without a directory line", () => {
+    const html = renderToStaticMarkup(
+      <FileButton
+        commentCount={0}
+        file={reviewFile("README.md")}
+        isSelected={false}
+        onSelect={vi.fn()}
+        position={1}
+        total={1}
+      />
+    );
+
+    expect(html).toContain('aria-label="README.md modified"');
+    expect(html).not.toContain("fileDir");
+  });
+
+  it("keeps the end of long file names visible", () => {
+    const html = renderToStaticMarkup(
+      <FileButton
+        commentCount={0}
+        file={reviewFile("src/schema.generated.ts")}
+        isSelected={false}
+        onSelect={vi.fn()}
+        position={1}
+        total={1}
+      />
+    );
+
+    expect(html).toContain('title="src/schema.generated.ts"');
+    expect(html).toMatch(/>schema\.gene<\/span><span[^>]*>rated\.ts<\/span>/);
+  });
+
+  it("renders neutral stats for files without line changes", () => {
+    const html = renderToStaticMarkup(
+      <FileButton
+        commentCount={0}
+        file={reviewFile("assets/preview.png", { additions: 0, deletions: 0 })}
+        isSelected={false}
+        onSelect={vi.fn()}
+        position={1}
+        total={1}
+      />
+    );
+
+    expect(html).toContain('title="No line changes"');
+    expect(html).not.toContain("+0");
+    expect(html).not.toContain('data-kind="del"');
+    expect(html).toContain('data-kind="none"');
   });
 
   it("renders file actions in the row context menu", () => {

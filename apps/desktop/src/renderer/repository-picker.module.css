@@ -18,25 +18,43 @@
   padding: 7px 12px;
 }
 
-.footer button {
-  display: inline-flex;
+.footerActions {
+  composes: buttonGroup from "./styles/buttons.module.css";
+}
+
+/* Shown after "Scan a folder…": which folder the list is limited to, and whether
+   its scan is still running. */
+.scanStatus {
+  display: flex;
+  min-height: 40px;
   align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
   font-size: 12px;
-  padding: 7px 10px;
+  font-weight: 600;
+  padding: 6px 12px;
 }
 
-.footer button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.scanStatusText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.footer button:disabled {
-  cursor: default;
-  opacity: 0.45;
+.scanSpinner {
+  composes: spin from "./styles/motion.module.css";
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
+/* Qualified so it out-ranks the recipe's max-content width in any bundle order. */
+.footer .footerActions {
+  width: 100%;
 }

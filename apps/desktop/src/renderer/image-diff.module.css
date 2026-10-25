@@ -20,7 +20,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--text-muted);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
 }
 
@@ -36,7 +36,7 @@
   justify-content: center;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   background-color: var(--bg);
   background-image:
     linear-gradient(
@@ -69,10 +69,14 @@
 
 .imageStage img {
   display: block;
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: auto;
   max-height: calc(100vh - 190px);
   object-fit: contain;
+}
+
+.imageStage img[data-pixelated="true"] {
+  image-rendering: pixelated;
 }
 
 .loadingState {
@@ -82,24 +86,18 @@
   justify-content: center;
   gap: 8px;
   color: var(--text-muted);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 12.5px;
 }
 
 .loadingMark {
+  composes: spin from "./styles/motion.module.css";
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   border: 1px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: loading-spin 900ms linear infinite;
-}
-
-@keyframes loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 780px) {
