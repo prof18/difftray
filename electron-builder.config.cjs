@@ -75,10 +75,7 @@ module.exports = {
   electronFuses: { runAsNode: true },
   extraResources: [
     { from: "apps/desktop/resources/bin/difftray", to: "bin/difftray" },
-    {
-      from: "integrations/agents/difftray/skills/difftray",
-      to: "skills/difftray"
-    }
+    { from: "integrations/agents/difftray/skills", to: "skills" }
   ],
   npmRebuild: false,
   mac: {

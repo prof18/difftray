@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { agentSkillNames } from "../shared/agent-skill-names.js";
 
 type MacPackagingConfig = {
   readonly electronFuses: { readonly runAsNode: boolean };
@@ -33,18 +34,20 @@ const packagingConfig =
 const temporaryDirectories: string[] = [];
 
 describe("macOS packaging configuration", () => {
-  it("bundles the direct Difftray skill tree", () => {
+  it("bundles the Difftray skill tree with every command skill", () => {
     expect(packagingConfig.extraResources).toContainEqual({
-      from: "integrations/agents/difftray/skills/difftray",
-      to: "skills/difftray"
+      from: "integrations/agents/difftray/skills",
+      to: "skills"
     });
-    const skill = path.resolve(
+    const skills = path.resolve(
       import.meta.dirname,
-      "../../../../integrations/agents/difftray/skills/difftray"
+      "../../../../integrations/agents/difftray/skills"
     );
     for (const file of ["SKILL.md", "scripts/difftray", "references/commands.md"]) {
-      expect(readFileSync(path.join(skill, file), "utf8")).toBeTruthy();
+      expect(readFileSync(path.join(skills, "difftray", file), "utf8")).toBeTruthy();
     }
+    for (const name of agentSkillNames)
+      expect(readFileSync(path.join(skills, name, "SKILL.md"), "utf8")).toBeTruthy();
   });
 
   it("bundles an executable CLI with an independent CJS build and Node mode enabled", () => {

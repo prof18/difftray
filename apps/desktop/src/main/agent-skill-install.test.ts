@@ -10,12 +10,14 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSkillInstaller } from "./agent-skill-install.js";
+import { agentSkillNames } from "../shared/agent-skill-names.js";
 import type { AgentSkillTarget } from "../shared/agent-setup-types.js";
 
 let root: string;
@@ -32,6 +34,10 @@ beforeEach(() => {
   writeFileSync(path.join(source, "SKILL.md"), "skill");
   writeFileSync(path.join(source, "scripts/difftray"), "#!/bin/sh\n", { mode: 0o755 });
   writeFileSync(path.join(source, "references/commands.md"), "commands");
+  for (const name of agentSkillNames.filter((item) => item !== "difftray")) {
+    mkdirSync(path.join(resourcesPath, "skills", name));
+    writeFileSync(path.join(resourcesPath, "skills", name, "SKILL.md"), name);
+  }
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 const installer = (
@@ -51,6 +57,10 @@ function status(target: AgentSkillTarget, instance = installer()) {
   const result = setup.skills.find((item) => item.target === target);
   if (!result) throw new Error("Missing target");
   return result;
+}
+function unlinkCommandSkills(parent: string): void {
+  for (const name of agentSkillNames.filter((item) => item !== "difftray"))
+    unlinkSync(path.join(parent, name));
 }
 function installedDestination(target: AgentSkillTarget): string {
   const destination = status(target).destination;
@@ -82,6 +92,55 @@ describe("agent skill installation", () => {
       ).toBe("commands");
     }
   });
+  it("links every command skill beside the main skill", () => {
+    installer().install("claude");
+    expect(status("claude").kind).toBe("installed");
+    for (const name of agentSkillNames) {
+      expect(readlinkSync(path.join(home, ".claude/skills", name))).toBe(
+        path.join(resourcesPath, "skills", name)
+      );
+    }
+    expect(agentSkillNames).toEqual([
+      "difftray",
+      "difftray-open",
+      "difftray-read",
+      "difftray-fix",
+      "difftray-review",
+      "difftray-label"
+    ]);
+  });
+  it("offers repair when command skills are missing and adds them without touching the main link", () => {
+    installer().install("codex");
+    const parent = path.join(home, ".agents/skills");
+    const main = lstatSync(path.join(parent, "difftray")).ino;
+    unlinkCommandSkills(parent);
+    expect(status("codex")).toMatchObject({
+      kind: "repairable",
+      reason: expect.stringContaining("missing")
+    });
+    installer().install("codex");
+    expect(status("codex").kind).toBe("installed");
+    expect(lstatSync(path.join(parent, "difftray")).ino).toBe(main);
+    expect(readlinkSync(path.join(parent, "difftray-read"))).toBe(
+      path.join(resourcesPath, "skills/difftray-read")
+    );
+  });
+  it("blocks the whole host and links nothing when one command destination is taken", () => {
+    const parent = path.join(home, ".claude/skills");
+    mkdirSync(parent, { recursive: true });
+    writeFileSync(path.join(parent, "difftray-open"), "keep");
+    installer().install("claude");
+    expect(status("claude")).toMatchObject({
+      kind: "blocked",
+      reason: expect.stringContaining("difftray-open")
+    });
+    expect(readFileSync(path.join(parent, "difftray-open"), "utf8")).toBe("keep");
+    expect(existsSync(path.join(parent, "difftray"))).toBe(false);
+  });
+  it("reports the bundle as incomplete when a command skill is missing", () => {
+    rmSync(path.join(resourcesPath, "skills/difftray-fix/SKILL.md"));
+    expect(status("pi").kind).toBe("unavailable");
+  });
   it("repairs a link after a custom-named app moves, using its installation receipt", () => {
     const first = installer();
     first.install("claude");
@@ -96,6 +155,9 @@ describe("agent skill installation", () => {
     expect(status("claude", moved).kind).toBe("installed");
     expect(readlinkSync(destination)).toBe(
       path.join(movedApp, "Contents/Resources/skills/difftray")
+    );
+    expect(readlinkSync(path.join(path.dirname(destination), "difftray-review"))).toBe(
+      path.join(movedApp, "Contents/Resources/skills/difftray-review")
     );
   });
   it("links a chosen folder and remembers it for status and repair", () => {

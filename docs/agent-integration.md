@@ -4,7 +4,8 @@
 
 Open **Settings → Agents** in a packaged macOS app to install or repair the
 portable skill, check the bundled CLI, or read this guide. The app bundles the
-canonical skill at `Contents/Resources/skills/difftray` and the CLI at
+canonical skill at `Contents/Resources/skills/difftray`, its
+[command skills](#command-skills) beside it, and the CLI at
 `Contents/Resources/bin/difftray`. Choose **Install** for a known agent or use
 the folder chooser for another agent:
 
@@ -16,7 +17,12 @@ the folder chooser for another agent:
 | Other agents | Choose a native skills folder; the app adds `/difftray` |
 
 Install creates an app-owned symlink from the selected destination to the
-bundled skill. The skill folder remains inside the app, so the link receives
+bundled skill, plus one sibling link per command skill (`difftray-open` and the
+others) in the same skills folder. An agent counts as installed only when every
+link is in place; when some command links are missing, for example after an
+update that added a command, the agent shows **Repair**, which adds only the
+missing links. If any of these names is taken by something else, nothing is
+linked for that agent. The skill folder remains inside the app, so the link receives
 skill updates whenever the app is updated at the same path. The host agent may
 need to restart or reload its skills to see those updates. **Repair** updates an
 app-owned link when the app has moved. If the destination already contains an
@@ -38,8 +44,8 @@ the actual agent directories.
 ## Agent skill setup
 
 The repository remains the source for contributors, with one canonical portable
-skill at `integrations/agents/difftray/skills/difftray`. The app bundles only
-that skill folder and the existing CLI; plugin wrappers and marketplace catalogs
+skill at `integrations/agents/difftray/skills/difftray` and its command skills
+beside it. The app bundles only that `skills` folder and the existing CLI; plugin wrappers and marketplace catalogs
 are not needed for this installation flow. Their previous repository-based
 installation instructions are superseded. No host skill installation or live
 agent-session validation is claimed here.
@@ -65,6 +71,26 @@ and [command reference](../integrations/agents/difftray/skills/difftray/referenc
 cover opening the current worktree, reading every feedback page, reviewing exact
 anchors, and submitting authorized single-line, inclusive-range, file, and overall findings. Loading a
 skill alone authorizes no write, code edit, other agent, or chat message.
+
+### Command skills
+
+Five short skills give each common request its own slash command. Each one
+loads the canonical skill from `../difftray/SKILL.md` and narrows the request;
+the CLI path, safety rules and recovery live only in the canonical skill. They
+set `disable-model-invocation: true`, so Claude Code runs them only when typed,
+and their descriptions say the same for agents that ignore that field.
+
+| Command            | Does                                                                     | Writes                  |
+| ------------------ | ------------------------------------------------------------------------ | ----------------------- |
+| `/difftray-open`   | Opens the worktree, keeping its selected diff                            | Nothing                 |
+| `/difftray-read`   | Reads every feedback page and summarizes it                              | Nothing                 |
+| `/difftray-fix`    | Fixes the code for active feedback and reports each item                 | Code only               |
+| `/difftray-review` | Reviews the diff and submits findings in one batch                       | Feedback only           |
+| `/difftray-label`  | Sets the given label, picks one when none is given, or resets on `reset` | The worktree label only |
+
+Typing `/difftray-review` is the user's request to submit, and typing
+`/difftray-fix` is the request to change code; the plain `difftray` skill
+still writes nothing unless asked.
 
 Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 

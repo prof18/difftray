@@ -17,6 +17,7 @@ import type {
   AgentSkillStatus,
   AgentSkillTarget
 } from "../shared/agent-setup-types.js";
+import { agentSkillNames } from "../shared/agent-skill-names.js";
 
 type Receipt = { version: 1; records: Record<string, string[]>; otherDirectory?: string };
 const labels: Record<AgentSkillTarget, string> = {
@@ -26,6 +27,7 @@ const labels: Record<AgentSkillTarget, string> = {
   other: "Other agents"
 };
 const targets = Object.keys(labels) as AgentSkillTarget[];
+type SkillKind = Exclude<AgentSkillStatus["kind"], "unavailable">;
 
 function stat(file: string): Stats | null {
   try {
@@ -43,7 +45,9 @@ export function createAgentSkillInstaller(options: {
   profileOverride: boolean;
   uid: number;
 }) {
-  const source = path.resolve(options.resourcesPath, "skills/difftray");
+  const sourceOf = (name: string): string =>
+    path.resolve(options.resourcesPath, "skills", name);
+  const source = sourceOf("difftray");
   const receiptDirectory = path.join(options.home, ".difftray");
   const receiptPath = path.join(receiptDirectory, "skill-install-receipts.json");
   const errors = new Map<AgentSkillTarget, string>();
@@ -124,7 +128,7 @@ export function createAgentSkillInstaller(options: {
     for (const [destination, sources] of Object.entries(record.records)) {
       if (
         !path.isAbsolute(destination) ||
-        path.basename(destination) !== "difftray" ||
+        !(agentSkillNames as readonly string[]).includes(path.basename(destination)) ||
         !Array.isArray(sources) ||
         sources.length > 2 ||
         !sources.length ||
@@ -132,7 +136,7 @@ export function createAgentSkillInstaller(options: {
           (item: unknown) =>
             typeof item === "string" &&
             path.isAbsolute(item) &&
-            item.endsWith("/Contents/Resources/skills/difftray")
+            item.endsWith(`/Contents/Resources/skills/${path.basename(destination)}`)
         )
       ) {
         throw new Error("Invalid skill installation receipt.");
@@ -159,11 +163,37 @@ export function createAgentSkillInstaller(options: {
   function completeSource(): boolean {
     const launcher = stat(path.join(source, "scripts/difftray"));
     return Boolean(
-      stat(path.join(source, "SKILL.md"))?.isFile() &&
+      agentSkillNames.every((name) =>
+        stat(path.join(sourceOf(name), "SKILL.md"))?.isFile()
+      ) &&
       stat(path.join(source, "references/commands.md"))?.isFile() &&
       launcher?.isFile() &&
       launcher.mode & 0o111
     );
+  }
+  function inspectLink(
+    name: string,
+    destination: string,
+    receipt: Receipt
+  ): { kind: SkillKind; reason: string | null } {
+    const existing = stat(destination);
+    if (!existing) return { kind: "absent", reason: null };
+    if (!existing.isSymbolicLink() || existing.uid !== options.uid)
+      return {
+        kind: "blocked",
+        reason: `Another file or folder already exists at ${destination}.`
+      };
+    const linked = linkedSource(destination);
+    if (linked === sourceOf(name)) return { kind: "installed", reason: null };
+    if (receipt.records[receiptKey(destination)]?.includes(linked))
+      return {
+        kind: "repairable",
+        reason: "The skill link points to a previous app location."
+      };
+    return {
+      kind: "blocked",
+      reason: `Another skill link already exists at ${destination}.`
+    };
   }
   function inspect(
     target: AgentSkillTarget,
@@ -186,19 +216,19 @@ export function createAgentSkillInstaller(options: {
       return result("unavailable", "The bundled skill is missing or incomplete.");
     for (const parent of target === "other" ? (chosen ? [chosen] : []) : parents[target])
       checkDirectory(parent);
-    if (!destination) return result("absent");
-    const existing = stat(destination);
-    if (!existing) return result("absent");
-    if (!existing.isSymbolicLink() || existing.uid !== options.uid)
-      return result(
-        "blocked",
-        `Another file or folder already exists at ${destination}.`
-      );
-    const linked = linkedSource(destination);
-    if (linked === source) return result("installed");
-    if (receipt.records[receiptKey(destination)]?.includes(linked))
-      return result("repairable", "The skill link points to a previous app location.");
-    return result("blocked", `Another skill link already exists at ${destination}.`);
+    if (!chosen || !destination) return result("absent");
+    const links = agentSkillNames.map((name) =>
+      inspectLink(name, path.join(chosen, name), receipt)
+    );
+    const blocked = links.find((link) => link.kind === "blocked");
+    if (blocked) return result("blocked", blocked.reason);
+    if (links.every((link) => link.kind === "installed")) return result("installed");
+    if (links.every((link) => link.kind === "absent")) return result("absent");
+    return result(
+      "repairable",
+      links.find((link) => link.kind === "repairable")?.reason ??
+        "Some Difftray command skills are missing."
+    );
   }
   function getSetup(): AgentSetupInfo {
     if (!options.packaged) return { available: false };
@@ -240,7 +270,8 @@ export function createAgentSkillInstaller(options: {
         chosen &&
         initial.destination
       ) {
-        receipt.records[receiptKey(initial.destination)] = [source];
+        for (const name of agentSkillNames)
+          receipt.records[receiptKey(path.join(chosen, name))] = [sourceOf(name)];
         receipt.otherDirectory = chosen;
         writeReceipt(receipt);
         return getSetup();
@@ -261,27 +292,37 @@ export function createAgentSkillInstaller(options: {
       receipt = readReceipt();
       const current = inspect(target, receipt, chosen);
       if (current.kind !== "absent" && current.kind !== "repairable") return getSetup();
-      const previous =
-        current.kind === "repairable" ? linkedSource(initial.destination) : undefined;
-      // Record both exact sources before replacing our link, so a failed repair remains repairable.
-      receipt.records[receiptKey(initial.destination)] = previous
-        ? [source, previous]
-        : [source];
-      if (target === "other") receipt.otherDirectory = path.dirname(initial.destination);
+      const parent = path.dirname(initial.destination);
+      const pending = agentSkillNames.flatMap((name) => {
+        const destination = path.join(parent, name);
+        const link = inspectLink(name, destination, receipt);
+        if (link.kind === "installed") return [];
+        const previous =
+          link.kind === "repairable" ? linkedSource(destination) : undefined;
+        return [{ name, destination, previous }];
+      });
+      // Record both exact sources before replacing our links, so a failed repair remains repairable.
+      for (const { name, destination, previous } of pending)
+        receipt.records[receiptKey(destination)] = previous
+          ? [sourceOf(name), previous]
+          : [sourceOf(name)];
+      if (target === "other") receipt.otherDirectory = parent;
       writeReceipt(receipt);
-      if (previous) {
-        const value = stat(initial.destination);
-        if (
-          !value?.isSymbolicLink() ||
-          value.uid !== options.uid ||
-          linkedSource(initial.destination) !== previous
-        ) {
-          throw new Error("The skill destination changed during repair. Try again.");
+      for (const { name, destination, previous } of pending) {
+        if (previous) {
+          const value = stat(destination);
+          if (
+            !value?.isSymbolicLink() ||
+            value.uid !== options.uid ||
+            linkedSource(destination) !== previous
+          ) {
+            throw new Error("The skill destination changed during repair. Try again.");
+          }
+          unlinkSync(destination);
         }
-        unlinkSync(initial.destination);
+        // symlink creation fails if another file appeared; never overwrite that file.
+        symlinkSync(sourceOf(name), destination);
       }
-      // symlink creation fails if another file appeared; never overwrite that file.
-      symlinkSync(source, initial.destination);
     } catch (error) {
       errors.set(target, error instanceof Error ? error.message : String(error));
     }

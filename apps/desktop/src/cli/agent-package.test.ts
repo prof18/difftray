@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { agentSkillNames } from "../shared/agent-skill-names.js";
 import { parseAgentResponse } from "../shared/agent-protocol.js";
 import { parseCliArguments } from "./commands.js";
 import { withSubmissionInput } from "./submission-input.js";
@@ -55,6 +56,32 @@ describe("portable agent skill", () => {
       ]
     ];
     for (const argv of examples) expect(() => parseCliArguments(argv)).not.toThrow();
+  });
+
+  it("keeps command skills as typed-only entry points to the main skill", () => {
+    const commands = agentSkillNames.filter((name) => name !== "difftray");
+    expect(commands.length).toBeGreaterThan(0);
+    const read = (name: string) =>
+      readFileSync(path.join(packageRoot, "skills", name, "SKILL.md"), "utf8");
+    for (const name of commands) {
+      const text = read(name);
+      expect(text).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
+      expect(text).toContain("disable-model-invocation: true");
+      expect(text).toContain(`Use only when the user types /${name}`);
+      expect(text).toContain("`../difftray/SKILL.md`");
+      expect(text).not.toContain("scripts/difftray");
+    }
+    for (const name of [
+      "difftray-open",
+      "difftray-read",
+      "difftray-fix",
+      "difftray-label"
+    ])
+      expect(read(name)).toContain("Do not submit feedback");
+    expect(read("difftray-read")).toContain("Do not edit code");
+    expect(read("difftray-review")).toContain(
+      "Typing this command is the user's request to submit"
+    );
   });
 
   it("documents worktree labels as Difftray-only metadata with runnable examples", () => {
