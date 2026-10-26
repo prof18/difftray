@@ -125,6 +125,8 @@ describe("SettingsPanel", () => {
     if (!result) throw new Error(`Missing section ${title}`);
     return result;
   }
+  const SETUP = "Install the skill";
+  const TERMINAL = "Terminal (optional)";
   function buttonNamed(parent: HTMLElement, name: string): HTMLButtonElement {
     const result = [...parent.querySelectorAll<HTMLButtonElement>("button")].find(
       (item) => item.textContent === name
@@ -140,9 +142,9 @@ describe("SettingsPanel", () => {
     return detail;
   }
   it("shows install, repair, installed, and unavailable states with destinations", async () => {
-    const setup = section(await readyAgents(), "Set up an agent");
+    const setup = section(await readyAgents(), SETUP);
     expect(setup.textContent).toContain(
-      "Install links the bundled skill into your agent’s skills directory. Restart the agent after installing or repairing."
+      "Install links the bundled skill into your agent’s skills directory. The agent needs nothing else; restart it after installing or repairing."
     );
     expect(buttonNamed(setup, "Install").getAttribute("aria-label")).toBe(
       "Install Claude Code skill"
@@ -180,7 +182,7 @@ describe("SettingsPanel", () => {
         }
       ]
     });
-    const setup = section(await readyAgents(), "Set up an agent");
+    const setup = section(await readyAgents(), SETUP);
     expect(buttonNamed(setup, "Blocked").disabled).toBe(true);
     expect(buttonNamed(setup, "Unavailable").disabled).toBe(true);
     expect(setup.textContent).toContain("The destination is a regular file.");
@@ -203,7 +205,7 @@ describe("SettingsPanel", () => {
           }
         ]
       });
-      const setup = section(await readyAgents(), "Set up an agent");
+      const setup = section(await readyAgents(), SETUP);
       const chooseFolder = setup.querySelector<HTMLButtonElement>(
         'button[aria-label="Choose folder for Other agents skill"]'
       );
@@ -263,7 +265,7 @@ describe("SettingsPanel", () => {
       };
       vi.mocked(window.difftray.getAgentSetup).mockResolvedValue(initial);
       vi.mocked(window.difftray.installAgentSkill).mockResolvedValue(refreshed);
-      const setup = section(await readyAgents(), "Set up an agent");
+      const setup = section(await readyAgents(), SETUP);
       const button = setup.querySelector<HTMLButtonElement>(
         `button[aria-label="${label}"]`
       );
@@ -285,7 +287,7 @@ describe("SettingsPanel", () => {
         finish = resolve;
       })
     );
-    const setup = section(await readyAgents(), "Set up an agent");
+    const setup = section(await readyAgents(), SETUP);
     act(() => {
       buttonNamed(setup, "Install").click();
     });
@@ -300,7 +302,7 @@ describe("SettingsPanel", () => {
     vi.mocked(window.difftray.installAgentSkill).mockRejectedValueOnce(
       new Error("Permission denied")
     );
-    const setup = section(await readyAgents(), "Set up an agent");
+    const setup = section(await readyAgents(), SETUP);
     await act(async () => {
       buttonNamed(setup, "Install").click();
       await Promise.resolve();
@@ -315,6 +317,52 @@ describe("SettingsPanel", () => {
       await Promise.resolve();
     });
     expect(window.difftray.installAgentSkill).toHaveBeenLastCalledWith("other");
+  });
+  // Installing used to leave "Not checked yet" until a second click on Check.
+  it("checks the connection once a skill install succeeds", async () => {
+    vi.mocked(window.difftray.installAgentSkill).mockResolvedValue({
+      available: true,
+      skills: [
+        {
+          target: "claude",
+          label: "Claude Code",
+          destination: "/skills/claude",
+          kind: "installed",
+          reason: null
+        }
+      ]
+    });
+    const detail = await readyAgents();
+    await act(async () => {
+      buttonNamed(section(detail, SETUP), "Install").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(window.difftray.checkAgentConnection).toHaveBeenCalledOnce();
+    expect(section(detail, "Status").textContent).toContain("Connected");
+  });
+  it("does not check the connection when the install leaves the skill missing", async () => {
+    vi.mocked(window.difftray.installAgentSkill).mockRejectedValueOnce(
+      new Error("Permission denied")
+    );
+    const detail = await readyAgents();
+    await act(async () => {
+      buttonNamed(section(detail, SETUP), "Install").click();
+      await Promise.resolve();
+    });
+    expect(window.difftray.checkAgentConnection).not.toHaveBeenCalled();
+  });
+  // Agents never need the command-line tool, so it sits collapsed, not as a step.
+  it("keeps the command-line tool collapsed as an optional extra", async () => {
+    const terminal = section(await readyAgents(), TERMINAL);
+    const details = terminal.querySelector("details");
+
+    expect(details?.open).toBe(false);
+    expect(details?.querySelector("summary")?.textContent).toContain("Command-line tool");
+    expect(details?.querySelector("summary [data-cli-state]")?.textContent).toBe(
+      "Not installed"
+    );
+    expect(terminal.textContent).toContain("Agents don’t need it.");
   });
   // The section and its only row were both "Status", with nothing shown before the
   // first check; the row now names what it checks and says it has not run yet.
@@ -336,7 +384,7 @@ describe("SettingsPanel", () => {
       pathInstruction: null,
       reason: "Terminal installation is available in packaged Difftray."
     });
-    const terminal = section(await readyAgents(), "Terminal");
+    const terminal = section(await readyAgents(), TERMINAL);
 
     expect(terminal.querySelector('[data-cli-state="unavailable"]')?.textContent).toBe(
       "Packaged builds only"

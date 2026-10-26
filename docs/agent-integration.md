@@ -29,10 +29,15 @@ app-owned link when the app has moved. If the destination already contains an
 unrelated folder, file, or symlink, the app preserves it and does not overwrite
 it. The folder chooser can always be used again to choose another destination.
 
+The page has four sections: **About**, **Install the skill**, **Status** and
+**Terminal (optional)**. The skill is the only thing an agent needs.
+
 **Check** runs that app's bundled `bin/difftray doctor --json` against the current
 profile with a 20-second timeout. It reports **Connected** or the CLI's error
-message. **Full guide** opens this guide. **Terminal** contains the optional
-command-line tool installer.
+message. A successful Install or Repair runs the same check straight away, so the
+Status row shows the result without a second click. **Full guide** opens this
+guide. **Terminal (optional)** is collapsed by default and holds the command-line
+tool installer, which only adds a `difftray` command to the user's own shell.
 
 The app resolves its own location from the installed skill symlink, including
 Alpha and custom-named bundles. If the app moves, use **Repair** to update the

@@ -1154,6 +1154,43 @@
   font-size: 12.5px;
 }
 
+.cliDisclosure > summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-2);
+  cursor: default;
+  font-size: 12.5px;
+  list-style: none;
+  padding: 0 14px;
+}
+
+.cliDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cliDisclosure > summary > span:first-child {
+  flex: 1;
+}
+
+.cliDisclosureChevron {
+  color: var(--text-dim);
+  transition: transform 150ms ease;
+}
+
+.cliDisclosure[open] .cliDisclosureChevron {
+  transform: rotate(90deg);
+}
+
+.cliDisclosure[open] > summary {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.cliDisclosure .agentActions {
+  justify-self: start;
+}
+
 .cliInstallError {
   margin: 0;
   padding: 12px 14px;

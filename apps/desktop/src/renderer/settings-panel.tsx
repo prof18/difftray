@@ -399,12 +399,13 @@ function updateStatusText(phase: UpdatePhase, checkRequested: boolean): string {
 const INTRO =
   "Let coding agents on this Mac open worktrees in Difftray, read your review feedback, and post findings for you to review.";
 const ABOUT_TITLE = "About";
-const SETUP_TITLE = "Set up an agent";
+const SETUP_TITLE = "Install the skill";
 const STATUS_TITLE = "Status";
-const TERMINAL_TITLE = "Terminal";
+const TERMINAL_TITLE = "Terminal (optional)";
 const OTHER_LABEL = "Other agents";
 const INSTALL_NOTE =
-  "Install links the bundled skill into your agent’s skills directory. Restart the agent after installing or repairing.";
+  "Install links the bundled skill into your agent’s skills directory. The agent needs nothing else; restart it after installing or repairing.";
+const TERMINAL_NOTE = "Adds a difftray command to your own shell. Agents don’t need it.";
 const GUIDE_LABEL = "Full guide";
 const CHECK_LABEL = "Check";
 const CHECKING_LABEL = "Checking…";
@@ -458,13 +459,22 @@ function AgentsSettingsPage({
   async function installSkill(target: AgentSkillTarget): Promise<void> {
     setSetupError(null);
     setInstallingTarget(target);
+    let installed = false;
     try {
-      setSetup(await window.difftray.installAgentSkill(target));
+      const result = await window.difftray.installAgentSkill(target);
+      setSetup(result);
+      installed =
+        result.available &&
+        result.skills.some(
+          (skill) => skill.target === target && skill.kind === "installed"
+        );
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
     } finally {
       setInstallingTarget(null);
     }
+    // Show whether the agent can reach Difftray without a second click on Check.
+    if (installed && !checkBusy) await runCheck();
   }
 
   async function runCheck(): Promise<void> {
@@ -647,14 +657,25 @@ function AgentsSettingsPage({
         ) : null}
       </SettingsSection>
       <SettingsSection title={TERMINAL_TITLE}>
-        <div className={styles.settingRow}>
-          <span>Command-line tool</span>
-          {cliStatus ? (
-            <span className={styles.rowValueGroup}>
+        <details className={styles.cliDisclosure}>
+          <summary>
+            <span>Command-line tool</span>
+            {cliStatus ? (
               <span className={styles.rowValue} data-cli-state={cliStatus.kind}>
                 {cliStateLabel(cliStatus.kind)}
               </span>
-              {cliStatus.kind === "absent" || cliStatus.kind === "repairable" ? (
+            ) : null}
+            <ChevronRight
+              className={styles.cliDisclosureChevron}
+              size={16}
+              strokeWidth={1.4}
+              aria-hidden
+            />
+          </summary>
+          <div className={styles.cliInstallDetails}>
+            <p>{TERMINAL_NOTE}</p>
+            {cliStatus?.kind === "absent" || cliStatus?.kind === "repairable" ? (
+              <div className={styles.agentActions}>
                 <button
                   className={styles.secondaryButton}
                   disabled={disabled || cliBusy}
@@ -667,27 +688,25 @@ function AgentsSettingsPage({
                     ? "Repair command-line tool"
                     : "Install command-line tool"}
                 </button>
-              ) : null}
-            </span>
-          ) : null}
-        </div>
-        {cliStatus ? (
-          <div className={styles.cliInstallDetails}>
-            {cliStatus.reason ? <p role="status">{cliStatus.reason}</p> : null}
-            <label>
-              Absolute command path
-              <input
-                aria-label="Absolute command path"
-                readOnly
-                value={
-                  cliStatus.kind === "installed"
-                    ? cliStatus.destination
-                    : cliStatus.invocation
-                }
-                onFocus={(event) => event.currentTarget.select()}
-              />
-            </label>
-            {!cliStatus.onPath ? (
+              </div>
+            ) : null}
+            {cliStatus?.reason ? <p role="status">{cliStatus.reason}</p> : null}
+            {cliStatus ? (
+              <label>
+                Absolute command path
+                <input
+                  aria-label="Absolute command path"
+                  readOnly
+                  value={
+                    cliStatus.kind === "installed"
+                      ? cliStatus.destination
+                      : cliStatus.invocation
+                  }
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </label>
+            ) : null}
+            {cliStatus && !cliStatus.onPath ? (
               <label>
                 Add to terminal PATH if needed
                 <input
@@ -699,12 +718,12 @@ function AgentsSettingsPage({
               </label>
             ) : null}
           </div>
-        ) : null}
-        {cliError ? (
-          <p className={styles.cliInstallError} role="alert">
-            {cliError}
-          </p>
-        ) : null}
+          {cliError ? (
+            <p className={styles.cliInstallError} role="alert">
+              {cliError}
+            </p>
+          ) : null}
+        </details>
       </SettingsSection>
     </>
   );

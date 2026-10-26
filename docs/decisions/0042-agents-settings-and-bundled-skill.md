@@ -42,8 +42,11 @@ installation. An isolated profile override cannot install into real agent
 directories.
 
 Keep the Check action on the bundled CLI's `doctor --json`, using the current
-profile and a 20-second timeout. Keep the optional terminal CLI installer in
-Agents settings. The app does not run agent commands or modify unrelated host
+profile and a 20-second timeout, and run it automatically after a successful
+Install or Repair. Name the install section "Install the skill": it installs a
+skill, not the agent. Keep the optional terminal CLI installer in Agents settings
+under a collapsed "Terminal (optional)" section that says agents don't need it,
+because showing it as an equal step led users to install it as a requirement. The app does not run agent commands or modify unrelated host
 configuration.
 
 ## Consequences
