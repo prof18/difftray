@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.0.17 - 2026-10-26
+
+### Improved
+
+- Make agent setup a single step: the Agents settings section is now Install the
+  skill, a successful install checks the agent connection straight away, and the
+  optional terminal command-line tool sits in a collapsed Terminal (optional)
+  section.
+
 ## 0.0.16 - 2026-10-25
 
 ### Added
