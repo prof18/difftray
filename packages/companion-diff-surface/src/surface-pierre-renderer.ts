@@ -19,15 +19,20 @@ export type SurfacePierreRenderModel =
   | {
       readonly fileDiff: FileDiffMetadata;
       readonly kind: "diff";
+      readonly whitespaceIgnored?: true;
     }
   | {
       readonly detail: string;
+      readonly hint?: string;
       readonly kind: "fallback";
       readonly title: string;
+      readonly whitespaceOnly?: true;
     };
 
 export type SurfacePierreRenderModelInput = {
   readonly diffHash: string;
+  /** Display only: the review hash stays based on the canonical patch. */
+  readonly ignoreWhitespace?: boolean;
   readonly newText?: string;
   readonly oldText?: string;
   readonly patch: string;
@@ -55,6 +60,9 @@ export type SurfaceAnnotationMetadata =
 export type SurfaceLineAnnotation = DiffLineAnnotation<SurfaceAnnotationMetadata>;
 
 const fallbackTitle = "No textual diff";
+const whitespaceOnlyTitle = "Only whitespace changed";
+const whitespaceOnlyHint = "Turn off ignoring whitespace to see these changes.";
+const ignoreWhitespaceCacheSuffix = ":ignore-whitespace";
 const maxLineDiffLength = 20_000;
 const maxTokenizedLineLength = 4_000;
 
@@ -174,7 +182,7 @@ export function createSurfacePierreRenderModel(
 
     if (fileDiff) {
       return {
-        fileDiff: withDifftrayMetadata(fileDiff, input),
+        fileDiff: withDifftrayMetadata(fileDiff, input, input.diffHash),
         kind: "diff"
       };
     }
@@ -321,16 +329,40 @@ function createFullSnapshotModel(
     name: input.path
   });
 
+  const ignoreWhitespace = input.ignoreWhitespace === true;
   try {
+    const fileDiff = parseDiffFromFile(
+      oldFile,
+      newFile,
+      ignoreWhitespace ? { ignoreWhitespace: true } : undefined,
+      true
+    );
+    if (
+      ignoreWhitespace &&
+      fileDiff.hunks.length === 0 &&
+      (input.oldText ?? "") !== (input.newText ?? "")
+    ) {
+      return {
+        detail: "",
+        hint: whitespaceOnlyHint,
+        kind: "fallback",
+        title: whitespaceOnlyTitle,
+        whitespaceOnly: true
+      };
+    }
     return {
       fileDiff: withDifftrayMetadata(
-        parseDiffFromFile(oldFile, newFile, undefined, true),
+        fileDiff,
         {
           ...input,
           ...(previousPath ? { previousPath } : {})
-        }
+        },
+        ignoreWhitespace
+          ? `${input.diffHash}${ignoreWhitespaceCacheSuffix}`
+          : input.diffHash
       ),
-      kind: "diff"
+      kind: "diff",
+      ...(ignoreWhitespace ? { whitespaceIgnored: true as const } : {})
     };
   } catch {
     return undefined;
@@ -350,11 +382,12 @@ function fileContents(input: FileContents): FileContents {
 
 function withDifftrayMetadata(
   fileDiff: FileDiffMetadata,
-  input: SurfacePierreRenderModelInput
+  input: SurfacePierreRenderModelInput,
+  cacheKey: string
 ): FileDiffMetadata {
   return {
     ...fileDiff,
-    cacheKey: input.diffHash,
+    cacheKey,
     name: input.path,
     ...(input.previousPath ? { prevName: input.previousPath } : {}),
     type: fileDiff.isPartial ? fileDiff.type : changeTypeForStatus(input.status, fileDiff)
@@ -397,4 +430,58 @@ function fallbackModel(detail: string): SurfacePierreRenderModel {
     kind: "fallback",
     title: fallbackTitle
   };
+}
+
+export type ReviewLineAnchor = {
+  readonly lineNumber: number;
+  readonly side: "additions" | "deletions";
+};
+
+export type WhitespaceNotice = "comments" | "partial";
+
+export type WhitespaceDisplay = {
+  readonly model: SurfacePierreRenderModel;
+  readonly notice?: WhitespaceNotice;
+};
+
+/**
+ * What to draw when the viewer ignores whitespace. Comments must stay visible, so a
+ * comment on a line that only changed whitespace brings the canonical diff back. A
+ * comment the canonical diff would not show either (an unchanged line in an expanded
+ * gap) keeps the ignored diff.
+ */
+export function resolveWhitespaceDisplay({
+  anchors,
+  canonical,
+  ignored
+}: {
+  readonly anchors: readonly ReviewLineAnchor[];
+  readonly canonical: () => SurfacePierreRenderModel;
+  readonly ignored: SurfacePierreRenderModel;
+}): WhitespaceDisplay {
+  if (ignored.kind === "diff" && ignored.whitespaceIgnored !== true) {
+    return { model: ignored, notice: "partial" };
+  }
+  if (ignored.kind === "fallback" && ignored.whitespaceOnly !== true) {
+    return { model: ignored };
+  }
+  const hidden = anchors.filter(
+    (anchor) => ignored.kind === "fallback" || !anchorInHunks(ignored.fileDiff, anchor)
+  );
+  if (hidden.length === 0) {
+    return { model: ignored };
+  }
+  const canonicalModel = canonical();
+  return canonicalModel.kind === "diff" &&
+    hidden.some((anchor) => anchorInHunks(canonicalModel.fileDiff, anchor))
+    ? { model: canonicalModel, notice: "comments" }
+    : { model: ignored };
+}
+
+function anchorInHunks(fileDiff: FileDiffMetadata, anchor: ReviewLineAnchor): boolean {
+  return fileDiff.hunks.some((hunk) => {
+    const start = anchor.side === "additions" ? hunk.additionStart : hunk.deletionStart;
+    const count = anchor.side === "additions" ? hunk.additionCount : hunk.deletionCount;
+    return count > 0 && anchor.lineNumber >= start && anchor.lineNumber < start + count;
+  });
 }

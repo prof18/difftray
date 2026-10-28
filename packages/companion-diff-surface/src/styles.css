@@ -270,6 +270,19 @@ body {
   word-break: break-word;
 }
 
+.diff-surface__fallback-hint {
+  margin: 0;
+}
+
+.diff-surface__notice {
+  border-bottom: 1px solid color-mix(in srgb, var(--diff-surface-muted), transparent 70%);
+  color: var(--diff-surface-muted);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  margin: 0;
+  padding: 8px 16px;
+}
+
 .diff-surface__annotation {
   background: color-mix(in srgb, var(--diff-surface-accent), transparent 88%);
   border: 1px solid color-mix(in srgb, var(--diff-surface-accent), transparent 60%);

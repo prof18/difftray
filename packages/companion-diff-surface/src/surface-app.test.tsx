@@ -138,7 +138,90 @@ describe("diff surface app", () => {
     expect(html).not.toContain("diff-surface__header");
     expect(html).toContain('data-renderer="pierre"');
   });
+
+  it("shows the whitespace-only empty state when ignoring whitespace", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp state={textState({ ignoreWhitespace: true })} />
+    );
+
+    expect(html).toContain(whitespaceOnlyTitle);
+    expect(html).toContain(whitespaceOnlyHint);
+    expect(html).not.toContain("<pre>");
+  });
+
+  it("shows whitespace with a note when a comment sits on a whitespace-only line", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={textState({ comments: [comment], ignoreWhitespace: true })}
+      />
+    );
+
+    expect(html).toContain(commentsNotice);
+    expect(html).not.toContain(whitespaceOnlyTitle);
+  });
+
+  it("notes that a file without snapshots keeps its whitespace", () => {
+    const {
+      newText: _newText,
+      oldText: _oldText,
+      ...withoutTexts
+    } = textState({
+      ignoreWhitespace: true
+    });
+    const html = renderToStaticMarkup(<DiffSurfaceApp state={withoutTexts} />);
+
+    expect(html).toContain(partialNotice);
+  });
+
+  it("shows no whitespace notes when the setting is off", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp state={textState({ ignoreWhitespace: false })} />
+    );
+
+    expect(html).not.toContain(whitespaceOnlyTitle);
+    expect(html).not.toContain(commentsNotice);
+    expect(html).not.toContain(partialNotice);
+  });
 });
+
+const whitespaceOnlyTitle = "Only whitespace changed";
+const whitespaceOnlyHint = "Turn off ignoring whitespace to see these changes.";
+const commentsNotice =
+  "Whitespace is shown for this file because it has comments on lines that only changed whitespace.";
+const partialNotice =
+  "Whitespace is shown for this file because it is too large to compare with whitespace ignored.";
+
+const comment = {
+  body: "why?",
+  createdAt: "2026-10-27T00:00:00.000Z",
+  createdBy: { kind: "human" as const },
+  diffHash: "hash-text",
+  id: "c1",
+  lastEditedBy: { kind: "human" as const },
+  lineEnd: 2,
+  lineStart: 2,
+  path: "src/a.ts",
+  side: "additions" as const,
+  updatedAt: "2026-10-27T00:00:00.000Z"
+};
+
+function textState(overrides: Partial<DiffSurfaceAppState>): DiffSurfaceAppState {
+  return state({
+    diffHash: "hash-text",
+    newText: "if (x) {\n    foo();\n}\n",
+    oldText: "if (x) {\nfoo();\n}\n",
+    patch: [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -2 +2 @@",
+      "-foo();",
+      "+    foo();"
+    ].join("\n"),
+    path: "src/a.ts",
+    ...overrides
+  });
+}
 
 function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppState {
   return {
@@ -146,6 +229,7 @@ function state(overrides: Partial<DiffSurfaceAppState> = {}): DiffSurfaceAppStat
     diffHash: "hash-1",
     diffMode: "unified",
     draft: null,
+    ignoreWhitespace: false,
     patch:
       "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
     path: "README.md",

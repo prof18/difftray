@@ -508,6 +508,30 @@ async function checkTouchComments(browser, url) {
   await touch(gutters.first(), 650);
   await page.getByRole("button", { name: "Cancel", exact: true }).tap();
   assert((await selections()).length === 0, "Cancel must emit nothing");
+  await clear();
+  await touch(gutters.first(), 650);
+  await page.getByRole("button", { name: "Comment", exact: true }).waitFor();
+  await page.getByRole("button", { name: /Ignore whitespace/ }).click();
+  await page.locator('.diff-surface[data-ignore-whitespace="true"]').waitFor({
+    timeout: 10_000
+  });
+  // The selection resets in an effect after the commit that sets the attribute.
+  const selectionCleared = await page
+    .getByRole("button", { name: "Comment", exact: true })
+    .waitFor({ state: "detached", timeout: 2_000 })
+    .then(
+      () => true,
+      () => false
+    );
+  assert(selectionCleared, "Toggling ignore whitespace must clear the pending selection");
+  assert((await selections()).length === 0, "Toggling must not emit a selection");
+  await page.getByRole("button", { name: /Show whitespace/ }).click();
+  await page.locator('.diff-surface[data-ignore-whitespace="false"]').waitFor({
+    timeout: 10_000
+  });
+  // Toggling back remounts the diff; let its rows settle before touching them.
+  await page.waitForTimeout(250);
+  await gutters.first().waitFor();
   await touch(gutters.first(), 650);
   await page.locator('[data-comment-id="harness-comment-1"]').tap();
   assert(

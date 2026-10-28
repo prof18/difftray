@@ -4,6 +4,7 @@ export {
   type DiffSurfaceMessage,
   type DiffSurfaceDraftRange,
   type DiffSurfaceHostMessage,
+  type DiffSurfaceIgnoreWhitespace,
   type DiffSurfaceLineSnippet,
   type DiffSurfaceMode,
   type DiffSurfaceSide,

@@ -85,6 +85,16 @@ export function createDiffSurfaceHarnessActions(): readonly DiffSurfaceHarnessAc
       }
     },
     {
+      detail: "Compare lines without leading and trailing spaces.",
+      label: "Ignore whitespace",
+      message: { ignoreWhitespace: true, kind: "set_ignore_whitespace" }
+    },
+    {
+      detail: "Compare lines exactly again.",
+      label: "Show whitespace",
+      message: { ignoreWhitespace: false, kind: "set_ignore_whitespace" }
+    },
+    {
       detail: "Highlight a draft review range on the additions side.",
       label: "Set draft",
       message: {

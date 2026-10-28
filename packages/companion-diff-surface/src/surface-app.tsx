@@ -19,8 +19,11 @@ import {
 import {
   createSurfaceFileDiffOptions,
   createSurfacePierreRenderModel,
+  resolveWhitespaceDisplay,
   surfaceAnnotationLocation,
-  surfaceCommentAnnotations
+  surfaceCommentAnnotations,
+  type SurfacePierreRenderModel,
+  type WhitespaceNotice
 } from "./surface-pierre-renderer.js";
 import { createLineRangeSelectedMessage } from "./surface-outbound.js";
 import { createPreviewSnapshot } from "./surface-preview-snapshot.js";
@@ -41,6 +44,7 @@ export type DiffSurfaceAppState = {
   readonly diffHash: string;
   readonly diffMode: DiffSurfaceMode;
   readonly draft: DiffSurfaceDraftRange | null;
+  readonly ignoreWhitespace: boolean;
   readonly newText?: string;
   readonly oldText?: string;
   readonly patch: string;
@@ -50,6 +54,13 @@ export type DiffSurfaceAppState = {
   readonly status: "added" | "deleted" | "mode_changed" | "modified" | "renamed";
   readonly theme: DiffSurfaceThemeTokens;
   readonly wrapLines: boolean;
+};
+
+const whitespaceNoticeText: Record<WhitespaceNotice, string> = {
+  comments:
+    "Whitespace is shown for this file because it has comments on lines that only changed whitespace.",
+  partial:
+    "Whitespace is shown for this file because it is too large to compare with whitespace ignored."
 };
 
 export function DiffSurfaceApp({
@@ -81,19 +92,6 @@ export function DiffSurfaceApp({
     },
     [virtualizer]
   );
-  const model = useMemo(
-    () =>
-      createSurfacePierreRenderModel({
-        diffHash: state.diffHash,
-        ...(state.newText === undefined ? {} : { newText: state.newText }),
-        ...(state.oldText === undefined ? {} : { oldText: state.oldText }),
-        patch: state.patch,
-        path: state.path,
-        status: state.status
-      }),
-    [state.diffHash, state.newText, state.oldText, state.patch, state.path, state.status]
-  );
-  const selection = useSurfaceSelection(surfaceNodeRef, state, model, onSurfaceMessage);
   const annotations = useMemo(
     () =>
       surfaceCommentAnnotations({
@@ -104,6 +102,60 @@ export function DiffSurfaceApp({
       }),
     [state.comments, state.diffHash, state.draft, state.path]
   );
+  const parsedModel = useMemo(
+    () =>
+      createSurfacePierreRenderModel({
+        diffHash: state.diffHash,
+        ignoreWhitespace: state.ignoreWhitespace,
+        ...(state.newText === undefined ? {} : { newText: state.newText }),
+        ...(state.oldText === undefined ? {} : { oldText: state.oldText }),
+        patch: state.patch,
+        path: state.path,
+        status: state.status
+      }),
+    [
+      state.diffHash,
+      state.ignoreWhitespace,
+      state.newText,
+      state.oldText,
+      state.patch,
+      state.path,
+      state.status
+    ]
+  );
+  // Parsed at most once per diff, so a comment change does not reparse the file.
+  const canonicalModel = useMemo(() => {
+    let canonical: SurfacePierreRenderModel | undefined;
+    return () =>
+      (canonical ??= createSurfacePierreRenderModel({
+        diffHash: state.diffHash,
+        ...(state.newText === undefined ? {} : { newText: state.newText }),
+        ...(state.oldText === undefined ? {} : { oldText: state.oldText }),
+        patch: state.patch,
+        path: state.path,
+        status: state.status
+      }));
+  }, [
+    state.diffHash,
+    state.newText,
+    state.oldText,
+    state.patch,
+    state.path,
+    state.status
+  ]);
+  const whitespaceDisplay = useMemo(
+    () =>
+      state.ignoreWhitespace
+        ? resolveWhitespaceDisplay({
+            anchors: annotations,
+            canonical: canonicalModel,
+            ignored: parsedModel
+          })
+        : { model: parsedModel },
+    [annotations, canonicalModel, parsedModel, state.ignoreWhitespace]
+  );
+  const model = whitespaceDisplay.model;
+  const selection = useSurfaceSelection(surfaceNodeRef, state, model, onSurfaceMessage);
   const scrollTo = state.scrollTo;
   const options = useMemo(
     () =>
@@ -166,6 +218,7 @@ export function DiffSurfaceApp({
         className="diff-surface"
         data-bridge-version={DIFF_SURFACE_BRIDGE_VERSION}
         data-diff-mode={state.diffMode}
+        data-ignore-whitespace={String(state.ignoreWhitespace)}
         data-wrap-lines={String(state.wrapLines)}
         ref={setSurfaceRef}
         style={selection.barHeight ? { paddingBottom: selection.barHeight } : undefined}
@@ -175,10 +228,18 @@ export function DiffSurfaceApp({
             <div className="diff-surface__path">{state.path}</div>
           </header>
         ) : null}
+        {whitespaceDisplay.notice ? (
+          <p className="diff-surface__notice" role="status">
+            {whitespaceNoticeText[whitespaceDisplay.notice]}
+          </p>
+        ) : null}
         {model.kind === "fallback" ? (
           <section className="diff-surface__fallback" role="status">
             <strong>{model.title}</strong>
-            <pre>{model.detail}</pre>
+            {model.detail.length > 0 ? <pre>{model.detail}</pre> : null}
+            {model.hint ? (
+              <p className="diff-surface__fallback-hint">{model.hint}</p>
+            ) : null}
           </section>
         ) : (
           <VirtualizerContext.Provider value={virtualizer}>
@@ -511,7 +572,14 @@ function useSurfaceSelection(
       document.removeEventListener("visibilitychange", hidden);
       window.removeEventListener("blur", reset);
     };
-  }, [controller, state.path, state.diffHash, state.diffMode, surfaceRef]);
+  }, [
+    controller,
+    state.path,
+    state.diffHash,
+    state.diffMode,
+    state.ignoreWhitespace,
+    surfaceRef
+  ]);
   useEffect(() => {
     if (state.draft) controller.reset();
   }, [controller, state.draft]);

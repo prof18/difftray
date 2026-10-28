@@ -18,6 +18,8 @@ describe("diff surface browser harness fixtures", () => {
       "set_comments",
       "set_diff_mode",
       "set_draft",
+      "set_ignore_whitespace",
+      "set_ignore_whitespace",
       "show_file",
       "show_file",
       "show_file"

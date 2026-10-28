@@ -47,6 +47,38 @@ describe("diff surface host messages", () => {
     });
   });
 
+  it("accepts ignore whitespace updates", () => {
+    expect(
+      parseHostMessage({ ignoreWhitespace: true, kind: "set_ignore_whitespace" })
+    ).toEqual({ ignoreWhitespace: true, kind: "set_ignore_whitespace" });
+    expect(
+      parseHostMessage({ ignoreWhitespace: "yes", kind: "set_ignore_whitespace" })
+    ).toBeNull();
+    expect(
+      parseHostMessage({
+        extra: 1,
+        ignoreWhitespace: true,
+        kind: "set_ignore_whitespace"
+      })
+    ).toBeNull();
+  });
+
+  it("accepts an optional ignoreWhitespace on init", () => {
+    const init = {
+      diffMode: "unified",
+      kind: "init",
+      showFileHeader: true,
+      theme: themeTokens(),
+      wrapLines: true
+    } as const;
+    expect(parseHostMessage({ ...init, ignoreWhitespace: true })).toEqual({
+      ...init,
+      ignoreWhitespace: true
+    });
+    expect(parseHostMessage(init)).not.toHaveProperty("ignoreWhitespace");
+    expect(parseHostMessage({ ...init, ignoreWhitespace: 1 })).toBeNull();
+  });
+
   it("rejects invalid draft ranges", () => {
     expect(
       parseHostMessage({

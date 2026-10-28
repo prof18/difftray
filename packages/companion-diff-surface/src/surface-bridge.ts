@@ -5,6 +5,7 @@ export const DIFF_SURFACE_BRIDGE_VERSION = 1;
 export type DiffSurfaceMode = "split" | "unified";
 export type DiffSurfaceSide = "additions" | "deletions";
 export type DiffSurfaceWrapLines = boolean;
+export type DiffSurfaceIgnoreWhitespace = boolean;
 
 export type DiffSurfaceThemeTokens = {
   readonly accent: string;
@@ -38,6 +39,7 @@ export type DiffSurfaceHostMessage =
   | ({ readonly kind: "show_preview" } & DiffSurfacePreview)
   | {
       readonly diffMode: DiffSurfaceMode;
+      readonly ignoreWhitespace?: DiffSurfaceIgnoreWhitespace;
       readonly kind: "init";
       readonly showFileHeader: boolean;
       readonly theme: DiffSurfaceThemeTokens;
@@ -65,6 +67,10 @@ export type DiffSurfaceHostMessage =
   | {
       readonly kind: "set_wrap_lines";
       readonly wrapLines: DiffSurfaceWrapLines;
+    }
+  | {
+      readonly ignoreWhitespace: DiffSurfaceIgnoreWhitespace;
+      readonly kind: "set_ignore_whitespace";
     }
   | {
       readonly draft: DiffSurfaceDraftRange | null;
@@ -144,6 +150,8 @@ export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null 
       return parseSetDiffModeMessage(input);
     case "set_wrap_lines":
       return parseSetWrapLinesMessage(input);
+    case "set_ignore_whitespace":
+      return parseSetIgnoreWhitespaceMessage(input);
     case "set_draft":
       return parseSetDraftMessage(input);
     default:
@@ -152,7 +160,16 @@ export function parseHostMessage(input: unknown): DiffSurfaceHostMessage | null 
 }
 
 function parseInitMessage(input: Record<string, unknown>): DiffSurfaceHostMessage | null {
-  if (!hasOnlyKeys(input, ["diffMode", "kind", "showFileHeader", "theme", "wrapLines"])) {
+  if (
+    !hasOnlyKeys(input, [
+      "diffMode",
+      "ignoreWhitespace",
+      "kind",
+      "showFileHeader",
+      "theme",
+      "wrapLines"
+    ])
+  ) {
     return null;
   }
 
@@ -160,6 +177,8 @@ function parseInitMessage(input: Record<string, unknown>): DiffSurfaceHostMessag
 
   if (
     !isDiffMode(input.diffMode) ||
+    (input.ignoreWhitespace !== undefined &&
+      typeof input.ignoreWhitespace !== "boolean") ||
     !theme ||
     typeof input.showFileHeader !== "boolean" ||
     typeof input.wrapLines !== "boolean"
@@ -169,6 +188,9 @@ function parseInitMessage(input: Record<string, unknown>): DiffSurfaceHostMessag
 
   return {
     diffMode: input.diffMode,
+    ...(input.ignoreWhitespace === undefined
+      ? {}
+      : { ignoreWhitespace: input.ignoreWhitespace }),
     kind: "init",
     showFileHeader: input.showFileHeader,
     theme,
@@ -260,6 +282,22 @@ function parseSetWrapLinesMessage(
   return {
     kind: "set_wrap_lines",
     wrapLines: input.wrapLines
+  };
+}
+
+function parseSetIgnoreWhitespaceMessage(
+  input: Record<string, unknown>
+): DiffSurfaceHostMessage | null {
+  if (
+    !hasOnlyKeys(input, ["ignoreWhitespace", "kind"]) ||
+    typeof input.ignoreWhitespace !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    ignoreWhitespace: input.ignoreWhitespace,
+    kind: "set_ignore_whitespace"
   };
 }
 

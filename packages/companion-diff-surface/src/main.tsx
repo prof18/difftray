@@ -38,6 +38,7 @@ let state: DiffSurfaceAppState = {
   diffHash: "fixture",
   diffMode: "unified",
   draft: null,
+  ignoreWhitespace: false,
   patch: "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-Hello\n+Hello mobile",
   path: "README.md",
   showFileHeader: true,
@@ -115,6 +116,7 @@ window.__difftrayReceive = (rawMessage) => {
       state = {
         ...state,
         diffMode: message.diffMode,
+        ignoreWhitespace: message.ignoreWhitespace ?? false,
         showFileHeader: message.showFileHeader,
         theme: message.theme,
         wrapLines: message.wrapLines
@@ -151,6 +153,9 @@ window.__difftrayReceive = (rawMessage) => {
       break;
     case "set_wrap_lines":
       state = { ...state, wrapLines: message.wrapLines };
+      break;
+    case "set_ignore_whitespace":
+      state = { ...state, ignoreWhitespace: message.ignoreWhitespace };
       break;
     case "set_draft":
       state = { ...state, draft: message.draft };
