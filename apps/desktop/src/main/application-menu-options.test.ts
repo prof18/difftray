@@ -91,7 +91,18 @@ describe("viewMenuItemOptions", () => {
       "separator",
       "Use Split Diff",
       "Use Unified Diff",
-      "Toggle Wrap Long Lines"
+      "Toggle Wrap Long Lines",
+      "Toggle Ignore Whitespace"
     ]);
+  });
+
+  it("sends the ignore whitespace command without a shortcut", () => {
+    const onCommand = vi.fn();
+    const item = reviewViewMenuItemOptions(onCommand).at(-1);
+
+    expect(item?.label).toBe("Toggle Ignore Whitespace");
+    expect(item?.accelerator).toBeUndefined();
+    item?.click?.({} as never, undefined, {} as never);
+    expect(onCommand).toHaveBeenCalledWith("view-toggle-ignore-whitespace");
   });
 });

@@ -9,6 +9,8 @@ import type { FileDiffStatus } from "@difftray/core";
 export type CreateDiffsRenderModelInput = {
   readonly diffHash: string;
   readonly filePath: string;
+  /** Display only. Agent services never set it, so they keep the canonical diff. */
+  readonly ignoreWhitespace?: boolean;
   readonly newText?: string;
   readonly oldText?: string;
   readonly patch: string;
@@ -20,14 +22,20 @@ export type DiffsRenderModel =
   | {
       readonly fileDiff: FileDiffMetadata;
       readonly kind: "diff";
+      readonly whitespaceIgnored?: true;
     }
   | {
       readonly detail: string;
+      readonly hint?: string;
       readonly kind: "fallback";
       readonly title: string;
+      readonly whitespaceOnly?: true;
     };
 
 const fallbackTitle = "No textual diff";
+const whitespaceOnlyTitle = "Only whitespace changed";
+const whitespaceOnlyHint = "Turn off ignoring whitespace to see these changes.";
+const ignoreWhitespaceCacheSuffix = ":ignore-whitespace";
 
 export function createDiffsRenderModel(
   input: CreateDiffsRenderModelInput
@@ -51,7 +59,7 @@ export function createDiffsRenderModel(
 
     if (fileDiff) {
       return {
-        fileDiff: withDifftrayMetadata(fileDiff, input),
+        fileDiff: withDifftrayMetadata(fileDiff, input, input.diffHash),
         kind: "diff"
       };
     }
@@ -80,13 +88,37 @@ function createFullSnapshotModel(
     name: input.filePath
   });
 
+  const ignoreWhitespace = input.ignoreWhitespace === true;
   try {
+    const fileDiff = parseDiffFromFile(
+      oldFile,
+      newFile,
+      ignoreWhitespace ? { ignoreWhitespace: true } : undefined,
+      true
+    );
+    if (
+      ignoreWhitespace &&
+      fileDiff.hunks.length === 0 &&
+      (input.oldText ?? "") !== (input.newText ?? "")
+    ) {
+      return {
+        detail: "",
+        hint: whitespaceOnlyHint,
+        kind: "fallback",
+        title: whitespaceOnlyTitle,
+        whitespaceOnly: true
+      };
+    }
     return {
       fileDiff: withDifftrayMetadata(
-        parseDiffFromFile(oldFile, newFile, undefined, true),
-        input
+        fileDiff,
+        input,
+        ignoreWhitespace
+          ? `${input.diffHash}${ignoreWhitespaceCacheSuffix}`
+          : input.diffHash
       ),
-      kind: "diff"
+      kind: "diff",
+      ...(ignoreWhitespace ? { whitespaceIgnored: true as const } : {})
     };
   } catch {
     return undefined;
@@ -106,11 +138,12 @@ function fileContents(input: FileContents): FileContents {
 
 function withDifftrayMetadata(
   fileDiff: FileDiffMetadata,
-  input: CreateDiffsRenderModelInput
+  input: CreateDiffsRenderModelInput,
+  cacheKey: string
 ): FileDiffMetadata {
   return {
     ...fileDiff,
-    cacheKey: input.diffHash,
+    cacheKey,
     name: input.filePath,
     ...(input.previousPath ? { prevName: input.previousPath } : {}),
     type: changeTypeForStatus(input.status, fileDiff)
@@ -207,4 +240,58 @@ function mergeLineRanges(ranges: ReviewLineRange[]): ReviewLineRange[] {
     }
   }
   return merged;
+}
+
+export type ReviewLineAnchor = {
+  readonly lineNumber: number;
+  readonly side: "additions" | "deletions";
+};
+
+export type WhitespaceNotice = "comments" | "partial";
+
+export type WhitespaceDisplay = {
+  readonly model: DiffsRenderModel;
+  readonly notice?: WhitespaceNotice;
+};
+
+/**
+ * What to draw when the viewer ignores whitespace. Comments must stay visible, so a
+ * comment on a line that only changed whitespace brings the canonical diff back. A
+ * comment the canonical diff would not show either (an unchanged line in an expanded
+ * gap) keeps the ignored diff.
+ */
+export function resolveWhitespaceDisplay({
+  anchors,
+  canonical,
+  ignored
+}: {
+  readonly anchors: readonly ReviewLineAnchor[];
+  readonly canonical: () => DiffsRenderModel;
+  readonly ignored: DiffsRenderModel;
+}): WhitespaceDisplay {
+  if (ignored.kind === "diff" && ignored.whitespaceIgnored !== true) {
+    return { model: ignored, notice: "partial" };
+  }
+  if (ignored.kind === "fallback" && ignored.whitespaceOnly !== true) {
+    return { model: ignored };
+  }
+  const hidden = anchors.filter(
+    (anchor) => ignored.kind === "fallback" || !anchorInHunks(ignored.fileDiff, anchor)
+  );
+  if (hidden.length === 0) {
+    return { model: ignored };
+  }
+  const canonicalModel = canonical();
+  return canonicalModel.kind === "diff" &&
+    hidden.some((anchor) => anchorInHunks(canonicalModel.fileDiff, anchor))
+    ? { model: canonicalModel, notice: "comments" }
+    : { model: ignored };
+}
+
+function anchorInHunks(fileDiff: FileDiffMetadata, anchor: ReviewLineAnchor): boolean {
+  return fileDiff.hunks.some((hunk) => {
+    const start = anchor.side === "additions" ? hunk.additionStart : hunk.deletionStart;
+    const count = anchor.side === "additions" ? hunk.additionCount : hunk.deletionCount;
+    return count > 0 && anchor.lineNumber >= start && anchor.lineNumber < start + count;
+  });
 }

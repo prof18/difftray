@@ -84,6 +84,13 @@ Deleted, added, untracked, renamed, binary, symlink, submodule-pointer and
 mode-only changes each have their own presentation. Static PNG, JPEG and WebP
 changes show bounded, lazy image previews; other binaries show a summary.
 
+"Ignore leading/trailing whitespace" (Settings → Review, View → Toggle Ignore
+Whitespace) draws diffs with lines compared after trimming leading and trailing
+whitespace. It only changes what is shown: review state and agent reads use the
+canonical diff. A whitespace-only file shows "Only whitespace changed"; a file without
+full snapshots, or with comments on whitespace-only lines, shows its canonical diff
+with a note. See [Decision 0045](decisions/0045-ignore-whitespace-display.md).
+
 A file whose patch or old/new text exceeds 2 MB (`maxPatchBytesPerFile` in
 `packages/git/src/git-command.ts`, `maxTextSnapshotBytes` in
 `packages/git/src/git-diff-content.ts`) shows a summary instead of the full diff.

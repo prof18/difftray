@@ -17,6 +17,7 @@ export type ReadyDiffParseState = {
 export type CreateReadyDiffParseStateInput = {
   readonly diffHash: string;
   readonly filePath: string;
+  readonly ignoreWhitespace: boolean;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
   readonly parseKey: string;
@@ -28,6 +29,7 @@ export type CreateReadyDiffParseStateInput = {
 export function createReadyDiffParseState({
   diffHash,
   filePath,
+  ignoreWhitespace,
   newText,
   oldText,
   parseKey,
@@ -39,6 +41,7 @@ export function createReadyDiffParseState({
   const model = createDiffsRenderModel({
     diffHash,
     filePath,
+    ignoreWhitespace,
     ...(newText !== undefined ? { newText } : {}),
     ...(oldText !== undefined ? { oldText } : {}),
     patch,

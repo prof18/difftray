@@ -14,10 +14,12 @@ import type {
 let options: FileDiffOptions<undefined, undefined> | undefined;
 let selectedLines: SelectedLineRange | null | undefined;
 let lineAnnotations: DiffLineAnnotation<ReviewCommentAnnotationMetadata>[] | undefined;
+let renderedFileDiff: unknown;
 vi.mock("@pierre/diffs/react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@pierre/diffs/react")>()),
   WorkerPoolContextProvider: ({ children }: { children: React.ReactNode }) => children,
   FileDiff: (props: {
+    fileDiff: unknown;
     options: FileDiffOptions<undefined, undefined>;
     selectedLines?: SelectedLineRange | null;
     lineAnnotations: DiffLineAnnotation<ReviewCommentAnnotationMetadata>[];
@@ -26,6 +28,7 @@ vi.mock("@pierre/diffs/react", async (importOriginal) => ({
     ) => React.ReactNode;
   }) => {
     options = props.options;
+    renderedFileDiff = props.fileDiff;
     selectedLines = props.selectedLines;
     lineAnnotations = props.lineAnnotations;
     return (
@@ -82,6 +85,7 @@ describe("desktop comment selection", () => {
       diffMode: "unified",
       diffSideFocus: "both",
       filePath: "a.ts",
+      ignoreWhitespace: false,
       newText: undefined,
       oldText: undefined,
       onCancelComment: vi.fn(),
@@ -179,6 +183,35 @@ describe("desktop comment selection", () => {
     expect(lineAnnotations).not.toBe(initialAnnotations);
     expect(container.textContent).toContain("New lines 1-2");
     expect(container.querySelector("textarea")?.value).toBe("Keep this clear.");
+  });
+
+  it("reuses the canonical whitespace fallback when comments change", () => {
+    const comment = {
+      body: "why?",
+      createdAt: "2026-10-27T00:00:00.000Z",
+      diffHash: "hash",
+      id: "c1",
+      lineEnd: 2,
+      lineStart: 2,
+      path: "a.ts",
+      side: "additions" as const,
+      updatedAt: "2026-10-27T00:00:00.000Z"
+    };
+    props = {
+      ...props,
+      comments: [comment],
+      ignoreWhitespace: true,
+      newText: "if (x) {\n    foo();\n}\n",
+      oldText: "if (x) {\nfoo();\n}\n"
+    };
+    render();
+    const initialFileDiff = renderedFileDiff;
+    expect(initialFileDiff).toBeDefined();
+
+    props = { ...props, comments: [{ ...comment }] };
+    render();
+
+    expect(renderedFileDiff).toBe(initialFileDiff);
   });
 
   it("dispatches a click once and never creates a comment from a controlled highlight", () => {

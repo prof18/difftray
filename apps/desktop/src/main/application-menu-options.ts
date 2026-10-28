@@ -10,6 +10,7 @@ export type ApplicationCommand =
   | "repository-worktrees"
   | "view-split-diff"
   | "view-toggle-file-list"
+  | "view-toggle-ignore-whitespace"
   | "view-toggle-wrap-lines"
   | "view-unified-diff";
 
@@ -101,6 +102,10 @@ export function reviewViewMenuItemOptions(
     {
       click: () => onCommand("view-toggle-wrap-lines"),
       label: "Toggle Wrap Long Lines"
+    },
+    {
+      click: () => onCommand("view-toggle-ignore-whitespace"),
+      label: "Toggle Ignore Whitespace"
     }
   ];
 }

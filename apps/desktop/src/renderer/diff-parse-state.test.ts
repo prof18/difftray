@@ -7,6 +7,7 @@ describe("createReadyDiffParseState", () => {
     const state = createReadyDiffParseState({
       diffHash: "hash-a",
       filePath: "src/example.ts",
+      ignoreWhitespace: false,
       newText: "new\n",
       oldText: "old\n",
       parseKey: "src/example.ts:hash-a",
@@ -50,6 +51,7 @@ describe("createReadyDiffParseState", () => {
       createReadyDiffParseState({
         diffHash: "hash-binary",
         filePath: "assets/icon.png",
+        ignoreWhitespace: false,
         newText: undefined,
         oldText: undefined,
         parseKey: "assets/icon.png:hash-binary",
@@ -66,5 +68,30 @@ describe("createReadyDiffParseState", () => {
       },
       status: "ready"
     });
+  });
+
+  it("passes ignoreWhitespace to the render model", () => {
+    const state = createReadyDiffParseState({
+      diffHash: "hash-a",
+      filePath: "src/example.ts",
+      ignoreWhitespace: true,
+      newText: "  a\n",
+      oldText: "a\n",
+      parseKey: "src/example.ts:hash-a:ws-ignored",
+      patch: [
+        "diff --git a/src/example.ts b/src/example.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/example.ts",
+        "+++ b/src/example.ts",
+        "@@ -1 +1 @@",
+        "-a",
+        "+  a"
+      ].join("\n"),
+      previousPath: undefined,
+      status: "modified"
+    });
+
+    expect(state.key).toBe("src/example.ts:hash-a:ws-ignored");
+    expect(state.model).toMatchObject({ kind: "fallback", whitespaceOnly: true });
   });
 });

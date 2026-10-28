@@ -707,6 +707,7 @@ describe("SettingsPanel", () => {
     expect(review.textContent).toContain("Default diff view");
     expect(review.textContent).toContain("Unified");
     expect(review.textContent).toContain("Wrap long lines");
+    expect(review.textContent).toContain("Ignore leading/trailing whitespace");
     expect(review.textContent).toContain("Show generated files");
     expect(review.textContent).toContain("Notify when a reviewed file changes");
 
@@ -961,12 +962,34 @@ describe("SettingsPanel", () => {
 
     expect(wrap?.getAttribute("role")).toBe("switch");
 
+    const ignoreWhitespace = [...review.querySelectorAll<HTMLInputElement>("input")].find(
+      (input) =>
+        input.closest("label")?.textContent.includes("Ignore leading/trailing whitespace")
+    );
+
+    expect(ignoreWhitespace?.getAttribute("role")).toBe("switch");
+
     const companion = renderSettingsPage("companion");
     const toggle = companion.querySelector<HTMLInputElement>(
       'input[aria-label="Enable companion mode"]'
     );
 
     expect(toggle?.getAttribute("role")).toBe("switch");
+  });
+
+  it("emits the ignore whitespace toggle", () => {
+    const onChangeAppSettings = vi.fn();
+    const review = renderSettingsPage("review", {
+      appSettings: appSettings({ hideWhitespaceOnlyChanges: false }),
+      onChangeAppSettings
+    });
+    const toggle = [...review.querySelectorAll<HTMLInputElement>("input")].find((input) =>
+      input.closest("label")?.textContent.includes("Ignore leading/trailing whitespace")
+    );
+    act(() => {
+      toggle?.click();
+    });
+    expect(onChangeAppSettings).toHaveBeenCalledWith({ hideWhitespaceOnlyChanges: true });
   });
 
   // Every other switch row toggles from its label; the companion row did not.

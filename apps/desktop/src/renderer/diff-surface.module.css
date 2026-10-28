@@ -113,6 +113,19 @@
   white-space: pre-wrap;
 }
 
+.diffFallbackHint {
+  margin: 0;
+}
+
+.diffWhitespaceNotice {
+  margin: 0;
+  padding: 8px 28px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
 .diffEndSpacer {
   height: var(--diff-bottom-review-padding);
 }

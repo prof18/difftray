@@ -17,9 +17,13 @@ import {
 
 export { intellijIslandsDiffTheme };
 
+export { resolveWhitespaceDisplay } from "../shared/review-diff-model.js";
 export type {
   CreateDiffsRenderModelInput,
-  DiffsRenderModel
+  DiffsRenderModel,
+  ReviewLineAnchor,
+  WhitespaceDisplay,
+  WhitespaceNotice
 } from "../shared/review-diff-model.js";
 
 export type CreateDiffsFileDiffOptionsInput = {

@@ -44,7 +44,86 @@ describe("DiffSurface", () => {
 
     expect(html).toContain('data-diff-layout="single"');
   });
+
+  it("shows the whitespace-only empty state when ignoring whitespace", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurface {...textProps({ ignoreWhitespace: true })} />
+    );
+
+    expect(html).toContain(whitespaceOnlyTitle);
+    expect(html).toContain(whitespaceOnlyHint);
+    expect(html).not.toContain("<pre>");
+  });
+
+  it("shows whitespace with a note when a comment sits on a whitespace-only line", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurface {...textProps({ comments: [comment], ignoreWhitespace: true })} />
+    );
+
+    expect(html).toContain(commentsNotice);
+    expect(html).not.toContain(whitespaceOnlyTitle);
+  });
+
+  it("notes that a file without snapshots keeps its whitespace", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurface
+        {...textProps({ ignoreWhitespace: true, newText: undefined, oldText: undefined })}
+      />
+    );
+
+    expect(html).toContain(partialNotice);
+  });
+
+  it("shows no whitespace notes when the setting is off", () => {
+    const html = renderToStaticMarkup(
+      <DiffSurface {...textProps({ ignoreWhitespace: false })} />
+    );
+
+    expect(html).not.toContain(whitespaceOnlyTitle);
+    expect(html).not.toContain(commentsNotice);
+    expect(html).not.toContain(partialNotice);
+  });
 });
+
+const whitespaceOnlyTitle = "Only whitespace changed";
+const whitespaceOnlyHint = "Turn off ignoring whitespace to see these changes.";
+const commentsNotice =
+  "Whitespace is shown for this file because it has comments on lines that only changed whitespace.";
+const partialNotice =
+  "Whitespace is shown for this file because it is too large to compare with whitespace ignored.";
+
+const comment = {
+  body: "why?",
+  createdAt: "2026-10-27T00:00:00.000Z",
+  diffHash: "hash-text",
+  id: "c1",
+  lineEnd: 2,
+  lineStart: 2,
+  path: "src/a.ts",
+  side: "additions" as const,
+  updatedAt: "2026-10-27T00:00:00.000Z"
+};
+
+function textProps(
+  patch: Partial<React.ComponentProps<typeof DiffSurface>>
+): React.ComponentProps<typeof DiffSurface> {
+  return diffSurfaceProps({
+    diffHash: "hash-text",
+    filePath: "src/a.ts",
+    newText: "if (x) {\n    foo();\n}\n",
+    oldText: "if (x) {\nfoo();\n}\n",
+    patch: [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -2 +2 @@",
+      "-foo();",
+      "+    foo();"
+    ].join("\n"),
+    scrollKey: "src/a.ts:hash-text",
+    ...patch
+  });
+}
 
 function diffSurfaceProps(
   patch: Partial<React.ComponentProps<typeof DiffSurface>> = {}
@@ -56,6 +135,7 @@ function diffSurfaceProps(
     diffMode: "split",
     diffSideFocus: "both",
     filePath: "assets/icon.png",
+    ignoreWhitespace: false,
     newText: undefined,
     oldText: undefined,
     onCancelComment: vi.fn(),

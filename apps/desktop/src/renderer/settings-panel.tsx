@@ -779,6 +779,14 @@ function ReviewSettingsPage({
           }}
         />
         <ToggleRow
+          checked={appSettings.hideWhitespaceOnlyChanges}
+          disabled={disabled}
+          label="Ignore leading/trailing whitespace"
+          onChange={(checked) => {
+            onChangeAppSettings({ hideWhitespaceOnlyChanges: checked });
+          }}
+        />
+        <ToggleRow
           checked={appSettings.showGeneratedFiles}
           disabled={disabled}
           label="Show generated files"

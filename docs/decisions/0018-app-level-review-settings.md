@@ -17,7 +17,7 @@ Store review and editor preferences at the app level in `app_settings`:
 
 - default diff mode
 - generated-file visibility
-- whitespace-only change visibility
+- whitespace-only change visibility (now "Ignore leading/trailing whitespace", see [Decision 0045](0045-ignore-whitespace-display.md))
 - auto-collapse hunk threshold
 - drift notification preference
 - selected re-review trigger

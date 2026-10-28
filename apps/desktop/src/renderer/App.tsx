@@ -2433,6 +2433,11 @@ export function App(): React.JSX.Element {
       case "view-toggle-file-list":
         toggleFileListCollapsed();
         return;
+      case "view-toggle-ignore-whitespace":
+        void persistAppSettings({
+          hideWhitespaceOnlyChanges: !appSettings.hideWhitespaceOnlyChanges
+        });
+        return;
       case "view-toggle-wrap-lines":
         void persistAppSettings({ wrapDiffLines: !appSettings.wrapDiffLines });
         return;
@@ -4216,6 +4221,7 @@ export function App(): React.JSX.Element {
                       diffMode={diffMode}
                       diffSideFocus={selectedDiffSideFocus}
                       filePath={selectedFile.path}
+                      ignoreWhitespace={appSettings.hideWhitespaceOnlyChanges}
                       key={selectedDiffScrollKey ?? selectedFile.diffHash}
                       {...(loadSelectedFileImage
                         ? { loadImage: loadSelectedFileImage }

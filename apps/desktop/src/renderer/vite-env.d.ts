@@ -209,6 +209,7 @@ declare global {
     | "repository-worktrees"
     | "view-split-diff"
     | "view-toggle-file-list"
+    | "view-toggle-ignore-whitespace"
     | "view-toggle-wrap-lines"
     | "view-unified-diff";
 

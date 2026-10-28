@@ -27,11 +27,15 @@ import { createReadyDiffParseState, type DiffParseState } from "./diff-parse-sta
 import {
   createDiffsFileDiffOptions,
   createDiffsFocusedFileDiff,
+  createDiffsRenderModel,
   createDiffsWorkerPoolOptions,
   diffFocusClassName,
   diffsVirtualFileMetrics,
   diffsWorkerHighlighterOptions,
-  type DiffSideFocus
+  resolveWhitespaceDisplay,
+  type DiffSideFocus,
+  type DiffsRenderModel,
+  type WhitespaceNotice
 } from "./diffs-renderer.js";
 import { ReviewCommentAnnotation } from "./review-comment-annotation.js";
 import { ImageDiff } from "./image-diff.js";
@@ -52,6 +56,7 @@ export function DiffSurface({
   diffMode,
   diffSideFocus,
   filePath,
+  ignoreWhitespace,
   newText,
   oldText,
   loadImage,
@@ -80,6 +85,7 @@ export function DiffSurface({
   readonly diffMode: DiffMode;
   readonly diffSideFocus: DiffSideFocus;
   readonly filePath: string;
+  readonly ignoreWhitespace: boolean;
   readonly newText: string | undefined;
   readonly oldText: string | undefined;
   readonly loadImage?: (side: FileImageSide) => Promise<FileImageView | null>;
@@ -105,7 +111,7 @@ export function DiffSurface({
   readonly visiblePendingCommentSave: CommentSavePending | undefined;
   readonly wrapLines: boolean;
 }): React.JSX.Element {
-  const parseKey = `${filePath}:${diffHash}`;
+  const parseKey = `${filePath}:${diffHash}:${ignoreWhitespace ? "ws-ignored" : "ws-shown"}`;
   const effectiveDiffMode = status === "added" ? "unified" : diffMode;
   const visualDiffLayout =
     status === "added" || status === "deleted" || diffSideFocus !== "both"
@@ -115,6 +121,7 @@ export function DiffSurface({
     createReadyDiffParseState({
       diffHash,
       filePath,
+      ignoreWhitespace,
       newText,
       oldText,
       parseKey,
@@ -123,17 +130,10 @@ export function DiffSurface({
       status
     })
   );
-  const model =
+  const parsedModel =
     parseState.key === parseKey && parseState.status === "ready"
       ? parseState.model
       : undefined;
-  const focusedFileDiff = useMemo(
-    () =>
-      model?.kind === "diff"
-        ? createDiffsFocusedFileDiff(model.fileDiff, diffSideFocus)
-        : undefined,
-    [diffSideFocus, model]
-  );
   const selection = useCommentLineSelection(
     refObject,
     parseKey,
@@ -188,6 +188,41 @@ export function DiffSurface({
       }),
     [annotationDraft, comments]
   );
+  // Parsed at most once per diff, so a comment change does not reparse the file.
+  const canonicalModel = useMemo(() => {
+    let model: DiffsRenderModel | undefined;
+    return () =>
+      (model ??= createDiffsRenderModel({
+        diffHash,
+        filePath,
+        ...(newText !== undefined ? { newText } : {}),
+        ...(oldText !== undefined ? { oldText } : {}),
+        patch,
+        ...(previousPath !== undefined ? { previousPath } : {}),
+        status
+      }));
+  }, [diffHash, filePath, newText, oldText, patch, previousPath, status]);
+  const whitespaceDisplay = useMemo(
+    () =>
+      parsedModel === undefined
+        ? undefined
+        : ignoreWhitespace
+          ? resolveWhitespaceDisplay({
+              anchors: lineAnnotations,
+              canonical: canonicalModel,
+              ignored: parsedModel
+            })
+          : { model: parsedModel },
+    [canonicalModel, ignoreWhitespace, lineAnnotations, parsedModel]
+  );
+  const model = whitespaceDisplay?.model;
+  const focusedFileDiff = useMemo(
+    () =>
+      model?.kind === "diff"
+        ? createDiffsFocusedFileDiff(model.fileDiff, diffSideFocus)
+        : undefined,
+    [diffSideFocus, model]
+  );
   const workerPoolOptions = useMemo(() => createDiffsWorkerPoolOptions(), []);
 
   useLayoutEffect(() => {
@@ -199,6 +234,7 @@ export function DiffSurface({
       createReadyDiffParseState({
         diffHash,
         filePath,
+        ignoreWhitespace,
         newText,
         oldText,
         parseKey,
@@ -210,6 +246,7 @@ export function DiffSurface({
   }, [
     diffHash,
     filePath,
+    ignoreWhitespace,
     newText,
     oldText,
     parseKey,
@@ -227,73 +264,90 @@ export function DiffSurface({
   }, [diffHash, filePath, onRenderModelReady, parseKey, parseState, status]);
 
   return (
-    <DiffsVirtualizedSurface
-      contentReady={Boolean(model)}
-      diffLayout={visualDiffLayout}
-      horizontalScrollbarsEnabled={Boolean(focusedFileDiff) && !wrapLines}
-      refObject={refObject}
-      onScrollPositionChange={onScrollPositionChange}
-      scrollKey={scrollKey}
-      scrollPosition={scrollPosition}
-    >
-      {!model ? (
-        <div className={styles.diffPreparingState} role="status">
-          <span className={styles.loadingMiniMark} aria-hidden />
-          <span>Preparing diff</span>
-        </div>
+    <>
+      {whitespaceDisplay?.notice ? (
+        <p className={styles.diffWhitespaceNotice} role="status">
+          {whitespaceNoticeText[whitespaceDisplay.notice]}
+        </p>
       ) : null}
-      {model?.kind === "fallback" ? (
-        loadImage && binaryPatch(patch) ? (
-          <ImageDiff
-            diffHash={diffHash}
-            diffSideFocus={diffSideFocus}
-            fallback={<DiffFallback title={model.title} detail={model.detail} />}
-            loadImage={loadImage}
-            status={status}
-          />
-        ) : (
-          <DiffFallback title={model.title} detail={model.detail} />
-        )
-      ) : null}
-      {focusedFileDiff ? (
-        <WorkerPoolContextProvider
-          highlighterOptions={diffsWorkerHighlighterOptions}
-          poolOptions={workerPoolOptions}
-        >
-          <FileDiff
-            className={classList(styles.diffsFileDiff, diffFocusClassName(diffSideFocus))}
-            fileDiff={focusedFileDiff}
-            key={focusedFileDiff.cacheKey ?? `${focusedFileDiff.name}:${diffSideFocus}`}
-            lineAnnotations={lineAnnotations}
-            metrics={diffsVirtualFileMetrics}
-            options={fileDiffOptions}
-            selectedLines={selection.lines}
-            renderAnnotation={(annotation) => (
-              <ReviewCommentAnnotation
-                annotation={
-                  annotation.metadata.kind === "draft" && commentDraft
-                    ? { ...annotation, metadata: { kind: "draft", draft: commentDraft } }
-                    : annotation
-                }
-                onCancelDraft={onCancelComment}
-                onDeleteComment={onDeleteComment}
-                onDraftBodyChange={onCommentDraftBodyChange}
-                onSaveDraft={onSaveComment}
-                onUpdateComment={onUpdateComment}
-                saving={commentSavePendingMatchesAnnotation(
-                  pendingCommentSave,
-                  annotation
-                )}
-                showSaving={commentSavePendingMatchesAnnotation(
-                  visiblePendingCommentSave,
-                  annotation
-                )}
-              />
-            )}
-          />
-        </WorkerPoolContextProvider>
-      ) : null}
-    </DiffsVirtualizedSurface>
+      <DiffsVirtualizedSurface
+        contentReady={Boolean(model)}
+        diffLayout={visualDiffLayout}
+        horizontalScrollbarsEnabled={Boolean(focusedFileDiff) && !wrapLines}
+        refObject={refObject}
+        onScrollPositionChange={onScrollPositionChange}
+        scrollKey={scrollKey}
+        scrollPosition={scrollPosition}
+      >
+        {!model ? (
+          <div className={styles.diffPreparingState} role="status">
+            <span className={styles.loadingMiniMark} aria-hidden />
+            <span>Preparing diff</span>
+          </div>
+        ) : null}
+        {model?.kind === "fallback" ? (
+          loadImage && binaryPatch(patch) ? (
+            <ImageDiff
+              diffHash={diffHash}
+              diffSideFocus={diffSideFocus}
+              fallback={<DiffFallback title={model.title} detail={model.detail} />}
+              loadImage={loadImage}
+              status={status}
+            />
+          ) : (
+            <DiffFallback
+              title={model.title}
+              detail={model.detail}
+              {...(model.hint ? { hint: model.hint } : {})}
+            />
+          )
+        ) : null}
+        {focusedFileDiff ? (
+          <WorkerPoolContextProvider
+            highlighterOptions={diffsWorkerHighlighterOptions}
+            poolOptions={workerPoolOptions}
+          >
+            <FileDiff
+              className={classList(
+                styles.diffsFileDiff,
+                diffFocusClassName(diffSideFocus)
+              )}
+              fileDiff={focusedFileDiff}
+              key={focusedFileDiff.cacheKey ?? `${focusedFileDiff.name}:${diffSideFocus}`}
+              lineAnnotations={lineAnnotations}
+              metrics={diffsVirtualFileMetrics}
+              options={fileDiffOptions}
+              selectedLines={selection.lines}
+              renderAnnotation={(annotation) => (
+                <ReviewCommentAnnotation
+                  annotation={
+                    annotation.metadata.kind === "draft" && commentDraft
+                      ? {
+                          ...annotation,
+                          metadata: { kind: "draft", draft: commentDraft }
+                        }
+                      : annotation
+                  }
+                  onCancelDraft={onCancelComment}
+                  onDeleteComment={onDeleteComment}
+                  onDraftBodyChange={onCommentDraftBodyChange}
+                  onSaveDraft={onSaveComment}
+                  onUpdateComment={onUpdateComment}
+                  saving={commentSavePendingMatchesAnnotation(
+                    pendingCommentSave,
+                    annotation
+                  )}
+                  showSaving={commentSavePendingMatchesAnnotation(
+                    visiblePendingCommentSave,
+                    annotation
+                  )}
+                />
+              )}
+            />
+          </WorkerPoolContextProvider>
+        ) : null}
+      </DiffsVirtualizedSurface>
+    </>
   );
 }
 
@@ -797,17 +851,27 @@ function sameElements(
   );
 }
 
+const whitespaceNoticeText: Record<WhitespaceNotice, string> = {
+  comments:
+    "Whitespace is shown for this file because it has comments on lines that only changed whitespace.",
+  partial:
+    "Whitespace is shown for this file because it is too large to compare with whitespace ignored."
+};
+
 function DiffFallback({
   detail,
+  hint,
   title
 }: {
   readonly detail: string;
+  readonly hint?: string;
   readonly title: string;
 }): React.JSX.Element {
   return (
     <section className={styles.diffFallback}>
       <div className={styles.diffFallbackTitle}>{title}</div>
       {detail.length > 0 ? <pre>{detail}</pre> : null}
+      {hint ? <p className={styles.diffFallbackHint}>{hint}</p> : null}
     </section>
   );
 }

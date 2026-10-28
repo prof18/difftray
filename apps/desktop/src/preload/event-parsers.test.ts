@@ -32,6 +32,10 @@ describe("preload event parsers", () => {
     expect(parseApplicationCommand("open-settings")).toBe("open-settings");
     expect(parseApplicationCommand("file-show-in-finder")).toBe("file-show-in-finder");
     expect(parseApplicationCommand("repository-worktrees")).toBe("repository-worktrees");
+    expect(parseApplicationCommand("view-toggle-ignore-whitespace")).toBe(
+      "view-toggle-ignore-whitespace"
+    );
+    expect(parseApplicationCommand("view-toggle-ignore")).toBeUndefined();
     expect(parseApplicationCommand("delete-everything")).toBeUndefined();
     expect(parseApplicationCommand({ command: "open-settings" })).toBeUndefined();
   });
