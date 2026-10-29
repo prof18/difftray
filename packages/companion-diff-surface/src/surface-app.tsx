@@ -20,6 +20,7 @@ import {
   createSurfaceFileDiffOptions,
   createSurfacePierreRenderModel,
   resolveWhitespaceDisplay,
+  surfaceAnnotationAnchor,
   surfaceAnnotationLocation,
   surfaceCommentAnnotations,
   type SurfacePierreRenderModel,
@@ -147,7 +148,7 @@ export function DiffSurfaceApp({
     () =>
       state.ignoreWhitespace
         ? resolveWhitespaceDisplay({
-            anchors: annotations,
+            anchors: annotations.map(surfaceAnnotationAnchor),
             canonical: canonicalModel,
             ignored: parsedModel
           })

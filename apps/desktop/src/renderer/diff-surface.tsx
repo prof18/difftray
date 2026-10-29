@@ -41,6 +41,7 @@ import { ReviewCommentAnnotation } from "./review-comment-annotation.js";
 import { ImageDiff } from "./image-diff.js";
 import {
   commentSavePendingMatchesAnnotation,
+  reviewCommentAnchor,
   reviewCommentAnnotations,
   type CommentSavePending,
   type CommentSelection,
@@ -208,7 +209,7 @@ export function DiffSurface({
         ? undefined
         : ignoreWhitespace
           ? resolveWhitespaceDisplay({
-              anchors: lineAnnotations,
+              anchors: lineAnnotations.map(reviewCommentAnchor),
               canonical: canonicalModel,
               ignored: parsedModel
             })

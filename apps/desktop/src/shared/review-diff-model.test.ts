@@ -248,6 +248,70 @@ describe("resolveWhitespaceDisplay", () => {
     expect(display.notice).toBeUndefined();
   });
 
+  it("falls back to the canonical diff when a range starts on a whitespace-only line", () => {
+    // Lines 22-25 are re-indented next to the real change on line 30, so the canonical
+    // diff has one hunk and the ignored diff only shows lines 27-33.
+    const rangeNew = longOld
+      .replace(/line (2[2-5])\n/g, "  line $1\n")
+      .replace("line 30\n", "changed 30\n");
+    const rangeIgnored = createDiffsRenderModel({
+      ...base,
+      ignoreWhitespace: true,
+      oldText: longOld,
+      newText: rangeNew,
+      patch: ""
+    });
+    const rangeCanonical = () =>
+      createDiffsRenderModel({ ...base, oldText: longOld, newText: rangeNew, patch: "" });
+
+    const display = resolveWhitespaceDisplay({
+      anchors: [{ lineNumber: 30, lineStart: 22, side: "additions" }],
+      canonical: rangeCanonical,
+      ignored: rangeIgnored
+    });
+
+    expect(display.notice).toBe("comments");
+    expect(display.model).not.toBe(rangeIgnored);
+  });
+
+  it("falls back to the canonical diff for a range whose ends only changed whitespace", () => {
+    // Lines 5 and 35 are re-indented and nothing else changed, so the ignored model is
+    // the empty state and the canonical diff shows both ends but not the middle.
+    const endsNew = longOld
+      .replace("line 5\n", "  line 5\n")
+      .replace("line 35\n", "  line 35\n");
+    const endsIgnored = createDiffsRenderModel({
+      ...base,
+      ignoreWhitespace: true,
+      oldText: longOld,
+      newText: endsNew,
+      patch: ""
+    });
+    const endsCanonical = () =>
+      createDiffsRenderModel({ ...base, oldText: longOld, newText: endsNew, patch: "" });
+
+    const display = resolveWhitespaceDisplay({
+      anchors: [{ lineNumber: 35, lineStart: 5, side: "additions" }],
+      canonical: endsCanonical,
+      ignored: endsIgnored
+    });
+
+    expect(display.notice).toBe("comments");
+    expect(display.model.kind).toBe("diff");
+  });
+
+  it("keeps the ignored model when the canonical diff hides the same range lines", () => {
+    // Lines 15-26 are unchanged, so both diffs collapse them; only line 30 changed.
+    const display = resolveWhitespaceDisplay({
+      anchors: [{ lineNumber: 30, lineStart: 15, side: "additions" }],
+      canonical,
+      ignored
+    });
+
+    expect(display.model).toBe(ignored);
+    expect(display.notice).toBeUndefined();
+  });
+
   it("keeps the whitespace-only state without anchors and falls back with one", () => {
     const wsOnly = createDiffsRenderModel({
       ...base,

@@ -1,5 +1,7 @@
 import type { DiffLineAnnotation } from "@pierre/diffs";
 
+import type { ReviewLineAnchor } from "../shared/review-diff-model.js";
+
 export type ReviewCommentDraft = {
   readonly anchorLine?: number;
   readonly body: string;
@@ -102,6 +104,14 @@ export function reviewCommentAnnotations({
         ]
       : [])
   ];
+}
+
+/** The whole line range an annotation covers, so a range comment is checked end to end. */
+export function reviewCommentAnchor({
+  metadata
+}: DiffLineAnnotation<ReviewCommentAnnotationMetadata>): ReviewLineAnchor {
+  const range = metadata.kind === "comment" ? metadata.comment : metadata.draft;
+  return { lineNumber: range.lineEnd, lineStart: range.lineStart, side: range.side };
 }
 
 export function sameCommentSavePending(

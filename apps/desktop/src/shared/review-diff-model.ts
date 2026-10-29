@@ -243,7 +243,9 @@ function mergeLineRanges(ranges: ReviewLineRange[]): ReviewLineRange[] {
 }
 
 export type ReviewLineAnchor = {
+  /** Last line of the comment; a range comment also sets lineStart. */
   readonly lineNumber: number;
+  readonly lineStart?: number;
   readonly side: "additions" | "deletions";
 };
 
@@ -256,9 +258,10 @@ export type WhitespaceDisplay = {
 
 /**
  * What to draw when the viewer ignores whitespace. Comments must stay visible, so a
- * comment on a line that only changed whitespace brings the canonical diff back. A
- * comment the canonical diff would not show either (an unchanged line in an expanded
- * gap) keeps the ignored diff.
+ * comment on a line that only changed whitespace, or a range comment that covers one,
+ * brings the canonical diff back when it shows a commented line the ignored diff leaves
+ * out. A comment the canonical diff would not show either (unchanged lines in an
+ * expanded gap) keeps the ignored diff.
  */
 export function resolveWhitespaceDisplay({
   anchors,
@@ -283,15 +286,66 @@ export function resolveWhitespaceDisplay({
   }
   const canonicalModel = canonical();
   return canonicalModel.kind === "diff" &&
-    hidden.some((anchor) => anchorInHunks(canonicalModel.fileDiff, anchor))
+    hidden.some((anchor) => revealsHiddenLine(canonicalModel.fileDiff, ignored, anchor))
     ? { model: canonicalModel, notice: "comments" }
     : { model: ignored };
 }
 
+/** Whether every line of the anchor, from lineStart to lineNumber, sits in a hunk. */
 function anchorInHunks(fileDiff: FileDiffMetadata, anchor: ReviewLineAnchor): boolean {
+  return linesInHunks(fileDiff, anchor.side, anchorFirstLine(anchor), anchor.lineNumber);
+}
+
+/** Whether fileDiff shows a line of the anchor that the ignored model leaves out. */
+function revealsHiddenLine(
+  fileDiff: FileDiffMetadata,
+  ignored: DiffsRenderModel,
+  anchor: ReviewLineAnchor
+): boolean {
+  const first = anchorFirstLine(anchor);
   return fileDiff.hunks.some((hunk) => {
     const start = anchor.side === "additions" ? hunk.additionStart : hunk.deletionStart;
     const count = anchor.side === "additions" ? hunk.additionCount : hunk.deletionCount;
-    return count > 0 && anchor.lineNumber >= start && anchor.lineNumber < start + count;
+    const from = Math.max(start, first);
+    const to = Math.min(start + count - 1, anchor.lineNumber);
+    return (
+      count > 0 &&
+      from <= to &&
+      (ignored.kind === "fallback" ||
+        !linesInHunks(ignored.fileDiff, anchor.side, from, to))
+    );
   });
+}
+
+function anchorFirstLine(anchor: ReviewLineAnchor): number {
+  return Math.min(anchor.lineStart ?? anchor.lineNumber, anchor.lineNumber);
+}
+
+function linesInHunks(
+  fileDiff: FileDiffMetadata,
+  side: ReviewLineAnchor["side"],
+  from: number,
+  to: number
+): boolean {
+  let line = from;
+  while (line <= to) {
+    const hunkEnd = hunkEndContaining(fileDiff, side, line);
+    if (hunkEnd === undefined) return false;
+    line = hunkEnd;
+  }
+  return true;
+}
+
+/** The first line after the hunk that contains line on side, if any hunk does. */
+function hunkEndContaining(
+  fileDiff: FileDiffMetadata,
+  side: ReviewLineAnchor["side"],
+  line: number
+): number | undefined {
+  for (const hunk of fileDiff.hunks) {
+    const start = side === "additions" ? hunk.additionStart : hunk.deletionStart;
+    const count = side === "additions" ? hunk.additionCount : hunk.deletionCount;
+    if (count > 0 && line >= start && line < start + count) return start + count;
+  }
+  return undefined;
 }

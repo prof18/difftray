@@ -160,13 +160,32 @@ describe("diff surface app", () => {
     expect(html).not.toContain(whitespaceOnlyTitle);
   });
 
+  it("shows whitespace with a note when a range comment starts on a whitespace-only line", () => {
+    const oldText =
+      Array.from({ length: 40 }, (_, i) => `line ${String(i + 1)}`).join("\n") + "\n";
+    const newText = oldText
+      .replace(/line (2[2-5])\n/g, "  line $1\n")
+      .replace("line 30\n", "changed 30\n");
+    const html = renderToStaticMarkup(
+      <DiffSurfaceApp
+        state={textState({
+          comments: [{ ...comment, lineEnd: 30, lineStart: 22 }],
+          ignoreWhitespace: true,
+          newText,
+          oldText
+        })}
+      />
+    );
+
+    expect(html).toContain(commentsNotice);
+  });
+
   it("notes that a file without snapshots keeps its whitespace", () => {
-    const {
-      newText: _newText,
-      oldText: _oldText,
-      ...withoutTexts
-    } = textState({
-      ignoreWhitespace: true
+    const withoutTexts = state({
+      diffHash: "hash-text",
+      ignoreWhitespace: true,
+      patch: textState({}).patch,
+      path: "src/a.ts"
     });
     const html = renderToStaticMarkup(<DiffSurfaceApp state={withoutTexts} />);
 
