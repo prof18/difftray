@@ -70,6 +70,15 @@ do.
 
 Progress is reviewed visible files over all visible reviewable files.
 
+The filter field above the rows narrows the list to paths containing every
+space-separated term, ignoring case ([0044](decisions/0044-file-list-filter.md)).
+`Cmd+F` focuses it, `Enter` opens the first match, and `Escape` clears it, then
+leaves the field. While a filter is on, file navigation keys and the advance after
+marking a file reviewed stay within the matching rows; the header count and
+progress still cover the whole diff. A filter is dropped when the project or review
+target changes. While the file list is collapsed, navigation covers every file, as
+the rail does.
+
 With the file list hidden, a narrow rail keeps one mark per file showing its
 review state; each mark opens its file, names it for assistive technology, and the
 open file is ringed.
@@ -143,6 +152,7 @@ and free-form editor commands are not supported.
 | `Cmd+O`                            | Open a repository                                                 |
 | `Cmd+K`                            | Command palette                                                   |
 | `Cmd+P`                            | File-only command palette                                         |
+| `Cmd+F`                            | Filter the file list                                              |
 | `Cmd+1`                            | Collapse or expand the file list                                  |
 | `Cmd+,`                            | Settings                                                          |
 | `Cmd/Ctrl+Enter`                   | Save the focused review comment (plain `Enter` adds a line break) |
@@ -157,4 +167,4 @@ matches first inside each group. Arrows move through the rows in that drawn orde
 only), and action rows use neutral icons, keeping colour for change type and review
 state. Single-key shortcuts do not fire while a button or field has focus. Refresh,
 project switching and diff-mode switching are available from visible controls and
-the palette.
+the palette. The View menu lists Go to File… (`Cmd+P`) and Filter Files (`Cmd+F`).

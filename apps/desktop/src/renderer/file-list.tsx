@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  Search,
   X
 } from "lucide-react";
 import {
@@ -623,6 +624,97 @@ function filterCommitOptions(
       .join(" ")
       .toLowerCase()
       .includes(normalizedQuery)
+  );
+}
+
+export function FileFilterField({
+  inputRef,
+  matchCount,
+  onQueryChange,
+  onSubmit,
+  query,
+  totalCount
+}: {
+  readonly inputRef: React.RefObject<HTMLInputElement | null>;
+  readonly matchCount: number;
+  readonly onQueryChange: (query: string) => void;
+  readonly onSubmit: () => void;
+  readonly query: string;
+  readonly totalCount: number;
+}): React.JSX.Element {
+  const filtering = query.trim().length > 0;
+
+  return (
+    <div className={styles.fileFilter} data-filtering={filtering}>
+      <Search className={styles.fileFilterIcon} size={14} strokeWidth={1.4} aria-hidden />
+      <input
+        aria-label="Filter files"
+        className={styles.fileFilterInput}
+        onChange={(event) => {
+          onQueryChange(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+
+            if (query.length > 0) {
+              onQueryChange("");
+            } else {
+              event.currentTarget.blur();
+            }
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
+        placeholder="Filter files"
+        ref={inputRef}
+        spellCheck={false}
+        title="Filter files (⌘F)"
+        type="text"
+        value={query}
+      />
+      {filtering ? (
+        <>
+          <span className={styles.fileFilterCount} aria-live="polite">
+            <span>{matchCount}</span> of {totalCount}
+          </span>
+          <button
+            aria-label="Clear filter"
+            className={styles.fileFilterClear}
+            onClick={() => {
+              onQueryChange("");
+              inputRef.current?.focus();
+            }}
+            title="Clear filter"
+            type="button"
+          >
+            <X size={14} strokeWidth={1.4} aria-hidden />
+          </button>
+        </>
+      ) : (
+        <kbd className={styles.fileFilterShortcut} aria-hidden>
+          ⌘F
+        </kbd>
+      )}
+    </div>
+  );
+}
+
+export function FileFilterEmpty({
+  onClear,
+  query
+}: {
+  readonly onClear: () => void;
+  readonly query: string;
+}): React.JSX.Element {
+  return (
+    <div className={styles.fileFilterEmpty}>
+      <span>No files match “{query.trim()}”</span>
+      <button className={styles.fileFilterEmptyButton} onClick={onClear} type="button">
+        Clear filter
+      </button>
+    </div>
   );
 }
 

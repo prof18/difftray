@@ -186,8 +186,12 @@ describe("focus ring", () => {
         );
         if (!selector.includes(":focus-visible")) continue;
         if (selector.includes("[data-dialog-focus-restored]")) continue;
-        // The palette's search row is the field; a ring inside it would box the text.
-        if (selector === ".paletteSearch input:focus-visible") {
+        // The palette's search row and the file filter row are the field; a ring
+        // inside them would box the text.
+        if (
+          selector === ".paletteSearch input:focus-visible" ||
+          selector === ".fileFilter .fileFilterInput:focus-visible"
+        ) {
           expect(body).toContain("outline: none;");
           continue;
         }

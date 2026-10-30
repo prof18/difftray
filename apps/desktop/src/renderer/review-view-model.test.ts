@@ -34,6 +34,20 @@ describe("workspace file selection helpers", () => {
     expect(nextPendingPath(workspace, "d.ts")).toBe("b.ts");
   });
 
+  it("only advances to pending files that match the file list filter", () => {
+    const workspace = reviewWorkspace([
+      reviewFile("src/a.ts", { reviewed: true }),
+      reviewFile("docs/b.md", { reviewed: false }),
+      reviewFile("src/c.ts", { reviewed: false }),
+      reviewFile("docs/d.md", { reviewed: false })
+    ]);
+
+    expect(nextPendingPath(workspace, "src/a.ts", "docs")).toBe("docs/b.md");
+    expect(nextPendingPath(workspace, "docs/b.md", "docs")).toBe("docs/d.md");
+    expect(nextPendingPath(workspace, "docs/d.md", "src")).toBe("src/c.ts");
+    expect(nextPendingPath(workspace, "src/a.ts", "nothing")).toBeUndefined();
+  });
+
   it("keeps a visible preferred path or falls back to the first visible file", () => {
     const workspace = reviewWorkspace([
       reviewFile("hidden.ts", { visible: false }),

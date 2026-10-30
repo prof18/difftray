@@ -8,6 +8,8 @@ export type ApplicationCommand =
   | "repository-refresh"
   | "repository-show-in-finder"
   | "repository-worktrees"
+  | "view-filter-files"
+  | "view-go-to-file"
   | "view-split-diff"
   | "view-toggle-file-list"
   | "view-toggle-ignore-whitespace"
@@ -85,6 +87,17 @@ export function reviewViewMenuItemOptions(
   onCommand: ApplicationCommandHandler
 ): readonly MenuItemConstructorOptions[] {
   return [
+    {
+      accelerator: "CommandOrControl+P",
+      click: () => onCommand("view-go-to-file"),
+      label: "Go to File…"
+    },
+    {
+      accelerator: "CommandOrControl+F",
+      click: () => onCommand("view-filter-files"),
+      label: "Filter Files"
+    },
+    { type: "separator" },
     {
       accelerator: "CommandOrControl+1",
       click: () => onCommand("view-toggle-file-list"),

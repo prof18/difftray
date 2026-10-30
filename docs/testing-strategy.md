@@ -77,6 +77,7 @@ Cover:
 - next unreviewed selection
 - project switching from tabs and the command palette
 - command palette opening, keyboard navigation, file search, and selection
+- file-list filter matching, clearing, and the no-match state
 - file-list collapse/expand shortcut
 
 ### Main Process And IPC Tests

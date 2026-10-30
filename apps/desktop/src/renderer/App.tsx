@@ -31,7 +31,19 @@ import {
 import { DiffSurface } from "./diff-surface.js";
 import { DiffLoadingState, DiffToolbar } from "./diff-toolbar.js";
 import { FileCommentStack } from "./file-comments.js";
-import { CollapsedRail, FileList, FileListHeader } from "./file-list.js";
+import {
+  CollapsedRail,
+  FileFilterEmpty,
+  FileFilterField,
+  FileList,
+  FileListHeader
+} from "./file-list.js";
+import {
+  fileFilterForScope,
+  fileFilterScope,
+  filterFilesByQuery,
+  type FileFilterState
+} from "./file-list-filter.js";
 import {
   DriftToast,
   EmptyState,
@@ -200,6 +212,7 @@ export function App(): React.JSX.Element {
     readonly DroppedRepositoryPreviewView[]
   >([]);
   const [fileListCollapsed, setFileListCollapsed] = useState(false);
+  const [fileFilter, setFileFilter] = useState<FileFilterState>({ query: "", scope: "" });
   const [fileListWidth, setFileListWidth] = useState(340);
   const [hasBootstrapped, setHasBootstrapped] = useState(false);
   const [loadingDiffPath, setLoadingDiffPath] = useState<string | undefined>();
@@ -291,6 +304,7 @@ export function App(): React.JSX.Element {
     { readonly projectId: string; readonly requestId: number } | undefined
   >(undefined);
   const paletteInputRef = useRef<HTMLInputElement>(null);
+  const fileFilterInputRef = useRef<HTMLInputElement>(null);
   const commentReportCopyPendingRef = useRef(false);
   const commentSavePendingRef = useRef<CommentSavePending | undefined>(undefined);
   const focusRefreshRunningRef = useRef(false);
@@ -762,6 +776,12 @@ export function App(): React.JSX.Element {
         return;
       }
 
+      if (event.metaKey && key === "f") {
+        event.preventDefault();
+        focusFileFilter();
+        return;
+      }
+
       if (event.metaKey && key === "o") {
         event.preventDefault();
         void openRepositoryPicker();
@@ -854,6 +874,25 @@ export function App(): React.JSX.Element {
   const visibleFiles = useMemo(() => {
     return workspace ? workspace.files.filter((file) => file.visible) : [];
   }, [workspace]);
+
+  const currentFileFilterScope = workspace
+    ? fileFilterScope(workspace.project.id, workspace.reviewTarget)
+    : "";
+  // Switching project or review target drops the filter for good.
+  const scopedFileFilter = fileFilterForScope(fileFilter, currentFileFilterScope);
+
+  if (scopedFileFilter !== fileFilter) {
+    setFileFilter(scopedFileFilter);
+  }
+
+  const fileFilterQuery = scopedFileFilter.query;
+  const listedFiles = useMemo(
+    () => filterFilesByQuery(visibleFiles, fileFilterQuery),
+    [fileFilterQuery, visibleFiles]
+  );
+  // The collapsed rail shows every file, so navigation does too while it is shown.
+  const navigationFiles = fileListCollapsed ? visibleFiles : listedFiles;
+  const navigationFilterQuery = fileListCollapsed ? "" : fileFilterQuery;
 
   const selectedFile =
     visibleFiles.find((file) => file.path === selectedPath) ?? visibleFiles[0];
@@ -2427,6 +2466,12 @@ export function App(): React.JSX.Element {
       case "repository-worktrees":
         if (activeWorkspace) void openWorktreePicker(activeWorkspace.project);
         return;
+      case "view-filter-files":
+        focusFileFilter();
+        return;
+      case "view-go-to-file":
+        if (activeWorkspace) openPalette("files");
+        return;
       case "view-split-diff":
         setAndPersistDiffMode("split");
         return;
@@ -2924,21 +2969,53 @@ export function App(): React.JSX.Element {
     void persistProjectSettings({ fileListCollapsed: nextCollapsed });
   }
 
+  function setFileFilterQuery(query: string): void {
+    setFileFilter({ query, scope: currentFileFilterScope });
+  }
+
+  function focusFileFilter(): void {
+    if (!workspace) {
+      return;
+    }
+
+    closeTransientOverlays();
+
+    if (fileListCollapsed) {
+      toggleFileListCollapsed();
+    }
+
+    // The field mounts with the file list, which may only now be expanding.
+    requestAnimationFrame(() => {
+      fileFilterInputRef.current?.focus();
+      fileFilterInputRef.current?.select();
+    });
+  }
+
+  function openFirstFilteredFile(): void {
+    const firstFile = listedFiles[0];
+
+    if (firstFile) {
+      selectPath(firstFile.path);
+      fileFilterInputRef.current?.blur();
+    }
+  }
+
+  // Keyboard navigation steps through the filtered rows while a filter is on.
   function selectRelativeFile(offset: 1 | -1): void {
-    if (visibleFiles.length === 0) {
+    if (navigationFiles.length === 0) {
       return;
     }
 
     const selectedIndex = selectedFile
-      ? visibleFiles.findIndex((file) => file.path === selectedFile.path)
+      ? navigationFiles.findIndex((file) => file.path === selectedFile.path)
       : -1;
     const nextIndex =
       selectedIndex === -1
         ? offset > 0
           ? 0
-          : visibleFiles.length - 1
-        : clampIndex(selectedIndex + offset, visibleFiles.length);
-    const nextFile = visibleFiles[nextIndex];
+          : navigationFiles.length - 1
+        : clampIndex(selectedIndex + offset, navigationFiles.length);
+    const nextFile = navigationFiles[nextIndex];
 
     if (nextFile) {
       selectPath(nextFile.path);
@@ -2967,7 +3044,7 @@ export function App(): React.JSX.Element {
       )
     };
     const optimisticNextPath =
-      nextPendingPath(optimisticWorkspace, optimisticFile.path) ??
+      nextPendingPath(optimisticWorkspace, optimisticFile.path, navigationFilterQuery) ??
       visiblePathOrFirst(optimisticWorkspace, optimisticFile.path);
 
     nextReviewNavigationPerformanceIdRef.current = actionId;
@@ -3041,7 +3118,7 @@ export function App(): React.JSX.Element {
       const userSelectedPath = selectedPathRef.current;
       const nextPath =
         userSelectedPath === optimisticFile.path
-          ? (nextPendingPath(nextWorkspace, optimisticFile.path) ??
+          ? (nextPendingPath(nextWorkspace, optimisticFile.path, navigationFilterQuery) ??
             visiblePathOrFirst(nextWorkspace, optimisticFile.path))
           : visiblePathOrFirst(nextWorkspace, userSelectedPath);
 
@@ -4110,19 +4187,36 @@ export function App(): React.JSX.Element {
                   }}
                   pending={reviewNotePending || loadState === "loading"}
                 />
-                <FileList
-                  commentCountByPath={commentCountByPath}
-                  files={visibleFiles}
-                  onOpenInEditor={(path) => {
-                    void openFileInEditor(path);
-                  }}
-                  onSelect={selectPath}
-                  onShowInFinder={(path) => {
-                    void showFileInFinder(path);
-                  }}
-                  projectId={workspace.project.id}
-                  selectedPath={selectedFile?.path}
+                <FileFilterField
+                  inputRef={fileFilterInputRef}
+                  matchCount={listedFiles.length}
+                  onQueryChange={setFileFilterQuery}
+                  onSubmit={openFirstFilteredFile}
+                  query={fileFilterQuery}
+                  totalCount={visibleFiles.length}
                 />
+                {listedFiles.length === 0 && fileFilterQuery.trim().length > 0 ? (
+                  <FileFilterEmpty
+                    onClear={() => {
+                      setFileFilterQuery("");
+                    }}
+                    query={fileFilterQuery}
+                  />
+                ) : (
+                  <FileList
+                    commentCountByPath={commentCountByPath}
+                    files={listedFiles}
+                    onOpenInEditor={(path) => {
+                      void openFileInEditor(path);
+                    }}
+                    onSelect={selectPath}
+                    onShowInFinder={(path) => {
+                      void showFileInFinder(path);
+                    }}
+                    projectId={workspace.project.id}
+                    selectedPath={selectedFile?.path}
+                  />
+                )}
                 <div className={styles.fileFooter}>
                   <span>
                     <kbd>↑</kbd> <kbd>↓</kbd> navigate

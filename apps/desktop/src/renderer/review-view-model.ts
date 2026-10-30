@@ -1,4 +1,5 @@
 import type { DiffSideFocus } from "./diffs-renderer.js";
+import { filterFilesByQuery } from "./file-list-filter.js";
 
 export type DiffMode = "split" | "unified";
 export type ReviewDiffTargetMode = "branch" | "commit" | "working_tree";
@@ -15,9 +16,13 @@ export type FileListHeaderMetrics = {
 
 export function nextPendingPath(
   workspace: ReviewWorkspaceView,
-  reviewedPath: string
+  reviewedPath: string,
+  fileFilterQuery = ""
 ): string | undefined {
-  const visibleFiles = workspace.files.filter((file) => file.visible && !file.reviewed);
+  const visibleFiles = filterFilesByQuery(
+    workspace.files.filter((file) => file.visible && !file.reviewed),
+    fileFilterQuery
+  );
   const reviewedIndex = workspace.files.findIndex((file) => file.path === reviewedPath);
 
   return (

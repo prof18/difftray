@@ -16,6 +16,8 @@ export type ApplicationCommand =
   | "repository-refresh"
   | "repository-show-in-finder"
   | "repository-worktrees"
+  | "view-filter-files"
+  | "view-go-to-file"
   | "view-split-diff"
   | "view-toggle-file-list"
   | "view-toggle-ignore-whitespace"
@@ -33,6 +35,8 @@ export function parseApplicationCommand(
     case "repository-refresh":
     case "repository-show-in-finder":
     case "repository-worktrees":
+    case "view-filter-files":
+    case "view-go-to-file":
     case "view-split-diff":
     case "view-toggle-file-list":
     case "view-toggle-ignore-whitespace":

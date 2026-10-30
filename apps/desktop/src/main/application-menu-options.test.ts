@@ -87,6 +87,9 @@ describe("viewMenuItemOptions", () => {
     expect(
       reviewViewMenuItemOptions(onCommand).map((item) => item.label ?? item.type)
     ).toEqual([
+      "Go to File…",
+      "Filter Files",
+      "separator",
       "Toggle File List",
       "separator",
       "Use Split Diff",
@@ -104,5 +107,19 @@ describe("viewMenuItemOptions", () => {
     expect(item?.accelerator).toBeUndefined();
     item?.click?.({} as never, undefined, {} as never);
     expect(onCommand).toHaveBeenCalledWith("view-toggle-ignore-whitespace");
+  });
+
+  it("routes file finding commands with their shortcuts", () => {
+    const onCommand = vi.fn();
+    const [goToFile, filterFiles] = reviewViewMenuItemOptions(onCommand);
+
+    expect(goToFile).toMatchObject({ accelerator: "CommandOrControl+P" });
+    expect(filterFiles).toMatchObject({ accelerator: "CommandOrControl+F" });
+
+    goToFile?.click?.({} as never, undefined, {} as never);
+    filterFiles?.click?.({} as never, undefined, {} as never);
+
+    expect(onCommand).toHaveBeenNthCalledWith(1, "view-go-to-file");
+    expect(onCommand).toHaveBeenNthCalledWith(2, "view-filter-files");
   });
 });
