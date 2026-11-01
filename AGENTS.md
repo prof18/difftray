@@ -149,6 +149,8 @@ Run `pnpm bench:performance` before and after changes that can affect large-repo
 - renderer diff parsing/rendering, file-list rendering, or scroll restoration
 - packaging/bundle changes that can affect renderer payload size
 
+Benchmark numbers are only comparable on a quiet machine: close editors and other heavy apps, wait until the load average stays low, then run the baseline commit and the change back to back. A regression measured while the machine is busy is inconclusive, so rerun it rather than tuning the code against it.
+
 For agent context validation or agent read/submit paths, also run `pnpm bench:agent-reads` before and after (`DIFFTRAY_AGENT_BENCH_FILE_COUNT` sets the fixture size).
 
 Do not keep a performance optimization only because it is theoretically better. Record the before/after benchmark outputs and keep the change only when the relevant benchmark metric improves or when a product tradeoff is explicitly accepted.
@@ -158,6 +160,8 @@ For small isolated copy, styling, docs, or test-only changes with no plausible p
 ## UI Direction
 
 Professional but opinionated. Avoid generic Electron app grayness. Keep the interface dense, calm, and optimized for repeated review work.
+
+Build new UI from what the neighbouring screens already use: the same components, spacing scale, type sizes and selection styles as the sibling settings rows or panels. In the visual check, compare the changed view side by side with its neighbours, since one-off styles and loose spacing stand out immediately to the user.
 
 Do not use visible in-app explanatory text for obvious controls. Use familiar controls, icons, tooltips, and keyboard shortcuts.
 
