@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.0.18 - 2026-11-06
+
+### Added
+
+- Ignore leading and trailing whitespace when drawing a diff, from Settings ›
+  Review or View › Toggle Ignore Whitespace. Re-indented lines show as context;
+  the review itself stays based on the full diff.
+- Filter the file list by path (Cmd+F or View › Filter Files), and open Go to
+  File (Cmd+P) from the View menu.
+
+### Fixed
+
+- Keep range comments visible when ignoring whitespace hides some of their lines.
+
 ## 0.0.17 - 2026-10-26
 
 ### Improved
