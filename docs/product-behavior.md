@@ -18,6 +18,12 @@ as tabs; each tab shows the project name, its path as a tooltip, the current rev
 target and review progress. Difftray remembers recent projects, watches every open
 project for changes, and keeps each project's own base ref and last review target.
 
+Difftray closes the tab of a project whose folder is gone or has no `.git` entry, such
+as a deleted worktree. It checks at startup and whenever a window gets focus. If the
+gone tab is selected, the window shows "Worktree removed" and then the next tab. A
+phone viewing that project returns to its projects list with a notice
+([Decision 0046](decisions/0046-close-vanished-project-tabs.md)).
+
 With no project open, the window offers Open Repository, Scan a folder… (adds an
 approved search folder) and recent projects, and notes that a folder can be
 dropped onto the window.

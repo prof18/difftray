@@ -97,6 +97,8 @@ export type CompanionDeps = {
   readonly companionEnvelope: CompanionEnvelopeVerifier;
   readonly storage: DifftrayStorage;
   readonly closeProject: (projectId: string) => Promise<boolean>;
+  /** False when the project is not stored or its folder is gone. */
+  readonly isProjectAvailable: (projectId: string) => Promise<boolean>;
   readonly loadWorkspaceView: (projectId: string) => Promise<ReviewWorkspaceView>;
   readonly loadFileDiff: (
     projectId: string,
@@ -733,19 +735,32 @@ export function createCompanionApi(deps: CompanionDeps): readonly RouteDefinitio
       handler: async ({ capabilities, params }) => {
         const projectId = params.get("projectId");
 
-        if (!projectId) {
-          return {
-            body: companionError("not_found", "Workspace not found"),
-            status: 404
-          };
+        const workspaceNotFound = {
+          body: companionError("not_found", "Workspace not found"),
+          status: 404
+        };
+
+        if (!projectId || !(await deps.isProjectAvailable(projectId))) {
+          return workspaceNotFound;
+        }
+
+        // The folder can vanish while Git runs: recheck after the load, on
+        // failure and on success, so the phone sees a 404 and leaves.
+        let workspace: ReviewWorkspaceView;
+        try {
+          workspace = await loadWorkspaceSingleFlight(projectId);
+        } catch (caughtError) {
+          if (!(await deps.isProjectAvailable(projectId))) return workspaceNotFound;
+          throw caughtError;
+        }
+
+        if (!(await deps.isProjectAvailable(projectId))) {
+          return workspaceNotFound;
         }
 
         return {
           body: {
-            workspace: workspaceForCapabilities(
-              await loadWorkspaceSingleFlight(projectId),
-              capabilities
-            )
+            workspace: workspaceForCapabilities(workspace, capabilities)
           },
           status: 200
         };

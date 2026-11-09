@@ -8,15 +8,34 @@ export type WorkspaceLoadStatus = {
 const immediateTabSwitchLoaderFileThreshold = 75;
 export const delayedTabSwitchLoaderMs = 500;
 
-export function loadStatusFromProgress(
-  progress: ProjectLoadProgressView
+/**
+ * A pinned title (why the load started, such as "Worktree removed") stays in
+ * place and the status's own title moves into the detail line.
+ */
+export function withPinnedLoadTitle(
+  status: WorkspaceLoadStatus,
+  pinnedTitle?: string
 ): WorkspaceLoadStatus {
-  return {
-    detail: loadProgressDetail(progress),
-    ...(progress.loadedFiles !== undefined ? { loadedFiles: progress.loadedFiles } : {}),
-    title: progress.message,
-    ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
-  };
+  return pinnedTitle === undefined
+    ? status
+    : { ...status, detail: `${status.title} · ${status.detail}`, title: pinnedTitle };
+}
+
+export function loadStatusFromProgress(
+  progress: ProjectLoadProgressView,
+  pinnedTitle?: string
+): WorkspaceLoadStatus {
+  return withPinnedLoadTitle(
+    {
+      detail: loadProgressDetail(progress),
+      ...(progress.loadedFiles !== undefined
+        ? { loadedFiles: progress.loadedFiles }
+        : {}),
+      title: progress.message,
+      ...(progress.totalFiles !== undefined ? { totalFiles: progress.totalFiles } : {})
+    },
+    pinnedTitle
+  );
 }
 
 export function loadProgressDetail(progress: ProjectLoadProgressView): string {

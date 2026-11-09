@@ -419,9 +419,7 @@ declare global {
     readonly projectIds: readonly string[];
   };
 
-  type ProjectClosedEvent = {
-    readonly projectId: string;
-  };
+  type ProjectClosedEvent = import("../shared/project-closed.js").ProjectClosedEvent;
 
   type WorktreeLabelsChangedEvent = {
     readonly worktreeId: string;

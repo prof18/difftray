@@ -5,6 +5,7 @@ import type {
   AgentCheckResult,
   AgentSkillTarget
 } from "../shared/agent-setup-types.js";
+import type { ProjectClosedEvent } from "../shared/project-closed.js";
 export type {
   AgentSetupInfo,
   AgentCheckResult,
@@ -25,6 +26,7 @@ export type CliInstallStatus = {
 import {
   parseApplicationCommand,
   parseProjectChangedEvent,
+  parseProjectClosedEvent,
   parseWorktreeLabelsChangedEvent,
   type WorktreeLabelsChangedEvent,
   parseProjectLoadProgress,
@@ -56,9 +58,7 @@ export type ProjectsOpenedEvent = {
   readonly projectIds: readonly string[];
 };
 
-export type ProjectClosedEvent = {
-  readonly projectId: string;
-};
+export type { ProjectClosedEvent };
 
 export type WorktreeChangeCountEvent = {
   readonly changeCount: number;
@@ -996,8 +996,9 @@ const api: DifftrayApi = {
   },
   onProjectClosed: (listener) => {
     const handler = (_event: IpcRendererEvent, payload: unknown): void => {
-      if (!isProjectClosedEvent(payload)) return;
-      listener(payload);
+      const event = parseProjectClosedEvent(payload);
+      if (!event) return;
+      listener(event);
     };
 
     ipcRenderer.on("projects:closed", handler);
@@ -1195,10 +1196,6 @@ function isProjectsOpenedEvent(payload: unknown): payload is ProjectsOpenedEvent
       (projectId): projectId is string => typeof projectId === "string"
     )
   );
-}
-
-function isProjectClosedEvent(payload: unknown): payload is ProjectClosedEvent {
-  return isRecord(payload) && typeof payload.projectId === "string";
 }
 
 function isWorktreeChangeCountEvent(

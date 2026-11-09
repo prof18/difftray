@@ -727,6 +727,90 @@ describe("companion server core", () => {
     expect(requestedSummaryModes).toEqual(["complete", "background"]);
   });
 
+  it("answers 404 for the workspace of an unavailable project", async () => {
+    const loadWorkspaceView = vi.fn(async () => testWorkspace("project-1"));
+    const { baseUrl } = await startServer({
+      isProjectAvailable: async () => false,
+      loadWorkspaceView
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(response.plain.status).toBe(404);
+    expect(response.plain.body).toEqual({
+      error: expect.objectContaining({ code: "not_found", protocolVersion: 1 })
+    });
+    expect(loadWorkspaceView).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 when the project vanishes during a workspace load", async () => {
+    let available = true;
+    const { baseUrl } = await startServer({
+      isProjectAvailable: async () => available,
+      loadWorkspaceView: async () => {
+        available = false;
+        throw new Error("gone");
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(response.plain.status).toBe(404);
+    expect(response.plain.body).toEqual({
+      error: expect.objectContaining({ code: "not_found", protocolVersion: 1 })
+    });
+  });
+
+  it("keeps a workspace load failure internal while the project is available", async () => {
+    const { baseUrl } = await startServer({
+      isProjectAvailable: async () => true,
+      loadWorkspaceView: async () => {
+        throw new Error("git failed");
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(response.wireStatus).toBe(500);
+    expect(response.plain.body).toMatchObject({
+      error: { code: "internal", protocolVersion: COMPANION_PROTOCOL_VERSION }
+    });
+  });
+
+  it("answers 404 when the project vanishes after a successful workspace load", async () => {
+    let available = true;
+    const { baseUrl } = await startServer({
+      isProjectAvailable: async () => available,
+      loadWorkspaceView: async () => {
+        available = false;
+        return testWorkspace("project-1");
+      }
+    });
+
+    const response = await encryptedRequest({
+      baseUrl,
+      logicalMethod: "GET",
+      path: "/companion/v1/projects/project-1/workspace"
+    });
+
+    expect(response.plain.status).toBe(404);
+    expect(response.plain.body).toEqual({
+      error: expect.objectContaining({ code: "not_found", protocolVersion: 1 })
+    });
+  });
+
   it("only exposes structured worktree identity to clients that opt in", async () => {
     const project = {
       id: "project-1",
@@ -2121,6 +2205,7 @@ async function startServer(
     }),
     commentsReport: async () => "",
     closeProject: async () => false,
+    isProjectAvailable: async () => true,
     createComment: async () => {
       throw new Error("not implemented in test");
     },

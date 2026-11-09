@@ -1,4 +1,31 @@
+import type { ProjectClosedReason } from "../shared/project-closed.js";
+
 export type WorkspaceLoadState = "idle" | "loading";
+
+export function projectClosedLoadTitle(reason: ProjectClosedReason): string {
+  return reason === "vanished" ? "Worktree removed" : "Closing repository";
+}
+
+/**
+ * The main process drops vanished tabs before it answers listRecentProjects,
+ * so a vanished close for a tab this window never listed needs no overlay.
+ * Without this, a close during startup would abort the bootstrap load, whose
+ * load target invalidates on any tab removal.
+ */
+export function shouldIgnoreProjectClosedEvent(input: {
+  readonly reason: ProjectClosedReason;
+  readonly projectId: string;
+  readonly tabProjectIds: readonly string[];
+  readonly displayedProjectId: string | undefined;
+  readonly loadTargetProjectId: string | undefined;
+}): boolean {
+  return (
+    input.reason === "vanished" &&
+    !input.tabProjectIds.includes(input.projectId) &&
+    input.displayedProjectId !== input.projectId &&
+    input.loadTargetProjectId !== input.projectId
+  );
+}
 
 export type WorkspaceLoadRequestRef = { current: number };
 

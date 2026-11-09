@@ -135,6 +135,15 @@ import { openStoredProjectDirectory } from "./project-folder-open.js";
 import { copyStoredProjectPath } from "./project-path-copy.js";
 import { closeProjectIfOpen } from "./project-close.js";
 import {
+  isProjectPathPresent,
+  loadUnlessVanished,
+  vanishedProjectIds
+} from "./vanished-projects.js";
+import type {
+  ProjectClosedEvent,
+  ProjectClosedReason
+} from "../shared/project-closed.js";
+import {
   createRepositoryOpenService,
   type RepositoryOpenBatchResult
 } from "./repository-open-service.js";
@@ -1717,6 +1726,17 @@ app.on("before-quit", () => {
   storage = undefined;
 });
 
+// On macOS the app keeps running without a window, so a worktree deleted
+// meanwhile is noticed when the user comes back.
+app.on("browser-window-focus", () => {
+  if (!hasProfileLock || isQuitting || !storage) return;
+  try {
+    listAvailableRecentProjects();
+  } catch (caughtError) {
+    console.error("Failed to close vanished projects", caughtError);
+  }
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
@@ -2477,10 +2497,11 @@ function emitWorktreeLabelsChanged(change: WorktreeLabelChange): void {
   }
 }
 
-function emitProjectClosed(projectId: string): void {
+function emitProjectClosed(projectId: string, reason: ProjectClosedReason): void {
+  const event: ProjectClosedEvent = { projectId, reason };
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
-      window.webContents.send("projects:closed", { projectId });
+      window.webContents.send("projects:closed", event);
     }
   }
 }
@@ -2578,15 +2599,12 @@ function projectWatchTarget(
 function listAvailableRecentProjects(): readonly StoredProjectRecord[] {
   const projects = getStorage().listOpenProjects();
 
-  for (const project of projects) {
-    if (!existsSync(project.path)) {
-      closeProjectTab(project.id);
-      if (projectWatchService) {
-        void projectWatchService.stopProject(project.id).catch((caughtError: unknown) => {
-          console.error("Failed to stop missing project watcher", caughtError);
-        });
-      }
-    }
+  // closeOpenProject closes the tab synchronously, so the list below no
+  // longer contains the vanished projects.
+  for (const projectId of vanishedProjectIds(projects, existsSync)) {
+    void closeOpenProject(projectId, "vanished").catch((caughtError: unknown) => {
+      console.error("Failed to close vanished project", caughtError);
+    });
   }
 
   return getStorage().listOpenProjects();
@@ -2762,21 +2780,8 @@ export function createDesktopCompanionDeps(): CompanionDeps {
       ),
     companionAuth: getCompanionAuthManager(),
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
-    closeProject: async (projectId) =>
-      closeProjectIfOpen({
-        closeProjectTab: () => closeProjectTab(projectId),
-        isProjectOpen: () =>
-          storage.listOpenProjects().some((project) => project.id === projectId),
-        isShuttingDown: () => isQuitting,
-        onProjectClosed: () => {
-          emitProjectClosed(projectId);
-          broadcastCompanionWorkspaceChanged(projectId, "filesystem");
-        },
-        onWatcherStopError: (caughtError) => {
-          console.error("Failed to stop closed project watcher", caughtError);
-        },
-        stopProjectWatcher: () => getProjectWatchService().stopProject(projectId)
-      }),
+    closeProject: (projectId) => closeOpenProject(projectId, "closed"),
+    isProjectAvailable: isCompanionProjectAvailable,
     commentsReport: async (projectId) =>
       formatProjectCommentsReport(projectId, await loadProjectWorkspace(projectId)),
     createComment: async (input) => {
@@ -3478,15 +3483,24 @@ async function loadProjectReviewSummaryIfAvailable(
     return null;
   }
 
-  if (!existsSync(project.path)) {
-    closeProjectTab(project.id);
-    await projectWatchService?.stopProject(project.id);
-    return null;
-  }
+  return loadUnlessVanished({
+    isPresent: () => isProjectPathPresent(project.path, existsSync),
+    load: async () => {
+      const { files, progress } = await loadProjectReviewState(project);
+      return projectReviewSummaryView(files, progress);
+    },
+    onVanished: async () => {
+      await closeOpenProject(project.id, "vanished");
+    }
+  });
+}
 
-  const { files, progress } = await loadProjectReviewState(project);
-
-  return projectReviewSummaryView(files, progress);
+async function isCompanionProjectAvailable(projectId: string): Promise<boolean> {
+  const project = getStorage().getProject(projectId);
+  if (!project) return false;
+  if (isProjectPathPresent(project.path, existsSync)) return true;
+  await closeOpenProject(project.id, "vanished");
+  return false;
 }
 
 async function loadCompanionProjectWorkspace(
@@ -3528,13 +3542,13 @@ async function loadProjectWorkspaceIfAvailable(
     return null;
   }
 
-  if (!existsSync(project.path)) {
-    closeProjectTab(project.id);
-    await projectWatchService?.stopProject(project.id);
-    return null;
-  }
-
-  return loadProjectWorkspace(projectId, reportProgress);
+  return loadUnlessVanished({
+    isPresent: () => isProjectPathPresent(project.path, existsSync),
+    load: () => loadProjectWorkspace(projectId, reportProgress),
+    onVanished: async () => {
+      await closeOpenProject(project.id, "vanished");
+    }
+  });
 }
 
 async function markProjectFileReviewed(
@@ -4327,6 +4341,32 @@ function boundedRepositoryBatch(input: unknown, property: string): readonly stri
   const values = readStringArrayProperty(input, property);
   if (values.length > 100) throw new Error("Process at most 100 folders at once.");
   return [...new Set(values)];
+}
+
+/**
+ * Closes an open tab at most once, then tells every window and the phone.
+ * closeProjectIfOpen runs closeProjectTab before its first await.
+ */
+function closeOpenProject(
+  projectId: string,
+  reason: ProjectClosedReason
+): Promise<boolean> {
+  return closeProjectIfOpen({
+    closeProjectTab: () => closeProjectTab(projectId),
+    isProjectOpen: () =>
+      getStorage()
+        .listOpenProjects()
+        .some((project) => project.id === projectId),
+    isShuttingDown: () => isQuitting,
+    onProjectClosed: () => {
+      emitProjectClosed(projectId, reason);
+      broadcastCompanionWorkspaceChanged(projectId, "filesystem");
+    },
+    onWatcherStopError: (caughtError) => {
+      console.error("Failed to stop closed project watcher", caughtError);
+    },
+    stopProjectWatcher: () => getProjectWatchService().stopProject(projectId)
+  });
 }
 
 function closeProjectTab(projectId: string): void {

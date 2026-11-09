@@ -19,7 +19,9 @@ import {
   shouldReloadWorkspaceAfterProjectChange,
   shouldCancelProjectsOpenedRequest,
   shouldApplySilentWorkspaceRefresh,
-  shouldInvalidateWorkspaceLoadForTabRemoval
+  shouldInvalidateWorkspaceLoadForTabRemoval,
+  projectClosedLoadTitle,
+  shouldIgnoreProjectClosedEvent
 } from "./workspace-refresh.js";
 
 type TestProject = {
@@ -630,5 +632,45 @@ describe("workspaceCompletionOutcome", () => {
     expect(
       workspaceCompletionOutcome(request, { applyVersion: 3, projectId: undefined })
     ).toBe("discard");
+  });
+});
+
+describe("project closed events", () => {
+  it("titles the overlay by close reason", () => {
+    expect(projectClosedLoadTitle("vanished")).toBe("Worktree removed");
+    expect(projectClosedLoadTitle("closed")).toBe("Closing repository");
+  });
+
+  const unknownVanished = {
+    displayedProjectId: "shown",
+    loadTargetProjectId: "loading",
+    projectId: "gone",
+    reason: "vanished",
+    tabProjectIds: ["shown", "other"]
+  } as const;
+
+  it("ignores a vanished close for a tab the window never had", () => {
+    expect(shouldIgnoreProjectClosedEvent(unknownVanished)).toBe(true);
+  });
+
+  it("handles a vanished close for a known, displayed or loading tab", () => {
+    expect(
+      shouldIgnoreProjectClosedEvent({
+        ...unknownVanished,
+        tabProjectIds: ["shown", "gone"]
+      })
+    ).toBe(false);
+    expect(
+      shouldIgnoreProjectClosedEvent({ ...unknownVanished, displayedProjectId: "gone" })
+    ).toBe(false);
+    expect(
+      shouldIgnoreProjectClosedEvent({ ...unknownVanished, loadTargetProjectId: "gone" })
+    ).toBe(false);
+  });
+
+  it("never ignores a requested close", () => {
+    expect(shouldIgnoreProjectClosedEvent({ ...unknownVanished, reason: "closed" })).toBe(
+      false
+    );
   });
 });

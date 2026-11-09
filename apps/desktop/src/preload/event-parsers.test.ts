@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseApplicationCommand,
   parseProjectChangedEvent,
+  parseProjectClosedEvent,
   parseProjectLoadProgress,
   parseRepositoryScanProgress,
   parseUpdatePhase,
@@ -26,6 +27,23 @@ describe("preload event parsers", () => {
       })
     ).toBeUndefined();
     expect(parseWorktreeLabelsChangedEvent(null)).toBeUndefined();
+  });
+
+  it("parses project closed events strictly", () => {
+    expect(parseProjectClosedEvent({ projectId: "p", reason: "vanished" })).toEqual({
+      projectId: "p",
+      reason: "vanished"
+    });
+    expect(parseProjectClosedEvent({ projectId: "p", reason: "closed" })).toEqual({
+      projectId: "p",
+      reason: "closed"
+    });
+    expect(parseProjectClosedEvent({ projectId: "p" })).toEqual({
+      projectId: "p",
+      reason: "closed"
+    });
+    expect(parseProjectClosedEvent({ projectId: "p", reason: "other" })).toBeUndefined();
+    expect(parseProjectClosedEvent({ projectId: 1 })).toBeUndefined();
   });
 
   it("accepts only known application commands", () => {

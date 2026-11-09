@@ -75,6 +75,8 @@ import {
   shouldClearInvalidatedDisplayedWorkspace,
   shouldClearUnavailableDisplayedWorkspace,
   shouldCancelProjectsOpenedRequest,
+  shouldIgnoreProjectClosedEvent,
+  projectClosedLoadTitle,
   shouldDismissWorktreePickerForProjectRemoval,
   shouldReloadWorkspaceAfterProjectChange,
   shouldRefreshCachedWorkspaceAfterTabSwitch,
@@ -125,6 +127,7 @@ import {
 import { SettingsPanel } from "./settings-panel.js";
 import {
   loadStatusFromProgress,
+  withPinnedLoadTitle,
   tabSwitchLoaderDelayMs,
   type WorkspaceLoadStatus
 } from "./workspace-load-status.js";
@@ -281,7 +284,9 @@ export function App(): React.JSX.Element {
   const applicationCommandHandlerRef = useRef<(command: ApplicationCommand) => void>(
     () => undefined
   );
-  const projectClosedHandlerRef = useRef<(projectId: string) => void>(() => undefined);
+  const projectClosedHandlerRef = useRef<(event: ProjectClosedEvent) => void>(
+    () => undefined
+  );
   const projectsOpenedHandlerRef = useRef<(event: ProjectsOpenedEvent) => void>(
     () => undefined
   );
@@ -335,6 +340,17 @@ export function App(): React.JSX.Element {
   const workspaceCacheRef = useRef<Map<string, WorkspaceCacheEntry>>(new Map());
   const invalidatedDisplayedWorkspaceRef = useRef<string | undefined>(undefined);
   const workspaceLoadRequestRef = useRef(0);
+  const pinnedLoadTitleRef = useRef<
+    { readonly requestId: number; readonly title: string } | undefined
+  >(undefined);
+
+  // A pin belongs to one load request; a newer load ignores it.
+  function currentPinnedLoadTitle(): string | undefined {
+    const pin = pinnedLoadTitleRef.current;
+    return pin && isWorkspaceLoadRequestCurrent(pin.requestId, workspaceLoadRequestRef)
+      ? pin.title
+      : undefined;
+  }
   const workspaceLoadTargetRef = useRef<
     (WorkspaceLoadTarget & { readonly requestId: number }) | undefined
   >(undefined);
@@ -698,8 +714,8 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    const stopProjectClosed = window.difftray.onProjectClosed(({ projectId }) => {
-      projectClosedHandlerRef.current(projectId);
+    const stopProjectClosed = window.difftray.onProjectClosed((event) => {
+      projectClosedHandlerRef.current(event);
     });
     const stopProjectsOpened = window.difftray.onProjectsOpened((event) => {
       projectsOpenedHandlerRef.current(event);
@@ -1313,7 +1329,7 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     return window.difftray.onProjectLoadProgress((progress) => {
-      setLoadStatus(loadStatusFromProgress(progress));
+      setLoadStatus(loadStatusFromProgress(progress, currentPinnedLoadTitle()));
     });
   }, []);
 
@@ -1564,10 +1580,12 @@ export function App(): React.JSX.Element {
 
     const workspaceToApply = carryLoadedDiffsForward(workspaceRef.current, nextWorkspace);
 
-    setLoadStatus({
-      detail: workspaceToApply.project.name,
-      title: "Preparing workspace"
-    });
+    setLoadStatus(
+      withPinnedLoadTitle(
+        { detail: workspaceToApply.project.name, title: "Preparing workspace" },
+        currentPinnedLoadTitle()
+      )
+    );
     const [nextSettings, nextBranchRefs, nextRecentCommits] = await Promise.all([
       options.projectSettings
         ? Promise.resolve(options.projectSettings)
@@ -2103,7 +2121,8 @@ export function App(): React.JSX.Element {
   async function removeProjectTab(
     projectId: string,
     title: string,
-    remove: () => Promise<readonly RecentProjectView[]>
+    remove: () => Promise<readonly RecentProjectView[]>,
+    options: { readonly pinTitle?: boolean } = {}
   ): Promise<void> {
     const recentProjectsRequestId = ++recentProjectsRefreshRequestRef.current;
     const { closingActiveProject, displayedProjectClosed } = projectTabRemovalDisposition(
@@ -2166,6 +2185,7 @@ export function App(): React.JSX.Element {
 
     const requestId = invalidateWorkspaceLoadRequest(workspaceLoadRequestRef);
 
+    if (options.pinTitle) pinnedLoadTitleRef.current = { requestId, title };
     setError(undefined);
     invalidatePendingSilentWorkspaceRefreshes();
     updateLoadState("loading");
@@ -2283,6 +2303,9 @@ export function App(): React.JSX.Element {
         setError(errorMessage(caughtError));
       }
     } finally {
+      if (pinnedLoadTitleRef.current?.requestId === requestId) {
+        pinnedLoadTitleRef.current = undefined;
+      }
       if (isWorkspaceLoadRequestCurrent(requestId, workspaceLoadRequestRef)) {
         updateLoadState("idle");
         setLoadStatus(defaultWorkspaceLoadStatus);
@@ -2401,7 +2424,18 @@ export function App(): React.JSX.Element {
       });
   }
 
-  function handleProjectClosed(projectId: string): void {
+  function handleProjectClosed({ projectId, reason }: ProjectClosedEvent): void {
+    if (
+      shouldIgnoreProjectClosedEvent({
+        displayedProjectId: workspaceRef.current?.project.id,
+        loadTargetProjectId: workspaceLoadTargetRef.current?.projectId,
+        projectId,
+        reason,
+        tabProjectIds: recentProjects.map((project) => project.id)
+      })
+    ) {
+      return;
+    }
     if (
       shouldCancelProjectsOpenedRequest(
         projectsOpenedTargetRef.current?.projectId,
@@ -2411,8 +2445,11 @@ export function App(): React.JSX.Element {
       projectsOpenedRequestRef.current += 1;
       projectsOpenedTargetRef.current = undefined;
     }
-    void removeProjectTab(projectId, "Closing repository", () =>
-      window.difftray.listRecentProjects()
+    void removeProjectTab(
+      projectId,
+      projectClosedLoadTitle(reason),
+      () => window.difftray.listRecentProjects(),
+      { pinTitle: reason === "vanished" }
     );
   }
 

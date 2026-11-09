@@ -879,6 +879,7 @@ async function createIntegrationHarness(): Promise<{
     companionAuth,
     companionEnvelope: createCompanionEnvelopeVerifier({ storage }),
     closeProject: async () => false,
+    isProjectAvailable: async () => true,
     commentsReport: async (projectId) => commentsReport(storage, projectId),
     createComment: async (input) => {
       const workspace = await loadWorkspaceView(storage, input.projectId);

@@ -7,10 +7,41 @@ import {
   projectTabTitle,
   tabLoadingText,
   tabReviewCountText,
-  tabSwitchLoaderDelayMs
+  tabSwitchLoaderDelayMs,
+  withPinnedLoadTitle
 } from "./workspace-load-status.js";
 
 describe("loadStatusFromProgress", () => {
+  it("keeps a pinned title and moves the progress message into the detail", () => {
+    const progress = projectProgress({ phase: "resolving_review_state" });
+
+    expect(loadStatusFromProgress(progress, "Worktree removed")).toEqual({
+      detail: `${progress.message} · ${loadProgressDetail(progress)}`,
+      title: "Worktree removed"
+    });
+  });
+
+  it("pins a title over any load status", () => {
+    expect(
+      withPinnedLoadTitle(
+        { detail: "wt-d", title: "Preparing workspace" },
+        "Worktree removed"
+      )
+    ).toEqual({ detail: "Preparing workspace · wt-d", title: "Worktree removed" });
+    expect(withPinnedLoadTitle({ detail: "wt-d", title: "Preparing workspace" })).toEqual(
+      {
+        detail: "wt-d",
+        title: "Preparing workspace"
+      }
+    );
+  });
+
+  it("uses the progress message as title without a pinned title", () => {
+    const progress = projectProgress({ phase: "resolving_review_state" });
+
+    expect(loadStatusFromProgress(progress).title).toBe(progress.message);
+  });
+
   it("formats loading file progress with counts and current path", () => {
     const progress = projectProgress({
       loadedFiles: 3,

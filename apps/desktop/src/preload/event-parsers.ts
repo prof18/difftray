@@ -1,3 +1,8 @@
+import type {
+  ProjectClosedEvent,
+  ProjectClosedReason
+} from "../shared/project-closed.js";
+
 export type UpdatePhase =
   | { readonly kind: "idle" }
   | { readonly kind: "checking" }
@@ -92,6 +97,26 @@ export type WorktreeLabelsChangedEvent = {
   readonly worktreeId: string;
   readonly worktreePath: string;
 };
+
+export function parseProjectClosedEvent(
+  payload: unknown
+): ProjectClosedEvent | undefined {
+  if (!isRecord(payload) || typeof payload.projectId !== "string") {
+    return undefined;
+  }
+
+  const reason = payload.reason ?? "closed";
+
+  if (!isProjectClosedReason(reason)) {
+    return undefined;
+  }
+
+  return { projectId: payload.projectId, reason };
+}
+
+function isProjectClosedReason(value: unknown): value is ProjectClosedReason {
+  return value === "closed" || value === "vanished";
+}
 
 export function parseWorktreeLabelsChangedEvent(
   payload: unknown
