@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+## 0.0.19 - 2026-11-10
+
 ### Improved
 
 - Make line and file comments easier to read: their text is now the same size as
   the code, and the agent that wrote a comment is shown more clearly.
+- Close the tab of a worktree whose folder was deleted, at startup, when the
+  window regains focus and while loading. A paired phone returns to its projects
+  list for that worktree.
 
 ## 0.0.18 - 2026-11-06
 
