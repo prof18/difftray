@@ -456,6 +456,33 @@ describe("cards, toasts and dialogs", () => {
     }
   });
 
+  it("sets line and file comment text at the diff's reading size", () => {
+    const parts: [string, string, string, string[]][] = [
+      ["header", ".reviewCommentHeader", ".header", ["font-size: 12px;"]],
+      [
+        "body",
+        ".reviewCommentBody",
+        ".body",
+        ["font-size: 13px;", "line-height: 1.5;", "color: var(--text);"]
+      ],
+      ["textarea", ".reviewCommentTextarea", ".textarea", ["font-size: 13px;"]],
+      [
+        "attribution",
+        ".attribution",
+        ".attribution",
+        ["font-size: 12.5px;", "color: var(--text-2);"]
+      ]
+    ];
+    for (const [part, lineSelector, fileSelector, declarations] of parts) {
+      const line = rule(sheet("review-comment-annotation.module.css"), lineSelector);
+      const file = rule(sheet("file-comments.module.css"), fileSelector);
+      for (const declaration of declarations) {
+        expect(line, `line comment ${part}`).toContain(declaration);
+        expect(file, `file comment ${part}`).toContain(declaration);
+      }
+    }
+  });
+
   it("gives every dialog the palette radius, overlay and title size", () => {
     const settings = sheet("settings-panel.module.css");
     for (const panel of [".companionStorePanel", ".companionPairingPanel"]) {

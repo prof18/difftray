@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Improved
+
+- Make line and file comments easier to read: their text is now the same size as
+  the code, and the agent that wrote a comment is shown more clearly.
+
 ## 0.0.18 - 2026-11-06
 
 ### Added
