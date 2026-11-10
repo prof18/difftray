@@ -1,0 +1,490 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T19:23:11+00:00",
+  "title": "Design System: Difftray (difftray.app)",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Graphite Ground",
+        "canonical": "#151619",
+        "oklch": "oklch(20.0% 0.006 271)",
+        "tonalRamp": [
+          "oklch(15% 0.002 271)",
+          "oklch(25% 0.003 271)",
+          "oklch(35% 0.004 271)",
+          "oklch(45% 0.006 271)",
+          "oklch(58% 0.005 271)",
+          "oklch(70% 0.004 271)",
+          "oklch(82% 0.003 271)",
+          "oklch(95% 0.001 271)"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#191a1c",
+        "oklch": "oklch(21.8% 0.004 264)",
+        "tonalRamp": [
+          "oklch(15% 0.002 264)",
+          "oklch(25% 0.002 264)",
+          "oklch(35% 0.003 264)",
+          "oklch(45% 0.004 264)",
+          "oklch(58% 0.004 264)",
+          "oklch(70% 0.003 264)",
+          "oklch(82% 0.002 264)",
+          "oklch(95% 0.001 264)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel Graphite",
+        "canonical": "#1f2024",
+        "oklch": "oklch(24.4% 0.008 275)",
+        "tonalRamp": [
+          "oklch(15% 0.003 275)",
+          "oklch(25% 0.004 275)",
+          "oklch(35% 0.006 275)",
+          "oklch(45% 0.007 275)",
+          "oklch(58% 0.007 275)",
+          "oklch(70% 0.005 275)",
+          "oklch(82% 0.003 275)",
+          "oklch(95% 0.001 275)"
+        ]
+      },
+      "elev": {
+        "role": "neutral",
+        "displayName": "Raised Graphite",
+        "canonical": "#2b2d30",
+        "oklch": "oklch(29.6% 0.006 258)",
+        "tonalRamp": [
+          "oklch(15% 0.002 258)",
+          "oklch(25% 0.003 258)",
+          "oklch(35% 0.004 258)",
+          "oklch(45% 0.006 258)",
+          "oklch(58% 0.005 258)",
+          "oklch(70% 0.004 258)",
+          "oklch(82% 0.003 258)",
+          "oklch(95% 0.001 258)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#26282b",
+        "oklch": "oklch(27.6% 0.006 258)",
+        "tonalRamp": [
+          "oklch(15% 0.002 258)",
+          "oklch(25% 0.003 258)",
+          "oklch(35% 0.005 258)",
+          "oklch(45% 0.006 258)",
+          "oklch(58% 0.005 258)",
+          "oklch(70% 0.004 258)",
+          "oklch(82% 0.003 258)",
+          "oklch(95% 0.001 258)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "#3a3d42",
+        "oklch": "oklch(35.9% 0.010 261)",
+        "tonalRamp": [
+          "oklch(15% 0.003 261)",
+          "oklch(25% 0.005 261)",
+          "oklch(35% 0.007 261)",
+          "oklch(45% 0.009 261)",
+          "oklch(58% 0.008 261)",
+          "oklch(70% 0.006 261)",
+          "oklch(82% 0.004 261)",
+          "oklch(95% 0.002 261)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Body Grey",
+        "canonical": "#d1d3da",
+        "oklch": "oklch(86.7% 0.010 273)",
+        "tonalRamp": [
+          "oklch(15% 0.004 273)",
+          "oklch(25% 0.005 273)",
+          "oklch(35% 0.007 273)",
+          "oklch(45% 0.009 273)",
+          "oklch(58% 0.008 273)",
+          "oklch(70% 0.006 273)",
+          "oklch(82% 0.004 273)",
+          "oklch(95% 0.002 273)"
+        ]
+      },
+      "text-2": {
+        "role": "neutral",
+        "displayName": "Secondary Grey",
+        "canonical": "#bcbec4",
+        "oklch": "oklch(80.2% 0.009 271)",
+        "tonalRamp": [
+          "oklch(15% 0.003 271)",
+          "oklch(25% 0.005 271)",
+          "oklch(35% 0.006 271)",
+          "oklch(45% 0.008 271)",
+          "oklch(58% 0.007 271)",
+          "oklch(70% 0.006 271)",
+          "oklch(82% 0.004 271)",
+          "oklch(95% 0.002 271)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Grey",
+        "canonical": "#9a9ea6",
+        "oklch": "oklch(69.9% 0.013 264)",
+        "tonalRamp": [
+          "oklch(15% 0.005 264)",
+          "oklch(25% 0.007 264)",
+          "oklch(35% 0.009 264)",
+          "oklch(45% 0.011 264)",
+          "oklch(58% 0.011 264)",
+          "oklch(70% 0.008 264)",
+          "oklch(82% 0.005 264)",
+          "oklch(95% 0.002 264)"
+        ]
+      },
+      "heading": {
+        "role": "neutral",
+        "displayName": "Heading White",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 90)",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(25% 0.000 90)",
+          "oklch(35% 0.000 90)",
+          "oklch(45% 0.000 90)",
+          "oklch(58% 0.000 90)",
+          "oklch(70% 0.000 90)",
+          "oklch(82% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "terminal": {
+        "role": "neutral",
+        "displayName": "Terminal Black",
+        "canonical": "#0f1012",
+        "oklch": "oklch(17.3% 0.004 264)",
+        "tonalRamp": [
+          "oklch(15% 0.002 264)",
+          "oklch(25% 0.002 264)",
+          "oklch(35% 0.003 264)",
+          "oklch(45% 0.004 264)",
+          "oklch(58% 0.004 264)",
+          "oklch(70% 0.003 264)",
+          "oklch(82% 0.002 264)",
+          "oklch(95% 0.001 264)"
+        ]
+      },
+      "ok": {
+        "role": "primary",
+        "displayName": "Reviewed Green",
+        "canonical": "#73bd79",
+        "oklch": "oklch(73.2% 0.122 146)",
+        "tonalRamp": [
+          "oklch(15% 0.044 146)",
+          "oklch(25% 0.067 146)",
+          "oklch(35% 0.089 146)",
+          "oklch(45% 0.111 146)",
+          "oklch(58% 0.104 146)",
+          "oklch(70% 0.078 146)",
+          "oklch(82% 0.051 146)",
+          "oklch(95% 0.022 146)"
+        ]
+      },
+      "ok-hover": {
+        "role": "primary",
+        "displayName": "Lit Green",
+        "canonical": "#86ca8b",
+        "oklch": "oklch(77.7% 0.112 146)",
+        "tonalRamp": [
+          "oklch(15% 0.041 146)",
+          "oklch(25% 0.061 146)",
+          "oklch(35% 0.082 146)",
+          "oklch(45% 0.102 146)",
+          "oklch(58% 0.096 146)",
+          "oklch(70% 0.071 146)",
+          "oklch(82% 0.047 146)",
+          "oklch(95% 0.020 146)"
+        ]
+      },
+      "ok-ink": {
+        "role": "primary",
+        "displayName": "Moss Ink",
+        "canonical": "#0f1f11",
+        "oklch": "oklch(22.0% 0.035 147)",
+        "tonalRamp": [
+          "oklch(15% 0.013 147)",
+          "oklch(25% 0.019 147)",
+          "oklch(35% 0.025 147)",
+          "oklch(45% 0.032 147)",
+          "oklch(58% 0.030 147)",
+          "oklch(70% 0.022 147)",
+          "oklch(82% 0.015 147)",
+          "oklch(95% 0.006 147)"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Drift Amber",
+        "canonical": "#d9b64e",
+        "oklch": "oklch(78.8% 0.128 90)",
+        "tonalRamp": [
+          "oklch(15% 0.047 90)",
+          "oklch(25% 0.070 90)",
+          "oklch(35% 0.093 90)",
+          "oklch(45% 0.116 90)",
+          "oklch(58% 0.109 90)",
+          "oklch(70% 0.081 90)",
+          "oklch(82% 0.054 90)",
+          "oklch(95% 0.023 90)"
+        ]
+      },
+      "agent": {
+        "role": "secondary",
+        "displayName": "Agent Blue",
+        "canonical": "#5da9ff",
+        "oklch": "oklch(72.4% 0.147 253)",
+        "tonalRamp": [
+          "oklch(15% 0.053 253)",
+          "oklch(25% 0.080 253)",
+          "oklch(35% 0.107 253)",
+          "oklch(45% 0.134 253)",
+          "oklch(58% 0.126 253)",
+          "oklch(70% 0.094 253)",
+          "oklch(82% 0.061 253)",
+          "oklch(95% 0.027 253)"
+        ]
+      },
+      "del": {
+        "role": "tertiary",
+        "displayName": "Deletion Red",
+        "canonical": "#ff7a70",
+        "oklch": "oklch(73.3% 0.164 26)",
+        "tonalRamp": [
+          "oklch(15% 0.060 26)",
+          "oklch(25% 0.089 26)",
+          "oklch(35% 0.119 26)",
+          "oklch(45% 0.149 26)",
+          "oklch(58% 0.140 26)",
+          "oklch(70% 0.104 26)",
+          "oklch(82% 0.069 26)",
+          "oklch(95% 0.030 26)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The single hero h1."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section h2s, max 20ch."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h3, agent names, shortcut word labels."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Hero paragraph, max 56ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Reading text; 16px under 720px."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "Setup copy, facts, nav links, buttons (600)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Metadata, captions, footer; sentence case."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Commands in the command table; 13.5px inline."
+      },
+      "terminal": {
+        "displayName": "Terminal",
+        "purpose": "Terminal pane body; 12px on mobile."
+      }
+    },
+    "shadows": [
+      {
+        "name": "window-lift",
+        "value": "0 18px 40px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3)",
+        "purpose": "Terminal pane and real app captures."
+      },
+      {
+        "name": "device-lift",
+        "value": "drop-shadow(0 18px 30px rgba(0,0,0,.5))",
+        "purpose": "Filter on cut-out phone captures."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "All transitions."
+      },
+      {
+        "name": "state",
+        "value": ".15s",
+        "purpose": "Button and link hover, active nudge."
+      },
+      {
+        "name": "terminal-line",
+        "value": ".35s, 260ms stagger, 200ms initial delay",
+        "purpose": "Terminal replay: each line fades up 4px."
+      },
+      {
+        "name": "agent-mark",
+        "value": ".5s, second mark +.18s",
+        "purpose": "Outline marks over agent comments after the replay."
+      },
+      {
+        "name": "nav-border",
+        "value": ".2s",
+        "purpose": "Nav hairline after 8px scroll."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stack",
+        "value": "900px"
+      },
+      {
+        "name": "mobile",
+        "value": "720px"
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid #5da9ff; outline-offset: 3px; border-radius: 4px",
+      "purpose": "Global focus-visible ring in Agent Blue."
+    },
+    "selection": {
+      "background": "#264f78",
+      "color": "#ffffff"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single filled action: every download.",
+      "html": "<a class=\"ds-btn ds-btn-go\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v12m0 0-5-5m5 5 5-5M5 20h14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Download for Mac</a>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font:600 15px/1 var(--sans);border-radius:8px;padding:11px 16px;border:0;cursor:pointer;transition:background .15s,border-color .15s,transform .15s var(--ease)} .ds-btn:focus-visible{outline:2px solid var(--agent);outline-offset:3px} .ds-btn-go{background:var(--ok);color:var(--ok-ink)} .ds-btn-go:hover{background:var(--ok-hover)} .ds-btn-go:active{transform:translateY(1px)}"
+    },
+    {
+      "name": "Line Button",
+      "kind": "button",
+      "refersTo": "button-line",
+      "description": "Secondary action, outlined in the strong hairline (Intel build).",
+      "html": "<a class=\"ds-btn ds-btn-line\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v12m0 0-5-5m5 5 5-5M5 20h14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Intel</a>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font:600 15px/1 var(--sans);border-radius:8px;padding:11px 16px;border:0;cursor:pointer;transition:background .15s,border-color .15s,transform .15s var(--ease)} .ds-btn:focus-visible{outline:2px solid var(--agent);outline-offset:3px} .ds-btn-line{background:transparent;border:1px solid var(--line-strong);color:var(--text)} .ds-btn-line:hover{border-color:var(--muted);background:var(--panel)}"
+    },
+    {
+      "name": "Store Badge",
+      "kind": "button",
+      "refersTo": "store-badge",
+      "description": "Outlined app store link with an inline platform mark.",
+      "html": "<a class=\"ds-store\" href=\"#\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.580 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.950-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.070-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z\"/></svg><span><small>Download on the</small>App Store</span></a>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-store{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid var(--line-strong);border-radius:8px;text-decoration:none;color:#fff;font:600 15px/1.2 var(--sans);background:var(--ground)} .ds-store small{display:block;font-size:12px;font-weight:400;color:var(--muted)} .ds-store:hover{border-color:var(--muted);background:var(--panel)} .ds-store:focus-visible{outline:2px solid var(--agent);outline-offset:3px}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav",
+      "description": "Sticky 60px bar on the ground; hairline appears after scroll.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-brand\" href=\"#\"><span class=\"ds-mark\"></span>Difftray</a><ul class=\"ds-links\"><li><a href=\"#\">Agents</a></li><li><a href=\"#\">Drift</a></li><li><a href=\"#\">Phone</a></li><li><a href=\"#\">GitHub</a></li></ul><a class=\"ds-go\" href=\"#\">Download</a></header>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-nav{display:flex;align-items:center;gap:28px;height:60px;padding:0 24px;background:var(--ground);border-bottom:1px solid var(--line)} .ds-brand{display:flex;align-items:center;gap:10px;text-decoration:none;font:700 18px/1 var(--display);letter-spacing:-.01em;color:#fff} .ds-mark{width:28px;height:28px;border-radius:6px;background:linear-gradient(160deg,#3e4a92,#2c3672)} .ds-links{display:flex;gap:24px;margin:0 0 0 auto;padding:0;list-style:none} .ds-links a{text-decoration:none;color:var(--text-2);font:400 15px/1.6 var(--sans)} .ds-links a:hover{color:#fff} .ds-go{text-decoration:none;font:600 14px/1 var(--sans);border-radius:8px;padding:9px 14px;background:var(--ok);color:var(--ok-ink)} .ds-go:hover{background:var(--ok-hover)} .ds-nav a:focus-visible{outline:2px solid var(--agent);outline-offset:3px;border-radius:4px}"
+    },
+    {
+      "name": "Command Table",
+      "kind": "card",
+      "refersTo": "command-table",
+      "description": "Ruled table of slash commands and what each one writes.",
+      "html": "<div class=\"ds-cmds\"><div class=\"ds-cmd ds-head\"><span>Command</span><span>What the agent does</span><span>Writes</span></div><div class=\"ds-cmd\"><code>/difftray-read</code><p>Reads all of your feedback and summarizes it.</p><span class=\"ds-w\">Nothing</span></div><div class=\"ds-cmd\"><code>/difftray-fix</code><p>Fixes the code for each open comment.</p><span class=\"ds-w ds-code\">Code only</span></div><div class=\"ds-cmd\"><code>/difftray-review</code><p>Reviews the diff and submits its findings.</p><span class=\"ds-w ds-fb\">Comments only</span></div></div>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-cmds{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);font-family:var(--sans)} .ds-cmd{display:grid;grid-template-columns:170px minmax(0,1fr) 120px;gap:20px;align-items:baseline;padding:18px 22px;border-top:1px solid var(--line)} .ds-cmd:first-child{border-top:0} .ds-cmd code{font:400 15px var(--mono);color:#fff} .ds-cmd p{margin:0;color:var(--text-2);font-size:16px;line-height:1.6} .ds-w{font-size:14px;color:var(--muted);text-align:right} .ds-code{color:var(--del)} .ds-fb{color:var(--agent)} .ds-head{background:var(--panel);padding:12px 22px;font-size:13px;color:var(--muted)} .ds-head span:last-child{text-align:right}"
+    },
+    {
+      "name": "Terminal Pane",
+      "kind": "custom",
+      "refersTo": "terminal-pane",
+      "description": "Signature: the agent's session as a lifted terminal window.",
+      "html": "<div class=\"ds-term\"><div class=\"ds-bar\"><i></i><i></i><i></i><span>agent · tidepool</span></div><div class=\"ds-body\"><p class=\"ds-you\"><b>›</b> /difftray-review</p><p class=\"ds-c\"><b>$</b> difftray review inspect --json</p><p class=\"ds-o\">context ctx_182a · 5 files · 0 comments</p><p class=\"ds-ok\">4 comments written as <span>Claude Code</span></p></div></div>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-term{max-width:440px;background:#0f1012;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3)} .ds-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font:500 12.5px/1 var(--mono);color:var(--muted)} .ds-bar i{width:10px;height:10px;border-radius:50%;background:var(--elev);display:block} .ds-bar span{margin-left:6px} .ds-body{padding:16px 16px 18px;font:400 12.5px/1.75 var(--mono);color:var(--text-2)} .ds-body p{margin:0} .ds-you{color:#fff} .ds-you b{color:var(--ok);font-weight:500} .ds-c{color:var(--text)} .ds-c b{color:var(--muted);font-weight:400} .ds-o{color:var(--muted);padding-left:2ch} .ds-ok{color:var(--ok);padding-left:2ch} .ds-ok span{color:var(--agent)} .ds-body p{animation:ds-in .35s var(--ease) both} .ds-body p:nth-child(2){animation-delay:.26s} .ds-body p:nth-child(3){animation-delay:.52s} .ds-body p:nth-child(4){animation-delay:.78s} @keyframes ds-in{from{opacity:0;transform:translateY(4px)}} @media (prefers-reduced-motion:reduce){.ds-body p{animation:none}}"
+    },
+    {
+      "name": "Review Status List",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Reviewed, changed after review and not reviewed, as state dots.",
+      "html": "<ul class=\"ds-states\"><li><span class=\"ds-dot ds-ok\"></span><p><b>Reviewed.</b> <span>Press R to mark the file.</span></p></li><li><span class=\"ds-dot ds-warn\"></span><p><b>Changed after review.</b> <span>The agent edited the file again.</span></p></li><li><span class=\"ds-dot\"></span><p><b>Not reviewed.</b> <span>Counted in the progress bar.</span></p></li></ul>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-states{list-style:none;margin:0;padding:0;display:grid;gap:16px;font:400 17px/1.6 var(--sans)} .ds-states li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:12px;align-items:start} .ds-states p{margin:0} .ds-dot{width:12px;height:12px;border-radius:50%;margin-top:7px;border:2px solid var(--muted);box-sizing:border-box} .ds-dot.ds-ok{border-color:var(--ok);background:var(--ok)} .ds-dot.ds-warn{border-color:var(--warn);background:var(--warn)} .ds-states b{color:#fff;font-weight:600} .ds-states span{color:var(--text-2)}"
+    },
+    {
+      "name": "Shortcut Row",
+      "kind": "custom",
+      "refersTo": "kbd",
+      "description": "Keycap beside a one-line description with a white keyword.",
+      "html": "<dl class=\"ds-keys\"><div class=\"ds-key\"><dt><kbd>⌘</kbd><kbd>P</kbd></dt><dd>Opens <b>any file by name</b>, which helps in large changes.</dd></div><div class=\"ds-key\"><dt class=\"ds-word\">Targets</dt><dd>Review the <b>working tree</b>, a <b>branch</b> or a <b>commit</b>.</dd></div></dl>",
+      "css": ":host{--ground:#151619;--bg:#191a1c;--panel:#1f2024;--elev:#2b2d30;--line:#26282b;--line-strong:#3a3d42;--text:#d1d3da;--text-2:#bcbec4;--muted:#9a9ea6;--ok:#73bd79;--ok-ink:#0f1f11;--ok-hover:#86ca8b;--warn:#d9b64e;--agent:#5da9ff;--del:#ff7a70;--display:'Schibsted Grotesk','IBM Plex Sans',sans-serif;--sans:'IBM Plex Sans','Avenir Next',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)} .ds-keys{margin:0;font-family:var(--sans)} .ds-key{display:grid;grid-template-columns:120px minmax(0,1fr);gap:18px;padding:20px 0;border-top:1px solid var(--line);align-items:baseline} .ds-key dt{display:flex;gap:5px} .ds-key dd{margin:0;color:var(--text-2);font-size:16px;line-height:1.6} .ds-key b{color:#fff;font-weight:600} kbd{display:inline-block;min-width:26px;padding:3px 7px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;background:var(--elev);font:400 13px/1.3 var(--mono);color:#fff;text-align:center} .ds-word{font:600 15px/1.4 var(--display);color:var(--muted);letter-spacing:-.005em}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Two Terminals, One Desk",
+    "overview": "The site is set on the same graphite desk the app runs on: an agent's terminal pane and a real Difftray window sit side by side, reviewing the same diff. Nothing on the page is a decorative surface. The ground, panels and hairlines are the app's own dark theme, and the only saturated colours are the app's review states. Proof is real captures and real commands, never illustration.\n\nDensity is calm and editorial: wide section breathing room (72 to 128px between sections) around content that is itself tight and tabular, like a review session. Structure comes from 1px hairlines and grid alignment, not from cards. Depth is reserved for the things that stand for real windows (terminal, screenshots, phones), which lift off the desk with a soft drop shadow.\n\nMotion is one authored moment: the terminal replays its commands line by line, then the matching agent comments in the capture receive a blue outline. Everything else is a short state transition.",
+    "keyCharacteristics": [
+      "Graphite ground (app dark theme), white headlines, two-step grey body text.",
+      "Colour means review state: green reviewed/primary action, amber drift, blue agent, red deletion/code write.",
+      "Schibsted Grotesk display over IBM Plex Sans body; JetBrains Mono only where the content is code.",
+      "Hairline-ruled rows and tables instead of card grids.",
+      "Real windows lift with a shadow; all other surfaces are flat."
+    ],
+    "rules": [
+      {
+        "name": "The States Are The Palette Rule",
+        "body": "A saturated colour appears only when it means a review state or an agent action, in the same sense the app uses it. No decorative accent, gradient or tint exists outside the brand mark.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Green Rule",
+        "body": "Reviewed Green is the only filled button colour. Secondary actions are outlined in Strong Hairline.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Means Code Rule",
+        "body": "JetBrains Mono is used only where the text is a command, path, shortcut or terminal output. Section labels, metadata and headings stay in the sans faces.",
+        "section": "typography"
+      },
+      {
+        "name": "The Only Windows Lift Rule",
+        "body": "A shadow means \"this is a real window or device\". Tables, buttons, rows and sections stay flat.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the app's dark theme values for every surface; check `apps/desktop/src/renderer/styles/global.css` before adding a neutral.",
+      "Do keep Reviewed Green as the only filled button and Agent Blue for anything the agent wrote, including the focus ring.",
+      "Do separate content with 1px hairlines and ruled grids.",
+      "Do show real app captures in 10px hairline frames with the window lift shadow.",
+      "Do set code, commands, shortcuts and terminal output in JetBrains Mono, and everything else in Schibsted Grotesk or IBM Plex Sans.",
+      "Do keep motion to the terminal replay and short state transitions, and honour reduced motion."
+    ],
+    "donts": [
+      "Don't introduce a colour that is not a review state, a graphite step or white.",
+      "Don't add shadows to anything that is not a window or device capture.",
+      "Don't set labels, eyebrows or section names in mono or uppercase.",
+      "Don't wrap features in uniform cards; use the ruled row and table patterns.",
+      "Don't draw outline marks or highlights over anything but real content in a capture."
+    ]
+  }
+}

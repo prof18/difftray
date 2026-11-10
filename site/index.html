@@ -3,34 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Difftray — Code review on Mac, iOS &amp; Android</title>
-<meta name="description" content="Review local Git changes on your Mac, iPhone, iPad, or Android device. Track reviewed files, catch drift, and send review notes back to your agent.">
+<title>Difftray: review the diff with your coding agent</title>
+<meta name="description" content="Difftray is a free Mac app for reviewing local Git changes, yours or an agent's. Mark files reviewed and see when they change again. Connect the coding agent you already use and comments go both ways.">
 <link rel="canonical" href="https://difftray.app/">
 
-<!-- Favicons (relative paths — work on github.io/<repo>/ project pages and custom domains alike) -->
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-<meta name="theme-color" content="#0a0a0d">
+<meta name="theme-color" content="#151619">
 
-<!-- Social preview. ⚠️ og:url and og:image MUST be ABSOLUTE URLs for link unfurling to work.
-     Replace the domain below with your final GitHub Pages URL (or custom domain). -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Difftray">
 <meta property="og:locale" content="en_US">
-<meta property="og:title" content="Difftray — Code review on Mac, iOS &amp; Android">
-<meta property="og:description" content="Review on your Mac or paired mobile device. Track reviewed files, catch drift, and turn comments into a prompt for your agent.">
+<meta property="og:title" content="Difftray: review the diff with your coding agent">
+<meta property="og:description" content="A free Mac app for reviewing local Git changes, yours or an agent's. Connect the coding agent you already use and comments go both ways.">
 <meta property="og:url" content="https://difftray.app/">
-<meta property="og:image" content="https://difftray.app/assets/social-card.png?v=mac-mobile-1">
+<meta property="og:image" content="https://difftray.app/assets/social-card.png?v=agents-1">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Difftray: review local Git changes on Mac, iOS, and Android. Catch drift fast.">
+<meta property="og:image:alt" content="Difftray: review the diff with your coding agent. A real Difftray window with agent comments.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Difftray — Code review on Mac, iOS &amp; Android">
-<meta name="twitter:description" content="Local code review on Mac, with an iOS and Android companion. Track reviewed files, catch drift, and turn comments into an agent prompt.">
-<meta name="twitter:image" content="https://difftray.app/assets/social-card.png?v=mac-mobile-1">
-<meta name="twitter:image:alt" content="Difftray: review local Git changes on Mac, iOS, and Android. Catch drift fast.">
+<meta name="twitter:title" content="Difftray: review the diff with your coding agent">
+<meta name="twitter:description" content="A free Mac app for reviewing local Git changes. Connect the coding agent you already use and comments go both ways.">
+<meta name="twitter:image" content="https://difftray.app/assets/social-card.png?v=agents-1">
+<meta name="twitter:image:alt" content="Difftray: review the diff with your coding agent. A real Difftray window with agent comments.">
 
 <script type="application/ld+json">
 {
@@ -41,21 +38,13 @@
       "@id": "https://difftray.app/#app",
       "name": "Difftray",
       "applicationCategory": "DeveloperApplication",
-      "operatingSystem": "macOS",
-      "description": "Local-first macOS app for reviewing Git changes across projects. Track what you reviewed, get re-flagged on drift, and export notes as prompts.",
+      "operatingSystem": "macOS 13 or later",
+      "description": "Local-first macOS app for reviewing Git changes with your coding agent. Agents read your comments and write their own review back through the bundled CLI and skills. Reviewed files are flagged again when their diff changes.",
       "url": "https://difftray.app/",
       "downloadUrl": "https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg",
-      "image": "https://difftray.app/assets/social-card.png?v=mac-mobile-1",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "author": {
-        "@type": "Person",
-        "name": "Marco Gomiero",
-        "url": "https://www.marcogomiero.com"
-      }
+      "image": "https://difftray.app/assets/social-card.png?v=agents-1",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Person", "name": "Marco Gomiero", "url": "https://www.marcogomiero.com" }
     },
     {
       "@type": "MobileApplication",
@@ -63,20 +52,12 @@
       "name": "Difftray Companion",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Android, iOS",
-      "description": "Mobile companion for Difftray. Pairs with the macOS app over Wi-Fi or Tailscale to browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent.",
-      "url": "https://difftray.app/#companion",
+      "description": "Mobile companion for Difftray. Pairs with the Mac app over Wi-Fi or Tailscale to read diffs, mark files reviewed, read agent comments and leave your own. Free for one project; Difftray Pro unlocks every project.",
+      "url": "https://difftray.app/#phone",
       "downloadUrl": ["https://apps.apple.com/app/id6789255782", "https://play.google.com/store/apps/details?id=com.prof18.difftray.companion"],
       "isPartOf": { "@id": "https://difftray.app/#app" },
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "author": {
-        "@type": "Person",
-        "name": "Marco Gomiero",
-        "url": "https://www.marcogomiero.com"
-      }
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Person", "name": "Marco Gomiero", "url": "https://www.marcogomiero.com" }
     }
   ]
 }
@@ -84,413 +65,220 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Schibsted+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
 <style>
 :root{
-  --bg:#0a0a0d;
-  --bg-2:#0e0e12;
-  --panel:#151519;
-  --panel-2:#1a1a1f;
-  --elev:#1f1f25;
-  --border:#26262d;
-  --border-soft:#1c1c22;
-  --border-strong:#34343d;
-  --text:#f0f0f3;
-  --text-2:#c6c6cd;
-  --muted:#8b8b95;
-  --dim:#5d5d67;
-  --accent:#8a99f7;
-  --accent-2:#6c7df0;
-  --accent-btn:#5566ee;
-  --accent-btn-2:#4456e0;
-  --accent-soft:rgba(138,153,247,0.12);
-  --accent-line:rgba(138,153,247,0.32);
-  --ok:#5dc28a;
-  --ok-soft:rgba(93,194,138,0.14);
-  --warn:#e9b04a;
-  --warn-soft:rgba(233,176,74,0.14);
-  --del:#ee5258;
-  --del-soft:rgba(238,82,88,0.14);
-  --maxw:1160px;
-  --sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;
-  --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ground:#151619;
+  --bg:#191a1c;
+  --panel:#1f2024;
+  --elev:#2b2d30;
+  --line:#26282b;
+  --line-strong:#3a3d42;
+  --text:#d1d3da;
+  --text-2:#bcbec4;
+  --muted:#9a9ea6;
+  --ok:#73bd79;
+  --ok-ink:#0f1f11;
+  --ok-hover:#86ca8b;
+  --warn:#d9b64e;
+  --agent:#5da9ff;
+  --del:#ff7a70;
+  --display:"Schibsted Grotesk","IBM Plex Sans",sans-serif;
+  --sans:"IBM Plex Sans","Avenir Next",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --wrap:1180px;
+  --gutter:clamp(16px,4vw,40px);
+  --ease:cubic-bezier(.16,1,.3,1);
+  color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+html{scroll-behavior:smooth;scroll-padding-top:72px;-webkit-text-size-adjust:100%}
 body{
-  font-family:var(--sans);
-  background:var(--bg);
+  background:var(--ground);
   color:var(--text);
-  font-feature-settings:'cv11','ss01';
-  line-height:1.5;
+  font:400 17px/1.6 var(--sans);
   -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
   overflow-x:hidden;
 }
-a{color:inherit;text-decoration:none}
-.mono{font-family:var(--mono);font-feature-settings:'zero','ss02'}
-img{display:block;max-width:100%}
-::selection{background:var(--accent-soft);color:#fff}
+::selection{background:#264f78;color:#fff}
+a{color:inherit}
+img,picture{display:block;max-width:100%;height:auto}
+code,kbd,.mono{font-family:var(--mono)}
+:focus-visible{outline:2px solid var(--agent);outline-offset:3px;border-radius:4px}
+html{scrollbar-color:var(--line-strong) var(--ground)}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gutter)}
+.skip{position:absolute;left:-999px;top:8px;background:var(--panel);padding:8px 12px;border-radius:6px;z-index:100}
+.skip:focus{left:8px}
 
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
-.eyebrow{
-  font-family:var(--mono);font-size:12px;font-weight:500;
-  letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
-  display:inline-flex;align-items:center;gap:9px;
-}
-.eyebrow::before{content:"";width:18px;height:1px;background:var(--accent-line)}
+/* nav */
+.nav{position:sticky;top:0;z-index:40;background:var(--ground);border-bottom:1px solid transparent;transition:border-color .2s}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav-in{display:flex;align-items:center;gap:28px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font:700 18px/1 var(--display);letter-spacing:-.01em;color:#fff}
+.brand svg{width:28px;height:28px}
+.nav-links{display:flex;gap:24px;margin-left:auto;list-style:none}
+.nav-links a{text-decoration:none;color:var(--text-2);font-size:15px}
+.nav-links a:hover{color:#fff}
+.btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font:600 15px/1 var(--sans);border-radius:8px;padding:11px 16px;transition:background .15s,border-color .15s,transform .15s var(--ease)}
+.btn svg{flex:none}
+.btn-go{background:var(--ok);color:var(--ok-ink)}
+.btn-go:hover{background:var(--ok-hover)}
+.btn-go:active{transform:translateY(1px)}
+.btn-line{border:1px solid var(--line-strong);color:var(--text)}
+.btn-line:hover{border-color:var(--muted);background:var(--panel)}
+.nav .btn{padding:9px 14px;font-size:14px}
 
-/* ---------- NAV ---------- */
-.nav{
-  position:sticky;top:0;z-index:50;
-  backdrop-filter:saturate(140%) blur(14px);
-  background:rgba(10,10,13,.72);
-  border-bottom:1px solid transparent;
-  transition:border-color .25s,background .25s;
-}
-.nav.scrolled{border-bottom-color:var(--border-soft);background:rgba(10,10,13,.86)}
-.nav-inner{max-width:var(--maxw);margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px}
-.brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:16.5px;letter-spacing:-.02em}
-.logo-tile{width:30px;height:30px;border-radius:8px;flex:none;box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.08)}
-.nav-menu{display:flex;align-items:center;gap:8px}
-.nav-link{padding:8px 12px;color:var(--text-2);font-size:14px;font-weight:500;border-radius:7px;transition:color .15s,background .15s;white-space:nowrap}
-.nav-link:hover{color:var(--text);background:var(--panel)}
-.nav-toggle{
-  display:none;align-items:center;justify-content:center;
-  width:40px;height:40px;border:1px solid var(--border);border-radius:8px;
-  background:var(--panel);color:var(--text);cursor:pointer;flex:none;
-  transition:border-color .15s,background .15s;
-}
-.nav-toggle:hover{border-color:var(--border-strong);background:var(--panel-2)}
-.nav-toggle svg{width:18px;height:18px}
+/* hero */
+.hero{padding:clamp(36px,5.5vw,64px) 0 0}
+.hero-top{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:clamp(24px,5vw,72px);align-items:end}
+h1{font:800 clamp(40px,6.2vw,76px)/1.02 var(--display);letter-spacing:-.035em;color:#fff;text-wrap:balance}
+.lede{margin-top:22px;max-width:56ch;color:var(--text-2);font-size:clamp(17px,1.6vw,19px)}
+.lede strong{color:var(--text);font-weight:500}
+.get{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+.get .btn-go{font-size:16px;padding:14px 20px}
+.get-meta{font-size:14px;color:var(--muted)}
+.get-meta a{color:var(--text-2);text-underline-offset:3px}
+.get-meta a:hover{color:#fff}
 
-/* buttons */
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;gap:9px;
-  font-family:var(--sans);font-weight:600;font-size:14.5px;letter-spacing:-.01em;
-  border-radius:9px;padding:10px 16px;cursor:pointer;border:1px solid transparent;
-  transition:transform .12s ease,background .15s,border-color .15s,box-shadow .15s;
-  white-space:nowrap;
-}
-.btn:active{transform:translateY(1px)}
-.btn-primary{
-  background:linear-gradient(180deg,var(--accent-btn),var(--accent-btn-2));
-  border-color:#6675f2;color:#fff;
-  box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 6px 20px -6px rgba(85,102,238,.7);
-}
-.btn-primary:hover{box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 10px 28px -6px rgba(85,102,238,.85)}
-.btn-ghost{background:var(--panel);border-color:var(--border);color:var(--text)}
-.btn-ghost:hover{background:var(--panel-2);border-color:var(--border-strong)}
-.btn .kbd{
-  font-family:var(--mono);font-size:11px;font-weight:600;
-  background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.26);
-  border-radius:5px;padding:1px 6px;line-height:1.5;
-}
-.btn-lg{padding:14px 22px;font-size:16px;border-radius:11px}
+.desk{position:relative;margin-top:clamp(36px,5vw,56px);display:grid;grid-template-columns:minmax(0,40fr) minmax(0,60fr);gap:0;align-items:end}
+.desk .term{position:relative;z-index:2;margin-right:-24px;align-self:center}
+.desk .shot{grid-column:2;grid-row:1}
+.desk .term{grid-column:1;grid-row:1}
+.term{background:#0f1012;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3)}
+.term-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font:500 12.5px/1 var(--mono);color:var(--muted)}
+.term-bar i{width:10px;height:10px;border-radius:50%;background:var(--elev);display:block}
+.term-bar span{margin-left:6px}
+.term-body{padding:16px 16px 18px;font:400 12.5px/1.75 var(--mono);color:var(--text-2);min-height:100%}
+.term-body p{white-space:pre-wrap;word-break:break-word}
+.t-you{color:#fff}
+.t-you b{color:var(--ok);font-weight:500}
+.t-cmd{color:var(--text);padding-left:2ch;text-indent:-2ch}
+.t-cmd span{white-space:nowrap}
+.t-cmd b{color:var(--muted);font-weight:400}
+.t-out{color:var(--muted);padding-left:2ch}
+.t-ok{color:var(--ok);padding-left:2ch}
+.t-agent{color:var(--agent)}
+.t-gap{height:.6em}
+.shot{display:block;position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);box-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3)}
+.mark{position:absolute;border-radius:6px;outline:2px solid var(--agent);outline-offset:2px;opacity:0;transition:opacity .5s var(--ease)}
+.mark.m1{left:5.61%;top:42.36%;width:88.89%;height:19.69%}
+.mark.m2{left:5.61%;top:78.11%;width:88.89%;height:19.69%;transition-delay:.18s}
+.desk.done .mark{opacity:1}
+.desk-note{grid-column:1/-1;margin-top:44px;font-size:14px;color:var(--muted)}
+.works{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 26px;margin-top:clamp(32px,4vw,44px);padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}
+.works strong{font:600 17px/1 var(--display);color:var(--text);letter-spacing:-.01em}
 
-/* ---------- HERO ---------- */
-.hero{position:relative;padding:84px 0 0;text-align:center;overflow:hidden}
-.hero-glow{
-  position:absolute;top:-340px;left:50%;transform:translateX(-50%);
-  width:1100px;height:760px;pointer-events:none;z-index:0;
-  background:radial-gradient(50% 50% at 50% 50%,rgba(108,125,240,.30),rgba(108,125,240,.07) 45%,transparent 72%);
-  filter:blur(8px);
-}
-.hero-grid{
-  position:absolute;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(var(--border-soft) 1px,transparent 1px),linear-gradient(90deg,var(--border-soft) 1px,transparent 1px);
-  background-size:54px 54px;
-  -webkit-mask-image:radial-gradient(120% 80% at 50% 0%,#000 30%,transparent 72%);
-  mask-image:radial-gradient(120% 80% at 50% 0%,#000 30%,transparent 72%);
-  opacity:.5;
-}
-.hero .wrap{position:relative;z-index:2}
-.badge-pill{
-  display:inline-flex;align-items:center;gap:9px;
-  background:var(--panel);border:1px solid var(--border);
-  padding:6px 13px 6px 8px;border-radius:999px;font-size:13px;color:var(--text-2);
-  font-weight:500;margin-bottom:30px;
-}
-.badge-pill .tag{flex-shrink:0;white-space:nowrap;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 9px}
-h1{
-  font-size:clamp(38px,6.4vw,72px);line-height:1.02;letter-spacing:-.035em;font-weight:600;
-  max-width:16ch;margin:0 auto;text-wrap:balance;
-}
-h1 .em{
-  background:linear-gradient(110deg,var(--accent) 10%,#b8c1ff 60%,var(--accent));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
-.hero-companion{display:inline-flex;align-items:center;gap:10px;margin-top:24px;padding:8px 15px;background:var(--panel);border:1px solid var(--border);border-radius:999px;font-size:13.5px;color:var(--text-2);font-weight:500;transition:border-color .15s,background .15s,transform .12s}
-.hero-companion:hover{border-color:var(--accent-line);background:var(--panel-2);transform:translateY(-1px)}
-.hero-companion b{color:var(--text);font-weight:600}
-.hero-companion svg:first-child{color:var(--accent)}
-.hero-companion svg:last-child{color:var(--muted);transition:transform .15s}
-.hero-companion:hover svg:last-child{transform:translateX(2px);color:var(--accent)}
-.sub{
-  font-size:clamp(16.5px,2.1vw,20px);color:var(--muted);max-width:60ch;margin:26px auto 0;
-  line-height:1.55;text-wrap:pretty;
-}
-.cta-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:38px}
-.cta-alt{margin-top:14px;text-align:center;font-family:var(--mono);font-size:12px}
-.cta-alt a{
-  color:var(--dim);text-decoration:underline;text-decoration-color:rgba(93,93,103,.45);
-  text-underline-offset:3px;transition:color .15s,text-decoration-color .15s;
-}
-.cta-alt a:hover{color:var(--muted);text-decoration-color:var(--muted)}
-.cta-meta{margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
-.cta-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--dim)}
+/* sections */
+section{padding:clamp(72px,10vw,128px) 0 0}
+h2{font:700 clamp(32px,4.2vw,50px)/1.06 var(--display);letter-spacing:-.03em;color:#fff;text-wrap:balance;max-width:20ch}
+.sub{margin-top:18px;max-width:62ch;color:var(--text-2)}
+.split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,5vw,64px);align-items:start}
 
-/* hero gallery */
-.gallery{position:relative;margin:56px auto 0;max-width:1040px;z-index:2;padding-bottom:8px}
-.gallery::after{
-  content:"";position:absolute;left:8%;right:8%;bottom:-24px;height:72px;z-index:-1;
-  background:radial-gradient(50% 100% at 50% 0,rgba(85,102,238,.28),transparent 70%);filter:blur(14px);
-}
-.gal-tabs{
-  display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;
-  padding:0 4px;
-}
-.gal-tab{
-  font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--muted);
-  background:var(--panel);border:1px solid var(--border);border-radius:8px;
-  padding:9px 14px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;
-  white-space:nowrap;
-}
-.gal-tab:hover{color:var(--text);border-color:var(--border-strong);background:var(--panel-2)}
-.gal-tab.active{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-line)}
-.gal-stage{
-  border-radius:14px;overflow:hidden;
-  border:1px solid var(--border-strong);background:#f6f6f8;
-  box-shadow:0 2px 0 rgba(255,255,255,.04) inset,0 40px 90px -40px rgba(0,0,0,.85),0 24px 50px -24px rgba(85,102,238,.22);
-  line-height:0;position:relative;
-}
-.gal-zoom{
-  display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;line-height:0;
-}
-.gal-zoom img{width:100%;height:auto;display:block}
-.gal-zoom-hint{
-  position:absolute;right:12px;bottom:12px;
-  font-family:var(--mono);font-size:11px;color:var(--text);
-  background:rgba(10,10,13,.72);border:1px solid var(--border);border-radius:6px;
-  padding:5px 9px;pointer-events:none;opacity:0;transition:opacity .15s;
-}
-.gal-stage:hover .gal-zoom-hint,.gal-stage:focus-within .gal-zoom-hint{opacity:1}
-.gal-caption{
-  margin-top:14px;text-align:center;font-size:14px;color:var(--muted);line-height:1.5;
-  min-height:1.5em;padding:0 12px;
-}
-.gal-caption .enlarge{color:var(--dim)}
+/* loop: command table */
+.cmds{margin-top:40px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.cmd{display:grid;grid-template-columns:200px minmax(0,1fr) 170px;gap:24px;align-items:baseline;padding:18px 22px;border-top:1px solid var(--line)}
+.cmd:first-child{border-top:0}
+.cmd code{font-size:15px;color:#fff}
+.cmd p{color:var(--text-2);font-size:16px}
+.cmd .writes{font-size:14px;color:var(--muted);text-align:right}
+.cmd .writes.w-code{color:var(--del)}
+.cmd .writes.w-fb{color:var(--agent)}
+.cmd-head{background:var(--panel);padding:12px 22px;font-size:13px;color:var(--muted);text-transform:none}
+.cmd-head span:last-child{text-align:right}
+.setup{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(20px,3vw,40px);margin-top:36px}
+.setup div{padding-top:16px;border-top:1px solid var(--line-strong)}
+.setup h3{font:600 17px/1.3 var(--display);color:#fff;letter-spacing:-.01em}
+.setup p{margin-top:6px;font-size:15px;color:var(--text-2)}
+.setup code{font-size:13.5px;color:var(--text)}
 
-/* lightbox */
-.lightbox{
-  position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
-  padding:24px;background:rgba(4,4,6,.88);backdrop-filter:blur(8px);
+/* drift */
+.states{margin-top:30px;list-style:none;display:grid;gap:16px}
+.states li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:12px;align-items:start}
+.dot{width:12px;height:12px;border-radius:50%;margin-top:7px;border:2px solid var(--muted)}
+.dot.ok{border-color:var(--ok);background:var(--ok)}
+.dot.warn{border-color:var(--warn);background:var(--warn)}
+.states b{color:#fff;font-weight:600}
+.states span{color:var(--text-2)}
+.drift-shot{display:block;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3)}
+
+/* phone */
+.phone{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,5fr);gap:clamp(28px,5vw,64px);align-items:center}
+.phones{display:flex;gap:clamp(12px,2vw,22px);justify-content:center}
+.phones img{width:min(46%,250px);filter:drop-shadow(0 18px 30px rgba(0,0,0,.5))}
+.phones img:last-child{margin-top:48px}
+.stores{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.store{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid var(--line-strong);border-radius:8px;text-decoration:none;color:#fff;font:600 15px/1.2 var(--sans)}
+.store:hover{border-color:var(--muted);background:var(--panel)}
+.store small{display:block;font-size:12px;font-weight:400;color:var(--muted)}
+.facts{margin-top:28px;display:grid;gap:10px;font-size:15px;color:var(--text-2)}
+.facts p{padding-left:16px;border-left:1px solid var(--line-strong)}
+.facts b{color:var(--text);font-weight:600}
+
+/* desk features */
+.keys{margin-top:40px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(28px,5vw,64px)}
+.key{display:grid;grid-template-columns:120px minmax(0,1fr);gap:18px;padding:20px 0;border-top:1px solid var(--line);align-items:baseline}
+.key dt{display:flex;gap:5px;flex-wrap:wrap}
+kbd{display:inline-block;min-width:26px;padding:3px 7px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;background:var(--elev);font-size:13px;line-height:1.3;color:#fff;text-align:center}
+.key dd b{color:#fff;font-weight:600}
+.key dt.word{font:600 15px/1.4 var(--display);color:var(--muted);letter-spacing:-.005em}
+.key dd{color:var(--text-2);font-size:16px}
+
+/* download */
+.dl{margin-top:clamp(72px,10vw,128px);padding:56px 0;border-top:1px solid var(--line)}
+.dl-in{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end}
+.dl-btns{display:flex;flex-wrap:wrap;gap:12px}
+.dl-btns .btn{font-size:16px;padding:14px 20px}
+.dl-meta{margin-top:16px;font-size:14px;color:var(--muted)}
+
+footer{border-top:1px solid var(--line);padding:28px 0 40px;font-size:14px;color:var(--muted)}
+.foot{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center}
+.foot nav{display:flex;flex-wrap:wrap;gap:8px 22px;margin-left:auto}
+.foot a{color:var(--text-2);text-decoration:none}
+.foot a:hover{color:#fff;text-decoration:underline;text-underline-offset:3px}
+
+/* terminal replay: lines are visible by default; JS hides them only to play */
+.play .term-body p{opacity:0;transform:translateY(4px)}
+.play .term-body p.on{opacity:1;transform:none;transition:opacity .35s var(--ease),transform .35s var(--ease)}
+
+@media (max-width:900px){
+  .hero-top{grid-template-columns:1fr}
+  .desk{grid-template-columns:1fr}
+  .desk .shot,.desk .term{grid-column:1;grid-row:auto}
+  .desk .term{margin:0 0 14px}
+  .desk-note{margin-top:14px}
+  .split,.phone{grid-template-columns:1fr}
+  .cmd{grid-template-columns:170px minmax(0,1fr);gap:6px 20px}
+  .cmd .writes{grid-column:2;text-align:left}
+  .cmd-head span:last-child{display:none}
+  .keys{grid-template-columns:1fr}
+  .dl-in{grid-template-columns:1fr}
+  .setup{grid-template-columns:1fr}
 }
-.lightbox.open{display:flex}
-.lightbox-img{
-  max-width:min(96vw,1400px);max-height:92vh;width:auto;height:auto;
-  border-radius:10px;border:1px solid var(--border-strong);
-  box-shadow:0 30px 80px -20px rgba(0,0,0,.9);
+@media (max-width:720px){
+  .nav-links{display:none}
+  .nav .btn{margin-left:auto}
+  body{font-size:16px}
+  .dl{padding:40px 0}
+  .cmd{grid-template-columns:1fr;padding:16px 16px}
+  .cmd .writes{grid-column:1}
+  .cmd-head{display:none}
+  .key{grid-template-columns:1fr;gap:8px}
+  .phones img:last-child{margin-top:28px}
+  .term-body{font-size:12px}
+  .mark.m1{left:13.66%;top:17.82%;width:83.51%;height:30.77%}
+  .mark.m2{left:13.66%;top:67.73%;width:83.51%;height:30.77%}
+  .drift-shot{max-width:420px}
 }
-.lightbox-close{
-  position:absolute;top:18px;right:18px;
-  width:40px;height:40px;border-radius:8px;border:1px solid var(--border);
-  background:var(--panel);color:var(--text);font-size:22px;line-height:1;cursor:pointer;
-}
-.lightbox-close:hover{background:var(--panel-2);border-color:var(--border-strong)}
-body.lightbox-open,body.nav-open{overflow:hidden}
-
-/* logo strip */
-.proof{padding:54px 0 8px;text-align:center}
-.proof-label{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-bottom:22px}
-.proof-row{display:flex;align-items:center;justify-content:center;gap:14px 34px;flex-wrap:wrap;color:var(--muted)}
-.proof-item{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--text-2)}
-.proof-item svg{color:var(--muted)}
-
-/* ---------- SECTION SHELL ---------- */
-section{position:relative}
-.sec{padding:96px 0}
-.sec-head{max-width:680px;margin-bottom:54px}
-.sec-head.center{margin-left:auto;margin-right:auto;text-align:center}
-.sec-head h2{font-size:clamp(28px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:600;margin-top:18px;text-wrap:balance}
-.sec-head p{font-size:clamp(16px,1.8vw,18.5px);color:var(--muted);margin-top:18px;line-height:1.55;text-wrap:pretty}
-
-/* ---------- DRIFT (the hook) ---------- */
-.drift{background:linear-gradient(180deg,var(--bg),var(--bg-2));border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft)}
-.drift-copy{max-width:680px}
-
-.drift-steps{display:flex;flex-direction:column;gap:4px;margin-top:30px}
-.dstep{display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--border-soft)}
-.dstep:first-child{border-top:0}
-.dstep-ic{width:34px;height:34px;border-radius:9px;flex:none;display:grid;place-items:center;border:1px solid var(--border)}
-.dstep-ic.ok{background:var(--ok-soft);color:var(--ok);border-color:rgba(93,194,138,.3)}
-.dstep-ic.warn{background:var(--warn-soft);color:var(--warn);border-color:rgba(233,176,74,.3)}
-.dstep-ic.acc{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
-.dstep h4{font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px}
-.dstep p{font-size:14px;color:var(--muted);line-height:1.5}
-
-/* ---------- FEATURES ---------- */
-.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:start}
-.feat{
-  background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;min-width:0;
-  position:relative;overflow:hidden;transition:border-color .2s,transform .2s,background .2s;
-}
-.feat:hover{border-color:var(--border-strong);transform:translateY(-3px);background:var(--panel-2)}
-.feat-ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line);flex:none}
-.feat h3{font-size:17.5px;font-weight:600;letter-spacing:-.02em;margin-bottom:9px}
-.feat p{font-size:14.5px;color:var(--muted);line-height:1.55}
-.feat:not(.wide){display:grid;grid-template-columns:auto 1fr;column-gap:15px;align-items:center;align-content:start}
-.feat:not(.wide) h3{margin:0;font-size:16.5px}
-.feat:not(.wide) p{grid-column:1 / -1;margin-top:13px}
-.feat.wide{grid-column:span 3;display:grid;grid-template-columns:1fr 1.15fr;gap:34px;align-items:center;padding:0;overflow:hidden}
-.feat.wide .feat-body{padding:36px}
-.feat.wide .feat-ic{margin-bottom:22px}
-.feat.wide h3{font-size:22px}
-.feat.wide p{font-size:15.5px}
-
-/* prompt card visual */
-.prompt-card{background:var(--bg-2);border-left:1px solid var(--border);height:100%;padding:26px;display:flex;flex-direction:column;gap:10px;min-height:260px;justify-content:center}
-.pc-head{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;display:flex;align-items:center;gap:8px}
-.pc-line{font-family:var(--mono);font-size:12.5px;line-height:1.65;color:var(--text-2)}
-.pc-line .tag{color:var(--accent)}
-.pc-line .path{color:var(--ok)}
-.pc-line .ln{color:var(--dim)}
-.pc-copy{margin-top:14px;align-self:flex-start;display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:6px 11px}
-
-/* ---------- FINAL CTA ---------- */
-.final{text-align:center;padding:72px 0 80px}
-.final-card{
-  position:relative;border:1px solid var(--border-strong);border-radius:18px;padding:40px 28px;overflow:hidden;
-  background:radial-gradient(120% 140% at 50% -20%,rgba(108,125,240,.18),transparent 60%),var(--panel);
-}
-.final-card .logo-tile{width:44px;height:44px;border-radius:11px;margin:0 auto 18px}
-.final h2{font-size:clamp(24px,3.2vw,34px);letter-spacing:-.03em;font-weight:600;line-height:1.08;max-width:20ch;margin:0 auto;text-wrap:balance}
-.final p{color:var(--muted);font-size:15px;margin:14px auto 0;max-width:44ch;line-height:1.5}
-.final .cta-row{margin-top:28px}
-.final .btn-lg{padding:12px 18px;font-size:15px;border-radius:10px}
-.final .cta-alt{margin-top:12px;font-size:11.5px}
-
-/* ---------- FOOTER ---------- */
-footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
-.foot-inner{display:flex;align-items:flex-start;justify-content:space-between;gap:30px;flex-wrap:wrap}
-.foot-brand{max-width:300px}
-.foot-brand .brand{margin-bottom:14px}
-.foot-brand p{font-size:13.5px;color:var(--dim);line-height:1.55}
-.foot-cols{display:flex;gap:60px;flex-wrap:wrap}
-.foot-col h5{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:14px;font-weight:500}
-.foot-col a{display:block;font-size:14px;color:var(--text-2);padding:5px 0;transition:color .15s}
-.foot-col a:hover{color:var(--accent)}
-.foot-bottom{margin-top:44px;padding-top:22px;border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--dim);font-family:var(--mono)}
-.foot-bottom a{color:var(--text-2);transition:color .15s}
-.foot-bottom a:hover{color:var(--accent)}
-.foot-donate{
-  display:inline-flex;align-items:center;gap:6px;
-  font-family:var(--sans);font-size:13px;font-weight:600;
-  padding:7px 13px;border-radius:8px;
-  background:var(--panel);border:1px solid var(--border);color:var(--text-2);
-  transition:color .15s,border-color .15s,background .15s;
-}
-.foot-donate:hover{color:var(--text);border-color:var(--border-strong);background:var(--panel-2)}
-
-/* ---------- COMPANION ---------- */
-.companion{background:linear-gradient(180deg,var(--bg-2),var(--bg));border-top:1px solid var(--border-soft)}
-.comp-top{display:grid;grid-template-columns:1fr 1.05fr;gap:60px;align-items:center}
-.comp-intro h2{font-size:clamp(28px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:600;margin-top:18px;text-wrap:balance}
-.comp-intro>p{font-size:clamp(16px,1.8vw,18.5px);color:var(--muted);margin-top:18px;line-height:1.55;text-wrap:pretty;max-width:52ch}
-.store-badges{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px}
-.store-badge{display:inline-flex;align-items:center;gap:11px;background:#050506;border:1px solid var(--border-strong);border-radius:12px;padding:10px 18px 10px 15px;transition:border-color .15s,transform .12s,background .15s}
-.store-badge:hover{border-color:#4a4a55;background:#0c0c10;transform:translateY(-2px)}
-.store-badge:active{transform:translateY(0)}
-.store-badge svg{flex:none;color:#fff}
-.store-badge .sb-txt{display:flex;flex-direction:column;line-height:1.15}
-.store-badge .sb-sm{font-size:10.5px;color:var(--text-2);letter-spacing:.02em}
-.store-badge .sb-lg{font-size:16.5px;font-weight:600;color:#fff;letter-spacing:-.01em}
-.comp-meta{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.comp-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--dim)}
-.comp-phones{position:relative;display:flex;justify-content:center;align-items:flex-end;min-height:520px}
-.comp-phones::after{content:"";position:absolute;left:8%;right:8%;bottom:0;height:120px;z-index:0;background:radial-gradient(50% 100% at 50% 100%,rgba(108,125,240,.28),transparent 72%);filter:blur(20px)}
-.comp-phones img{position:relative;z-index:1;width:44%;height:auto;filter:drop-shadow(0 40px 60px rgba(0,0,0,.6))}
-.comp-phones .ph-side{width:40%;opacity:.94}
-.comp-phones .ph-a{transform:translateX(24%) translateY(-14px) rotate(-4deg)}
-.comp-phones .ph-b{transform:translateX(-24%) translateY(-14px) rotate(4deg)}
-.comp-phones .ph-mid{z-index:2;margin:0 -14%;transform:translateY(-40px)}
-.comp-how{margin-top:96px}
-.comp-how-head{max-width:640px;margin:0 auto 44px;text-align:center}
-.comp-how-head h3{font-size:clamp(24px,3vw,32px);letter-spacing:-.025em;font-weight:600;margin-top:16px;text-wrap:balance}
-.comp-how-head p{font-size:16px;color:var(--muted);margin-top:14px;line-height:1.55}
-.comp-steps{display:grid;grid-template-columns:1.4fr 1fr;gap:44px;align-items:center;max-width:980px;margin:0 auto}
-.comp-step-list{display:flex;flex-direction:column}
-.cstep{display:flex;gap:18px;padding:22px 0;border-top:1px solid var(--border-soft)}
-.cstep:first-child{border-top:0;padding-top:0}
-.cstep-num{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none}
-.cstep h4{font-size:16.5px;font-weight:600;letter-spacing:-.015em;margin-bottom:6px}
-.cstep p{font-size:14.5px;color:var(--muted);line-height:1.55}
-.cstep code,.cstep .kb{font-family:var(--mono);font-size:12.5px;color:var(--text-2);background:var(--elev);border:1px solid var(--border-strong);border-radius:5px;padding:1px 6px}
-.comp-qr{display:flex;justify-content:center}
-.comp-qr img{width:270px;height:auto;max-width:100%;filter:drop-shadow(0 40px 60px rgba(0,0,0,.6))}
-
-/* reveal */
-.reveal{opacity:0;transform:translateY(20px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
-.reveal.in{opacity:1;transform:none}
-
-/* ---------- RESPONSIVE ---------- */
-@media(max-width:900px){
-  .comp-top{grid-template-columns:1fr;gap:20px}
-  .comp-phones{min-height:440px;margin-top:56px}
-  .comp-steps{grid-template-columns:1fr;gap:40px}
-  .comp-qr{order:-1}
-  .feat-grid{grid-template-columns:1fr}
-  .feat.wide{grid-template-columns:1fr;grid-column:auto}
-  .feat.wide .prompt-card{border-left:0;border-top:1px solid var(--border)}
-}
-/* The nav bar needs ~750px to lay out flat (brand + 4 links + Download).
-   Below that it collapses to the hamburger — earlier than the other mobile
-   rules below, which stay at 680px. */
-@media(max-width:780px){
-  .nav-inner{position:relative}
-  .nav-toggle{display:inline-flex;margin-left:auto}
-  .nav-menu{
-    display:none;position:absolute;top:calc(100% + 1px);left:0;right:0;
-    flex-direction:column;align-items:stretch;gap:4px;
-    padding:12px 20px 18px;
-    background:rgba(10,10,13,.96);border-bottom:1px solid var(--border-soft);
-    backdrop-filter:saturate(140%) blur(14px);
-  }
-  .nav.open .nav-menu{display:flex}
-  .nav-menu .nav-link{padding:12px 14px}
-  .nav-menu .btn{width:100%;justify-content:center;margin-top:8px}
-}
-@media(max-width:680px){
-  .wrap,.nav-inner{padding-left:20px;padding-right:20px}
-  .gal-zoom-hint{opacity:1}
-  .sec{padding:72px 0}
-  .hero{padding:60px 0 0}
-  .gallery{margin-top:40px}
-  .gal-tabs{
-    flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;
-    -webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;
-    scrollbar-width:none;padding-bottom:6px;
-  }
-  .gal-tabs::-webkit-scrollbar{display:none}
-  .gal-tab{flex:0 0 auto;scroll-snap-align:start;font-size:11.5px;padding:8px 12px}
-  .gal-stage{border-radius:12px}
-  .gal-caption{font-size:13px}
-  .cta-row{flex-direction:column;align-items:stretch}
-  .cta-row .btn{width:100%}
-  .final{padding:56px 0 64px}
-  .final-card{padding:32px 20px}
-  .foot-cols{gap:36px}
-}
-@media(prefers-reduced-motion:reduce){
-  *{animation:none!important}
-  .reveal{opacity:1;transform:none;transition:none}
+@media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
+  *,*::before,*::after{transition:none!important;animation:none!important}
 }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
-<!-- inline logo mark (gradient) reused via <use> -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <linearGradient id="g-tile" x1="0" y1="0" x2=".55" y2="1"><stop offset="0%" stop-color="#3e4a92"/><stop offset="100%" stop-color="#2c3672"/></linearGradient>
@@ -499,357 +287,194 @@ footer{border-top:1px solid var(--border-soft);padding:46px 0 60px}
     <linearGradient id="g-neu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e8e6dc"/><stop offset="100%" stop-color="#cfccbe"/></linearGradient>
     <g id="dt-mark">
       <rect width="1024" height="1024" rx="229" fill="url(#g-tile)"/>
-      <rect width="1024" height="3" fill="rgba(255,255,255,.10)"/>
       <rect x="190" y="612" width="560" height="130" rx="40" fill="url(#g-neu)"/>
       <rect x="260" y="447" width="640" height="130" rx="40" fill="url(#g-del)"/>
       <rect x="170" y="282" width="700" height="130" rx="40" fill="url(#g-add)"/>
       <circle cx="240" cy="347" r="22" fill="rgba(255,255,255,.95)"/>
     </g>
+    <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><g fill="currentColor"><path d="M3.6 2.2c-.25.27-.4.68-.4 1.22v17.16c0 .54.15.95.4 1.22l.06.05L13.4 12.1v-.2L3.66 2.15l-.06.05z" opacity=".85"/><path d="M16.7 15.4l-3.3-3.3v-.2l3.3-3.3.08.05 3.9 2.22c1.12.63 1.12 1.67 0 2.31l-3.9 2.2-.08.02z"/><path d="M16.78 15.35 13.4 12 3.6 21.8c.37.39.98.44 1.66.06l11.52-6.5" opacity=".9"/><path d="M16.78 8.65 5.26 2.15c-.68-.39-1.29-.34-1.66.05L13.4 12l3.38-3.35z" opacity=".7"/></g></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12m0 0-5-5m5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
-<!-- NAV -->
 <header class="nav" id="nav">
-  <div class="nav-inner">
-    <a class="brand" href="#top">
-      <svg class="logo-tile" viewBox="0 0 1024 1024"><use href="#dt-mark"/></svg>
-      Difftray
-    </a>
-    <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <nav class="nav-menu" id="nav-menu">
-      <a class="nav-link" href="#drift">Drift tracking</a>
-      <a class="nav-link" href="#gallery">Screenshots</a>
-      <a class="nav-link" href="#features">Features</a>
-      <a class="nav-link" href="#companion">Mobile companion</a>
-      <a class="btn btn-primary" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">Download</a>
-    </nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="Difftray home"><svg viewBox="0 0 1024 1024" aria-hidden="true"><use href="#dt-mark"/></svg>Difftray</a>
+    <ul class="nav-links">
+      <li><a href="#agents">Agents</a></li>
+      <li><a href="#drift">Drift</a></li>
+      <li><a href="#phone">Phone</a></li>
+      <li><a href="https://github.com/prof18/difftray" rel="noopener">GitHub</a></li>
+    </ul>
+    <a class="btn btn-go" href="#download">Download</a>
   </div>
 </header>
 
-<main id="top">
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-glow"></div>
-  <div class="hero-grid"></div>
+<main id="main">
+<div class="hero" id="top">
   <div class="wrap">
-    <span class="badge-pill"><span class="tag">Mac + mobile</span> A focused review desk for local Git changes</span>
-    <h1>Know what you reviewed.<br>Get re-flagged when it <span class="em">drifts</span>.</h1>
-    <p class="sub">Review local Git changes on your Mac, or pair Difftray Companion to keep reviewing on iOS and Android. Mark a file reviewed — when its diff changes, Difftray flags it for another look.</p>
-    <div class="cta-row">
-      <a class="btn btn-primary btn-lg" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
-        Download for macOS
+    <div class="hero-top">
+      <div>
+        <h1>Review the diff with your agent.</h1>
+        <p class="lede">Difftray is a Mac app for reviewing local Git changes, yours or an agent's. Mark files reviewed, leave comments, and Difftray flags any file that changes after you looked. <strong>Connect the coding agent you already use and the comments go both ways</strong>: it reads yours, fixes the code and writes its own review back.</p>
+      </div>
+      <div class="get">
+        <a class="btn btn-go" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener"><svg width="18" height="18" aria-hidden="true"><use href="#i-down"/></svg>Download for Mac</a>
+        <p class="get-meta">Free · No agent required · macOS 13 or later<br>Apple silicon · <a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-x64.dmg" rel="noopener">Download the Intel build</a></p>
+      </div>
+    </div>
+
+    <div class="desk" id="desk">
+      <div class="term" aria-label="Agent session replay">
+        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>agent · tidepool</span></div>
+        <div class="term-body">
+          <p class="t-you"><b>›</b> /difftray-review</p>
+          <p class="t-gap" aria-hidden="true"></p>
+          <p class="t-cmd"><b>$</b> difftray open .</p>
+          <p class="t-out">tidepool · working tree</p>
+          <p class="t-cmd"><b>$</b> difftray review inspect <span>--json</span></p>
+          <p class="t-out">context ctx_182a · 5 files · 0 comments</p>
+          <p class="t-cmd"><b>$</b> difftray review file <span>--context $ctx</span> <span>--path src/http/client.ts</span></p>
+          <p class="t-cmd"><b>$</b> difftray review file <span>--context $ctx</span> <span>--path src/sync/queue.ts</span></p>
+          <p class="t-cmd"><b>$</b> difftray feedback submit <span>--context $ctx</span> <span>--input review.json</span></p>
+          <p class="t-ok">4 comments written as <span class="t-agent">Claude Code</span></p>
+        </div>
+      </div>
+      <a class="shot" href="assets/agent-review.webp" aria-label="Open the full-size Difftray screenshot">
+        <picture><source media="(max-width: 720px)" srcset="assets/agent-review-phone.webp" width="776" height="1066"><img src="assets/agent-review-crop.webp" width="1710" height="1270" alt="Difftray diff of src/http/client.ts with two review comments attributed to Agent: Claude Code, an off-by-one on line 28 and a retry concern on lines 18 to 32." fetchpriority="high"></picture>
+        <span class="mark m1" aria-hidden="true"></span>
+        <span class="mark m2" aria-hidden="true"></span>
       </a>
+      <p class="desk-note">A real Difftray window on a demo repository. The terminal replays, abridged, the commands the <code>/difftray-review</code> skill runs.</p>
     </div>
-    <p class="cta-alt"><a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-x64.dmg" rel="noopener">Download for Intel Mac</a></p>
-    <div class="cta-meta">
-      <span>Local repositories · No cloud backend</span>
-    </div>
-    <a class="hero-companion" href="#companion">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
-      <span>Review from your phone with the <b>iOS &amp; Android companion</b></span>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </a>
-  </div>
 
-  <div class="gallery wrap" id="gallery">
-    <div class="gal-tabs" role="tablist" aria-label="Product screenshots">
-      <button type="button" class="gal-tab active" role="tab" aria-selected="true" data-shot="review-workflow">Review workflow</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-shot="review-invalidated">Drift alert</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-shot="expanded-context">Expanded context</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-shot="diff-focused-new">Focused diff</button>
-    </div>
-    <div class="gal-stage" role="tabpanel" aria-live="polite">
-      <button type="button" class="gal-zoom" id="gal-zoom" aria-label="View screenshot full size">
-        <img id="gal-img" src="assets/review-workflow.png" alt="Difftray review workflow with inline comments and a copy-to-clipboard prompt" width="2440" height="1640" loading="eager" decoding="async">
-      </button>
-      <span class="gal-zoom-hint">Click to enlarge</span>
-    </div>
-    <p class="gal-caption" id="gal-caption">Inline comments and a ready-made agent handoff prompt. <span class="enlarge">· Tap image to zoom</span></p>
-  </div>
-</section>
-
-<!-- PROOF / context strip -->
-<div class="proof wrap">
-  <div class="proof-label">Built for the agent iteration loop</div>
-  <div class="proof-row">
-    <div class="proof-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg> Working tree changes</div>
-    <div class="proof-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M8.5 6H14a4 4 0 014 4"/></svg> Branch vs. local ref</div>
-    <div class="proof-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6"/></svg> A single commit</div>
-    <div class="proof-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12l2 2 4-4"/></svg> Multiple repos, one desk</div>
+    <p class="works"><span>Works with the agent you already run:</span> <strong>Claude Code</strong> <strong>Codex</strong> <strong>Pi</strong> <span>or any agent that reads a skills folder. Difftray does not include or run an agent.</span></p>
   </div>
 </div>
 
-<!-- DRIFT — the hook -->
-<section class="sec drift" id="drift">
+<section id="agents">
   <div class="wrap">
-    <div class="drift-copy reveal">
-        <span class="eyebrow">The core idea</span>
-        <h2 style="font-size:clamp(28px,4vw,42px);line-height:1.08;letter-spacing:-.03em;font-weight:600;margin-top:18px;">Reviewed doesn't stay reviewed if it changed.</h2>
-        <p style="font-size:17px;color:var(--muted);margin-top:18px;line-height:1.55;">You skim a diff. The agent iterates. You come back — and you've lost track of which files are still the ones you looked at, and which moved underneath you. Difftray fixes exactly that.</p>
-        <div class="drift-steps">
-          <div class="dstep">
-            <div class="dstep-ic ok"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-            <div><h4>Mark it reviewed</h4><p>Hit <span class="mono" style="color:var(--text-2)">R</span> and the file gets a solid green dot. Difftray remembers what you looked at.</p></div>
-          </div>
-          <div class="dstep">
-            <div class="dstep-ic warn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
-            <div><h4>The diff drifts</h4><p>Later the file's diff changes. Difftray notices and flips the file back to <span style="color:var(--warn)">attention</span>.</p></div>
-          </div>
-          <div class="dstep">
-            <div class="dstep-ic acc"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 12a10 10 0 0 1 18-6m2-2v6h-6"/><path d="M22 12a10 10 0 0 1-18 6m-2 2v-6h6"/></svg></div>
-            <div><h4>You look again</h4><p>It doesn't tell you <em>what</em> changed — just that your last pass is no longer trustworthy. One verb in, one signal out.</p></div>
-          </div>
-        </div>
+    <h2>Comments go both ways.</h2>
+    <p class="sub">You leave comments on a line, a range, a file or the whole change. Your agent reads every one through the <code>difftray</code> command-line tool bundled in the app. It can also review the diff itself and write comments back, labelled with its name, so you can see who wrote what.</p>
+
+    <div class="cmds" role="table" aria-label="Difftray agent commands">
+      <div class="cmd cmd-head" role="row"><span role="columnheader">Command</span><span role="columnheader">What the agent does</span><span role="columnheader">Writes</span></div>
+      <div class="cmd" role="row"><code role="cell">/difftray-open</code><p role="cell">Opens the current worktree in Difftray and keeps the diff you had selected.</p><span class="writes" role="cell">Nothing</span></div>
+      <div class="cmd" role="row"><code role="cell">/difftray-read</code><p role="cell">Reads all of your feedback and summarizes it.</p><span class="writes" role="cell">Nothing</span></div>
+      <div class="cmd" role="row"><code role="cell">/difftray-fix</code><p role="cell">Fixes the code for each open comment and reports what it changed.</p><span class="writes w-code" role="cell">Code only</span></div>
+      <div class="cmd" role="row"><code role="cell">/difftray-review</code><p role="cell">Reviews the diff and submits its findings in one batch.</p><span class="writes w-fb" role="cell">Comments only</span></div>
+      <div class="cmd" role="row"><code role="cell">/difftray-label</code><p role="cell">Gives the worktree a readable name in Difftray.</p><span class="writes" role="cell">The label</span></div>
+    </div>
+
+    <div class="setup">
+      <div><h3>Install once</h3><p>Open Settings › Agents and press Install next to Claude Code, Codex or Pi, whichever you already use. The skill updates with the app.</p></div>
+      <div><h3>Nothing runs on its own</h3><p>Loading the skill writes nothing. The agent edits code or comments only when you type the command.</p></div>
+      <div><h3>Prefer copy and paste?</h3><p><strong>Copy for agent</strong> puts every comment on the clipboard as a prompt for any tool.</p></div>
     </div>
   </div>
 </section>
 
-<!-- FEATURES -->
-<section class="sec" id="features">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">What it does</span>
-      <h2>A review desk, not another diff client.</h2>
-      <p>Difftray isn't an IDE, an agent host, or a pull-request platform. It does one thing — help you keep track of what changed, what you already reviewed, and what needs another look.</p>
+<section id="drift">
+  <div class="wrap split">
+    <div>
+      <h2>Reviewed means this exact diff.</h2>
+      <p class="sub">Agents keep editing after you look. Difftray remembers the diff you marked as reviewed and compares it on every change, so a file never stays reviewed after it moves.</p>
+      <ul class="states">
+        <li><span class="dot ok" aria-hidden="true"></span><p><b>Reviewed.</b> <span>Press R to mark the file and move to the next one.</span></p></li>
+        <li><span class="dot warn" aria-hidden="true"></span><p><b>Changed after review.</b> <span>The agent edited the file again. Difftray marks it in the file list and above the diff.</span></p></li>
+        <li><span class="dot" aria-hidden="true"></span><p><b>Not reviewed.</b> <span>The progress bar counts what is left in each project.</span></p></li>
+      </ul>
     </div>
-    <div class="feat-grid">
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg></div>
-        <h3>Many repos, one desk</h3>
-        <p>Find repositories with Quick Open, open linked Git worktrees, and keep several projects side by side. Browse the same repository catalog from your paired mobile device.</p>
-      </div>
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/></svg></div>
-        <h3>Diffs in any shape</h3>
-        <p>Side-by-side, unified, expanded context, or focused on one side. Read each change in the shape that fits the moment — generated files tucked away by default.</p>
-      </div>
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6M9 13h4"/></svg></div>
-        <h3>Drive it from the keyboard</h3>
-        <p>Move through files, mark reviewed, filter, and jump anywhere from the command palette. Every surface has a keyboard equivalent.</p>
-      </div>
+    <a class="drift-shot" href="assets/drift-flagged.webp" aria-label="Open the full-size drift screenshot">
+      <picture><source media="(max-width: 720px)" srcset="assets/drift-flagged-phone.webp" width="680" height="1160"><img src="assets/drift-flagged-crop.webp" width="1650" height="1170" loading="lazy" alt="Difftray with retry.ts marked Changed after review, the file list showing 2 of 5 reviewed and 1 needs attention."></picture>
+    </a>
+  </div>
+</section>
 
-      <div class="feat wide reveal">
-        <div class="feat-body">
-          <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 10h8M8 14h5"/><path d="M21 12a8 8 0 0 1-11.3 7.3L3 21l1.7-6.7A8 8 0 1 1 21 12z"/></svg></div>
-          <h3>Your notes become the prompt</h3>
-          <p>Leave line-level review comments as you read. When you're done, copy them out as a ready-made prompt — and paste it straight back into your favorite agent or AI tool to make the fixes.</p>
-        </div>
-        <div class="prompt-card">
-          <div class="pc-head"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block"></span>Generated prompt</div>
-          <div class="pc-line"><span class="tag">Please address these review notes:</span></div>
-          <div class="pc-line"><span class="path">tracked.txt</span> <span class="ln">:3</span></div>
-          <div class="pc-line">— Please tighten the added line.</div>
-          <div class="pc-line"><span class="path">context.txt</span> <span class="ln">:12</span></div>
-          <div class="pc-line">— Expand the changed block before marking reviewed.</div>
-          <div class="pc-copy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copied to clipboard</div>
-        </div>
+<section id="phone">
+  <div class="wrap phone">
+    <div class="phones">
+      <img src="assets/companion-review-again.webp" width="780" height="1595" loading="lazy" alt="Difftray Companion on iPhone showing the tidepool review: 2 of 5 files reviewed, retry.ts marked Review again, and comment counts on client.ts and queue.ts.">
+      <img src="assets/companion-agent-comment.webp" width="780" height="1595" loading="lazy" alt="Difftray Companion showing client.ts with the comment on line 28 attributed to Agent: Claude Code.">
+    </div>
+    <div>
+      <h2>Read the review away from your desk.</h2>
+      <p class="sub">Difftray Companion pairs with the Mac app. Read diffs, mark files reviewed and answer the agent's comments from the couch, then pick up at the Mac where you left off.</p>
+      <div class="stores">
+        <a class="store" href="https://apps.apple.com/app/id6789255782" rel="noopener"><svg width="22" height="22" aria-hidden="true"><use href="#i-apple"/></svg><span><small>Download on the</small>App Store</span></a>
+        <a class="store" href="https://play.google.com/store/apps/details?id=com.prof18.difftray.companion" rel="noopener"><svg width="20" height="22" aria-hidden="true"><use href="#i-play"/></svg><span><small>Get it on</small>Google Play</span></a>
       </div>
-
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
-        <h3>Local by design</h3>
-        <p>No fetching, pushing, staging, or editing. Difftray never writes to your repository metadata — it only reads what's already there, on your machine.</p>
-      </div>
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
-        <h3>Built for iteration</h3>
-        <p>Working tree, branch comparison, or a single pasted commit — the same focused flow. You're not preparing a PR, you're checking what just happened.</p>
-      </div>
-      <div class="feat reveal">
-        <div class="feat-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h11M4 12h16M4 18h9"/><path d="M19 15l3 3-3 3" opacity=".0"/></svg></div>
-        <h3>Open where you work</h3>
-        <p>Jump from any file straight into your system editor or a common editor preset, then come right back to the review.</p>
+      <div class="facts">
+        <p><b>The companion is free for one project.</b> Difftray Pro unlocks every project with a yearly subscription or a one-time purchase.</p>
+        <p><b>Nothing goes through a server.</b> The phone talks to your Mac over Wi-Fi or Tailscale on an end-to-end encrypted channel.</p>
+        <p><b>Pairing takes a minute.</b> Scan the QR code in Settings › Companion on the Mac.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- COMPANION -->
-<section class="sec companion" id="companion">
+<section id="features">
   <div class="wrap">
-    <div class="comp-top">
-      <div class="comp-intro reveal">
-        <span class="eyebrow">On your phone</span>
-        <h2>Take the review with you.</h2>
-        <p>Difftray Companion pairs with your Mac and puts the whole review loop in your pocket — browse changed files, read diffs, mark them reviewed, leave line-level comments, and copy a ready-made prompt back to your agent. From the couch, the commute, anywhere.</p>
-        <div class="store-badges">
-          <a class="store-badge" href="https://apps.apple.com/app/id6789255782" target="_blank" rel="noopener">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
-            <span class="sb-txt"><span class="sb-sm">Download on the</span><span class="sb-lg">App Store</span></span>
-          </a>
-          <a class="store-badge" href="https://play.google.com/store/apps/details?id=com.prof18.difftray.companion" target="_blank" rel="noopener">
-            <svg width="20" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.6 2.2c-.25.27-.4.68-.4 1.22v17.16c0 .54.15.95.4 1.22l.06.05L13.4 12.1v-.2L3.66 2.15l-.06.05z" opacity=".85"/><path d="M16.7 15.4l-3.3-3.3v-.2l3.3-3.3.08.05 3.9 2.22c1.12.63 1.12 1.67 0 2.31l-3.9 2.2-.08.02z"/><path d="M16.78 15.35 13.4 12 3.6 21.8c.37.39.98.44 1.66.06l11.52-6.5" opacity=".9"/><path d="M16.78 8.65 5.26 2.15c-.68-.39-1.29-.34-1.66.05L13.4 12l3.38-3.35z" opacity=".7"/></svg>
-            <span class="sb-txt"><span class="sb-sm">Get it on</span><span class="sb-lg">Google Play</span></span>
-          </a>
-        </div>
-        <div class="comp-meta"><span>iOS &amp; Android</span><span class="dot"></span><span>Pairs over Wi-Fi or Tailscale</span></div>
-      </div>
-      <div class="comp-phones reveal">
-        <img class="ph-side ph-a" src="assets/companion-comments.png" alt="Companion comments and generated-prompt screen" width="780" height="1688" loading="lazy" decoding="async">
-        <img class="ph-mid" src="assets/companion-workspace.png" alt="Companion workspace: changed files with review state and drift flags" width="780" height="1688" loading="lazy" decoding="async">
-        <img class="ph-side ph-b" src="assets/companion-diff.png" alt="Companion diff view with Mark reviewed action" width="780" height="1688" loading="lazy" decoding="async">
-      </div>
-    </div>
-
-    <div class="comp-how reveal">
-      <div class="comp-how-head">
-        <span class="eyebrow" style="justify-content:center">Pair in under a minute</span>
-        <h3>Your repos stay on your Mac. Review from either screen.</h3>
-        <p>Your Mac stays the source of truth and shares review data with your paired device over Wi-Fi or Tailscale, without a cloud backend. Keep Difftray running on a reachable Mac while you review.</p>
-      </div>
-      <div class="comp-steps">
-        <div class="comp-step-list">
-          <div class="cstep">
-            <div class="cstep-num">1</div>
-            <div><h4>Install the app</h4><p>Get <b>Difftray Companion</b> from the App Store or Google Play and open it on your phone.</p></div>
-          </div>
-          <div class="cstep">
-            <div class="cstep-num">2</div>
-            <div><h4>Turn on Companion mode</h4><p>In Difftray on your Mac, open <span class="kb">Settings → Companion</span> and hit <b>Pair new device</b> to show a QR code.</p></div>
-          </div>
-          <div class="cstep">
-            <div class="cstep-num">3</div>
-            <div><h4>Scan &amp; confirm</h4><p>Scan the code, match the key fingerprint on both screens, and your projects appear. Same Wi-Fi works out of the box — sign both into <b>Tailscale</b> to review from anywhere.</p></div>
-          </div>
-        </div>
-        <div class="comp-qr">
-          <img src="assets/companion-qr.png" alt="Companion QR pairing screen" width="780" height="1688" loading="lazy" decoding="async">
-        </div>
-      </div>
-    </div>
+    <h2>Built for your own reviews too.</h2>
+    <dl class="keys">
+      <div class="key"><dt><kbd>R</kbd></dt><dd>Marks the file <b>reviewed</b> and opens the next one.</dd></div>
+      <div class="key"><dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>Moves through the <b>file list</b> without the mouse.</dd></div>
+      <div class="key"><dt><kbd>⌘</kbd><kbd>P</kbd></dt><dd>Opens <b>any file by name</b>, which helps in large changes.</dd></div>
+      <div class="key"><dt><kbd>⌘</kbd><kbd>F</kbd></dt><dd>Filters the file list <b>by path</b>.</dd></div>
+      <div class="key"><dt class="word">Projects</dt><dd>Every <b>repository and worktree</b> opens in one window, and each tab shows its own progress.</dd></div>
+      <div class="key"><dt class="word">Targets</dt><dd>You can review the <b>working tree</b>, a <b>branch</b> against its base, or a single <b>commit</b>.</dd></div>
+    </dl>
   </div>
 </section>
 
-<!-- FINAL CTA -->
-<section class="final">
-  <div class="wrap">
-    <div class="final-card reveal">
-      <svg class="logo-tile" viewBox="0 0 1024 1024"><use href="#dt-mark"/></svg>
-      <h2>Stop losing track of your own reviews.</h2>
-      <p>Start with the free Mac app, then pair the iOS or Android companion to review from your phone or tablet.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c.05 1-.34 1.97-.94 2.66-.64.74-1.69 1.31-2.71 1.23-.12-.97.37-1.98.93-2.61.64-.72 1.74-1.26 2.72-1.28zM18.9 8.36c-.06.04-1.84 1.06-1.82 3.18.02 2.54 2.22 3.38 2.25 3.39-.02.07-.35 1.21-1.17 2.39-.7 1.02-1.43 2.03-2.58 2.05-1.12.02-1.49-.66-2.78-.66-1.29 0-1.69.64-2.76.68-1.1.04-1.95-1.1-2.66-2.12-1.45-2.1-2.57-5.93-1.07-8.52.74-1.29 2.07-2.1 3.5-2.12 1.09-.02 2.11.73 2.78.73.66 0 1.91-.9 3.21-.77.55.02 2.09.22 3.08 1.68z"/></svg>
-          Download for macOS
-        </a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/prof18/difftray" target="_blank" rel="noopener">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Star on GitHub
-        </a>
-      </div>
-      <p class="cta-alt"><a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-x64.dmg" rel="noopener">Download for Intel Mac</a></p>
+<div class="dl" id="download">
+  <div class="wrap dl-in">
+    <div>
+      <h2>Download Difftray for Mac.</h2>
+      <p class="dl-meta">Free and open source under Apache 2.0 · macOS 13 or later · Your repositories never leave your Mac.</p>
+    </div>
+    <div class="dl-btns">
+      <a class="btn btn-go" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener"><svg width="18" height="18" aria-hidden="true"><use href="#i-down"/></svg>Apple silicon</a>
+      <a class="btn btn-line" href="https://github.com/prof18/difftray/releases/latest/download/Difftray-x64.dmg" rel="noopener"><svg width="18" height="18" aria-hidden="true"><use href="#i-down"/></svg>Intel</a>
     </div>
   </div>
-</section>
+</div>
 </main>
 
-<!-- FOOTER -->
 <footer>
-  <div class="wrap">
-    <div class="foot-inner">
-      <div class="foot-brand">
-        <a class="brand" href="#top">
-          <svg class="logo-tile" viewBox="0 0 1024 1024"><use href="#dt-mark"/></svg>
-          Difftray
-        </a>
-        <p>A local-first review desk for tracking Git changes across your projects — and knowing the moment a reviewed file drifts.</p>
-      </div>
-      <div class="foot-cols">
-        <div class="foot-col">
-          <h5>Product</h5>
-          <a href="#drift">Drift tracking</a>
-          <a href="#gallery">Screenshots</a>
-          <a href="#features">Features</a>
-          <a href="#companion">Mobile companion</a>
-          <a href="https://github.com/prof18/difftray/releases/latest/download/Difftray-arm64.dmg" rel="noopener">Download</a>
-        </div>
-        <div class="foot-col">
-          <h5>Project</h5>
-          <a href="https://github.com/prof18/difftray" target="_blank" rel="noopener">Source on GitHub</a>
-          <a href="https://github.com/prof18/difftray/releases/latest" target="_blank" rel="noopener">Releases</a>
-          <a href="https://github.com/prof18/difftray/issues" target="_blank" rel="noopener">Report an issue</a>
-        </div>
-      </div>
-    </div>
-    <div class="foot-bottom">
-      <span>© 2026 Difftray · Built by <a href="https://www.marcogomiero.com" target="_blank" rel="noopener">Marco Gomiero</a></span>
-      <a class="foot-donate" href="https://www.paypal.me/MarcoGomiero" target="_blank" rel="noopener">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        Donate
-      </a>
-    </div>
+  <div class="wrap foot">
+    <span>© 2026 Difftray · Built by <a href="https://www.marcogomiero.com" rel="noopener">Marco Gomiero</a></span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/prof18/difftray" rel="noopener">Source</a>
+      <a href="https://github.com/prof18/difftray/blob/main/docs/agent-integration.md" rel="noopener">Agent guide</a>
+      <a href="https://github.com/prof18/difftray/releases/latest" rel="noopener">Releases</a>
+      <a href="https://github.com/prof18/difftray/issues" rel="noopener">Report an issue</a>
+      <a href="https://www.paypal.me/MarcoGomiero" rel="noopener">Donate</a>
+    </nav>
   </div>
 </footer>
 
-<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot preview">
-  <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">×</button>
-  <img class="lightbox-img" id="lightbox-img" alt="">
-</div>
-
 <script>
-// nav shadow on scroll + mobile menu
 const nav=document.getElementById('nav');
-const navToggle=document.getElementById('nav-toggle');
-const navMenu=document.getElementById('nav-menu');
-function setNavOpen(open){
-  nav.classList.toggle('open',open);
-  navToggle.setAttribute('aria-expanded',String(open));
-  navToggle.setAttribute('aria-label',open?'Close menu':'Open menu');
-  document.body.classList.toggle('nav-open',open);
-}
-navToggle.addEventListener('click',()=>setNavOpen(!nav.classList.contains('open')));
-navMenu.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setNavOpen(false)));
-addEventListener('scroll',()=>{
-  nav.classList.toggle('scrolled',scrollY>10);
-  if(nav.classList.contains('open'))setNavOpen(false);
-},{passive:true});
-addEventListener('keydown',e=>{if(e.key==='Escape'&&nav.classList.contains('open'))setNavOpen(false)});
+addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>8),{passive:true});
 
-// reveal on scroll
-const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12,rootMargin:'0px 0px -60px 0px'});
-document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-
-// screenshot gallery
-const GALLERY={
-  'review-workflow':{src:'assets/review-workflow.png',alt:'Difftray review workflow with inline comments and a copy-to-clipboard prompt',caption:'Inline comments and a ready-made agent handoff prompt.'},
-  'review-invalidated':{src:'assets/review-invalidated.png',alt:'Difftray drift notification when a reviewed file changes',caption:'Reviewed-file drift notification after a diff changes.'},
-  'expanded-context':{src:'assets/expanded-context.png',alt:'Difftray split diff with expandable unchanged context',caption:'Expandable unchanged context in split diff mode.'},
-  'diff-focused-new':{src:'assets/diff-focused-new.png',alt:'Difftray focused new-side diff view',caption:'Focused new-side diff view for reading additions.'}
-};
-const galImg=document.getElementById('gal-img'),galCap=document.getElementById('gal-caption');
-const lightbox=document.getElementById('lightbox');
-const lightboxImg=document.getElementById('lightbox-img');
-const lightboxClose=document.getElementById('lightbox-close');
-function showShot(id){
-  const shot=GALLERY[id];
-  if(!shot)return;
-  galImg.src=shot.src;galImg.alt=shot.alt;
-  galCap.innerHTML=`${shot.caption} <span class="enlarge">· Tap image to zoom</span>`;
-}
-function openLightbox(){
-  lightboxImg.src=galImg.src;lightboxImg.alt=galImg.alt;
-  lightbox.classList.add('open');document.body.classList.add('lightbox-open');
-}
-function closeLightbox(){
-  lightbox.classList.remove('open');document.body.classList.remove('lightbox-open');
-  lightboxImg.removeAttribute('src');
-}
-document.getElementById('gal-zoom').addEventListener('click',openLightbox);
-lightboxClose.addEventListener('click',closeLightbox);
-lightbox.addEventListener('click',e=>{if(e.target===lightbox)closeLightbox()});
-addEventListener('keydown',e=>{if(e.key==='Escape'&&lightbox.classList.contains('open'))closeLightbox()});
-document.querySelectorAll('.gal-tab').forEach(tab=>{
-  tab.addEventListener('click',()=>{
-    document.querySelectorAll('.gal-tab').forEach(t=>{t.classList.remove('active');t.setAttribute('aria-selected','false')});
-    tab.classList.add('active');tab.setAttribute('aria-selected','true');
-    showShot(tab.dataset.shot);
-  });
-});
-showShot('review-workflow');
+// One authored moment: the agent session replays, then its comments light up in the window.
+(()=>{
+  const desk=document.getElementById('desk');
+  const lines=[...desk.querySelectorAll('.term-body p')];
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){desk.classList.add('done');return}
+  desk.classList.add('play');
+  const run=()=>{
+    lines.forEach((line,i)=>setTimeout(()=>line.classList.add('on'),200+i*260));
+    setTimeout(()=>desk.classList.add('done'),200+lines.length*260+250);
+  };
+  if(!('IntersectionObserver' in window)){run();return}
+  const io=new IntersectionObserver(entries=>{
+    if(entries.some(e=>e.isIntersecting)){io.disconnect();run()}
+  },{threshold:.25});
+  io.observe(desk);
+})();
 </script>
 </body>
 </html>

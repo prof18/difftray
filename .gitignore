@@ -15,3 +15,9 @@ tmp/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Impeccable run artifacts (critique snapshots, question rolls, review captures)
+.impeccable/critique/
+.impeccable/questions/
+.impeccable/review/
+.impeccable/config.local.json
