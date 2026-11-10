@@ -2,7 +2,7 @@
 
 ## Summary
 
-Difftray is a local-first macOS app for reviewing Git diffs across multiple projects. It lets a developer mark files as reviewed, keeps those marks across app restarts, and automatically clears them when a file's diff changes.
+Difftray is a local-first macOS app for reviewing Git diffs across multiple projects. A developer can mark files as reviewed. Difftray keeps those marks across app restarts and clears them automatically when a file's diff changes.
 
 ## Target User
 
@@ -31,7 +31,7 @@ Local review workflows break down when many files change across multiple repos o
 
 ## Product Thesis
 
-The diff viewer is not the moat. The moat is durable, trustworthy review state.
+Difftray's advantage over other diff viewers is review state that is durable and that the user can trust. The diff viewer alone does not set it apart.
 
 If Difftray says a file is reviewed, that must mean the exact diff currently shown to the user matches the diff that was reviewed.
 

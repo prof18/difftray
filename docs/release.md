@@ -32,8 +32,8 @@ copied plugin package and resolver fixtures, and
 `pnpm --filter @difftray/desktop test:cli:bundle` to check the temporary bundled
 CLI. These local checks do not install plugins, exercise agent accounts, or
 validate a signed release. Confirm agent-host sessions separately during the
-final user validation pass. General Settings offers an optional terminal
-command installation; the agent skill does not depend on it.
+final user validation pass. Settings › Agents › Terminal (optional) offers an
+optional terminal command installation; the agent skill does not depend on it.
 
 The full gate runs bounded CLI process acceptance after visual tests with
 `test:cli:e2e --skip-build`, reusing its built outputs. This exercises actual
@@ -133,8 +133,8 @@ or in Settings › General.
 ```
 
 The alpha form reads artifacts from `release/0.1.0-alpha` and publishes them
-under the distinct GitHub tag `v0.1.0-alpha`; production uses `v0.1.0`. This
-allows both channels to publish the same base version without competing for one
+under the distinct GitHub tag `v0.1.0-alpha`; production uses `v0.1.0`. Both
+channels can therefore publish the same base version without competing for one
 GitHub tag.
 
 Use the script directly for uploads. With pnpm script argument forwarding, the

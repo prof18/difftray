@@ -2,7 +2,7 @@
 
 SQLite is the local source of truth for app settings, projects, review targets, and review marks.
 
-This is an initial model, not final schema syntax.
+The SQL on this page describes an initial model and is not the final schema syntax.
 
 ## Tables
 

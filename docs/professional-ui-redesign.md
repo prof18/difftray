@@ -2,24 +2,24 @@
 
 ## Purpose
 
-Difftray should look and feel like a professional local review console for engineers. The current direction allows too much visual drama: heavy gradients, bright accent surfaces, badge-like controls, and decorative shapes can make the app feel like a game interface instead of a trusted review tool.
+Difftray should look and feel like a professional local review console for engineers. The current direction uses heavy gradients, bright accent surfaces, badge-like controls, and decorative shapes. Together they can make the app look like a game interface instead of a review tool that engineers can trust.
 
 This document defines the next UI direction before implementation starts. It is the design brief for the redesign and the acceptance standard for future UI changes.
 
 ## Product Positioning
 
-Difftray is not an IDE, an agent runner, a pull request platform, or a merge tool. It is a local-first diff review workspace that helps an engineer answer four questions quickly:
+Difftray is a local-first diff review workspace. It does not edit code, run agents, host pull requests, or merge branches. It helps an engineer answer four questions quickly:
 
 - What project am I reviewing?
 - What changed?
 - What still needs review?
 - Did anything change after I reviewed it?
 
-The interface should feel closer to a command center for focused engineering work than a dashboard, landing page, or game HUD.
+The interface should look like a dense tool for focused engineering work, without the large tiles of a dashboard, the hero sections of a landing page, or the overlays of a game HUD.
 
 ## Reference Direction
 
-The Codex app is the primary inspiration for the level of polish and density, not a skin to copy. The relevant qualities are:
+The Codex app is the primary reference for the level of polish and density. Difftray adopts these qualities without copying its visual design:
 
 - A calm multi-pane workspace for real developer workflows.
 - Clear organization by project, thread, file, and artifact.
@@ -64,7 +64,7 @@ The app should be composed from persistent work surfaces:
 - details or inspector panel
 - command bar
 
-Avoid stacked cards, nested cards, floating marketing panels, and decorative content boxes. Repeated items such as file rows can have subtle row containers, but page sections should not be cardified.
+Avoid stacked cards, nested cards, floating marketing panels, and decorative content boxes. Repeated items such as file rows can have subtle row containers, but page sections should not be drawn as cards.
 
 ### Quiet Motion
 
@@ -282,7 +282,7 @@ Avoid large illustrations, hero copy, and celebratory states. A clean "No unrevi
 
 ### Settings
 
-Settings should feel like an inspector panel or compact sheet, not a showcase area. Settings controls should be aligned, labeled, and predictable.
+Settings should look like an inspector panel or a compact sheet, without showcase-style presentation. Settings controls should be aligned, labeled, and predictable.
 
 Do not use visible instructional prose for obvious controls.
 

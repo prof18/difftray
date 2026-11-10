@@ -2,7 +2,7 @@
 
 Difftray should be developed with hard TDD for core behavior.
 
-The most important rule: review state must never lie.
+The most important rule is that review state must always be correct: Difftray must never show a file as reviewed when its current diff differs from the reviewed diff.
 
 ## Test Pyramid
 
@@ -180,7 +180,7 @@ Viewport/window coverage should match the change. For broad layout changes, chec
 - normal desktop window
 - wide desktop window
 
-Visual verification does not replace unit or workflow tests. It catches rendering and layout failures that tests often miss.
+Visual verification does not replace unit or workflow tests. It catches the rendering and layout failures that those tests often miss.
 
 ### Performance Benchmarks
 
@@ -273,8 +273,8 @@ The Electron visual smoke also checks that moving between targets keeps the
 overlay visible, leaving the window clears it, and Escape, blur, drag end and
 resumed mouse movement dismiss stale hover state.
 
-`pnpm bench:performance` is a conditional gate, not part of `./ci.sh`. Run it
-for performance-sensitive work as described above.
+`pnpm bench:performance` is a conditional gate and is not part of `./ci.sh`. Run
+it for performance-sensitive work as described above.
 
 ## Code range comments
 
@@ -290,9 +290,10 @@ isolated development profile for manual checks. Compare `pnpm bench:performance`
 before and after surface changes. Check both themes and narrow/wide viewports;
 confirm that the bottom action bar leaves the final line reachable.
 
-Native WebView runs should confirm immediate single-tap commenting, no keyboard
-on hold, scrolling while selecting, confirm/cancel and saved-comment editing.
-Browser tests prove internal gesture behavior; native layout trees alone do not.
+Native WebView runs should confirm that a single tap starts a comment immediately,
+that holding does not open the keyboard, and that scrolling while selecting,
+confirm/cancel and saved-comment editing work. Browser tests prove internal
+gesture behavior; native layout trees alone cannot show it.
 
 ## Local agent process acceptance
 
@@ -313,15 +314,15 @@ pairs fresh ephemeral keys and compares encrypted responses with and without
 the attribution capability. Legacy responses recursively omit attribution and
 note-version fields; current responses preserve all four scopes' attribution.
 
-Clock/SQL fixture manipulation for deterministic expiry and corruption tests is
-confined to owned test data. It does not add SQL or clock controls to the agent
-protocol. The strict wire `hello` shape is tested separately from `doctor`'s
+To make expiry and corruption tests deterministic, the harness changes the clock
+and SQL data only in test data that it owns. These tests add no SQL or clock
+controls to the agent protocol. The strict wire `hello` shape is tested separately from `doctor`'s
 CLI-only diagnostics. Successful stdout remains a single JSON envelope, or exact
 prompt text for a prompt export, without tokens or startup diagnostics.
 
 Run the heavier `pnpm --filter @difftray/desktop test:cli:bundle` separately before
-handoff to validate archive distribution without Node on PATH. Copied agent
-package/resolver tests do not establish actual host-session compatibility.
+handoff to validate archive distribution without Node on PATH. Tests of the copied
+agent package and resolver do not show that real host sessions work.
 M6's final acceptance and handoff are pending. Actual agent hosts, signed arm64
 and x64 archives, and publication remain user checks.
 

@@ -19,23 +19,23 @@ It avoids the crowded "patch management" space around names beginning with `Patc
 
 ### Patchmark
 
-Rejected because it is already used in an adjacent code diff/review context.
+This name is already in use in an adjacent code diff/review context, so the project did not choose it.
 
 ### Patchwise
 
-Rejected because it is already used for kernel patch review tooling and appears in active package/project listings.
+Kernel patch review tooling already uses this name, and it appears in active package/project listings.
 
 ### Differ
 
-Rejected because it is already used by active software products and has poor searchability.
+Active software products already use this name, and it is hard to find in search results.
 
 ### DiffPilot
 
-Rejected because it is already used by a VS Code code review tool.
+A VS Code code review tool already uses this name.
 
 ### DiffScope
 
-Rejected because it is already used by Git analysis tooling.
+Git analysis tooling already uses this name.
 
 ## Availability Notes
 

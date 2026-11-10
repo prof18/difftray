@@ -59,10 +59,11 @@ be retried after source changes or context expiry without duplicating feedback.
 Overall notes use an independent version for compare-and-swap. Human edits retain
 agent creator attribution while recording the last editor separately.
 
-The local socket carries strict, bounded versioned envelopes. `doctor` adds local
-CLI diagnostics to the authenticated `hello` identity; it does not widen the wire
-schema. Companion clients opt into attribution with a capability, and legacy
-responses omit provenance/version fields recursively. See
+Messages on the local socket use strict, bounded envelopes that carry a protocol
+version. The `doctor` command adds local CLI diagnostics to the authenticated
+`hello` identity, and it adds no fields to the wire schema. A companion client
+receives attribution only after it opts in with a capability; responses to older
+clients omit the provenance and version fields at every level. See
 [agent integration](agent-integration.md) and
 [Decision 0041](decisions/0041-local-agent-integration.md).
 
@@ -83,12 +84,11 @@ Renderer process:
 - keyboard navigation
 - settings UI
 
-Renderer implementation should avoid concentrating review workflow behavior in a
-single React component. Pure view-model helpers, command palette ranking,
-workspace loading status formatting, and review-comment annotation logic live in
-small tested renderer modules. React components and hooks can then compose those
-modules without making the top-level app component the only place behavior can be
-changed.
+The renderer should not concentrate review workflow behavior in a single React
+component. Pure view-model helpers, command palette ranking, workspace loading
+status formatting, and review-comment annotation logic live in small tested
+renderer modules. React components and hooks compose those modules, so behavior
+can change outside the top-level app component.
 
 IPC boundary:
 
@@ -105,11 +105,11 @@ IPC boundary:
 
 ### Project
 
-A local Git repo or worktree opened by the user.
+A project is a local Git repo or worktree that the user opened.
 
 ### Review Target
 
-The comparison context for review state.
+A review target is the comparison that review state belongs to.
 
 Examples:
 
@@ -121,9 +121,8 @@ Review state is scoped to a review target.
 
 ### File Diff
 
-Normalized representation of a single changed file in a review target.
-
-Includes:
+A file diff is the normalized representation of a single changed file in a review
+target. It includes:
 
 - current path
 - previous path for renames
@@ -136,7 +135,8 @@ Includes:
 
 ### Review Mark
 
-Persisted record that a file's diff hash was reviewed for a review target.
+A review mark is a persisted record that a file's diff hash was reviewed for a
+review target.
 
 ## Git Strategy
 
@@ -172,8 +172,8 @@ Use Chokidar from the Electron main process to monitor opened projects. The rend
 subscribes to typed project-change notifications through preload, but it does not
 watch files or read Git metadata directly.
 
-The watcher is a freshness signal, not the source of truth. Raw filesystem events
-debounce into project-change notifications. The renderer then asks the existing
+The watcher only signals that a project may have changed; Git remains the source
+of truth. Raw filesystem events debounce into project-change notifications. The renderer then asks the existing
 main-process project loader for current Git state, review state, and progress. The
 app should not recompute large diffs on every filesystem event.
 
@@ -223,13 +223,13 @@ virtualization.
 
 Difftray still owns the review model around the renderer. `packages/git`
 provides Git-derived patch text and bounded old/new text snapshots. Review
-hashes and invalidation are based on those Git-derived payloads, not on Diffs
+hashes and invalidation use those Git-derived payloads and never the Diffs
 render output.
 
-Keep the existing performance boundary: summaries load without full patch text,
-selected file content loads lazily, parsing is deferred until after paint,
-highlighting uses a bounded worker pool, and inactive repository tabs must not
-mount hidden diff viewers.
+Keep the existing performance boundary. Summaries load without full patch text,
+and selected file content loads lazily. Parsing waits until after paint, and
+highlighting uses a bounded worker pool. Inactive repository tabs must not mount
+hidden diff viewers.
 
 See [Decision 0024](decisions/0024-diffs-rendering-engine.md).
 
@@ -241,7 +241,7 @@ Use Radix UI primitives for accessible overlays and controls when native element
 
 Use lucide-react icons for action buttons and status indicators where an icon improves scan speed.
 
-Avoid adopting a broad component kit in v0. Difftray needs a distinctive review workspace, not a generic dashboard skin.
+Avoid adopting a broad component kit in v0, because its generic dashboard styling would replace the review workspace's own visual design.
 
 ## Failure Modes
 
@@ -265,10 +265,11 @@ The UI should handle:
 
 Marking a file reviewed is a main-process verified operation:
 
-1. Renderer sends project id, review target id, file path, and displayed diff hash.
-2. Main process recomputes or reloads the current file diff hash.
-3. If hashes match, storage writes the review mark.
-4. If hashes differ, storage is not changed and the renderer refreshes.
+1. The renderer sends the project id, review target id, file path, and displayed
+   diff hash.
+2. The main process recomputes or reloads the current file diff hash.
+3. If the hashes match, storage writes the review mark.
+4. If the hashes differ, storage does not change and the renderer refreshes.
 
 ## Performance Notes
 

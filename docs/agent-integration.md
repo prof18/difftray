@@ -19,15 +19,17 @@ the folder chooser for another agent:
 Install creates an app-owned symlink from the selected destination to the
 bundled skill, plus one sibling link per command skill (`difftray-open` and the
 others) in the same skills folder. An agent counts as installed only when every
-link is in place; when some command links are missing, for example after an
+link is in place. When some command links are missing, for example after an
 update that added a command, the agent shows **Repair**, which adds only the
 missing links. If any of these names is taken by something else, nothing is
-linked for that agent. The skill folder remains inside the app, so the link receives
-skill updates whenever the app is updated at the same path. The host agent may
-need to restart or reload its skills to see those updates. **Repair** updates an
-app-owned link when the app has moved. If the destination already contains an
-unrelated folder, file, or symlink, the app preserves it and does not overwrite
-it. The folder chooser can always be used again to choose another destination.
+linked for that agent.
+
+The skill folder stays inside the app, so the link receives skill updates
+whenever the app is updated at the same path. The host agent may need to restart
+or reload its skills to see those updates. **Repair** updates an app-owned link
+when the app has moved. If the destination already contains an unrelated folder,
+file, or symlink, the app keeps it and does not overwrite it. You can use the
+folder chooser again at any time to choose another destination.
 
 The page has four sections: **About**, **Install the skill**, **Status** and
 **Terminal (optional)**. The skill is the only thing an agent needs.
@@ -48,17 +50,18 @@ the actual agent directories.
 
 ## Agent skill setup
 
-The repository remains the source for contributors, with one canonical portable
+The repository is the source for contributors, with one canonical portable
 skill at `integrations/agents/difftray/skills/difftray` and its command skills
-beside it. The app bundles only that `skills` folder and the existing CLI; plugin wrappers and marketplace catalogs
-are not needed for this installation flow. Their previous repository-based
-installation instructions are superseded. No host skill installation or live
-agent-session validation is claimed here.
+beside it. The app bundles only that `skills` folder and the existing CLI. This
+installation flow needs no plugin wrappers or marketplace catalogs, and it
+supersedes their earlier repository-based installation instructions. This page
+does not claim that any host skill installation or live agent session has been
+validated.
 
 The skill's sibling `scripts/difftray` resolver uses `DIFFTRAY_APP_PATH` first
 when set. Otherwise, an installed skill link identifies its owning app bundle,
 including Alpha and custom-named bundles. When used from the repository source
-checkout, the resolver retains the default production lookup of
+checkout, the resolver keeps the default production lookup of
 `/Applications/Difftray.app`, then `~/Applications/Difftray.app`. It validates
 the app bundle and executable paths before calling the bundled CLI. It does not
 search `PATH` or change the caller's working directory. The direct launcher at
@@ -74,8 +77,9 @@ or add that directory to the shell environment yourself.
 The [canonical skill](../integrations/agents/difftray/skills/difftray/SKILL.md)
 and [command reference](../integrations/agents/difftray/skills/difftray/references/commands.md)
 cover opening the current worktree, reading every feedback page, reviewing exact
-anchors, and submitting authorized single-line, inclusive-range, file, and overall findings. Loading a
-skill alone authorizes no write, code edit, other agent, or chat message.
+anchors, and submitting authorized single-line, inclusive-range, file, and overall
+findings. Loading a skill alone authorizes no write, code edit, other agent, or chat
+message.
 
 ### Command skills
 
@@ -97,36 +101,54 @@ Typing `/difftray-review` is the user's request to submit, and typing
 `/difftray-fix` is the request to change code; the plain `difftray` skill
 still writes nothing unless asked.
 
-Difftray's local agent protocol is version 1, separate from the companion protocol. The bundled CLI connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
+Difftray's local agent protocol is version 1 and is separate from the companion protocol. The bundled CLI connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 
-A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch. Frames are bounded to 1 MiB for requests and 16 MiB for responses. Unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields are rejected.
+A connection exchanges exactly one UTF-8 JSON object followed by LF. Requests carry `version`, transport `id`, a 32-byte hex `token`, `method`, and method-specific `params`. Responses carry the same version and transport ID, then either `ok: true` with a validated result or `ok: false` with `{ code, message, retryable }`. The separate feedback `submission.requestId` identifies an idempotent batch.
 
-`open` takes `{ repoPath, selector }`. With `working-tree`, `branch` with `base`, or `commit` with `commit` it selects that desktop target. With `selected` it keeps the worktree's current target (the working tree for a worktree never opened before), and when that review is already on screen it focuses it without reloading. `review.inspect` takes the same parameters and can also specify `selected`; it resolves that selection into a context without changing the GUI. `review.files`, `review.file`, `review.feedback`, and `review.export` take a `contextId`. File and feedback reads support bounded pagination. A context records the canonical worktree and Git identity, target, file manifest, snapshot hash, and expiry. Later operations must reject stale code or expired contexts instead of silently switching targets.
+Frames are bounded to 1 MiB for requests and 16 MiB for responses. The server rejects unknown properties, malformed UTF-8, unknown methods or enum values, and unbounded fields.
 
-`feedback.submit` accepts an actor name and run ID, a request ID, and 1–100 items. The four scopes are single line, inclusive range, file, and overall note. Single-line and range items both use wire kind `line` and may address additions or deletions. Line and file items carry the context file path and diff hash; line positions are positive safe integers. An overall item carries the expected note version. Bodies are nonblank and at most 10,000 Unicode code points. The server fixes attribution to agent; callers cannot claim human authorship. Feedback pagination uses a separate feedback version and reports `stale_feedback` if rows change between pages.
+`open` takes `{ repoPath, selector }`. With `working-tree`, `branch` with `base`, or `commit` with `commit`, it selects that desktop target. With `selected`, it keeps the worktree's current target (the working tree for a worktree never opened before). When that review is already on screen, `open` focuses it without reloading. `review.inspect` takes the same parameters and can also specify `selected`; it resolves that selection into a context without changing the GUI.
+
+`review.files`, `review.file`, `review.feedback`, and `review.export` take a `contextId`. File and feedback reads support bounded pagination. A context records the canonical worktree and Git identity, target, file manifest, snapshot hash, and expiry. Later operations must reject stale code or expired contexts instead of silently switching targets.
+
+`feedback.submit` accepts an actor name and run ID, a request ID, and 1–100 items. The four scopes are single line, inclusive range, file, and overall note. Single-line and range items both use wire kind `line` and may address additions or deletions. Line and file items carry the context file path and diff hash; line positions are positive safe integers. An overall item carries the expected note version.
+
+Bodies are nonblank and at most 10,000 Unicode code points. The server fixes attribution to agent; callers cannot claim human authorship. Feedback pagination uses a separate feedback version and reports `stale_feedback` if rows change between pages.
 
 The protocol error codes are `invalid_request`, `unsupported_version`, `unauthorized`, `app_unavailable`, `profile_mismatch`, `repository_missing`, `invalid_target`, `context_missing`, `context_expired`, `stale_review`, `stale_diff`, `stale_feedback`, `note_conflict`, `idempotency_conflict`, `limit_exceeded`, `busy`, `request_timeout`, and `internal_error`. `request_timeout` maps to the CLI I/O exit category; `stale_feedback` maps to the conflict category. No token should appear in CLI output.
 
-The internal context service persists snapshots without opening a repository tab. It pins commit contexts to a SHA, checks working-tree and branch identities before and after Git loads, and checks the context on every read. Commit and branch contexts are checked by re-resolving their target SHAs and fingerprinting the working-tree `.gitattributes`, `info/attributes`, the global attributes file (configured or Git's XDG default) and diff configuration, which together fix the diff; working-tree contexts reload the saved file manifest and visibility setting. Reads of repository content (`review file`, prompt `review export`, `feedback submit`) are checked again afterwards; manifest and feedback pages are checked once, since the manifest is frozen and feedback cursors carry their own version. `pnpm bench:agent-reads` measures these costs. The manifest includes hidden generated files. Replacing the repository directory invalidates its contexts even when its Git content is identical. Contexts expire after 24 hours; creating a context purges expired entries and rejects capacity beyond 128 live entries instead of evicting one.
+The internal context service persists snapshots without opening a repository tab. It pins commit contexts to a SHA, checks working-tree and branch identities before and after Git loads, and checks the context on every read.
 
-Desktop and companion note mutations increment a persistent revision in the same SQLite transaction. Deleting a note retains that revision. The snapshot API returns the current note and an opaque version token together, so same-timestamp edits and delete/recreate cycles are distinguishable. Target-aware report excerpts use the report's recorded target and omit mismatched content. Agent reads and clipboard reports share the same target-aware formatter.
+The service checks commit and branch contexts by re-resolving their target SHAs. It also fingerprints the inputs that together fix the diff: the working-tree `.gitattributes`, `info/attributes`, the global attributes file (configured or Git's XDG default) and diff configuration. Working-tree contexts reload the saved file manifest and visibility setting.
+
+Reads of repository content (`review file`, prompt `review export`, `feedback submit`) are checked again afterwards. Manifest and feedback pages are checked once, since the manifest is frozen and feedback cursors carry their own version. `pnpm bench:agent-reads` measures these costs. The manifest includes hidden generated files.
+
+Replacing the repository directory invalidates its contexts even when its Git content is identical. Contexts expire after 24 hours. Creating a context purges expired entries, and it rejects a new context beyond 128 live entries instead of evicting one.
+
+Every note change from the desktop or the companion increments a persistent revision in the same SQLite transaction. Deleting a note keeps that revision. The snapshot API returns the current note together with an opaque version token, so a client can tell apart two edits with the same timestamp, or a note that was deleted and created again.
+
+Report excerpts use the target that the report recorded and leave out content from any other target. Agent reads and clipboard reports use the same target-aware formatter.
 
 ## Connecting and opening
 
-Run `Difftray.app/Contents/Resources/bin/difftray doctor --json` to connect quietly and inspect the authenticated bundle/profile identity. `open [PATH] --json` selects the canonical containing worktree and returns only after the renderer commits the requested target. Paths default to the caller’s working directory. Without `--target`, opening keeps the worktree's current selection; branch and commit modes require `--base` and `--commit` respectively. Unknown arguments and invalid selectors fail before startup. Help and version work offline without standalone Node on PATH.
+Run `Difftray.app/Contents/Resources/bin/difftray doctor --json` to connect quietly and inspect the authenticated bundle/profile identity. `open [PATH] --json` selects the canonical containing worktree and returns only after the renderer commits the requested target. Paths default to the caller’s working directory.
+
+Without `--target`, opening keeps the worktree's current selection. Branch and commit modes require `--base` and `--commit` respectively. Unknown arguments and invalid selectors fail before startup. Help and version work offline without standalone Node on PATH.
 
 `doctor` is a CLI command built on the strict wire `hello` operation. Fields such
 as `connected`, `bundlePath`, and `cliVersion` are CLI diagnostics assembled
 locally; clients must not add them to a wire `hello` response. Neither surface
 prints the endpoint token.
 
-The CLI launches only its own bundle executable, with detached standard streams and Electron runtime injection variables removed. Every profile is canonicalized before Electron acquires its single-instance lock or opens storage. Background second-instance launches do not focus the UI; a normal launch or an explicit open does. Context reads use this same connection path without opening a window.
+The CLI launches only its own bundle executable, with the standard streams detached and the Electron runtime injection variables removed from its environment. Difftray canonicalizes every profile before Electron acquires its single-instance lock or opens storage. A background second-instance launch does not focus the UI, but a normal launch or an explicit open does. Context reads use the same connection path without opening a window.
 
-The socket lives beneath a per-user, profile-hashed directory with mode 0700. Socket and endpoint metadata must be owned by the current user with mode 0600. Existing unsafe paths are rejected rather than repaired. Endpoint publication follows explicit socket permission verification, independent of the launching shell’s umask. Connections are capped at 16, incomplete requests at five seconds, and authenticated dispatch plus response drain at 120 seconds. Disconnects cancel pending opens; queued expired selections never execute.
+The socket lives beneath a per-user, profile-hashed directory with mode 0700. Socket and endpoint metadata must be owned by the current user with mode 0600. The app rejects existing unsafe paths instead of repairing them. It publishes the endpoint only after it verifies the socket permissions, independent of the launching shell’s umask.
+
+Connections are capped at 16, incomplete requests at five seconds, and authenticated dispatch plus response drain at 120 seconds. Disconnects cancel pending opens; queued expired selections never execute.
 
 Startup waits at most 30 seconds. Authentication failures normally stop immediately. A caller with pre-crash metadata can refresh once after a verified generation change within that same deadline, without launching another process because of an authentication error. A profile, flavor, executable or protocol mismatch requires quitting and restarting the intended bundle; the CLI never kills or substitutes an existing app.
 
-`pnpm --filter @difftray/desktop test:cli:e2e` builds an unsigned temporary bundle and exercises isolated profiles. `--app` can reuse an explicit fixture bundle. The smoke-only `DIFFTRAY_AGENT_SMOKE_DEBUG_PORT` environment variable enables loopback browser inspection only when an explicit `DIFFTRAY_USER_DATA_DIR` is supplied. This fixture evidence does not establish signed-release or real agent-host compatibility.
+`pnpm --filter @difftray/desktop test:cli:e2e` builds an unsigned temporary bundle and exercises isolated profiles. `--app` can reuse an explicit fixture bundle. The smoke-only `DIFFTRAY_AGENT_SMOKE_DEBUG_PORT` environment variable enables loopback browser inspection only when an explicit `DIFFTRAY_USER_DATA_DIR` is supplied. This fixture evidence does not show compatibility with signed releases or real agent hosts.
 
 The full gate runs that process test after visual verification with `--skip-build`,
 reusing the gate's build outputs. Read, write, invalidation, and companion
@@ -153,7 +175,7 @@ Run `review inspect [--repo PATH] --json` (selected target by default), then pas
 change the selected tab or feedback.
 
 File reads require an exact manifest path. `diffHash` is the stored review summary
-fingerprint used for comment anchors; `renderDiffHash` identifies the loaded content.
+fingerprint that comment anchors use, and `renderDiffHash` identifies the loaded content.
 These can differ for ordinary text. `selectableRanges` lists valid source line spans
 on each side, including unchanged lines available in full snapshots. Nontext and
 oversized content have no selectable line ranges.
@@ -211,8 +233,8 @@ supplied values must agree.
 The desktop validates all paths, summary hashes and source-line anchors before a
 single atomic write. It does not downgrade unavailable line findings to file
 comments. An overall item needs the `expectedNoteVersion` returned by inspection
-or feedback reads. A conflict requires rereading and deliberately preserving or
-replacing the current note; no automatic concatenation occurs.
+or feedback reads. After a conflict, the caller must reread the note and deliberately preserve or
+replace it. Difftray never concatenates notes automatically.
 
 Successful receipts are durable under `(actor name, runId, requestId)`. An exact
 retry using the original context and payload returns the same IDs even after a
@@ -222,8 +244,8 @@ payload returns `idempotency_conflict`. Receipt replay changes neither feedback
 nor revisions and emits no repeated notifications. New batches increment the
 project feedback revision once; note revisions remain independent.
 
-Author labels are caller-supplied display names, not authenticated provider
-identities. Comments retain their original creator when a human edits them, and
+Author labels are display names that the caller supplies; Difftray does not
+authenticate them as provider identities. Comments retain their original creator when a human edits them, and
 record the last editor separately. Overall notes show their last editor. Human
 request routes reject caller-supplied provenance and version fields. Agent
 submission fixes the actor kind to agent.

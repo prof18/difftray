@@ -74,7 +74,7 @@ path segment such as `__generated__` or `generated`. Lockfiles are never treated
 generated. Hidden generated files do not count toward progress; once shown, they
 do.
 
-Progress is reviewed visible files over all visible reviewable files.
+Progress counts the reviewed visible files out of all visible reviewable files.
 
 The filter field above the rows narrows the list to paths containing every
 space-separated term, ignoring case ([0044](decisions/0044-file-list-filter.md)).

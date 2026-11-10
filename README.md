@@ -4,25 +4,25 @@
 
 # Difftray
 
-Difftray is a local-first macOS desktop app for reviewing Git changes across multiple projects. It tracks which files have been reviewed, automatically invalidates that review state when the relevant diff changes, and turns review comments into a ready-made prompt for your favorite agent or AI tool.
+Difftray is a local-first macOS desktop app for reviewing Git changes across multiple projects. It tracks which files you have reviewed and clears that review state when a file's diff changes. Your review comments become a ready-made prompt for your coding agent or AI tool, and agents can read and write review feedback through a bundled CLI.
 
-Keep track of what changed, what you already reviewed, and what needs another look.
+Difftray shows what changed, what you already reviewed, and what needs another look.
 
-Difftray is not an IDE, not an AI agent host, and not a pull request platform. It is a focused review desk for local Git changes.
+Difftray only reviews local Git changes. It does not edit code, run AI agents, or host pull requests.
 
 ## Why Difftray?
 
-Why not just use a regular Git diff client?
+Why not use a regular Git diff client?
 
 I built this because I kept losing track of my own reviews. I'd skim a diff, an agent would iterate, I'd come back, and I had no idea which files were still the ones I'd looked at and which had moved underneath me.
 
 A few things came out of that:
 
-- **Reviewed files don't stay reviewed if they change.** Mark a file as reviewed; if the diff for that file changes later, Difftray drops it back to unreviewed so you know to look again. It doesn't tell you _what_ changed, just that something did, and your previous pass is no longer trustworthy.
+- **Reviewed files don't stay reviewed if they change.** Mark a file as reviewed. If the diff for that file changes later, Difftray drops it back to unreviewed so you know to look again. It does not tell you _what_ changed, only that something did, so your previous pass no longer covers the current diff.
 - **It's built around the iteration loop.** Working tree changes, branch changes,
-  or a single committed patch, same flow. You're not preparing a PR, you're
-  checking what the agent (or you) just did.
-- **Comments are meant to go back to the agent.** Leave line-level notes while reviewing, then copy them out as a prompt.
+  and a single committed patch all use the same review flow. The flow is for
+  checking what an agent (or you) just changed, before any pull request exists.
+- **Comments are meant to go back to the agent.** Leave line, range and file comments and an overall note while reviewing. Then copy them out as a prompt, or let the agent read them directly through the CLI.
 
 ## Current Features
 
@@ -30,20 +30,21 @@ A few things came out of that:
 - See which projects still need attention without switching context.
 - Review working tree changes, branch changes against a local ref, or a single
   recent/pasted commit with the same focused workflow.
-- Move through changed files quickly, with noisy generated files out of the way
-  by default.
+- Move through changed files quickly. Difftray hides noisy generated files by
+  default.
 - Read diffs in the shape that fits the moment: side-by-side, unified, expanded context, or focused on one side.
 - Mark files reviewed and Difftray will flag them if they change later.
-- Leave line-level review notes and copy a ready-made prompt to paste back into your favorite agent or AI tool.
+- Leave line, range and file comments plus an overall review note, then copy a ready-made prompt to paste back into your agent or AI tool.
+- Let a coding agent open the worktree in Difftray, read your feedback, and submit its own attributed review findings through the bundled CLI and portable skill.
 - Drive review from the keyboard, command palette, or dense file list controls.
-- Pair Difftray Companion on a phone to review the same local projects from your
-  couch, tablet stand, or another machine on your private network.
+- Pair Difftray Companion on a phone or tablet to review the same local projects
+  from another device on your private network.
 - Open the selected file in the system default editor or an installed common
   editor preset.
 - Configure app appearance, default diff mode, line wrapping, generated-file
   visibility, drift notifications, phone companion access, and editor launch
   behavior.
-- Stay local by design: no fetching, pushing, staging, editing, or repository metadata writes.
+- Keep everything local. By design, Difftray never fetches, pushes, stages, edits files, or writes repository metadata.
 
 ## Phone Companion
 
@@ -99,10 +100,30 @@ Open the `.dmg` and drag Difftray into your Applications folder.
 
 ## Agent workflows
 
-The app includes a CLI at
+Difftray works with coding agents such as Claude Code, Codex and Pi through two
+pieces that ship inside the app: a command-line tool and a portable agent skill.
+With them, an agent can:
+
+- open the current Git worktree in Difftray, keeping the diff already selected
+  for it or switching to a working-tree, branch or commit target;
+- read every page of the review feedback, including the overall note and
+  inactive comments;
+- read the exact file diffs and submit review findings as single-line,
+  inclusive-range, file or overall feedback, on either the added or the removed
+  side of a diff;
+- set or reset the worktree's display label in Difftray.
+
+The agent writes feedback only when you ask it to submit. Loading the skill alone
+authorizes no write, code edit, other agent or chat message. Difftray labels agent
+feedback with the name the agent supplies. It shows that name for attribution
+only and does not authenticate it. Five typed-only command skills
+(`/difftray-open`, `/difftray-read`, `/difftray-fix`, `/difftray-review` and
+`/difftray-label`) give each common request its own slash command.
+
+The app includes the CLI at
 `/Applications/Difftray.app/Contents/Resources/bin/difftray`. It runs without a
 separate Node or npm installation. `doctor --json` checks the selected app and
-connection; review commands can start the installed app automatically. If the app
+connection, and review commands can start the installed app automatically. If the app
 is in `~/Applications`, use that path instead. The bundled launcher follows its
 own app when it is moved.
 
@@ -111,12 +132,12 @@ review workflows for Codex, Claude Code, and Pi. Packaged apps include the
 canonical skill and CLI. In Settings → Agents, choose **Install** to link the
 skill into Claude Code (`~/.claude/skills/difftray`), Codex
 (`~/.agents/skills/difftray`), Pi (`~/.pi/agent/skills/difftray`), or a folder
-you choose for another agent. The link follows skill updates in place; if you
+you choose for another agent. The link follows skill updates in place. If you
 move the app, use **Repair** to update it. The skill finds the owning app from
 its link, including Alpha and custom-named bundles. `DIFFTRAY_APP_PATH` remains
 an explicit override for manual or developer use. Settings → Agents also offers
-an optional **Install command-line tool** action for terminal convenience; it
-does not edit shell startup files. See [agent setup and review
+an optional **Install command-line tool** action that adds a `difftray` command
+for your terminal. It does not edit shell startup files. See [agent setup and review
 commands](docs/agent-integration.md#agent-skill-setup).
 
 ## Development

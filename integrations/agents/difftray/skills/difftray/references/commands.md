@@ -1,6 +1,6 @@
 # Difftray CLI review commands
 
-Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to the intended Git worktree's absolute path. Quote every variable. These are command examples, not automatic instructions to submit feedback.
+Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to the intended Git worktree's absolute path. Quote every variable. These lines are command examples; listing them does not authorize submitting feedback.
 
 ```sh
 "$cli" --help
@@ -18,7 +18,9 @@ Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to 
 "$cli" worktree label reset --repo "$repo" --json
 ```
 
-`worktree label set` gives the worktree at the exact root `$repo` a Difftray display name of 1–80 characters (surrounding spaces are trimmed; tabs, newlines, other control characters and invisible or bidirectional formatting characters are rejected). `worktree label reset` removes it so Difftray shows the Git branch or detached hash again. Both are idempotent. A subdirectory is rejected rather than resolved to its parent. Labeling does not rename the branch, move the directory, change Git config or open the worktree, and it uses no review context. Label only the worktrees the user asked you to label. The JSON result returns the canonical root and the resolved worktree; a reset omits `customLabel`:
+`worktree label set` gives the worktree at the exact root `$repo` a Difftray display name of 1–80 characters. Surrounding spaces are trimmed. Tabs, newlines, other control characters and invisible or bidirectional formatting characters are rejected. `worktree label reset` removes the label so Difftray shows the Git branch or detached hash again. Both commands are idempotent.
+
+The CLI rejects a subdirectory instead of resolving it to its parent. Labeling does not rename the branch, move the directory, change Git config or open the worktree, and it uses no review context. Label only the worktrees the user asked you to label. The JSON result returns the canonical root and the resolved worktree; a reset omits `customLabel`:
 
 <!-- worktree-label-result -->
 
@@ -46,7 +48,9 @@ Set `cli` to the absolute path of this skill's `scripts/difftray` and `repo` to 
 
 An app older than the CLI answers `app_unavailable` and asks for the CLI bundled with the same Difftray build; do not fall back to Git commands.
 
-Use `--target working-tree`, `--target branch --base REF`, or `--target commit --commit REF` with `review inspect` when the selected target is not the intended target. `open` supports the same explicit target modes. Without one it keeps the diff the user already selected for that worktree (the working tree for a worktree never opened before) and only brings it forward; pass a target only when the user asked for a specific diff. `review inspect` defaults to the selected UI target. Keep the returned context for all later commands. `review files` and `review feedback` paginate independently until no `nextCursor` remains. Read exact file diffs before choosing line anchors. Do not infer a line number from a summary.
+Use `--target working-tree`, `--target branch --base REF`, or `--target commit --commit REF` with `review inspect` when the selected target is not the intended target. `open` supports the same explicit target modes. Without a target, `open` keeps the diff the user already selected for that worktree (the working tree for a worktree never opened before) and only brings it forward. Pass a target only when the user asked for a specific diff.
+
+`review inspect` defaults to the selected UI target. Keep the returned context for all later commands. `review files` and `review feedback` paginate independently until no `nextCursor` remains. Read exact file diffs before choosing line anchors. Do not infer a line number from a summary.
 
 The submission file is a JSON object with `actor`, `requestId`, and `items`. The `contextId` is passed through `--context`. Generate IDs with the macOS utility, never with an actor label, timestamp alone, or copied example literal:
 
@@ -95,6 +99,6 @@ The caller writes the JSON through a JSON-aware editor/tool to a scratch file ou
 }
 ```
 
-Optional `previousPath` belongs only on line/file findings for a renamed file when returned by the review data. Use nonempty bodies. Include only items that the user authorized and that the current review supports. Overall feedback is versioned replacement of the entire note; preserve prior text when appending.
+Optional `previousPath` belongs only on line/file findings for a renamed file when returned by the review data. Use nonempty bodies. Include only items that the user authorized and that the current review supports. An overall item replaces the entire note, guarded by its version; preserve prior text when appending.
 
 Save the exact payload and original context ID together in caller-owned scratch storage so they survive a host-session restart. Two concurrent runs with the same actor name still require separate `runId` values. An uncertain retry uses the original `contextId`, JSON bytes, run ID, and request ID. A definitive `note_conflict`, `stale_review`, or `stale_diff` requires fresh reads and a re-evaluated batch with a new request ID. On `stale_feedback`, only restart feedback pagination under the same valid context.
