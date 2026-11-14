@@ -139,6 +139,11 @@ The agent report puts the active review note first, then each file's comments wi
 file comments before line comments. "Copy for agent" in the diff toolbar puts it on the clipboard,
 and `difftray review export` returns the same text to an agent. The report names the reviewed
 change and explains the three scopes (`packages/core/src/review-comments-report-templates.ts`).
+It tells the agent to check each request against the code and decline changes that
+don't make sense for the implementation (never only on style), to answer questions
+without editing, and to
+end with a recap of what it addressed, answered, declined or left unresolved
+([decision 0047](decisions/0047-agent-report-weighs-feedback.md)).
 
 ## External editor
 
