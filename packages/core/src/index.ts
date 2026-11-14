@@ -29,7 +29,9 @@ export {
 
 const reviewTargetFingerprintVersion = "difftray-review-target-v1";
 const reviewNoteScopeVersion = "note-scope-v1";
+const reviewLineageVersion = "difftray-review-lineage-v1";
 const fileDiffFingerprintVersion = "difftray-file-diff-v1";
+const fileContentFingerprintVersion = "difftray-file-content-v1";
 
 export type WorkingTreeReviewTarget = {
   readonly headRefName?: string;
@@ -111,6 +113,7 @@ export type FileDiff = {
 };
 
 export type ReviewMark = {
+  readonly contentFingerprint?: string;
   readonly path: string;
   readonly previousPath?: string;
   readonly reviewedDiffHash: string;
@@ -212,6 +215,7 @@ export type GeneratedFileDetection = {
 
 export type ResolveReviewStatesInput = {
   readonly diffs: readonly FileDiff[];
+  readonly lineageMarks?: readonly ReviewMark[];
   readonly marks: readonly ReviewMark[];
   readonly reviewTarget: ReviewTarget;
   readonly showGeneratedFiles?: boolean;
@@ -225,10 +229,23 @@ export function createReviewNoteScopeId(target: ReviewTarget): string {
   return `${reviewNoteScopeVersion}:${sha256(canonicalReviewNoteScope(target))}`;
 }
 
+export function createReviewLineageId(target: ReviewTarget): string | undefined {
+  const lineage = canonicalReviewLineage(target);
+  return lineage ? `${reviewLineageVersion}:${sha256(lineage)}` : undefined;
+}
+
 export function createDiffHash(target: ReviewTarget, diff: FileDiff): string {
   return `${fileDiffFingerprintVersion}:${sha256([
     fileDiffFingerprintVersion,
     canonicalReviewTarget(target),
+    canonicalFileDiff(diff)
+  ])}`;
+}
+
+// Callers pass summary diffs, the same FileDiff values createDiffHash gets on the workspace load and mark paths.
+export function createContentFingerprint(diff: FileDiff): string {
+  return `${fileContentFingerprintVersion}:${sha256([
+    fileContentFingerprintVersion,
     canonicalFileDiff(diff)
   ])}`;
 }
@@ -278,6 +295,22 @@ export function resolveReviewStates(
     }
   }
 
+  const lineageMarksByPath = new Map<string, ReviewMark[]>();
+
+  for (const mark of input.lineageMarks ?? []) {
+    if (mark.contentFingerprint === undefined) {
+      continue;
+    }
+
+    const pathMarks = lineageMarksByPath.get(mark.path);
+
+    if (pathMarks) {
+      pathMarks.push(mark);
+    } else {
+      lineageMarksByPath.set(mark.path, [mark]);
+    }
+  }
+
   return input.diffs.map((diff) => {
     const diffHash = createDiffHash(input.reviewTarget, diff);
     const generatedSample = generatedDetectionSample(diff);
@@ -289,14 +322,24 @@ export function resolveReviewStates(
       }).isGenerated;
     const visible = input.showGeneratedFiles === true || !generated;
     const pathMarks = marksByPath.get(diff.newPath) ?? [];
-    const reviewed = pathMarks.some((mark) => mark.reviewedDiffHash === diffHash);
+    const lineagePathMarks = lineageMarksByPath.get(diff.newPath) ?? [];
+    const reviewedHere = pathMarks.some((mark) => mark.reviewedDiffHash === diffHash);
+    const contentFingerprint =
+      !reviewedHere && lineagePathMarks.length > 0
+        ? createContentFingerprint(diff)
+        : undefined;
+    const reviewed =
+      reviewedHere ||
+      lineagePathMarks.some((mark) => mark.contentFingerprint === contentFingerprint);
 
     return {
       diff,
       diffHash,
       generated,
       invalidated:
-        !reviewed && pathMarks.some((mark) => mark.reviewedDiffHash !== diffHash),
+        !reviewed &&
+        (pathMarks.some((mark) => mark.reviewedDiffHash !== diffHash) ||
+          lineagePathMarks.length > 0),
       path: diff.newPath,
       reviewable: true,
       reviewed,
@@ -626,6 +669,22 @@ function canonicalReviewNoteScope(target: ReviewTarget): readonly unknown[] {
         target.headRefName ?? target.headSha
       ];
   }
+}
+
+function canonicalReviewLineage(target: ReviewTarget): readonly unknown[] | undefined {
+  if (target.kind === "commit" || !target.headRefName) {
+    return undefined;
+  }
+
+  return target.kind === "branch"
+    ? [
+        reviewLineageVersion,
+        target.projectId,
+        target.kind,
+        target.baseRefName,
+        target.headRefName
+      ]
+    : [reviewLineageVersion, target.projectId, target.kind, target.headRefName];
 }
 
 function canonicalFileDiff(diff: FileDiff): readonly unknown[] {

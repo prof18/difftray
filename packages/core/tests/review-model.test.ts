@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateProgress,
+  createContentFingerprint,
   createDiffHash,
+  createReviewLineageId,
   createReviewNoteScopeId,
   createReviewTargetId,
   detectGeneratedFile,
@@ -787,5 +789,204 @@ describe("review note scope ids", () => {
     expect(createReviewNoteScopeId(workingTreeTarget)).not.toBe(
       createReviewNoteScopeId({ ...workingTreeTarget, projectId: "project-b" })
     );
+  });
+});
+
+describe("review lineage", () => {
+  it("ignores commit shas for branch comparisons", () => {
+    expect(createReviewLineageId(branchTarget)).toBe(
+      createReviewLineageId({
+        ...branchTarget,
+        baseSha: "7777777777777777777777777777777777777777",
+        headSha: "8888888888888888888888888888888888888888",
+        mergeBaseSha: "9999999999999999999999999999999999999999"
+      })
+    );
+  });
+
+  it("ignores head sha changes for working trees", () => {
+    expect(createReviewLineageId(workingTreeTarget)).toBe(
+      createReviewLineageId({
+        ...workingTreeTarget,
+        headSha: "9999999999999999999999999999999999999999"
+      })
+    );
+  });
+
+  it("changes with the base ref, head ref and project", () => {
+    const lineageId = createReviewLineageId(branchTarget);
+
+    expect(lineageId).toBeDefined();
+    expect(
+      createReviewLineageId({ ...branchTarget, baseRefName: "origin/develop" })
+    ).not.toBe(lineageId);
+    expect(
+      createReviewLineageId({ ...branchTarget, headRefName: "feature/other" })
+    ).not.toBe(lineageId);
+    expect(createReviewLineageId({ ...branchTarget, projectId: "project-b" })).not.toBe(
+      lineageId
+    );
+    expect(
+      createReviewLineageId({ ...workingTreeTarget, headRefName: "feature/other" })
+    ).not.toBe(createReviewLineageId(workingTreeTarget));
+    expect(
+      createReviewLineageId({ ...workingTreeTarget, projectId: "project-b" })
+    ).not.toBe(createReviewLineageId(workingTreeTarget));
+  });
+
+  it("separates branch and working-tree lineages", () => {
+    expect(
+      createReviewLineageId({
+        ...workingTreeTarget,
+        headRefName: branchTarget.headRefName
+      })
+    ).not.toBe(createReviewLineageId(branchTarget));
+  });
+
+  it("has no lineage for commits or targets without a head branch", () => {
+    const detachedBranch = {
+      baseRefName: branchTarget.baseRefName,
+      baseSha: branchTarget.baseSha,
+      headSha: branchTarget.headSha,
+      kind: "branch",
+      mergeBaseSha: branchTarget.mergeBaseSha,
+      projectId: branchTarget.projectId
+    } satisfies ReviewTarget;
+    const detachedWorkingTree = {
+      headSha: workingTreeTarget.headSha,
+      kind: "working_tree",
+      projectId: workingTreeTarget.projectId
+    } satisfies ReviewTarget;
+
+    expect(createReviewLineageId(commitTarget)).toBeUndefined();
+    expect(createReviewLineageId(detachedBranch)).toBeUndefined();
+    expect(createReviewLineageId(detachedWorkingTree)).toBeUndefined();
+    expect(createReviewLineageId({ ...branchTarget, headRefName: "" })).toBeUndefined();
+    expect(
+      createReviewLineageId({ ...workingTreeTarget, headRefName: "" })
+    ).toBeUndefined();
+  });
+
+  it("prefixes ids with the lineage version", () => {
+    expect(
+      createReviewLineageId(branchTarget)?.startsWith("difftray-review-lineage-v1:")
+    ).toBe(true);
+  });
+});
+
+const summaryDiff = {
+  content: { byteSize: 16, digest: "summary-digest-1", kind: "binary" },
+  newPath: "f.txt",
+  status: "modified"
+} satisfies FileDiff;
+
+const rebasedTarget = {
+  ...branchTarget,
+  baseSha: "7777777777777777777777777777777777777777",
+  headSha: "8888888888888888888888888888888888888888",
+  mergeBaseSha: "9999999999999999999999999999999999999999"
+} satisfies ReviewTarget;
+
+const changedSummaryDiff = {
+  ...summaryDiff,
+  content: { ...summaryDiff.content, digest: "summary-digest-2" }
+} satisfies FileDiff;
+
+describe("content fingerprints", () => {
+  it("are stable for the same summary diff", () => {
+    expect(createContentFingerprint(summaryDiff)).toBe(
+      createContentFingerprint({ ...summaryDiff })
+    );
+  });
+
+  it("ignore the review target while diff hashes do not", () => {
+    expect(createDiffHash(branchTarget, summaryDiff)).not.toBe(
+      createDiffHash(rebasedTarget, summaryDiff)
+    );
+    expect(createContentFingerprint(summaryDiff)).toBe(
+      createContentFingerprint(structuredClone(summaryDiff))
+    );
+  });
+
+  it("change when the content digest changes", () => {
+    expect(createContentFingerprint(changedSummaryDiff)).not.toBe(
+      createContentFingerprint(summaryDiff)
+    );
+  });
+
+  it("change when status, paths or mode change", () => {
+    const fingerprint = createContentFingerprint(summaryDiff);
+
+    expect(createContentFingerprint({ ...summaryDiff, status: "added" })).not.toBe(
+      fingerprint
+    );
+    expect(createContentFingerprint({ ...summaryDiff, oldPath: "old.txt" })).not.toBe(
+      fingerprint
+    );
+    expect(createContentFingerprint({ ...summaryDiff, newPath: "g.txt" })).not.toBe(
+      fingerprint
+    );
+    expect(createContentFingerprint({ ...summaryDiff, newMode: "100755" })).not.toBe(
+      fingerprint
+    );
+  });
+
+  it("prefix fingerprints with the fingerprint version", () => {
+    expect(
+      createContentFingerprint(summaryDiff).startsWith("difftray-file-content-v1:")
+    ).toBe(true);
+  });
+});
+
+describe("review carry-over across rebases", () => {
+  function lineageMark(overrides: Partial<ReviewMark> = {}): ReviewMark {
+    return {
+      path: "f.txt",
+      reviewedDiffHash: "difftray-file-diff-v1:unrelated",
+      reviewTargetId: createReviewTargetId(branchTarget),
+      ...overrides
+    };
+  }
+
+  function resolveRebased(lineageMarks: readonly ReviewMark[]) {
+    return resolveReviewStates({
+      diffs: [summaryDiff],
+      lineageMarks,
+      marks: [],
+      reviewTarget: rebasedTarget
+    });
+  }
+
+  it("keeps a file reviewed when an earlier mark has the same fingerprint", () => {
+    expect(
+      resolveRebased([
+        lineageMark({ contentFingerprint: createContentFingerprint(summaryDiff) })
+      ])
+    ).toEqual([expect.objectContaining({ invalidated: false, reviewed: true })]);
+  });
+
+  it("invalidates a file whose content changed since the earlier mark", () => {
+    expect(
+      resolveRebased([
+        lineageMark({ contentFingerprint: createContentFingerprint(changedSummaryDiff) })
+      ])
+    ).toEqual([expect.objectContaining({ invalidated: true, reviewed: false })]);
+  });
+
+  it("ignores earlier marks without a fingerprint", () => {
+    expect(resolveRebased([lineageMark()])).toEqual([
+      expect.objectContaining({ invalidated: false, reviewed: false })
+    ]);
+  });
+
+  it("ignores earlier marks for other paths", () => {
+    expect(
+      resolveRebased([
+        lineageMark({
+          contentFingerprint: createContentFingerprint(summaryDiff),
+          path: "other.txt"
+        })
+      ])
+    ).toEqual([expect.objectContaining({ invalidated: false, reviewed: false })]);
   });
 });
