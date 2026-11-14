@@ -41,6 +41,8 @@ export type StoredReviewTargetRecord = ReviewTargetRecord & {
 };
 
 export type ReviewMarkInput = {
+  readonly contentFingerprint?: string;
+  readonly lineageId?: string;
   readonly path: string;
   readonly previousPath?: string;
   readonly projectId: string;
@@ -49,6 +51,7 @@ export type ReviewMarkInput = {
 };
 
 export type ReviewMarkRecord = {
+  readonly contentFingerprint?: string;
   readonly path: string;
   readonly previousPath?: string;
   readonly reviewedDiffHash: string;

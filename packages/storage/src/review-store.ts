@@ -39,11 +39,15 @@ export function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
       path,
       previous_path,
       reviewed_diff_hash,
+      lineage_id,
+      content_fingerprint,
       reviewed_at,
       updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     on conflict(review_target_id, path, reviewed_diff_hash) do update set
       previous_path = excluded.previous_path,
+      lineage_id = excluded.lineage_id,
+      content_fingerprint = excluded.content_fingerprint,
       updated_at = excluded.updated_at
   `
   ).run(
@@ -53,6 +57,8 @@ export function markReviewed(db: DatabaseSync, input: ReviewMarkInput): void {
     input.path,
     input.previousPath ?? null,
     input.reviewedDiffHash,
+    input.lineageId ?? null,
+    input.contentFingerprint ?? null,
     now,
     now
   );
@@ -72,6 +78,20 @@ export function unmarkReviewed(
         and reviewed_diff_hash = ?
     `
   ).run(reviewTargetId, filePath, reviewedDiffHash);
+}
+
+export function unmarkLineageReviewed(
+  db: DatabaseSync,
+  lineageId: string,
+  filePath: string,
+  contentFingerprint: string
+): void {
+  db.prepare(
+    `
+      delete from review_marks
+      where lineage_id = ? and path = ? and content_fingerprint = ?
+    `
+  ).run(lineageId, filePath, contentFingerprint);
 }
 
 export function isReviewed(
@@ -103,7 +123,8 @@ export function listReviewMarks(
   const rows = db
     .prepare(
       `
-        select path, previous_path, reviewed_diff_hash, review_target_id
+        select path, previous_path, reviewed_diff_hash, review_target_id,
+          content_fingerprint
         from review_marks
         where review_target_id = ?
         order by path asc, reviewed_at desc
@@ -111,6 +132,24 @@ export function listReviewMarks(
     )
     .all(reviewTargetId);
 
+  return rows.map((row) => reviewMarkFromRow(row as ReviewMarkRow));
+}
+
+export function listLineageReviewMarks(
+  db: DatabaseSync,
+  lineageId: string
+): readonly ReviewMarkRecord[] {
+  const rows = db
+    .prepare(
+      `
+        select path, previous_path, reviewed_diff_hash, review_target_id,
+          content_fingerprint
+        from review_marks
+        where lineage_id = ? and content_fingerprint is not null
+        order by path asc, reviewed_at desc
+      `
+    )
+    .all(lineageId);
   return rows.map((row) => reviewMarkFromRow(row as ReviewMarkRow));
 }
 

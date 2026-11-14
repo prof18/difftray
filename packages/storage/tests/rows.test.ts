@@ -104,6 +104,7 @@ describe("storage row mappers", () => {
   it("maps review marks and review comments", () => {
     expect(
       reviewMarkFromRow({
+        content_fingerprint: null,
         path: "src/app.ts",
         previous_path: "src/old-app.ts",
         reviewed_diff_hash: "hash-a",
@@ -112,6 +113,21 @@ describe("storage row mappers", () => {
     ).toEqual({
       path: "src/app.ts",
       previousPath: "src/old-app.ts",
+      reviewedDiffHash: "hash-a",
+      reviewTargetId: "target-1"
+    });
+
+    expect(
+      reviewMarkFromRow({
+        content_fingerprint: "fp-1",
+        path: "src/app.ts",
+        previous_path: null,
+        reviewed_diff_hash: "hash-a",
+        review_target_id: "target-1"
+      })
+    ).toEqual({
+      contentFingerprint: "fp-1",
+      path: "src/app.ts",
       reviewedDiffHash: "hash-a",
       reviewTargetId: "target-1"
     });

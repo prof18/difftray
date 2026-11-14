@@ -86,12 +86,14 @@ import {
   getReviewFileComment,
   getReviewNote,
   isReviewed,
+  listLineageReviewMarks,
   listReviewComments,
   listReviewFileComments,
   listReviewMarks,
   markReviewed,
   saveReviewNote,
   setReviewNoteDismissed,
+  unmarkLineageReviewed,
   unmarkReviewed,
   updateReviewComment,
   updateReviewFileComment
@@ -189,8 +191,10 @@ export type {
 } from "./worktree-label-store.js";
 
 export type VerifyAndMarkReviewedInput = {
+  readonly contentFingerprint?: string;
   readonly currentDiffHash: string;
   readonly displayedDiffHash: string;
+  readonly lineageId?: string;
   readonly path: string;
   readonly previousPath?: string;
   readonly projectId: string;
@@ -207,8 +211,10 @@ export type VerifyAndMarkReviewedResult =
     };
 
 export type VerifyAndUnmarkReviewedInput = {
+  readonly contentFingerprint?: string;
   readonly currentDiffHash: string;
   readonly displayedDiffHash: string;
+  readonly lineageId?: string;
   readonly path: string;
   readonly reviewTargetId: string;
 };
@@ -280,6 +286,7 @@ export type DifftrayStorage = {
     reviewTargetId: string
   ) => readonly ReviewFileCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
+  readonly listLineageReviewMarks: (lineageId: string) => readonly ReviewMarkRecord[];
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
   readonly listWorktreeLabels: (
     worktreePaths: readonly string[]
@@ -414,6 +421,7 @@ export function openStorage(filename: string): DifftrayStorage {
     listReviewFileComments: (reviewTargetId) =>
       listReviewFileComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
+    listLineageReviewMarks: (lineageId) => listLineageReviewMarks(db, lineageId),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
     listWorktreeLabels: (worktreePaths) => listWorktreeLabels(db, worktreePaths),
     markReviewed: (input) => {
@@ -477,6 +485,10 @@ export function openStorage(filename: string): DifftrayStorage {
       }
 
       markReviewed(db, {
+        ...(input.lineageId ? { lineageId: input.lineageId } : {}),
+        ...(input.contentFingerprint
+          ? { contentFingerprint: input.contentFingerprint }
+          : {}),
         path: input.path,
         ...(input.previousPath ? { previousPath: input.previousPath } : {}),
         projectId: input.projectId,
@@ -494,7 +506,22 @@ export function openStorage(filename: string): DifftrayStorage {
         };
       }
 
-      unmarkReviewed(db, input.reviewTargetId, input.path, input.currentDiffHash);
+      db.exec("begin immediate");
+      try {
+        unmarkReviewed(db, input.reviewTargetId, input.path, input.currentDiffHash);
+        if (input.lineageId && input.contentFingerprint) {
+          unmarkLineageReviewed(
+            db,
+            input.lineageId,
+            input.path,
+            input.contentFingerprint
+          );
+        }
+        db.exec("commit");
+      } catch (error) {
+        db.exec("rollback");
+        throw error;
+      }
 
       return { unmarked: true };
     }

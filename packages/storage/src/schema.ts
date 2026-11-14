@@ -296,6 +296,12 @@ export function runMigrations(db: DatabaseSync): void {
   ensureReviewTargetColumn(db, "commit_short_sha", "text");
   ensureReviewTargetColumn(db, "commit_subject", "text");
   ensureReviewTargetColumn(db, "parent_sha", "text");
+  ensureColumn(db, "review_marks", "lineage_id", "text");
+  ensureColumn(db, "review_marks", "content_fingerprint", "text");
+  db.exec(`
+    create index if not exists review_marks_lineage_path_idx
+      on review_marks(lineage_id, path)
+  `);
   ensureProjectSettingsColumn(db, "file_list_width", "integer not null default 340");
   ensureProjectSettingsColumn(db, "file_list_collapsed", "integer not null default 0");
   ensureProjectSettingsColumn(db, "default_diff_mode", "text not null default 'split'");

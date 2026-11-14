@@ -56,6 +56,7 @@ export type ProjectSettingsRow = {
 };
 
 export type ReviewMarkRow = {
+  readonly content_fingerprint: null | string;
   readonly path: string;
   readonly previous_path: null | string;
   readonly reviewed_diff_hash: string;
@@ -151,6 +152,7 @@ export function reviewMarkFromRow(row: ReviewMarkRow): ReviewMarkRecord {
   return {
     path: row.path,
     ...(row.previous_path ? { previousPath: row.previous_path } : {}),
+    ...(row.content_fingerprint ? { contentFingerprint: row.content_fingerprint } : {}),
     reviewedDiffHash: row.reviewed_diff_hash,
     reviewTargetId: row.review_target_id
   };
