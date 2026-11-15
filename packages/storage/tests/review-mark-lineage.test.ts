@@ -208,6 +208,68 @@ describe("review mark lineage", () => {
     storage.close();
   });
 
+  it("drops earlier lineage marks for the given paths and keeps the current target", () => {
+    const storage = seedCarriedMarks();
+    storage.markReviewed({
+      contentFingerprint: "fp-1",
+      lineageId: "lineage-1",
+      path: "gone.txt",
+      projectId: project.id,
+      reviewedDiffHash: "hash-gone",
+      reviewTargetId: reviewTarget.id
+    });
+    storage.markReviewed({
+      contentFingerprint: "fp-3",
+      lineageId: "lineage-1",
+      path: "gone.txt",
+      projectId: project.id,
+      reviewedDiffHash: "hash-gone-current",
+      reviewTargetId: rebasedTarget.id
+    });
+
+    storage.deleteLineageReviewMarks(
+      "lineage-1",
+      ["gone.txt"],
+      rebasedTarget.id,
+      "9999-01-01T00:00:00.000Z"
+    );
+
+    const remaining = storage.listLineageReviewMarks("lineage-1");
+    expect(remaining.filter((mark) => mark.path === "gone.txt")).toEqual([
+      expect.objectContaining({ reviewTargetId: rebasedTarget.id })
+    ]);
+    expect(remaining.filter((mark) => mark.path === "f.txt")).toHaveLength(2);
+    storage.close();
+  });
+
+  it("keeps lineage marks written after the load started", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-15T10:00:00.000Z"));
+    const storage = openSeeded();
+    const loadStartedAt = new Date().toISOString();
+    vi.setSystemTime(new Date("2026-11-15T10:00:05.000Z"));
+    storage.markReviewed({
+      contentFingerprint: "fp-new",
+      lineageId: "lineage-1",
+      path: "new.txt",
+      projectId: project.id,
+      reviewedDiffHash: "hash-new",
+      reviewTargetId: reviewTarget.id
+    });
+
+    storage.deleteLineageReviewMarks(
+      "lineage-1",
+      ["new.txt"],
+      rebasedTarget.id,
+      loadStartedAt
+    );
+
+    expect(storage.listLineageReviewMarks("lineage-1")).toEqual([
+      expect.objectContaining({ path: "new.txt" })
+    ]);
+    storage.close();
+  });
+
   it("unmark keeps other lineages", () => {
     const storage = seedCarriedMarks();
     storage.markReviewed({

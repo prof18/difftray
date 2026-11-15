@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Improved
+
+- Keep review progress after a rebase or a commit: files the rebase did not touch
+  stay reviewed, and files it changed show the changed-after-review marker.
+
 ## 0.0.19 - 2026-11-10
 
 ### Improved

@@ -6,7 +6,9 @@ import { performance } from "node:perf_hooks";
 import path from "node:path";
 
 import {
+  createContentFingerprint,
   createDiffHash,
+  createReviewLineageId,
   createReviewTargetId,
   resolveReviewStates
 } from "@difftray/core";
@@ -54,6 +56,7 @@ const gitBenchmark = await benchmarkGit(fixture);
 try {
   const packageBenchmark = await benchmarkPackage();
   const reviewStateBenchmark = benchmarkReviewState(reviewStateCount);
+  const reviewStateLineageBenchmark = benchmarkLineageReviewState(reviewStateCount);
   const samples = [];
 
   for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
@@ -76,6 +79,7 @@ try {
     },
     package: packageBenchmark,
     reviewState: reviewStateBenchmark,
+    reviewStateLineage: reviewStateLineageBenchmark,
     samples,
     ui: summarizeUiSamples(samples.map((sample) => sample.ui))
   };
@@ -206,6 +210,81 @@ function benchmarkReviewState(nextFileCount) {
     reviewedCount: states.filter((state) => state.reviewed).length,
     resolveMs: elapsed(start)
   };
+}
+
+function benchmarkLineageReviewState(nextFileCount, earlierTargetCount = 10) {
+  const target = (index) => ({
+    headRefName: "feature",
+    headSha: `lineage-head-${index}`,
+    kind: "working_tree",
+    projectId: "benchmark-project"
+  });
+  const reviewTarget = target(earlierTargetCount);
+  const lineageId = createReviewLineageId(reviewTarget);
+  const diffs = lineageBenchmarkDiffs(nextFileCount);
+  const storage = openStorage(":memory:");
+  seedLineageMarks(storage, target, earlierTargetCount, diffs, lineageId);
+  const queryStart = performance.now();
+  const lineageMarks = storage.listLineageReviewMarks(lineageId);
+  const lineageQueryMs = elapsed(queryStart);
+  const resolveStart = performance.now();
+  const states = resolveReviewStates({ diffs, lineageMarks, marks: [], reviewTarget });
+  const lineageResolveMs = elapsed(resolveStart);
+  storage.close();
+
+  return {
+    lineageMarkCount: lineageMarks.length,
+    lineageQueryMs,
+    lineageResolveMs,
+    reviewedCount: states.filter((state) => state.reviewed).length
+  };
+}
+
+function lineageBenchmarkDiffs(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    content: { kind: "binary", byteSize: 64, digest: `digest-${index}` },
+    newPath: `src/Lineage${String(index).padStart(5, "0")}.ts`,
+    status: "modified"
+  }));
+}
+
+function seedLineageMarks(storage, target, earlierTargetCount, diffs, lineageId) {
+  storage.upsertProject({
+    id: "benchmark-project",
+    name: "Benchmark",
+    path: "/benchmark"
+  });
+
+  for (let targetIndex = 0; targetIndex < earlierTargetCount; targetIndex += 1) {
+    const earlierTarget = target(targetIndex);
+    const reviewTargetId = createReviewTargetId(earlierTarget);
+    const matching = targetIndex === earlierTargetCount - 1;
+    storage.upsertReviewTarget({
+      headKind: "working_tree",
+      headRefName: "feature",
+      headRefSha: `lineage-head-${targetIndex}`,
+      id: reviewTargetId,
+      mode: "working_tree",
+      projectId: "benchmark-project"
+    });
+
+    diffs.forEach((diff, diffIndex) => {
+      const fingerprintDiff = matching
+        ? diff
+        : {
+            ...diff,
+            content: { ...diff.content, digest: `stale-${targetIndex}-${diffIndex}` }
+          };
+      storage.markReviewed({
+        contentFingerprint: createContentFingerprint(fingerprintDiff),
+        lineageId,
+        path: diff.newPath,
+        projectId: "benchmark-project",
+        reviewedDiffHash: createDiffHash(earlierTarget, diff),
+        reviewTargetId
+      });
+    });
+  }
 }
 
 async function benchmarkUi(app, files, iterationCount) {

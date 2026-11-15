@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStorage, type DifftrayStorage } from "@difftray/storage";
-import { createReviewContextService } from "./review-context-service.js";
+import {
+  createReviewContextService,
+  loadExplicitReviewState
+} from "./review-context-service.js";
+import { reviewMarkLineageFields } from "./review-mark-lineage.js";
 
 const roots: string[] = [];
 const stores: DifftrayStorage[] = [];
@@ -166,5 +170,149 @@ describe("explicit review contexts", () => {
     expect((await service.validate(commit.id)).reviewTargetId).toBe(
       commit.reviewTargetId
     );
+  });
+});
+
+type LoadedReviewState = Awaited<ReturnType<typeof loadExplicitReviewState>>;
+
+function markAll(store: DifftrayStorage, loaded: LoadedReviewState) {
+  for (const { state } of loaded.files) {
+    store.markReviewed({
+      projectId: loaded.reviewTarget.projectId,
+      reviewTargetId: loaded.reviewTargetId,
+      path: state.path,
+      reviewedDiffHash: state.diffHash,
+      ...reviewMarkLineageFields(loaded.reviewTarget, state.diff)
+    });
+  }
+}
+
+function fileState(loaded: LoadedReviewState, filePath: string) {
+  return loaded.files.find(({ state }) => state.path === filePath)?.state;
+}
+
+async function registeredProject(
+  root: string,
+  store: DifftrayStorage,
+  service: ReturnType<typeof createReviewContextService>
+) {
+  const context = await service.inspect(root, { kind: "working-tree" });
+  const project = store.getProject(context.projectId);
+  if (!project) throw new Error("project was not registered");
+  return project;
+}
+
+function lines(values: readonly string[]): string {
+  return `${values.join("\n")}\n`;
+}
+
+function commitFeatureBranch(root: string) {
+  writeFileSync(
+    path.join(root, "f.txt"),
+    lines(["a", "b", "c", "d", "e", "f", "g", "h"])
+  );
+  writeFileSync(
+    path.join(root, "h.txt"),
+    lines(["1", "2", "3", "4", "5", "6", "7", "8"])
+  );
+  writeFileSync(path.join(root, "u.txt"), lines(["one"]));
+  git(root, "add", ".");
+  git(root, "commit", "-m", "base files");
+  git(root, "checkout", "-b", "feat");
+  writeFileSync(
+    path.join(root, "f.txt"),
+    lines(["a", "b", "c", "d", "e", "F", "g", "h"])
+  );
+  writeFileSync(
+    path.join(root, "h.txt"),
+    lines(["1", "2", "3", "4", "5", "6", "7", "eight"])
+  );
+  git(root, "commit", "-am", "feature edits");
+}
+
+describe("review progress across history rewrites", () => {
+  it("keeps unchanged files reviewed after a rebase and flags changed ones", async () => {
+    const { root, store, service } = fixture();
+    commitFeatureBranch(root);
+    const project = await registeredProject(root, store, service);
+    const selector = { kind: "branch", base: "main" } as const;
+    const first = await loadExplicitReviewState(store, project, selector, false);
+    markAll(store, first);
+
+    git(root, "checkout", "main");
+    writeFileSync(path.join(root, "u.txt"), lines(["two"]));
+    writeFileSync(
+      path.join(root, "h.txt"),
+      lines(["top", "1", "2", "3", "4", "5", "6", "7", "8"])
+    );
+    git(root, "commit", "-am", "upstream edits");
+    git(root, "checkout", "feat");
+    git(root, "rebase", "main");
+
+    const rebased = await loadExplicitReviewState(store, project, selector, false);
+    expect(rebased.reviewTargetId).not.toBe(first.reviewTargetId);
+    expect(fileState(rebased, "f.txt")).toMatchObject({
+      invalidated: false,
+      reviewed: true
+    });
+    expect(fileState(rebased, "h.txt")).toMatchObject({
+      invalidated: true,
+      reviewed: false
+    });
+    expect(rebased.progress.reviewedVisibleFiles).toBe(1);
+  });
+
+  it("keeps a working-tree file reviewed after an unrelated commit", async () => {
+    const { root, store, service } = fixture();
+    writeFileSync(path.join(root, "file.txt"), "changed\n");
+    writeFileSync(path.join(root, "other.txt"), "other\n");
+    const project = await registeredProject(root, store, service);
+    const selector = { kind: "working-tree" } as const;
+    markAll(store, await loadExplicitReviewState(store, project, selector, false));
+
+    git(root, "add", "other.txt");
+    git(root, "commit", "-m", "other");
+
+    const next = await loadExplicitReviewState(store, project, selector, false);
+    expect(fileState(next, "file.txt")).toMatchObject({ reviewed: true });
+  });
+
+  it("treats a new edit after a committed review as unreviewed, not changed", async () => {
+    const { root, store, service } = fixture();
+    writeFileSync(path.join(root, "file.txt"), "reviewed edit\n");
+    const project = await registeredProject(root, store, service);
+    const selector = { kind: "working-tree" } as const;
+    markAll(store, await loadExplicitReviewState(store, project, selector, false));
+
+    git(root, "commit", "-qam", "commit the reviewed edit");
+    const clean = await loadExplicitReviewState(store, project, selector, false);
+    expect(fileState(clean, "file.txt")).toBeUndefined();
+
+    git(root, "commit", "-q", "--allow-empty", "-m", "later work");
+    writeFileSync(path.join(root, "file.txt"), "a new, unreviewed edit\n");
+
+    const edited = await loadExplicitReviewState(store, project, selector, false);
+    expect(fileState(edited, "file.txt")).toMatchObject({
+      invalidated: false,
+      reviewed: false
+    });
+  });
+
+  it("does not carry review to another branch", async () => {
+    const { root, store, service } = fixture();
+    commitFeatureBranch(root);
+    const project = await registeredProject(root, store, service);
+    const selector = { kind: "branch", base: "main" } as const;
+    markAll(store, await loadExplicitReviewState(store, project, selector, false));
+
+    git(root, "checkout", "-b", "feat2", "feat");
+
+    const other = await loadExplicitReviewState(store, project, selector, false);
+    for (const filePath of ["f.txt", "h.txt"]) {
+      expect(fileState(other, filePath)).toMatchObject({
+        invalidated: false,
+        reviewed: false
+      });
+    }
   });
 });

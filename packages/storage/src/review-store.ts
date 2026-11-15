@@ -94,6 +94,40 @@ export function unmarkLineageReviewed(
   ).run(lineageId, filePath, contentFingerprint);
 }
 
+/**
+ * Deletes the lineage marks of `paths` written under other review targets
+ * before `writtenBefore`. Marks of `keepReviewTargetId` stay, so a file that
+ * briefly leaves the diff keeps its review on the current target. Marks
+ * written after the caller read Git, for example under a target created by a
+ * commit during a slow load, also stay.
+ */
+export function deleteLineageReviewMarks(
+  db: DatabaseSync,
+  lineageId: string,
+  paths: readonly string[],
+  keepReviewTargetId: string,
+  writtenBefore: string
+): void {
+  const statement = db.prepare(
+    `
+      delete from review_marks
+      where lineage_id = ? and path = ? and review_target_id <> ?
+        and updated_at < ?
+    `
+  );
+
+  db.exec("begin immediate");
+  try {
+    for (const filePath of paths) {
+      statement.run(lineageId, filePath, keepReviewTargetId, writtenBefore);
+    }
+    db.exec("commit");
+  } catch (error) {
+    db.exec("rollback");
+    throw error;
+  }
+}
+
 export function isReviewed(
   db: DatabaseSync,
   reviewTargetId: string,

@@ -33,6 +33,7 @@ import {
   getOrCreateCompanionServerIdentity
 } from "./auth.js";
 import { createCompanionServer } from "./server.js";
+import { listCarryOverMarks, reviewMarkLineageFields } from "../review-mark-lineage.js";
 import { reviewWorkspaceView } from "../project-workspace-view.js";
 import {
   commentReportContext,
@@ -429,13 +430,51 @@ describe("companion server integration", () => {
         }
       });
 
+      await writeFile(path.join(project.path, "unrelated.txt"), "unrelated\n");
+      await git(project.path, "add", "unrelated.txt");
+      await git(project.path, "commit", "-m", "unrelated");
+      const committedWorkspace = await encryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: `/companion/v1/projects/${project.id}/workspace`,
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(committedWorkspace.plain.status).toBe(200);
+      const committedView = readWorkspace(committedWorkspace.plain.body);
+      expect(committedView.reviewTarget.id).not.toBe(workspaceView.reviewTarget.id);
+      const carriedFile = readWorkspaceFile(committedView, "tracked.txt");
+      expect(carriedFile).toMatchObject({ reviewed: true });
+
+      const unmarkResult = await encryptedRequest({
+        baseUrl,
+        body: {
+          displayedDiffHash: carriedFile.diffHash,
+          path: carriedFile.path,
+          reviewTargetId: committedView.reviewTarget.id
+        },
+        logicalMethod: "POST",
+        path: `/companion/v1/projects/${project.id}/reviews/unmark`,
+        serverPublicKey: identity.serverPublicKey
+      });
+      expect(unmarkResult.plain.status).toBe(200);
+
+      const unmarkedWorkspace = await encryptedRequest({
+        baseUrl,
+        logicalMethod: "GET",
+        path: `/companion/v1/projects/${project.id}/workspace`,
+        serverPublicKey: identity.serverPublicKey
+      });
+      const unmarkedView = readWorkspace(unmarkedWorkspace.plain.body);
+      const unmarkedFile = readWorkspaceFile(unmarkedView, "tracked.txt");
+      expect(unmarkedFile).toMatchObject({ reviewed: false });
+
       await writeFile(path.join(project.path, "tracked.txt"), "changed again\n");
       const staleMark = await encryptedRequest({
         baseUrl,
         body: {
-          displayedDiffHash: trackedFile.diffHash,
-          path: trackedFile.path,
-          reviewTargetId: workspaceView.reviewTarget.id
+          displayedDiffHash: unmarkedFile.diffHash,
+          path: unmarkedFile.path,
+          reviewTargetId: unmarkedView.reviewTarget.id
         },
         logicalMethod: "POST",
         path: `/companion/v1/projects/${project.id}/reviews/mark`,
@@ -994,7 +1033,18 @@ async function createIntegrationHarness(): Promise<{
         return { stale: true, workspace };
       }
 
+      const { reviewTarget, states } = await loadFixtureReviewState(
+        storage,
+        input.projectId
+      );
+      const state = states.find((candidate) => candidate.path === input.path);
+
+      if (!state) {
+        return { stale: true, workspace };
+      }
+
       const result = storage.verifyAndMarkReviewed({
+        ...reviewMarkLineageFields(reviewTarget, state.diff),
         currentDiffHash: file.diffHash,
         displayedDiffHash: input.displayedDiffHash,
         path: file.path,
@@ -1035,7 +1085,18 @@ async function createIntegrationHarness(): Promise<{
         return { stale: true, workspace };
       }
 
+      const { reviewTarget, states } = await loadFixtureReviewState(
+        storage,
+        input.projectId
+      );
+      const state = states.find((candidate) => candidate.path === input.path);
+
+      if (!state) {
+        return { stale: true, workspace };
+      }
+
       const result = storage.verifyAndUnmarkReviewed({
+        ...reviewMarkLineageFields(reviewTarget, state.diff),
         currentDiffHash: file.diffHash,
         displayedDiffHash: input.displayedDiffHash,
         path: file.path,
@@ -1085,10 +1146,7 @@ async function createIntegrationHarness(): Promise<{
   };
 }
 
-async function loadWorkspaceView(
-  storage: DifftrayStorage,
-  projectId: string
-): ReturnType<CompanionDeps["loadWorkspaceView"]> {
+async function loadFixtureReviewState(storage: DifftrayStorage, projectId: string) {
   const project = storage.getProject(projectId);
 
   if (!project) {
@@ -1117,6 +1175,7 @@ async function loadWorkspaceView(
   const diffs = diffResult.files.map((file) => fileDiffFromGit(file));
   const states = resolveReviewStates({
     diffs,
+    lineageMarks: listCarryOverMarks(storage, reviewTarget),
     marks: storage.listReviewMarks(reviewTargetId),
     reviewTarget,
     showGeneratedFiles: storage.getAppSettings().showGeneratedFiles
@@ -1130,6 +1189,16 @@ async function loadWorkspaceView(
 
     return { state, summary };
   });
+
+  return { files, project, reviewTarget, reviewTargetId, states };
+}
+
+async function loadWorkspaceView(
+  storage: DifftrayStorage,
+  projectId: string
+): ReturnType<CompanionDeps["loadWorkspaceView"]> {
+  const { files, project, reviewTarget, reviewTargetId, states } =
+    await loadFixtureReviewState(storage, projectId);
 
   return reviewWorkspaceView({
     comments: storage.listReviewComments(reviewTargetId),

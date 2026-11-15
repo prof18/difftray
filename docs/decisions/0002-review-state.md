@@ -42,3 +42,12 @@ A file is reviewed if and only if:
 
 - its current review target matches the stored review target
 - its current diff hash matches a stored reviewed diff hash
+
+## Amendment (2026-11-14)
+
+[ADR 0048](0048-review-marks-survive-rebases.md) extends the review invariant so review
+marks survive rebases and commits on the same branch:
+
+> A file is reviewed if and only if a `review_marks` row for the current review
+> target has the file's current diff hash, or a row with the same lineage id and path
+> has the file's current content fingerprint.

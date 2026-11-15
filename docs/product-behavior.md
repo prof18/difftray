@@ -113,10 +113,14 @@ It stays in the list and can still be marked reviewed.
 
 ## Review state
 
-Review is per file. Marking a file reviewed stores its exact diff hash under the
-current review target, and the file counts as reviewed only while its current hash
-matches. A changed hash makes it unreviewed; if the diff returns to a reviewed hash,
-the file shows as reviewed again for that target. The main process re-checks the
+Review is per file. Marking a file reviewed stores its diff hash under the current
+review target, and the file counts as reviewed while that hash matches or while an
+earlier review on the same branch matches its content fingerprint. A changed diff
+makes the file unreviewed. After a rebase or a commit on the same branch, a file
+stays reviewed when neither its base version nor its branch version changed. A file
+the rebase changed, including a file that the base branch also edited, shows the
+changed-after-review marker ([ADR 0048](decisions/0048-review-marks-survive-rebases.md)).
+The main process re-checks the
 hash before storing a mark and rejects a stale one. Paths are part of the hash, so
 a rename does not inherit the old path's reviewed state.
 

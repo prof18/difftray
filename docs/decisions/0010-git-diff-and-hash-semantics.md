@@ -166,3 +166,12 @@ Negative:
 - More core logic before UI work.
 - Untracked file diff synthesis needs careful tests.
 - Some rename cases are stricter than users may expect.
+
+## Amendment (2026-11-14)
+
+[ADR 0048](0048-review-marks-survive-rebases.md) extends the review invariant so review
+marks survive rebases and commits on the same branch:
+
+> A file is reviewed if and only if a `review_marks` row for the current review
+> target has the file's current diff hash, or a row with the same lineage id and path
+> has the file's current content fingerprint.

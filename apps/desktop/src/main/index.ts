@@ -25,6 +25,12 @@ import {
   loadExplicitFileSummary,
   selectedReviewSelector
 } from "./review-context-service.js";
+import { KeyedSerialQueue } from "./keyed-serial-queue.js";
+import {
+  invalidatedAfterUnmark,
+  reviewMarkLineageFields,
+  type ReviewMarkLineageFields
+} from "./review-mark-lineage.js";
 import {
   app,
   BrowserWindow,
@@ -265,6 +271,13 @@ const macLocalNetworkSettingsUrl =
 const windowPresentationMode = resolveWindowPresentationMode(
   process.env.DIFFTRAY_WINDOW_PRESENTATION
 );
+
+// showInactive() alone still lets macOS activate the app at launch, which pulls
+// focus away from whatever the user is typing in. An accessory app never
+// becomes frontmost on its own, so automated runs stay in the background.
+if (windowPresentationMode === "inactive" && process.platform === "darwin") {
+  app.setActivationPolicy("accessory");
+}
 
 let mainWindow: BrowserWindow | undefined;
 const agentOpenCoordinator = createAgentOpenCoordinator({
@@ -1756,8 +1769,12 @@ async function activateReviewWindow(): Promise<void> {
   await ensureReviewWindow();
   if (!available()) return;
   if (mainWindow?.isMinimized()) mainWindow.restore();
-  mainWindow?.show();
-  mainWindow?.focus();
+  if (windowPresentationMode === "inactive") {
+    mainWindow?.showInactive();
+  } else {
+    mainWindow?.show();
+    mainWindow?.focus();
+  }
   scheduleAutoUpdaterWiring();
 }
 app.on("activate", () => {
@@ -3551,7 +3568,23 @@ async function loadProjectWorkspaceIfAvailable(
   });
 }
 
-async function markProjectFileReviewed(
+// Mark and unmark for one project run in call order. Without this a slow
+// unmark can finish after a later mark and delete it.
+const reviewMarkQueue = new KeyedSerialQueue();
+
+function markProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<MarkReviewedResult> {
+  return reviewMarkQueue.run(input.projectId, () => markProjectFileReviewedNow(input));
+}
+
+function unmarkProjectFileReviewed(
+  input: CompanionMarkReviewedBody & { readonly projectId: string }
+): Promise<UnmarkReviewedResult> {
+  return reviewMarkQueue.run(input.projectId, () => unmarkProjectFileReviewedNow(input));
+}
+
+async function markProjectFileReviewedNow(
   input: CompanionMarkReviewedBody & { readonly projectId: string }
 ): Promise<MarkReviewedResult> {
   const totalStartedAt = performance.now();
@@ -3600,6 +3633,7 @@ async function markProjectFileReviewed(
   }
 
   const result = getStorage().verifyAndMarkReviewed({
+    ...file.lineageFields,
     currentDiffHash: file.diffHash,
     displayedDiffHash,
     path: pathName,
@@ -3641,7 +3675,7 @@ async function markProjectFileReviewed(
   };
 }
 
-async function unmarkProjectFileReviewed(
+async function unmarkProjectFileReviewedNow(
   input: CompanionMarkReviewedBody & { readonly projectId: string }
 ): Promise<UnmarkReviewedResult> {
   const { displayedDiffHash, path: pathName, projectId, reviewTargetId } = input;
@@ -3667,7 +3701,28 @@ async function unmarkProjectFileReviewed(
     };
   }
 
+  const project = assertStoredProject(projectId);
+  const reviewTarget = await loadCurrentProjectReviewTarget(project);
+  const current = await loadCurrentReviewFile(
+    project,
+    reviewTarget,
+    pathName,
+    file.previousPath
+  );
+
+  if (
+    createReviewTargetId(reviewTarget) !== reviewTargetId ||
+    current?.diffHash !== displayedDiffHash
+  ) {
+    return {
+      reason: "stale_diff",
+      status: "rejected",
+      workspace
+    };
+  }
+
   const result = getStorage().verifyAndUnmarkReviewed({
+    ...current.lineageFields,
     currentDiffHash: file.diffHash,
     displayedDiffHash,
     path: file.path,
@@ -3682,15 +3737,15 @@ async function unmarkProjectFileReviewed(
     };
   }
 
-  const remainingPathMarks = getStorage()
-    .listReviewMarks(reviewTargetId)
-    .filter((mark) => mark.path === file.path);
-
   return {
     status: "unmarked",
     workspace: workspaceWithUpdatedReviewState(workspace, file.path, {
-      invalidated: remainingPathMarks.some(
-        (mark) => mark.reviewedDiffHash !== file.diffHash
+      invalidated: invalidatedAfterUnmark(
+        getStorage(),
+        reviewTarget,
+        reviewTargetId,
+        file.path,
+        file.diffHash
       ),
       reviewed: false
     })
@@ -4467,7 +4522,11 @@ async function loadCurrentReviewFile(
   reviewTarget: ReviewTarget,
   pathName: string,
   previousPath?: string
-): Promise<{ readonly diffHash: string; readonly previousPath?: string } | null> {
+): Promise<{
+  readonly diffHash: string;
+  readonly lineageFields: ReviewMarkLineageFields;
+  readonly previousPath?: string;
+} | null> {
   const summary = await loadExplicitFileSummary(
     project.path,
     reviewTarget,
@@ -4483,6 +4542,7 @@ async function loadCurrentReviewFile(
 
   return {
     diffHash: createDiffHash(reviewTarget, diff),
+    lineageFields: reviewMarkLineageFields(reviewTarget, diff),
     ...(diff.oldPath ? { previousPath: diff.oldPath } : {})
   };
 }

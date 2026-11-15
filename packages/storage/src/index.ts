@@ -86,6 +86,7 @@ import {
   getReviewFileComment,
   getReviewNote,
   isReviewed,
+  deleteLineageReviewMarks,
   listLineageReviewMarks,
   listReviewComments,
   listReviewFileComments,
@@ -287,6 +288,12 @@ export type DifftrayStorage = {
   ) => readonly ReviewFileCommentRecord[];
   readonly listRecentProjects: () => readonly StoredProjectRecord[];
   readonly listLineageReviewMarks: (lineageId: string) => readonly ReviewMarkRecord[];
+  readonly deleteLineageReviewMarks: (
+    lineageId: string,
+    paths: readonly string[],
+    keepReviewTargetId: string,
+    writtenBefore: string
+  ) => void;
   readonly listReviewMarks: (reviewTargetId: string) => readonly ReviewMarkRecord[];
   readonly listWorktreeLabels: (
     worktreePaths: readonly string[]
@@ -422,6 +429,8 @@ export function openStorage(filename: string): DifftrayStorage {
       listReviewFileComments(db, reviewTargetId),
     listRecentProjects: () => listRecentProjects(db),
     listLineageReviewMarks: (lineageId) => listLineageReviewMarks(db, lineageId),
+    deleteLineageReviewMarks: (lineageId, paths, keepReviewTargetId, writtenBefore) =>
+      deleteLineageReviewMarks(db, lineageId, paths, keepReviewTargetId, writtenBefore),
     listReviewMarks: (reviewTargetId) => listReviewMarks(db, reviewTargetId),
     listWorktreeLabels: (worktreePaths) => listWorktreeLabels(db, worktreePaths),
     markReviewed: (input) => {

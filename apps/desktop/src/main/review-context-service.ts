@@ -39,6 +39,7 @@ import {
   type AgentReviewContext,
   type AgentContextFile
 } from "../shared/agent-protocol.js";
+import { pruneCarryOverMarks } from "./review-mark-lineage.js";
 import {
   fileDiffFromGit,
   reviewTargetFromGit,
@@ -74,6 +75,7 @@ export async function loadExplicitReviewState(
   onProgress?: (progress: DiffLoadProgress) => void
 ) {
   const options = onProgress ? { onProgress } : {};
+  const loadStartedAt = new Date().toISOString();
   const result =
     selector.kind === "branch"
       ? await loadBranchDiffSummaries(project.path, selector.base, options)
@@ -83,8 +85,16 @@ export async function loadExplicitReviewState(
   const reviewTarget = reviewTargetFromGit(result.reviewTarget);
   const reviewTargetId = createReviewTargetId(reviewTarget);
   storage.upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
+  const diffs = result.files.map(fileDiffFromGit);
   const states = resolveReviewStates({
-    diffs: result.files.map(fileDiffFromGit),
+    diffs,
+    lineageMarks: pruneCarryOverMarks(
+      storage,
+      reviewTarget,
+      reviewTargetId,
+      new Set(diffs.map((diff) => diff.newPath)),
+      loadStartedAt
+    ),
     marks: storage.listReviewMarks(reviewTargetId),
     reviewTarget,
     showGeneratedFiles

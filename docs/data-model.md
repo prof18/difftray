@@ -124,11 +124,20 @@ review_marks (
   path text not null,
   previous_path text,
   reviewed_diff_hash text not null,
+  lineage_id text,
+  content_fingerprint text,
   reviewed_at text not null,
   updated_at text not null,
   unique(review_target_id, path, reviewed_diff_hash)
 )
 ```
+
+`lineage_id` and `content_fingerprint` hold the review lineage and the file's content
+fingerprint at the time of the mark, so the mark can carry over to a later target on
+the same branch (see [Review Lineage And Content Fingerprint](#review-lineage-and-content-fingerprint)).
+Rows written before [ADR 0048](decisions/0048-review-marks-survive-rebases.md) hold
+null in both columns. The `review_marks_lineage_path_idx` index covers
+`(lineage_id, path)`.
 
 This allows a file to become reviewed again if its diff returns to a previously reviewed hash.
 
@@ -311,6 +320,30 @@ context and is intentionally excluded from the diff hash.
 
 Binary files must include real content identity. Working-tree binary content is fingerprinted with SHA-256 of file bytes plus byte size. Committed binary content should use Git object id plus byte size when available.
 
+## Review Lineage And Content Fingerprint
+
+A review lineage groups the review targets of one branch across rebases and
+commits. Its id is a versioned SHA-256 with prefix `difftray-review-lineage-v1`:
+
+- branch targets: project id, target kind, base ref name and head ref name
+- working-tree targets: project id, target kind and head branch name
+- commit targets and targets without a head branch name have no lineage
+
+The content fingerprint identifies a file's change without the review target. It
+is the diff-summary hash with prefix `difftray-file-content-v1`, so it changes
+whenever the file's old or new blob or worktree identity changes. A file the base
+branch also edited therefore gets a new fingerprint. A mode-only change holds no
+content identity, so its fingerprint stays the same when upstream edits the file's
+content.
+
+When a target has a lineage, a mark stores both values, and the workspace load
+passes every earlier mark of that lineage to `resolveReviewStates`. The same load
+deletes the lineage marks of earlier targets whose file is no longer in the diff, so
+a later edit to a committed or reverted file starts unreviewed. Unmarking
+deletes the exact mark and every lineage mark with the same path and current
+fingerprint. Mark and unmark for one project run one after another in the main
+process. See [ADR 0048](decisions/0048-review-marks-survive-rebases.md).
+
 ## Rename Behavior
 
 For v0, review identity is path-sensitive. The model stores `previous_path` so the UI can explain the rename.
@@ -335,6 +368,6 @@ app-level review preference.
 
 ## Important Invariant
 
-A file is considered reviewed if and only if there is a `review_marks` row for the current review target whose `reviewed_diff_hash` equals the file's current diff hash.
+A file is reviewed if and only if a `review_marks` row for the current review target has the file's current diff hash, or a row with the same lineage id and path has the file's current content fingerprint.
 
 When the user marks a file reviewed, the main process must verify that the currently computed diff hash still equals the hash displayed by the renderer before writing the review mark.
