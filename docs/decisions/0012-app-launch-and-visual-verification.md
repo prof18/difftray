@@ -44,7 +44,10 @@ The scaffold should provide:
 Automated app workflow and visual tests may launch the Electron window with
 `DIFFTRAY_WINDOW_PRESENTATION=inactive` to avoid stealing focus from the user's
 current workspace. This still shows the window and preserves screenshot-based
-verification. Use `DIFFTRAY_WINDOW_PRESENTATION=active` for focused manual
+verification. On macOS, inactive mode also runs the app with the `accessory`
+activation policy (no Dock icon), because `showInactive()` alone still lets macOS
+make the app frontmost at launch. Agent `open` requests in this mode show the
+window without focusing it. Use `DIFFTRAY_WINDOW_PRESENTATION=active` for focused manual
 debugging.
 
 ## Handoff Policy
