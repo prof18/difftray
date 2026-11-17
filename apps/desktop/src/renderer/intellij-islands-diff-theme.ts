@@ -1,8 +1,8 @@
-import {
-  registerCustomTheme,
-  type ThemeRegistrationResolved,
-  type ThemesType
-} from "@pierre/diffs";
+import { registerCustomTheme, type DiffsTheme, type ThemesType } from "@pierre/diffs";
+
+// @pierre/diffs no longer re-exports Shiki's resolved theme type; derive it from
+// the TextMate slot of its own theme type instead of depending on Shiki directly.
+type ThemeRegistrationResolved = NonNullable<DiffsTheme["textmate"]>;
 
 import darkThemeJson from "./themes/intellij-islands-dark-theme.json?raw";
 import lightThemeJson from "./themes/intellij-islands-light-theme.json?raw";
