@@ -17,8 +17,8 @@
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@pierre/diffs": "1.6.4",
     "diff": "9.0.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
