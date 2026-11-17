@@ -1009,16 +1009,18 @@ async function runMatrix() {
   });
   children.push(warm);
   await open(quiet, repo.path);
-  const focused = await warm.evaluate(({ BrowserWindow }) => {
+  const shown = await warm.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];
     return { visible: window?.isVisible(), focused: window?.isFocused() };
   });
+  // Smoke profiles run in inactive presentation mode, where open shows the
+  // window without taking focus from the user (ADR 0012).
   assert.deepEqual(
-    focused,
-    { visible: true, focused: true },
-    "open must foreground the requested repository"
+    shown,
+    { visible: true, focused: false },
+    "open must show the requested repository without taking focus"
   );
-  results.push("clean shutdown/restart and foreground focus");
+  results.push("clean shutdown/restart and open shows without taking focus");
   const matrix = {
     cli,
     createProfile,
