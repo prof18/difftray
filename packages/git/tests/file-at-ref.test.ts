@@ -160,6 +160,25 @@ describe("readPatchBetween", () => {
     expect(patch).not.toContain("other.txt");
   });
 
+  it("returns a plain patch when the repository forces diff colors", async () => {
+    const repo = await createRepo();
+    await git(repo, "config", "color.diff", "always");
+    const before = await gitText(repo, "rev-parse", "HEAD");
+    await writeFile(path.join(repo, "tracked.txt"), "changed\n");
+    const after = await commitAll(repo, "change");
+
+    const patch = await readPatchBetween(
+      repo,
+      before,
+      after,
+      "tracked.txt",
+      "tracked.txt"
+    );
+
+    expect(patch).not.toContain("\u001b[");
+    expect(patch).toMatch(/^@@ /mu);
+  });
+
   it("follows a rename from oldPath to newPath", async () => {
     const repo = await createRepo();
     await writeFile(

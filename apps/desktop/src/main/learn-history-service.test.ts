@@ -32,6 +32,7 @@ import {
   RECOVERY_BUDGET_MS,
   createLearnHistoryService,
   defaultLearnHistoryGit,
+  refreshProjectRepository,
   type LearnHistoryGit,
   type LearnHistoryItem,
   type LearnHistoryResult
@@ -1246,6 +1247,64 @@ describe("LearnHistoryService repository replacement", () => {
     const result = await collector(storage).collect({ repoPath: root });
 
     expect(bodies(result)).toEqual([]);
+  });
+
+  it("does not group a former nested repository into the enclosing repository", async () => {
+    const root = initRepo();
+    const nested = initRepo(path.join(root, "nested"), "n");
+    const { storage } = openFixture();
+    register(storage, root);
+    const project = register(storage, nested);
+    await addLine(storage, project, { body: "nested old", stale: true });
+    rmSync(path.join(nested, ".git"), { force: true, recursive: true });
+
+    const result = await collector(storage).collect({ repoPath: root });
+
+    expect(bodies(result)).toEqual([]);
+    expect(storage.getProjectRepositoryKey(nested)?.commonGitDir).toBeNull();
+  });
+
+  it("keeps the stored key of a project path that is no longer its own worktree root", async () => {
+    const root = initRepo();
+    const nested = initRepo(path.join(root, "nested"), "n");
+    const { storage } = openFixture();
+    register(storage, root);
+    const project = register(storage, nested);
+    await addLine(storage, project, { body: "nested old", stale: true });
+    await collector(storage).collect({ repoPath: nested });
+    const before = storage.getProjectRepositoryKey(nested);
+    expect(before?.commonGitDir).toBe(realpathSync(path.join(nested, ".git")));
+    rmSync(path.join(nested, ".git"), { force: true, recursive: true });
+
+    await refreshProjectRepository({ storage }, project);
+    const result = await collector(storage).collect({ repoPath: root });
+
+    expect(storage.getProjectRepositoryKey(nested)).toEqual(before);
+    expect(bodies(result)).toEqual([]);
+  });
+
+  it("reads the root commit only when it will be stored", async () => {
+    const root = initRepo();
+    const rootCommit = git(root, "rev-list", "--max-parents=0", "--all");
+    const { storage } = openFixture();
+    const project = register(storage, root);
+
+    const first = countingGit();
+    await refreshProjectRepository({ git: first.git, storage }, project);
+    expect(storage.getProjectRepositoryKey(root)?.repositoryRootCommit).toBe(rootCommit);
+
+    const identified = countingGit();
+    await refreshProjectRepository({ git: identified.git, storage }, project);
+    expect(identified.count("readRootCommit")).toBe(0);
+    expect(identified.count("commitExists")).toBe(1);
+
+    const commonGitDir = storage.getProjectRepositoryKey(root)?.commonGitDir ?? "";
+    storage.setProjectCommonGitDir(root, commonGitDir, null, null);
+    await refreshProjectRepository({ git: countingGit().git, storage }, project);
+    expect(storage.getProjectRepositoryKey(root)).toMatchObject({
+      commonGitDirSince: null,
+      repositoryRootCommit: rootCommit
+    });
   });
 
   it("does not treat a branch with unrelated history as a replacement", async () => {

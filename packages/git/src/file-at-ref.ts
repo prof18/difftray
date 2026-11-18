@@ -111,6 +111,7 @@ export async function readPatchBetween(
       "--literal-pathspecs",
       "diff",
       "-M",
+      "--no-color",
       "--no-ext-diff",
       "--no-textconv",
       oldRef,

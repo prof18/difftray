@@ -136,9 +136,10 @@ export function inlineCode(text: string): string {
 }
 
 function fencedBlock(lines: readonly string[]): string {
-  const fence = "`".repeat(
-    Math.max(3, ...lines.map((line) => longestBacktickRun(line) + 1))
-  );
+  // A loop, not Math.max(...lines): a long body exceeds the argument limit.
+  let width = 3;
+  for (const line of lines) width = Math.max(width, longestBacktickRun(line) + 1);
+  const fence = "`".repeat(width);
 
   return [`${fence}text`, ...lines, fence].join("\n");
 }
@@ -322,7 +323,9 @@ function flatten(text: string): string {
 }
 
 function longestBacktickRun(text: string): number {
-  return Math.max(0, ...(text.match(/`+/gu) ?? []).map((run) => run.length));
+  let longest = 0;
+  for (const run of text.match(/`+/gu) ?? []) longest = Math.max(longest, run.length);
+  return longest;
 }
 
 function compareText(left: string, right: string): number {

@@ -1023,6 +1023,10 @@ describe("learn.report and learn.mark", () => {
       "impossible date since",
       { repoPath: "/repo", format: "markdown", since: "2026-04-31" }
     ],
+    [
+      "since past year 9999 in UTC",
+      { repoPath: "/repo", format: "markdown", since: "9999-12-31T23:30:00-02:00" }
+    ],
     ["numeric since", { repoPath: "/repo", format: "markdown", since: 1 }],
     ["all false", { repoPath: "/repo", format: "markdown", all: false }],
     ["relative out", { repoPath: "/repo", format: "markdown", out: "report.md" }],

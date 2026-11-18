@@ -200,14 +200,24 @@ export async function refreshProjectRepository(
   const git = dependencies.git ?? defaultLearnHistoryGit;
   const now = dependencies.now ?? Date.now;
   const { storage } = dependencies;
-  const { commonGitDir } = await git.resolveWorktree(project.path);
-  const rootCommit = await git.readRootCommit(project.path);
+  const resolved = await git.resolveWorktree(project.path);
+  // A path inside another repository's worktree resolves to that repository.
+  if (!(await isOwnWorktreeRoot(resolved.worktreeRoot, project.path))) return;
+  const { commonGitDir } = resolved;
   const stored = storage.getProjectRepositoryKey(project.id);
 
   if (!stored) return;
 
+  // Reading the root commit walks the whole history, so only do it to store it.
+  const readRootCommit = () => git.readRootCommit(project.path);
+
   if (stored.commonGitDir === null) {
-    storage.setProjectCommonGitDir(project.id, commonGitDir, null, rootCommit);
+    storage.setProjectCommonGitDir(
+      project.id,
+      commonGitDir,
+      null,
+      await readRootCommit()
+    );
     return;
   }
 
@@ -221,11 +231,12 @@ export async function refreshProjectRepository(
         project.id,
         commonGitDir,
         stored.commonGitDirSince,
-        rootCommit
+        await readRootCommit()
       );
     return;
   }
 
+  const rootCommit = await readRootCommit();
   const replacedAt = new Date(now()).toISOString();
   storage.setProjectCommonGitDir(project.id, commonGitDir, replacedAt, rootCommit);
 
@@ -259,10 +270,25 @@ async function isLiveWorktreeOf(
   try {
     if (!(await git.pathExists(projectPath))) return false;
     const resolved = await git.resolveWorktree(projectPath);
-    return resolved.commonGitDir === commonGitDir;
+    return (
+      resolved.commonGitDir === commonGitDir &&
+      (await isOwnWorktreeRoot(resolved.worktreeRoot, projectPath))
+    );
   } catch {
     return false;
   }
+}
+
+/**
+ * Stored project paths are worktree roots. One that resolves to a different root now
+ * sits inside some other worktree, such as a nested repository whose .git was removed.
+ */
+async function isOwnWorktreeRoot(
+  worktreeRoot: string,
+  projectPath: string
+): Promise<boolean> {
+  if (worktreeRoot === projectPath) return true;
+  return (await realpath(projectPath).catch(() => null)) === worktreeRoot;
 }
 
 export type LearnHistoryServiceDependencies = {
@@ -350,6 +376,7 @@ export function createLearnHistoryService(
       try {
         if (!(await git.pathExists(project.path))) continue;
         const backfilled = await git.resolveWorktree(project.path);
+        if (!(await isOwnWorktreeRoot(backfilled.worktreeRoot, project.path))) continue;
         storage.setProjectCommonGitDir(project.id, backfilled.commonGitDir, null, null);
       } catch {
         // A path that is no longer a Git worktree keeps no common directory.

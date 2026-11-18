@@ -284,6 +284,15 @@ describe("formatLearnReport", () => {
     expect(fences[0]).toEqual({ content: body.split("\n"), fence: "```" });
   });
 
+  it("formats a body with more lines than a function call can take as arguments", () => {
+    const body = Array.from({ length: 200_000 }, () => "x").join("\n");
+    const { fences } = splitFences(
+      formatLearnReport(input({ newItems: [item({ body })] }))
+    );
+
+    expect(fences[0]?.content).toHaveLength(200_000);
+  });
+
   it("gives an excerpt with three backticks a four-backtick fence", () => {
     const report = formatLearnReport(
       input({

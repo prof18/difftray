@@ -843,7 +843,10 @@ function timestamp(value: unknown): string {
   const calendar = new Date(Date.UTC(year, month - 1, day));
   if (calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day)
     return fail("Expected an ISO 8601 timestamp");
-  return new Date(ms).toISOString();
+  const iso = new Date(ms).toISOString();
+  // Storage compares timestamp text, which only orders four-digit UTC years.
+  if (!/^\d{4}-/.test(iso)) return fail("Expected an ISO 8601 timestamp");
+  return iso;
 }
 const count = (value: unknown): number => integer(value, 0, Number.MAX_SAFE_INTEGER);
 function counts(value: unknown, keys: readonly string[]): void {
