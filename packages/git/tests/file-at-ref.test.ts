@@ -101,8 +101,16 @@ describe("readRootCommit and commitExists", () => {
     await writeFile(path.join(repo, "other.txt"), "other\n");
     await commitAll(repo, "unrelated root");
 
-    await expect(readRootCommit(repo)).resolves.toBe(before);
+    // readRootCommit picks the smallest root SHA, so an orphan root can sort first.
+    // Branch switches stay non-replacements because the stored root still exists.
     expect(before).not.toBeNull();
+    const after = await readRootCommit(repo);
+    const roots = (await gitText(repo, "rev-list", "--max-parents=0", "--all"))
+      .split("\n")
+      .sort();
+    expect(after).toBe(roots[0]);
+    expect(roots).toContain(before);
+    await expect(commitExists(repo, before ?? "")).resolves.toBe(true);
   });
 
   it("matches across clones and differs for unrelated repositories", async () => {
