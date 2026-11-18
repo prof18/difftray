@@ -1019,7 +1019,10 @@ describe("learn.report and learn.mark", () => {
       { repoPath: "/repo", format: "markdown", since: "2026-11-01T00:00:00Z", all: true }
     ],
     ["unreadable since", { repoPath: "/repo", format: "markdown", since: "yesterday" }],
-    ["impossible date since", { repoPath: "/repo", format: "markdown", since: "2026-04-31" }],
+    [
+      "impossible date since",
+      { repoPath: "/repo", format: "markdown", since: "2026-04-31" }
+    ],
     ["numeric since", { repoPath: "/repo", format: "markdown", since: 1 }],
     ["all false", { repoPath: "/repo", format: "markdown", all: false }],
     ["relative out", { repoPath: "/repo", format: "markdown", out: "report.md" }],
