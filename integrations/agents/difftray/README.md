@@ -2,7 +2,7 @@
 
 This folder is the contributor source for Difftray's portable agent skill. Packaged apps bundle its `skills` folder at `Contents/Resources/skills`, next to the CLI at `Contents/Resources/bin/difftray`.
 
-The `skills` folder holds the canonical `difftray` skill and the typed-only command skills (`difftray-open`, `difftray-read`, `difftray-fix`, `difftray-review`, `difftray-label`). Each command skill loads the canonical skill and narrows the request. The app's **Settings → Agents** page creates a symlink from each agent's skills folder to every bundled skill folder. Installed skills therefore follow app updates at the same location.
+The `skills` folder holds the canonical `difftray` skill and the typed-only command skills (`difftray-open`, `difftray-read`, `difftray-fix`, `difftray-review`, `difftray-label`, `difftray-learn`). Each command skill loads the canonical skill and narrows the request. The app's **Settings → Agents** page creates a symlink from each agent's skills folder to every bundled skill folder. Installed skills therefore follow app updates at the same location.
 
 For setup from an installed app, open **Settings → Agents**; see the [agent integration guide](https://github.com/prof18/difftray/blob/main/docs/agent-integration.md#in-app-setup).
 

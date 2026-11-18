@@ -83,23 +83,25 @@ message.
 
 ### Command skills
 
-Five short skills give each common request its own slash command. Each one
+Six short skills give each common request its own slash command. Each one
 loads the canonical skill from `../difftray/SKILL.md` and narrows the request;
 the CLI path, safety rules and recovery live only in the canonical skill. They
 set `disable-model-invocation: true`, so Claude Code runs them only when typed,
 and their descriptions say the same for agents that ignore that field.
 
-| Command            | Does                                                                     | Writes                  |
-| ------------------ | ------------------------------------------------------------------------ | ----------------------- |
-| `/difftray-open`   | Opens the worktree, keeping its selected diff                            | Nothing                 |
-| `/difftray-read`   | Reads every feedback page and summarizes it                              | Nothing                 |
-| `/difftray-fix`    | Fixes the code for active feedback and reports each item                 | Code only               |
-| `/difftray-review` | Reviews the diff and submits findings in one batch                       | Feedback only           |
-| `/difftray-label`  | Sets the given label, picks one when none is given, or resets on `reset` | The worktree label only |
+| Command            | Does                                                                     | Writes                                              |
+| ------------------ | ------------------------------------------------------------------------ | --------------------------------------------------- |
+| `/difftray-open`   | Opens the worktree, keeping its selected diff                            | Nothing                                             |
+| `/difftray-read`   | Reads every feedback page and summarizes it                              | Nothing                                             |
+| `/difftray-fix`    | Fixes the code for active feedback and reports each item                 | Code only                                           |
+| `/difftray-review` | Reviews the diff and submits findings in one batch                       | Feedback only                                       |
+| `/difftray-label`  | Sets the given label, picks one when none is given, or resets on `reset` | The worktree label only                             |
+| `/difftray-learn`  | Turns past review feedback into proposed agent rules and docs            | Approved rule and doc edits, then the learned point |
 
 Typing `/difftray-review` is the user's request to submit, and typing
 `/difftray-fix` is the request to change code; the plain `difftray` skill
-still writes nothing unless asked.
+still writes nothing unless asked. Typing `/difftray-learn` is only a request to
+propose: the agent writes each rule or doc edit after the user approves it.
 
 Difftray's local agent protocol is version 1 and is separate from the companion protocol. The bundled CLI connects to a private local socket, starts its own desktop bundle when necessary, and opens an exact repository worktree. Review reads, exports, and attributed feedback submission use explicit persisted contexts.
 
@@ -151,8 +153,8 @@ Startup waits at most 30 seconds. Authentication failures normally stop immediat
 `pnpm --filter @difftray/desktop test:cli:e2e` builds an unsigned temporary bundle and exercises isolated profiles. `--app` can reuse an explicit fixture bundle. The smoke-only `DIFFTRAY_AGENT_SMOKE_DEBUG_PORT` environment variable enables loopback browser inspection only when an explicit `DIFFTRAY_USER_DATA_DIR` is supplied. This fixture evidence does not show compatibility with signed releases or real agent hosts.
 
 The full gate runs that process test after visual verification with `--skip-build`,
-reusing the gate's build outputs. Read, write, invalidation, and companion
-compatibility matrix helpers exercise the bundled CLI and actual Electron
+reusing the gate's build outputs. Read, write, invalidation, label, learn and
+companion compatibility matrix helpers exercise the bundled CLI and actual Electron
 services. The companion helper enables only its isolated fixture server, pairs
 fresh ephemeral keys, and reads encrypted legacy/current capability responses.
 Expiry and corruption cases manipulate only owned fixture state; SQL or clock
@@ -258,3 +260,59 @@ Desktop comments, file cards and overall notes display the optional attribution.
 The shared mobile inline diff renders agent labels as escaped text alongside the
 source-line location. Agent creator and later human editor remain distinct;
 overall notes display only their last editor.
+
+## Learning from past feedback
+
+`learn report [--repo PATH] [--since ISO | --all] [--out PATH] [--format markdown|json] [--json]`
+and `learn mark --cursor ISO [--repo PATH] [--json]` send the `learn.report` and
+`learn.mark` methods. Neither needs a review context. `--repo` defaults to the
+working directory; both commands resolve it to its repository and cover every
+worktree that shares the same common Git directory, including removed ones. The
+`/difftray-learn` skill runs them; see the
+[command reference](../integrations/agents/difftray/skills/difftray/references/commands.md)
+for the exact output.
+
+`learn report` collects the repository's line comments, file comments and review
+notes from people, agents and the phone, and writes them to a report file. By
+default the file goes to a new name in `learn-reports` under the profile's data
+folder, created with mode 0700, and the file has mode 0600. `--out PATH` writes to a
+new path in an existing folder instead; Difftray never cleans that file up. The
+default format is Markdown grouped by path, with a summary header; `--format json`
+writes the same data as JSON. The CLI prints the path and the counts, not the
+feedback. Writing a report and starting the app delete report files older than 24
+hours.
+
+The report has two sections. "New since last run" lists, in full, every item
+updated after the repository's last learned point (or after `--since`, or every
+item with `--all`), each with its author, status (`active`, `target_changed`,
+`diff_changed`, `dismissed`), a separate dismissed flag, date, lines and excerpt.
+"Earlier feedback (before last run)" lists up to 500 older items from the last 183
+days in compact form, without excerpts, with the first body line cut to 200
+characters. It is empty when the report has no start point.
+
+Each new item's excerpt carries its source. `saved` excerpts were stored when the
+feedback was saved. Older feedback is recovered from Git: `recovered` comes from
+the live diff of an active item or the exact refs of its review target, and
+`approximate` comes from a later review of the same branch or the first commit that
+touched the path after the comment, with that commit's SHA. `unavailable` means no
+source had the text; working-tree feedback saved before excerpts existed often ends
+here. Recovery stops after 500 Git reads or 45 seconds per report, and the remaining
+items are `not_looked_up`; on the 300-file, 600-comment benchmark fixture a full
+report reaches the time budget.
+
+The report's cursor is the newest `updatedAt` among its new items, or null.
+Reporting never moves the last learned point. `learn mark` moves it forward to the
+given cursor after the user approved and the agent applied at least one edit; it
+never moves it back and rejects a time in the future. The point is stored per
+common Git directory in `repository_learn_cursors`. When a worktree path holds a
+new repository (another common Git directory, or a stored root commit that no
+longer exists), its earlier feedback stops counting; when the common Git directory
+is unchanged, the point is deleted too.
+Switching to a branch with unrelated history keeps the point, because the stored
+root commit still exists.
+
+Exit codes are the CLI's usual ones: 2 for invalid usage or request, such as
+`--since` with `--all`, an unreadable time or an existing `--out` path, 3 when the
+app is unavailable, 5 for I/O failures and timeouts, and 1 for internal errors.
+Neither command writes rule or doc files; see
+[decision 0049](decisions/0049-learn-from-review-feedback.md).

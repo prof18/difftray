@@ -16,7 +16,10 @@ projects (
   default_base_ref text,
   created_at text not null,
   updated_at text not null,
-  last_opened_at text
+  last_opened_at text,
+  common_git_dir text,
+  common_git_dir_since text,
+  repository_root_commit text
 )
 ```
 
@@ -27,6 +30,16 @@ Difftray reviews the current `HEAD` branch against the merge base with that base
 Closing a project removes it from the explicit open-tab order; it does not delete
 this row or its settings, marks, and comments. Forgetting a repository is the
 separate destructive operation.
+
+`common_git_dir` is the real path of the worktree's common Git directory, shared by
+every worktree of one repository; learn reports group projects by it.
+`repository_root_commit` is the repository's smallest root commit SHA. When a path
+later holds another common Git directory, or its stored root commit no longer
+exists, the path holds a new repository: `common_git_dir_since` records when that
+was detected, and comments created and note bodies saved before it no longer count
+for learn reports. Projects stored before these columns existed are backfilled with
+their current common Git directory and no `common_git_dir_since`
+([ADR 0049](decisions/0049-learn-from-review-feedback.md)).
 
 ### repository_roots and repository_catalog
 
@@ -155,6 +168,7 @@ review_comments (
   line_start integer not null,
   line_end integer not null,
   body text not null,
+  excerpt_json text,
   created_at text not null,
   updated_at text not null
 )
@@ -182,6 +196,7 @@ review_file_comments (
   previous_path text,
   diff_hash text not null,
   body text not null,
+  excerpt_json text,
   created_at text not null,
   updated_at text not null
 )
@@ -200,6 +215,8 @@ review_notes (
   project_id text not null,
   body text not null,
   dismissed_at text,
+  excerpt_json text,
+  body_saved_at text,
   created_at text not null,
   updated_at text not null
 )
@@ -219,8 +236,44 @@ survives new commits:
 A note is active when it exists and `dismissed_at` is null. Only an active note
 is included in the agent prompt, under "Overall review notes" before the
 per-file comments. A dismissed note still appears in workspace views so it can be
-restored. Saving a body clears `dismissed_at`. Notes are removed when their
-project is forgotten.
+restored. Saving a body clears `dismissed_at` and sets `body_saved_at`, which
+dismissing or restoring leaves alone. Notes are removed when their project is
+forgotten.
+
+### Feedback excerpts
+
+`excerpt_json` on `review_comments`, `review_file_comments` and `review_notes` keeps
+the code context the feedback was written against. It is versioned JSON
+(`version: 1`) written when the feedback is saved from the desktop, the phone or an
+agent:
+
+- `lines` for a line comment: the commented lines on its side plus 3 lines either
+  side.
+- `patch` for a file comment: the file's unified patch.
+- `files` for a review note: the changed paths with addition and deletion counts,
+  up to 100 paths, with the number left out.
+
+Line and patch excerpts keep at most 40 lines of at most 400 characters each and
+record whether they were cut. Capture is best effort: when the diff cannot be read
+as text, or its hash changed during the save, the column stays null and the save
+still succeeds. Rows written before excerpts existed are null; learn reports try to
+recover their text from Git.
+
+### repository_learn_cursors
+
+```sql
+repository_learn_cursors (
+  common_git_dir text primary key,
+  cursor_at text not null,
+  updated_at text not null
+)
+```
+
+One "last learned" point per repository, keyed by `projects.common_git_dir`.
+`difftray learn mark` moves `cursor_at` forward and never back; learn reports list
+feedback updated after it as new. The row is deleted when a path keeps its common
+Git directory but its stored root commit no longer exists (a new repository in the
+same place), and when the last project with that common Git directory is forgotten.
 
 ### project_settings
 

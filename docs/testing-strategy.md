@@ -313,6 +313,11 @@ compatibility matrix starts the fixture's actual companion through preload,
 pairs fresh ephemeral keys and compares encrypted responses with and without
 the attribution capability. Legacy responses recursively omit attribution and
 note-version fields; current responses preserve all four scopes' attribution.
+The label matrix (`agent-cli-label-matrix.mjs`) sets and resets worktree labels.
+The learn matrix (`agent-cli-learn-matrix.mjs`) writes feedback in two worktrees of
+one repository, checks that `learn report` puts both in one private report file,
+that `learn mark` moves them to the earlier section, and that `--all` lists them as
+new again.
 
 To make expiry and corruption tests deterministic, the harness changes the clock
 and SQL data only in test data that it owns. These tests add no SQL or clock

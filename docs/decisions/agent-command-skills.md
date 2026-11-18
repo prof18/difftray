@@ -13,17 +13,20 @@ commands for the common requests.
 
 ## Decision
 
-Ship five command skills next to the canonical skill: `difftray-open`,
-`difftray-read`, `difftray-fix`, `difftray-review` and `difftray-label`. Each is a
-single `SKILL.md` that loads `../difftray/SKILL.md` and narrows the request. All
-rules, the CLI resolver and the command reference stay in the canonical skill, so
-they cannot drift apart.
+Ship six command skills next to the canonical skill: `difftray-open`,
+`difftray-read`, `difftray-fix`, `difftray-review`, `difftray-label` and
+`difftray-learn`. Each is a single `SKILL.md` that loads `../difftray/SKILL.md`
+and narrows the request. All rules, the CLI resolver and the command reference stay
+in the canonical skill, so they cannot drift apart.
 
 Command skills set `disable-model-invocation: true` and say "Use only when the
 user types" in their description, so they never compete with the canonical skill
 for automatic selection. Typing a command is the authorization it names:
 `/difftray-review` submits findings, `/difftray-fix` edits code, and neither
 does the other's job. `/difftray-read` and `/difftray-open` write nothing.
+`/difftray-learn` is the exception: typing it authorizes only proposals, and the
+agent writes each rule or doc edit after the user approves it
+([decision 0049](0049-learn-from-review-feedback.md)).
 
 The app bundles the whole `skills` folder. Settings → Agents links every skill
 name into each agent's skills folder and reports one status per agent: installed

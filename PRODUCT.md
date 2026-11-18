@@ -33,7 +33,7 @@ agent by name. Difftray is not an IDE, an agent host or a pull-request platform.
 - An agent runs in a terminal next to Difftray on the same Mac.
 - Agent skills install from Settings → Agents for Claude Code, Codex and Pi, or any
   agent with a skills folder. Slash commands: `/difftray-open`, `/difftray-read`,
-  `/difftray-fix`, `/difftray-review`, `/difftray-label`.
+  `/difftray-fix`, `/difftray-review`, `/difftray-label`, `/difftray-learn`.
 - The companion app pairs over Wi-Fi or Tailscale with an end-to-end encrypted
   channel. There is no cloud backend.
 

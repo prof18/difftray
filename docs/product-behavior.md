@@ -139,6 +139,14 @@ The exact scope rules are in [`data-model.md`](data-model.md). People write feed
 on the desktop and on paired phones; agents write it through the CLI, and agent
 feedback carries attribution.
 
+Feedback keeps the code context it was written against. Saving a line comment stores
+the commented lines with a few lines around them, a file comment stores the file's
+patch, and a review note stores the list of changed files, whether it comes from the
+desktop, a phone or an agent. Stale feedback is kept with that context, so typing
+`/difftray-learn` in an agent can turn the repository's past feedback into proposed
+rules and docs even after its review target is gone; the agent writes only the edits
+the user approves ([decision 0049](decisions/0049-learn-from-review-feedback.md)).
+
 The agent report puts the active review note first, then each file's comments with
 file comments before line comments. "Copy for agent" in the diff toolbar puts it on the clipboard,
 and `difftray review export` returns the same text to an agent. The report names the reviewed

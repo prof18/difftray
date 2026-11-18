@@ -116,9 +116,11 @@ With them, an agent can:
 The agent writes feedback only when you ask it to submit. Loading the skill alone
 authorizes no write, code edit, other agent or chat message. Difftray labels agent
 feedback with the name the agent supplies. It shows that name for attribution
-only and does not authenticate it. Five typed-only command skills
-(`/difftray-open`, `/difftray-read`, `/difftray-fix`, `/difftray-review` and
-`/difftray-label`) give each common request its own slash command.
+only and does not authenticate it. Six typed-only command skills
+(`/difftray-open`, `/difftray-read`, `/difftray-fix`, `/difftray-review`,
+`/difftray-label` and `/difftray-learn`) give each common request its own slash
+command. `/difftray-learn` turns the repository's past review feedback into
+proposed agent rules and docs, and writes only the edits you approve.
 
 The app includes the CLI at
 `/Applications/Difftray.app/Contents/Resources/bin/difftray`. It runs without a
