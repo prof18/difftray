@@ -5,5 +5,6 @@ export const agentSkillNames = [
   "difftray-read",
   "difftray-fix",
   "difftray-review",
-  "difftray-label"
+  "difftray-label",
+  "difftray-learn"
 ] as const;

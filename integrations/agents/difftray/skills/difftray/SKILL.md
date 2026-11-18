@@ -19,4 +19,6 @@ Keep that exact file and its original `contextId` through uncertain transport er
 
 A worktree can carry a Difftray display name, shown in Difftray only. When the user asks you to name or label a worktree, run `worktree label set --repo "$repo" --label "$label" --json` with the exact worktree root (main or linked, not a subdirectory) and a concise, task-based label of at most 80 characters; `worktree label reset --repo "$repo" --json` restores the Git name. Labeling does not rename the branch, move the directory, change Git config or submit feedback, and it needs no review context. Do not label worktrees the user did not ask you to label, even if you discovered them.
 
+`learn report` only reads feedback and writes a private report file; `learn mark` runs only after the user approved edits in `/difftray-learn`. Neither writes rule or doc files.
+
 On `stale_feedback`, discard accumulated feedback pages and restart feedback pagination with the same valid context; never combine pages from different feedback versions. On `stale_review` or `stale_diff`, inspect again, reload files and feedback, and re-review the code before a revised submission. Do not merely swap a hash.

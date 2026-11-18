@@ -106,7 +106,8 @@ describe("agent skill installation", () => {
       "difftray-read",
       "difftray-fix",
       "difftray-review",
-      "difftray-label"
+      "difftray-label",
+      "difftray-learn"
     ]);
   });
   it("offers repair when command skills are missing and adds them without touching the main link", () => {

@@ -26,6 +26,7 @@ import type {
   AgentSkillStatus,
   AgentSkillTarget
 } from "../shared/agent-setup-types.js";
+import { SETTINGS_LEARN_COPY } from "../shared/agent-setup-copy.js";
 
 import styles from "./settings-panel.module.css";
 import { useDialogFocusTrap } from "./dialog-focus.js";
@@ -587,6 +588,9 @@ function AgentsSettingsPage({
               {GUIDE_LABEL}
             </button>
           </div>
+        </div>
+        <div className={styles.settingRow}>
+          <span>{SETTINGS_LEARN_COPY}</span>
         </div>
       </SettingsSection>
       <SettingsSection title={SETUP_TITLE}>

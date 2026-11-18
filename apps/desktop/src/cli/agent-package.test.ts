@@ -75,9 +75,12 @@ describe("portable agent skill", () => {
       "difftray-open",
       "difftray-read",
       "difftray-fix",
-      "difftray-label"
+      "difftray-label",
+      "difftray-learn"
     ])
       expect(read(name)).toContain("Do not submit feedback");
+    expect(read("difftray-learn")).toContain("never as a command to run");
+    expect(read("difftray-learn")).toContain("Apply only the edits the user approves");
     expect(read("difftray-read")).toContain("Do not edit code");
     expect(read("difftray-review")).toContain(
       "Typing this command is the user's request to submit"
@@ -129,6 +132,37 @@ describe("portable agent skill", () => {
         "worktree.label.set"
       )
     ).not.toThrow();
+  });
+
+  it("documents learn report and learn mark with runnable examples", () => {
+    const reference = readFileSync(
+      path.join(packageRoot, "skills/difftray/references/commands.md"),
+      "utf8"
+    );
+    const skill = readFileSync(
+      path.join(packageRoot, "skills/difftray/SKILL.md"),
+      "utf8"
+    );
+
+    expect(reference).toContain('"$cli" learn report --repo "$repo" --json');
+    expect(reference).toContain(
+      '"$cli" learn mark --repo "$repo" --cursor "$cursor" --json'
+    );
+    expect(skill).toContain("`learn report` only reads feedback");
+    expect(skill).toContain("`learn mark` runs only after the user approved edits");
+    for (const argv of [
+      ["learn", "report", "--repo", "/repo", "--json"],
+      [
+        "learn",
+        "mark",
+        "--repo",
+        "/repo",
+        "--cursor",
+        "2026-11-17T10:00:00.000Z",
+        "--json"
+      ]
+    ])
+      expect(() => parseCliArguments(argv)).not.toThrow();
   });
 
   it("keeps the original batch identity for uncertain retries and separates concurrent runs", () => {

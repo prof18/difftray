@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SETTINGS_LEARN_COPY } from "../shared/agent-setup-copy.js";
 import { SettingsPanel } from "./settings-panel.js";
 
 describe("SettingsPanel", () => {
@@ -438,6 +439,13 @@ describe("SettingsPanel", () => {
     expect(
       [...detail.querySelectorAll("button")].some((item) => item.textContent === "Copy")
     ).toBe(false);
+  });
+  it("explains the /difftray-learn command in About", async () => {
+    const about = section(await readyAgents(), "About");
+    expect(about.textContent).toContain(SETTINGS_LEARN_COPY);
+    expect(SETTINGS_LEARN_COPY).toBe(
+      "Type /difftray-learn in your agent to turn past review feedback for the current repository into proposed rules and docs. The agent shows every proposed edit and writes only the ones you approve."
+    );
   });
   it("opens the full agent guide", async () => {
     const detail = await readyAgents();
