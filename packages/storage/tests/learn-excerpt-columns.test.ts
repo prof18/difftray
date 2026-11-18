@@ -160,6 +160,39 @@ describe("feedback excerpt columns", () => {
     storage.close();
   });
 
+  it("keeps an unchanged note, its version and excerpt when only the excerpt differs", () => {
+    vi.useFakeTimers();
+    const filename = temporaryDatabasePath();
+    const storage = openStorage(filename);
+    seed(storage);
+
+    vi.setSystemTime(new Date("2026-11-01T10:00:00.000Z"));
+    const saved = storage.saveReviewNote({
+      body: "Same",
+      excerptJson: '{"paths":["a"]}',
+      projectId: "p",
+      scopeId: "scope"
+    });
+    const version = storage.getReviewNoteSnapshot("scope");
+
+    vi.setSystemTime(new Date("2026-11-02T10:00:00.000Z"));
+    for (const excerptJson of ['{"paths":["b"]}', null]) {
+      const resaved = storage.saveReviewNote({
+        body: "Same",
+        excerptJson,
+        projectId: "p",
+        scopeId: "scope"
+      });
+      expect(resaved).toEqual(saved);
+    }
+    expect(storage.getReviewNoteSnapshot("scope")).toEqual(version);
+    expect(noteColumns(filename, "scope")).toEqual({
+      body_saved_at: "2026-11-01T10:00:00.000Z",
+      excerpt_json: '{"paths":["a"]}'
+    });
+    storage.close();
+  });
+
   it("overwrites the note excerpt and body_saved_at on every body save only", () => {
     vi.useFakeTimers();
     const filename = temporaryDatabasePath();

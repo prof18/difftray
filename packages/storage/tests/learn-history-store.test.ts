@@ -220,6 +220,26 @@ describe("listLearnHistoryRows", () => {
     ).toEqual(["old body"]);
   });
 
+  it("keeps earlier rows within upTo when after is later than the snapshot", () => {
+    const fixture = openFixture();
+    seedFeedback(fixture);
+
+    const result = fixture.storage.listLearnHistoryRows({
+      after: "2026-06-01T00:00:00.000Z",
+      earlierFrom: "2025-01-01T00:00:00.000Z",
+      earlierLimit: 10,
+      projects: both,
+      upTo: "2026-01-02T00:00:00.000Z"
+    });
+
+    expect(result.newRows).toEqual([]);
+    expect(result.earlierRows.map((row) => row.body)).toEqual([
+      "line body",
+      "old body",
+      "older body"
+    ]);
+  });
+
   it("returns only the given projects", () => {
     const fixture = openFixture();
     seedFeedback(fixture);

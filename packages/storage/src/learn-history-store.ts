@@ -156,13 +156,14 @@ export function listLearnHistoryRows(
           .prepare(
             feedbackQuery +
               ` select * from feedback
-                where updated_at <= ? and updated_at >= ?
+                where updated_at <= ? and updated_at <= ? and updated_at >= ?
                 order by updated_at desc, kind, id
                 limit ?`
           )
           .all(
             projects,
             input.after,
+            input.upTo,
             input.earlierFrom,
             input.earlierLimit
           ) as unknown as Row[]);

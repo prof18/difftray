@@ -233,13 +233,35 @@ export async function refreshProjectRepository(
 
   storage.deleteLearnCursor(commonGitDir);
   for (const sibling of storage.listProjectsByCommonGitDir(commonGitDir)) {
-    if (sibling.id === project.id || (await git.pathExists(sibling.path))) continue;
+    if (
+      sibling.id === project.id ||
+      (await isLiveWorktreeOf(git, sibling.path, commonGitDir))
+    )
+      continue;
     storage.setProjectCommonGitDir(
       sibling.id,
       commonGitDir,
       replacedAt,
       sibling.repositoryRootCommit
     );
+  }
+}
+
+/**
+ * Whether a project path is still a worktree of the repository at `commonGitDir`. A
+ * directory left behind after its Git metadata went away is not.
+ */
+async function isLiveWorktreeOf(
+  git: Pick<LearnHistoryGit, "pathExists" | "resolveWorktree">,
+  projectPath: string,
+  commonGitDir: string
+): Promise<boolean> {
+  try {
+    if (!(await git.pathExists(projectPath))) return false;
+    const resolved = await git.resolveWorktree(projectPath);
+    return resolved.commonGitDir === commonGitDir;
+  } catch {
+    return false;
   }
 }
 
@@ -340,16 +362,25 @@ export function createLearnHistoryService(
       if (await git.pathExists(project.path)) await refreshIgnoringErrors(project);
     }
 
-    const requestedRoot = requested
-      ? (storage.getProjectRepositoryKey(requested.id)?.repositoryRootCommit ?? null)
-      : await git.readRootCommit(worktreeRoot).catch(() => null);
+    // A project that is no longer a live worktree of this repository counts as
+    // removed: it belongs here only when its stored root commit is still part of it.
+    const knownRoots = new Map<string, Promise<boolean>>();
+    function rootBelongs(sha: string): Promise<boolean> {
+      let known = knownRoots.get(sha);
+      if (!known) {
+        known = git.commitExists(worktreeRoot, sha).catch(() => false);
+        knownRoots.set(sha, known);
+      }
+      return known;
+    }
     const grouped: { project: StoredProjectWithRepositoryKey; exists: boolean }[] = [];
     for (const project of storage.listProjectsByCommonGitDir(commonGitDir)) {
-      const exists = await git.pathExists(project.path);
+      assertActive(signal);
+      const exists = await isLiveWorktreeOf(git, project.path, commonGitDir);
       if (
         exists ||
         project.repositoryRootCommit === null ||
-        project.repositoryRootCommit === requestedRoot
+        (await rootBelongs(project.repositoryRootCommit))
       )
         grouped.push({ exists, project });
     }

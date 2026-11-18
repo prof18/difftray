@@ -410,10 +410,11 @@ export function saveReviewNote(
     const existing = getReviewNote(db, input.scopeId);
     const actorJson = JSON.stringify(input.actor ?? { kind: "human" });
     const excerptJson = input.excerptJson ?? null;
+    // An unchanged body is not a body save: keep its version, timestamps and excerpt,
+    // so agents holding the current noteVersion never see a spurious conflict.
     if (
       existing?.body === input.body &&
       !existing.dismissedAt &&
-      existing.excerptJson === excerptJson &&
       JSON.stringify(existing.lastEditedBy) === actorJson
     )
       return existing;

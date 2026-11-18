@@ -1019,6 +1019,7 @@ describe("learn.report and learn.mark", () => {
       { repoPath: "/repo", format: "markdown", since: "2026-11-01T00:00:00Z", all: true }
     ],
     ["unreadable since", { repoPath: "/repo", format: "markdown", since: "yesterday" }],
+    ["impossible date since", { repoPath: "/repo", format: "markdown", since: "2026-04-31" }],
     ["numeric since", { repoPath: "/repo", format: "markdown", since: 1 }],
     ["all false", { repoPath: "/repo", format: "markdown", all: false }],
     ["relative out", { repoPath: "/repo", format: "markdown", out: "report.md" }],
@@ -1031,6 +1032,9 @@ describe("learn.report and learn.mark", () => {
     ["unknown key", { repoPath: "/repo", cursor: "2026-11-01T00:00:00Z", all: true }],
     ["missing cursor", { repoPath: "/repo" }],
     ["unreadable cursor", { repoPath: "/repo", cursor: "not a date" }],
+    ["impossible date cursor", { repoPath: "/repo", cursor: "2026-02-30T00:00:00Z" }],
+    ["impossible date-only cursor", { repoPath: "/repo", cursor: "2026-02-30" }],
+    ["impossible hour cursor", { repoPath: "/repo", cursor: "2026-02-01T24:30:00Z" }],
     ["relative repository", { repoPath: "repo", cursor: "2026-11-01T00:00:00Z" }]
   ])("rejects an invalid learn.mark request: %s", (_name, params) => {
     expectCode(frame(base("learn.mark", params)), "invalid_request");

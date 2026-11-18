@@ -834,9 +834,15 @@ function absolutePath(value: unknown, label: string): string {
 /** Reads an ISO 8601 timestamp and returns it in the UTC form storage writes. */
 function timestamp(value: unknown): string {
   const s = nonempty(value);
-  if (!/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(s)) return fail("Expected an ISO 8601 timestamp");
+  const date = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(s);
+  if (!date) return fail("Expected an ISO 8601 timestamp");
   const ms = Date.parse(s);
   if (Number.isNaN(ms)) return fail("Expected an ISO 8601 timestamp");
+  // Date.parse rolls impossible days over (2026-02-30 becomes March 2); reject them.
+  const [year, month, day] = date.slice(1).map(Number) as [number, number, number];
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day)
+    return fail("Expected an ISO 8601 timestamp");
   return new Date(ms).toISOString();
 }
 const count = (value: unknown): number => integer(value, 0, Number.MAX_SAFE_INTEGER);

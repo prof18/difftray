@@ -1175,6 +1175,79 @@ describe("LearnHistoryService repository replacement", () => {
     expect(storage.getProjectRepositoryKey(clone)?.commonGitDirSince).toBeNull();
   });
 
+  it("cuts off a leftover linked worktree directory that no longer resolves after a clone replacement", async () => {
+    const origin = initRepo();
+    const unrelatedOrigin = initRepo(tempDir(), "unrelated");
+    const clone = path.join(tempDir(), "clone");
+    execFileSync("git", ["clone", "--quiet", origin, clone]);
+    const { storage } = openFixture();
+    const project = register(storage, clone);
+    await addLine(storage, project, { body: "old clone", stale: true });
+    const linked = addWorktree(clone, "old-wt");
+    const linkedProject = register(storage, linked);
+    await addLine(storage, linkedProject, { body: "old linked", stale: true });
+    const first = await collector(storage).collect({ repoPath: clone });
+    expect(bodies(first)).toEqual(["old clone", "old linked"]);
+    // Replacing the main clone drops the linked worktree's metadata but leaves its
+    // directory behind.
+    rmSync(clone, { force: true, recursive: true });
+    execFileSync("git", ["clone", "--quiet", unrelatedOrigin, clone]);
+    await expect(defaultLearnHistoryGit.pathExists(linked)).resolves.toBe(true);
+    await expect(defaultLearnHistoryGit.resolveWorktree(linked)).rejects.toThrow();
+
+    const replaced = await collector(storage).collect({ repoPath: clone });
+
+    expect(replaced.commonGitDir).toBe(first.commonGitDir);
+    expect(bodies(replaced)).toEqual([]);
+    expect(storage.getProjectRepositoryKey(linked)?.commonGitDirSince).not.toBeNull();
+  });
+
+  it("keeps a removed worktree whose stored root still exists but is not the current root", async () => {
+    const root = initRepo();
+    const mainRoot = git(root, "rev-parse", "HEAD");
+    git(root, "checkout", "--quiet", "--orphan", "other-root");
+    git(root, "rm", "-rf", "--quiet", ".");
+    write(root, "other.txt", "other\n");
+    const otherRoot = commitAll(root, "other root");
+    git(root, "checkout", "--quiet", "main");
+    const linked = addWorktree(root, "feature");
+    const { storage } = openFixture();
+    register(storage, root);
+    const project = register(storage, linked);
+    await addLine(storage, project, { body: "removed kept", stale: true });
+    const first = await collector(storage).collect({ repoPath: root });
+    const requestedRoot = storage.getProjectRepositoryKey(root)?.repositoryRootCommit;
+    expect(requestedRoot).toBe([mainRoot, otherRoot].sort()[0]);
+    const differentRoot = requestedRoot === mainRoot ? otherRoot : mainRoot;
+    storage.setProjectCommonGitDir(linked, first.commonGitDir, null, differentRoot);
+    git(root, "worktree", "remove", "--force", linked);
+
+    const result = await collector(storage).collect({ repoPath: root });
+
+    expect(bodies(result)).toEqual(["removed kept"]);
+  });
+
+  it("drops a removed worktree whose stored root is not a commit of the repository", async () => {
+    const root = initRepo();
+    const linked = addWorktree(root, "feature");
+    const { storage } = openFixture();
+    register(storage, root);
+    const project = register(storage, linked);
+    await addLine(storage, project, { body: "foreign", stale: true });
+    const first = await collector(storage).collect({ repoPath: root });
+    storage.setProjectCommonGitDir(
+      linked,
+      first.commonGitDir,
+      null,
+      "3333333333333333333333333333333333333333"
+    );
+    git(root, "worktree", "remove", "--force", linked);
+
+    const result = await collector(storage).collect({ repoPath: root });
+
+    expect(bodies(result)).toEqual([]);
+  });
+
   it("does not treat a branch with unrelated history as a replacement", async () => {
     const root = initRepo();
     const { storage } = openFixture();
