@@ -68,7 +68,7 @@ const submission: FeedbackSubmission = {
     { kind: "overall", expectedNoteVersion: "absent", body: "Overall" }
   ]
 };
-function fixture() {
+function fixture(activeContext: AgentReviewContext = context) {
   const events: string[] = [];
   const lookup = vi.fn(
     (key: Parameters<DifftrayStorage["findAgentFeedbackReceipt"]>[0]) => {
@@ -100,7 +100,7 @@ function fixture() {
         read: (c: AgentReviewContext) => Promise<T>
       ) => {
         events.push("before");
-        const result = await read(context);
+        const result = await read(activeContext);
         events.push("after");
         return result;
       }
@@ -273,6 +273,45 @@ it("loads one diff per path for file and line items", async () => {
   const stored = appliedExcerpts(f);
   expect(stored.slice(0, 10).every((excerpt) => excerpt?.kind === "patch")).toBe(true);
   expect(stored[10]?.kind).toBe("lines");
+});
+it("reads file excerpts with bounded concurrency", async () => {
+  const paths = Array.from({ length: 12 }, (_, index) => `file-${String(index)}`);
+  const f = fixture({
+    ...context,
+    files: paths.map((filePath) => ({
+      path: filePath,
+      diffHash: `${filePath}-hash`,
+      kind: "text" as const,
+      visible: true
+    }))
+  });
+  let inFlight = 0;
+  let maxInFlight = 0;
+  f.excerpts.fileDiff.mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+    return { content: { kind: "text" as const, patch: "@@ -1 +1 @@\n-a\n+b\n" } };
+  });
+
+  await f.service.submit({
+    contextId: context.id,
+    submission: {
+      ...submission,
+      items: paths.map((filePath) => ({
+        kind: "file" as const,
+        path: filePath,
+        diffHash: `${filePath}-hash`,
+        body: filePath
+      }))
+    }
+  });
+
+  expect(f.excerpts.fileDiff).toHaveBeenCalledTimes(12);
+  expect(maxInFlight).toBeGreaterThan(1);
+  expect(maxInFlight).toBeLessThanOrEqual(4);
+  expect(appliedExcerpts(f).every((excerpt) => excerpt?.kind === "patch")).toBe(true);
 });
 it("stores null excerpts for failed excerpt reads and still writes the batch", async () => {
   const f = fixture();

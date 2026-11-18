@@ -109,6 +109,23 @@ async function loadBoundFileDiff(context: AgentReviewContext, listed: AgentConte
     );
   return loaded;
 }
+const EXCERPT_READ_CONCURRENCY = 4;
+
+function concurrencyLimit(limit: number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(run: () => Promise<T>): Promise<T> => {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active += 1;
+    try {
+      return await run();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
+}
+
 // Excerpts are best effort: a failed read stores null and never fails the batch.
 async function itemExcerpts(
   context: AgentReviewContext,
@@ -118,6 +135,8 @@ async function itemExcerpts(
 ): Promise<(string | null)[]> {
   const manifest = new Map(context.files.map((file) => [file.path, file]));
   const fileReads = new Map<string, Promise<string | null>>();
+  // A batch can name up to MAX_BATCH_ITEMS files; each read runs several Git commands.
+  const limited = concurrencyLimit(EXCERPT_READ_CONCURRENCY);
   let overallRead: Promise<string | null> | undefined;
   const patchFor = (listed: AgentContextFile) => {
     const key = `${listed.path}\0${listed.diffHash}`;
@@ -127,11 +146,9 @@ async function itemExcerpts(
       read = (
         anchored
           ? anchored.then((file) => patchExcerptJson(file.content))
-          : excerpts
-              .fileDiff(context, listed)
-              .then((diff) =>
-                diff && !diff.oversized ? patchExcerptJson(diff.content) : null
-              )
+          : limited(() => excerpts.fileDiff(context, listed)).then((diff) =>
+              diff && !diff.oversized ? patchExcerptJson(diff.content) : null
+            )
       ).catch(() => null);
       fileReads.set(key, read);
     }
