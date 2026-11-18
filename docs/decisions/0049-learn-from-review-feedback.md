@@ -107,6 +107,11 @@ Negative:
   repository's feedback from reports.
 - A replacement made before this feature cannot be detected: projects backfilled
   with their current common Git directory have no stored root commit to compare.
+- A repository replaced at the same path while its tab stays open is detected only
+  at the next open, inspect or report. Comments saved in the new repository before
+  that stay in Difftray but never appear in learn reports, not even with `--all`.
+  This is accepted as a rare edge case; checking identity on every save would cost
+  more than it saves.
 - A note an agent wrote shows as human after the user dismisses or edits it,
   because notes record only their last editor.
 - An excerpt can show intermediate text when a file is edited and changed back
