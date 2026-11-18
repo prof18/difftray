@@ -2,12 +2,15 @@ import type { DatabaseSync } from "node:sqlite";
 
 import {
   type ProjectRecord,
+  type ProjectRepositoryKey,
   type ReviewTargetRecord,
+  type StoredProjectWithRepositoryKey,
   type StoredProjectRecord,
   type StoredReviewTargetRecord
 } from "./records.js";
 import {
   projectFromRow,
+  projectRepositoryKeyFromRow,
   reviewTargetFromRow,
   type ProjectRow,
   type ReviewTargetRow
@@ -152,6 +155,55 @@ export function listRecentProjects(db: DatabaseSync): readonly StoredProjectReco
           updated_at desc
       `
     )
+    .all();
+
+  return rows.map((row) => projectFromRow(row as ProjectRow));
+}
+
+export function setProjectCommonGitDir(
+  db: DatabaseSync,
+  projectId: string,
+  commonGitDir: string,
+  since: string | null,
+  rootCommit: string | null
+): void {
+  db.prepare(
+    `
+      update projects
+      set common_git_dir = ?, common_git_dir_since = ?, repository_root_commit = ?
+      where id = ?
+    `
+  ).run(commonGitDir, since, rootCommit, projectId);
+}
+
+export function getProjectRepositoryKey(
+  db: DatabaseSync,
+  projectId: string
+): ProjectRepositoryKey | null {
+  const row = db.prepare("select * from projects where id = ?").get(projectId);
+
+  return row ? projectRepositoryKeyFromRow(row as ProjectRow) : null;
+}
+
+export function listProjectsByCommonGitDir(
+  db: DatabaseSync,
+  commonGitDir: string
+): readonly StoredProjectWithRepositoryKey[] {
+  const rows = db
+    .prepare("select * from projects where common_git_dir = ? order by id")
+    .all(commonGitDir);
+
+  return rows.map((row) => ({
+    ...projectFromRow(row as ProjectRow),
+    ...projectRepositoryKeyFromRow(row as ProjectRow)
+  }));
+}
+
+export function listProjectsMissingCommonGitDir(
+  db: DatabaseSync
+): readonly StoredProjectRecord[] {
+  const rows = db
+    .prepare("select * from projects where common_git_dir is null order by id")
     .all();
 
   return rows.map((row) => projectFromRow(row as ProjectRow));

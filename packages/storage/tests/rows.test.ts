@@ -155,6 +155,7 @@ describe("storage row mappers", () => {
       lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       diffHash: "hash-a",
+      excerptJson: null,
       id: "comment-1",
       lineEnd: 12,
       lineStart: 10,
@@ -189,6 +190,7 @@ describe("file comment and review note row mappers", () => {
       lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
       diffHash: "hash-a",
+      excerptJson: null,
       id: "file-comment-1",
       path: "src/app.ts",
       projectId: "project-1",
@@ -215,6 +217,7 @@ describe("file comment and review note row mappers", () => {
       body: "Overall.",
       lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
+      excerptJson: null,
       projectId: "project-1",
       scopeId: "scope-1",
       updatedAt: "2026-01-02T00:00:00.000Z"

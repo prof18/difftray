@@ -31,6 +31,7 @@ export type AgentBatchItem =
       readonly lineStart: number;
       readonly lineEnd: number;
       readonly body: string;
+      readonly excerptJson?: string | null;
     }
   | {
       readonly kind: "file";
@@ -38,11 +39,13 @@ export type AgentBatchItem =
       readonly previousPath?: string;
       readonly diffHash: string;
       readonly body: string;
+      readonly excerptJson?: string | null;
     }
   | {
       readonly kind: "overall";
       readonly body: string;
       readonly expectedNoteVersion: string;
+      readonly excerptJson?: string | null;
     };
 export type AgentFeedbackBatch = AgentReceiptKey & {
   readonly projectId: string;
@@ -129,7 +132,8 @@ export function applyAgentFeedbackBatch(
           projectId: input.projectId,
           scopeId: input.noteScopeId,
           body: item.body,
-          actor: input.actor
+          actor: input.actor,
+          excerptJson: item.excerptJson ?? null
         });
         itemIds.push(input.noteScopeId);
       } else {

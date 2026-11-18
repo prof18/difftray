@@ -247,6 +247,12 @@ export function runMigrations(db: DatabaseSync): void {
     create index if not exists worktree_labels_path
       on worktree_labels(worktree_path);
 
+    create table if not exists repository_learn_cursors (
+      common_git_dir text primary key,
+      cursor_at text not null,
+      updated_at text not null
+    );
+
     insert or ignore into repository_catalog_roots (
       repository_id, root_id, last_seen_at, available
     )
@@ -302,6 +308,16 @@ export function runMigrations(db: DatabaseSync): void {
     create index if not exists review_marks_lineage_path_idx
       on review_marks(lineage_id, path)
   `);
+  ensureColumn(db, "review_comments", "excerpt_json", "text");
+  ensureColumn(db, "review_file_comments", "excerpt_json", "text");
+  ensureColumn(db, "review_notes", "excerpt_json", "text");
+  ensureColumn(db, "review_notes", "body_saved_at", "text");
+  ensureProjectColumn(db, "common_git_dir", "text");
+  ensureProjectColumn(db, "common_git_dir_since", "text");
+  ensureProjectColumn(db, "repository_root_commit", "text");
+  db.exec(
+    "create index if not exists projects_common_git_dir_idx on projects(common_git_dir)"
+  );
   ensureProjectSettingsColumn(db, "file_list_width", "integer not null default 340");
   ensureProjectSettingsColumn(db, "file_list_collapsed", "integer not null default 0");
   ensureProjectSettingsColumn(db, "default_diff_mode", "text not null default 'split'");

@@ -1,4 +1,4 @@
-import type { FeedbackActor } from "./records.js";
+import type { FeedbackActor, ProjectRepositoryKey } from "./records.js";
 import { clampFileListWidth, type ProjectSettingsRecord } from "./settings.js";
 import type {
   ReviewCommentRecord,
@@ -11,6 +11,8 @@ import type {
 } from "./index.js";
 
 export type ProjectRow = {
+  readonly common_git_dir?: null | string;
+  readonly common_git_dir_since?: null | string;
   readonly created_at: string;
   readonly default_base_ref: null | string;
   readonly default_commit_ref: null | string;
@@ -21,6 +23,7 @@ export type ProjectRow = {
   readonly path: string;
   readonly repository_name: null | string;
   readonly worktree_name: null | string;
+  readonly repository_root_commit?: null | string;
   readonly updated_at: string;
 };
 
@@ -69,6 +72,7 @@ export type ReviewCommentRow = {
   readonly body: string;
   readonly created_at: string;
   readonly diff_hash: string;
+  readonly excerpt_json?: null | string;
   readonly id: string;
   readonly line_end: number;
   readonly line_start: number;
@@ -86,6 +90,7 @@ export type ReviewFileCommentRow = {
   readonly body: string;
   readonly created_at: string;
   readonly diff_hash: string;
+  readonly excerpt_json?: null | string;
   readonly id: string;
   readonly path: string;
   readonly previous_path: null | string;
@@ -99,6 +104,7 @@ export type ReviewNoteRow = {
   readonly body: string;
   readonly created_at: string;
   readonly dismissed_at: null | string;
+  readonly excerpt_json?: null | string;
   readonly project_id: string;
   readonly scope_id: string;
   readonly updated_at: string;
@@ -117,6 +123,14 @@ export function projectFromRow(row: ProjectRow): StoredProjectRecord {
     ...(row.repository_name ? { repositoryName: row.repository_name } : {}),
     ...(row.worktree_name ? { worktreeName: row.worktree_name } : {}),
     updatedAt: row.updated_at
+  };
+}
+
+export function projectRepositoryKeyFromRow(row: ProjectRow): ProjectRepositoryKey {
+  return {
+    commonGitDir: row.common_git_dir ?? null,
+    commonGitDirSince: row.common_git_dir_since ?? null,
+    repositoryRootCommit: row.repository_root_commit ?? null
   };
 }
 
@@ -165,6 +179,7 @@ export function reviewCommentFromRow(row: ReviewCommentRow): ReviewCommentRecord
     body: row.body,
     createdAt: row.created_at,
     diffHash: row.diff_hash,
+    excerptJson: row.excerpt_json ?? null,
     id: row.id,
     lineEnd: row.line_end,
     lineStart: row.line_start,
@@ -186,6 +201,7 @@ export function reviewFileCommentFromRow(
     body: row.body,
     createdAt: row.created_at,
     diffHash: row.diff_hash,
+    excerptJson: row.excerpt_json ?? null,
     id: row.id,
     path: row.path,
     ...(row.previous_path ? { previousPath: row.previous_path } : {}),
@@ -201,6 +217,7 @@ export function reviewNoteFromRow(row: ReviewNoteRow): ReviewNoteRecord {
     body: row.body,
     createdAt: row.created_at,
     ...(row.dismissed_at ? { dismissedAt: row.dismissed_at } : {}),
+    excerptJson: row.excerpt_json ?? null,
     projectId: row.project_id,
     scopeId: row.scope_id,
     updatedAt: row.updated_at

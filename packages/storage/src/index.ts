@@ -47,14 +47,20 @@ import {
   clearProjectWorktreeIdentity,
   deleteProject,
   getProject,
+  getProjectRepositoryKey,
   getReviewTarget,
+  listProjectsByCommonGitDir,
+  listProjectsMissingCommonGitDir,
   listRecentProjects,
+  setProjectCommonGitDir,
   updateProjectDefaultDiffTarget,
   upsertProject,
   upsertReviewTarget
 } from "./project-store.js";
 import {
   type ProjectRecord,
+  type ProjectRepositoryKey,
+  type StoredProjectWithRepositoryKey,
   type ReviewTargetRecord,
   type StoredProjectRecord,
   type StoredReviewTargetRecord,
@@ -100,6 +106,13 @@ import {
   updateReviewFileComment
 } from "./review-store.js";
 import { runMigrations } from "./schema.js";
+import {
+  advanceLearnCursor,
+  deleteLearnCursor,
+  deleteOrphanedLearnCursor,
+  getLearnCursor,
+  type AdvanceLearnCursorResult
+} from "./learn-cursor-store.js";
 import {
   getWorktreeLabel,
   listWorktreeLabels,
@@ -159,6 +172,7 @@ export {
   type CreateReviewCommentInput,
   type CreateReviewFileCommentInput,
   type ProjectRecord,
+  type ProjectRepositoryKey,
   type ReviewCommentRecord,
   type ReviewCommentSide,
   type ReviewFileCommentRecord,
@@ -168,6 +182,7 @@ export {
   type ReviewTargetRecord,
   type SaveReviewNoteInput,
   type StoredProjectRecord,
+  type StoredProjectWithRepositoryKey,
   type StoredReviewTargetRecord
 } from "./records.js";
 
@@ -190,6 +205,7 @@ export type {
   SetWorktreeLabelInput,
   WorktreeLabelRecord
 } from "./worktree-label-store.js";
+export type { AdvanceLearnCursorResult } from "./learn-cursor-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly contentFingerprint?: string;
@@ -230,6 +246,12 @@ export type VerifyAndUnmarkReviewedResult =
     };
 
 export type DifftrayStorage = {
+  readonly advanceLearnCursor: (
+    commonGitDir: string,
+    cursorAt: string
+  ) => AdvanceLearnCursorResult;
+  readonly deleteLearnCursor: (commonGitDir: string) => void;
+  readonly getLearnCursor: (commonGitDir: string) => string | null;
   readonly applyAgentFeedbackBatch: (input: AgentFeedbackBatch) => AgentFeedbackReceipt;
   readonly findAgentFeedbackReceipt: (
     key: AgentReceiptKey
@@ -262,6 +284,7 @@ export type DifftrayStorage = {
   readonly getCompanionServerKeyPair: () => CompanionServerKeyPairRecord | null;
   readonly getProject: (id: string) => StoredProjectRecord | null;
   readonly getProjectByPath: (path: string) => StoredProjectRecord | null;
+  readonly getProjectRepositoryKey: (projectId: string) => ProjectRepositoryKey | null;
   readonly getProjectSettings: (projectId: string) => ProjectSettingsRecord;
   readonly getProjectTabOrder: () => readonly string[];
   readonly getReviewComment: (id: string) => ReviewCommentRecord | null;
@@ -279,6 +302,10 @@ export type DifftrayStorage = {
   ) => boolean;
   readonly listCompanionDevices: () => readonly CompanionDeviceRecord[];
   readonly listKnownProjects: () => readonly StoredProjectRecord[];
+  readonly listProjectsByCommonGitDir: (
+    commonGitDir: string
+  ) => readonly StoredProjectWithRepositoryKey[];
+  readonly listProjectsMissingCommonGitDir: () => readonly StoredProjectRecord[];
   readonly listOpenProjects: () => readonly StoredProjectRecord[];
   readonly listRepositoryCatalog: () => readonly RepositoryCatalogRecord[];
   readonly listRepositorySearchRoots: () => readonly RepositorySearchRootRecord[];
@@ -300,6 +327,12 @@ export type DifftrayStorage = {
   ) => readonly WorktreeLabelRecord[];
   readonly markReviewed: (input: ReviewMarkInput) => void;
   readonly saveReviewNote: (input: SaveReviewNoteInput) => ReviewNoteRecord;
+  readonly setProjectCommonGitDir: (
+    projectId: string,
+    commonGitDir: string,
+    since: string | null,
+    rootCommit: string | null
+  ) => void;
   readonly setReviewNoteDismissed: (
     scopeId: string,
     dismissed: boolean
@@ -362,6 +395,10 @@ export function openStorage(filename: string): DifftrayStorage {
   initializeProjectTabs(db, listRecentProjects(db));
 
   return {
+    advanceLearnCursor: (commonGitDir, cursorAt) =>
+      advanceLearnCursor(db, commonGitDir, cursorAt),
+    deleteLearnCursor: (commonGitDir) => deleteLearnCursor(db, commonGitDir),
+    getLearnCursor: (commonGitDir) => getLearnCursor(db, commonGitDir),
     listAgentFeedbackPage: (input) => listAgentFeedbackPage(db, input),
     createAgentReviewContext: (record, options) =>
       createAgentReviewContext(db, record, options),
@@ -394,6 +431,7 @@ export function openStorage(filename: string): DifftrayStorage {
     getCompanionServerKeyPair: () => getCompanionServerKeyPair(db),
     getProject: (id) => getProject(db, "id", id),
     getProjectByPath: (projectPath) => getProject(db, "path", projectPath),
+    getProjectRepositoryKey: (projectId) => getProjectRepositoryKey(db, projectId),
     getProjectSettings: (projectId) => getProjectSettings(db, projectId),
     getProjectTabOrder: () => getProjectTabOrder(db),
     getReviewComment: (id) => getReviewComment(db, id),
@@ -405,8 +443,10 @@ export function openStorage(filename: string): DifftrayStorage {
       db.exec("begin immediate");
 
       try {
+        const commonGitDir = getProjectRepositoryKey(db, id)?.commonGitDir ?? null;
         removeProjectFromTabOrder(db, id);
         deleteProject(db, id);
+        deleteOrphanedLearnCursor(db, commonGitDir);
         db.exec("commit");
       } catch (error) {
         db.exec("rollback");
@@ -420,6 +460,9 @@ export function openStorage(filename: string): DifftrayStorage {
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
     listCompanionDevices: () => listCompanionDevices(db),
     listKnownProjects: () => listRecentProjects(db),
+    listProjectsByCommonGitDir: (commonGitDir) =>
+      listProjectsByCommonGitDir(db, commonGitDir),
+    listProjectsMissingCommonGitDir: () => listProjectsMissingCommonGitDir(db),
     listOpenProjects: () =>
       applyProjectTabOrder(listRecentProjects(db), getProjectTabOrder(db)),
     listRepositoryCatalog: () => listRepositoryCatalog(db),
@@ -437,6 +480,8 @@ export function openStorage(filename: string): DifftrayStorage {
       markReviewed(db, input);
     },
     saveReviewNote: (input) => saveReviewNote(db, input),
+    setProjectCommonGitDir: (projectId, commonGitDir, since, rootCommit) =>
+      setProjectCommonGitDir(db, projectId, commonGitDir, since, rootCommit),
     setReviewNoteDismissed: (scopeId, dismissed) =>
       setReviewNoteDismissed(db, scopeId, dismissed),
     unmarkReviewed: (reviewTargetId, filePath, reviewedDiffHash) => {

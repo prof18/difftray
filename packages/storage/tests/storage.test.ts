@@ -1142,6 +1142,7 @@ describe("file comments and review notes", () => {
       body: "Split this module.",
       createdAt: expect.any(String),
       diffHash: "hash-a",
+      excerptJson: null,
       id: expect.any(String),
       path: "src/app.ts",
       previousPath: "src/old-app.ts",
@@ -1198,6 +1199,7 @@ describe("file comments and review notes", () => {
       body: "First pass.",
       lastEditedBy: { kind: "human" },
       createdAt: "2026-01-01T00:00:00.000Z",
+      excerptJson: null,
       projectId: project.id,
       scopeId: "scope-1",
       updatedAt: "2026-01-01T00:00:00.000Z"

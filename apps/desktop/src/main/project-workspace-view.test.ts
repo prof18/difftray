@@ -150,6 +150,7 @@ describe("project workspace views", () => {
       lastEditedBy: { kind: "human" as const },
       createdAt: "2026-01-01T00:00:00.000Z",
       dismissedAt: "2026-01-02T00:00:00.000Z",
+      excerptJson: null,
       projectId: "project-1",
       scopeId: createReviewNoteScopeId(reviewTarget),
       updatedAt: "2026-01-02T00:00:00.000Z"
@@ -254,6 +255,7 @@ function reviewCommentRecord(
     lastEditedBy: { kind: "human" as const },
     createdAt: "2026-01-01T00:00:00.000Z",
     diffHash: "hash-1",
+    excerptJson: null,
     id: "comment-1",
     lineEnd: 1,
     lineStart: 1,
@@ -280,6 +282,7 @@ function reviewFileCommentRecord(
     lastEditedBy: { kind: "human" as const },
     createdAt: "2026-01-01T00:00:00.000Z",
     diffHash: "hash-1",
+    excerptJson: null,
     id: "file-comment-1",
     path: "src/App.tsx",
     projectId: "project-1",

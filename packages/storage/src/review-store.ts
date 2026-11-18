@@ -212,8 +212,9 @@ export function createReviewComment(
       created_at,
       updated_at,
       created_by_json,
-      last_edited_by_json
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      last_edited_by_json,
+      excerpt_json
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   ).run(
     id,
@@ -229,7 +230,8 @@ export function createReviewComment(
     now,
     now,
     JSON.stringify(input.actor ?? { kind: "human" }),
-    JSON.stringify(input.actor ?? { kind: "human" })
+    JSON.stringify(input.actor ?? { kind: "human" }),
+    input.excerptJson ?? null
   );
 
   const comment = getReviewComment(db, id);
@@ -312,8 +314,9 @@ export function createReviewFileComment(
       created_at,
       updated_at,
       created_by_json,
-      last_edited_by_json
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      last_edited_by_json,
+      excerpt_json
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
   ).run(
     id,
@@ -326,7 +329,8 @@ export function createReviewFileComment(
     now,
     now,
     JSON.stringify(input.actor ?? { kind: "human" }),
-    JSON.stringify(input.actor ?? { kind: "human" })
+    JSON.stringify(input.actor ?? { kind: "human" }),
+    input.excerptJson ?? null
   );
 
   const comment = getReviewFileComment(db, id);
@@ -405,9 +409,11 @@ export function saveReviewNote(
   return withReviewNoteTransaction(db, () => {
     const existing = getReviewNote(db, input.scopeId);
     const actorJson = JSON.stringify(input.actor ?? { kind: "human" });
+    const excerptJson = input.excerptJson ?? null;
     if (
       existing?.body === input.body &&
       !existing.dismissedAt &&
+      existing.excerptJson === excerptJson &&
       JSON.stringify(existing.lastEditedBy) === actorJson
     )
       return existing;
@@ -422,15 +428,28 @@ export function saveReviewNote(
       dismissed_at,
       created_at,
       updated_at,
-      last_edited_by_json
-    ) values (?, ?, ?, null, ?, ?, ?)
+      last_edited_by_json,
+      excerpt_json,
+      body_saved_at
+    ) values (?, ?, ?, null, ?, ?, ?, ?, ?)
     on conflict(scope_id) do update set
       body = excluded.body,
       dismissed_at = null,
       updated_at = excluded.updated_at,
-      last_edited_by_json = excluded.last_edited_by_json
+      last_edited_by_json = excluded.last_edited_by_json,
+      excerpt_json = excluded.excerpt_json,
+      body_saved_at = excluded.body_saved_at
   `
-    ).run(input.scopeId, input.projectId, input.body, now, now, actorJson);
+    ).run(
+      input.scopeId,
+      input.projectId,
+      input.body,
+      now,
+      now,
+      actorJson,
+      excerptJson,
+      now
+    );
     incrementReviewNoteRevision(db, input.scopeId, input.projectId);
 
     const note = getReviewNote(db, input.scopeId);

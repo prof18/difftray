@@ -19,6 +19,14 @@ export type StoredProjectRecord = ProjectRecord & {
   readonly updatedAt: string;
 };
 
+export type ProjectRepositoryKey = {
+  readonly commonGitDir: string | null;
+  readonly commonGitDirSince: string | null;
+  readonly repositoryRootCommit: string | null;
+};
+
+export type StoredProjectWithRepositoryKey = StoredProjectRecord & ProjectRepositoryKey;
+
 export type ReviewTargetRecord = {
   readonly baseRefName?: string;
   readonly baseRefSha?: string;
@@ -64,6 +72,7 @@ export type CreateReviewCommentInput = {
   readonly actor?: FeedbackActor;
   readonly body: string;
   readonly diffHash: string;
+  readonly excerptJson?: string | null;
   readonly lineEnd: number;
   readonly lineStart: number;
   readonly path: string;
@@ -73,8 +82,12 @@ export type CreateReviewCommentInput = {
   readonly side: ReviewCommentSide;
 };
 
-export type ReviewCommentRecord = Omit<CreateReviewCommentInput, "actor"> & {
+export type ReviewCommentRecord = Omit<
+  CreateReviewCommentInput,
+  "actor" | "excerptJson"
+> & {
   readonly createdBy: FeedbackActor;
+  readonly excerptJson: string | null;
   readonly lastEditedBy: FeedbackActor;
   readonly createdAt: string;
   readonly id: string;
@@ -85,14 +98,19 @@ export type CreateReviewFileCommentInput = {
   readonly actor?: FeedbackActor;
   readonly body: string;
   readonly diffHash: string;
+  readonly excerptJson?: string | null;
   readonly path: string;
   readonly previousPath?: string;
   readonly projectId: string;
   readonly reviewTargetId: string;
 };
 
-export type ReviewFileCommentRecord = Omit<CreateReviewFileCommentInput, "actor"> & {
+export type ReviewFileCommentRecord = Omit<
+  CreateReviewFileCommentInput,
+  "actor" | "excerptJson"
+> & {
   readonly createdBy: FeedbackActor;
+  readonly excerptJson: string | null;
   readonly lastEditedBy: FeedbackActor;
   readonly createdAt: string;
   readonly id: string;
@@ -102,6 +120,7 @@ export type ReviewFileCommentRecord = Omit<CreateReviewFileCommentInput, "actor"
 export type SaveReviewNoteInput = {
   readonly actor?: FeedbackActor;
   readonly body: string;
+  readonly excerptJson?: string | null;
   readonly projectId: string;
   readonly scopeId: string;
 };
@@ -111,6 +130,7 @@ export type ReviewNoteRecord = {
   readonly body: string;
   readonly createdAt: string;
   readonly dismissedAt?: string;
+  readonly excerptJson: string | null;
   readonly projectId: string;
   readonly scopeId: string;
   readonly updatedAt: string;
