@@ -78,6 +78,38 @@ describe("repository open service", () => {
     );
   });
 
+  it("refreshes the project's repository key after registering it, without awaiting it", async () => {
+    const calls: string[] = [];
+    const refreshProjectRepository = vi.fn(() => {
+      calls.push("refresh");
+      return new Promise<void>(() => undefined);
+    });
+    const dependencies = createDependencies({ refreshProjectRepository });
+    dependencies.registerProject.mockImplementation(() => calls.push("register"));
+    const service = createRepositoryOpenService(dependencies);
+
+    const result = await service.openPaths(["/workspace/difftray"]);
+
+    expect(result.projects).toHaveLength(1);
+    expect(refreshProjectRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "/workspace/difftray", path: "/workspace/difftray" })
+    );
+    expect(calls.slice(0, 2)).toEqual(["register", "refresh"]);
+  });
+
+  it("ignores a failed repository key refresh", async () => {
+    const dependencies = createDependencies({
+      refreshProjectRepository: vi.fn(async () => {
+        throw new Error("git failed");
+      })
+    });
+    const service = createRepositoryOpenService(dependencies);
+
+    await expect(service.openPaths(["/workspace/difftray"])).resolves.toMatchObject({
+      failures: []
+    });
+  });
+
   it("rejects an open when current Git metadata cannot classify the worktree", async () => {
     const dependencies = createDependencies({
       isLinkedWorktree: vi.fn(async () => {
@@ -186,6 +218,7 @@ function createDependencies(
     isLinkedWorktree: vi.fn(async () => false),
     isProjectOpen: () => false,
     now: () => new Date("2026-08-10T12:00:00.000Z"),
+    refreshProjectRepository: vi.fn(async () => undefined),
     registerProject: vi.fn<(project: ProjectRecord) => void>(),
     ...overrides
   };

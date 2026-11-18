@@ -183,6 +183,8 @@ export function createReviewContextService(
     readonly now?: () => number;
     readonly ttl?: number;
     readonly maxContexts?: number;
+    // Runs in the background after the project row is stored; never awaited.
+    readonly refreshProjectRepository?: (project: StoredProjectRecord) => Promise<void>;
   } = {}
 ) {
   const now = options.now ?? Date.now;
@@ -243,6 +245,7 @@ export function createReviewContextService(
     }
     if (!project)
       throw new AgentProtocolError("internal_error", "Unable to register repository.");
+    void options.refreshProjectRepository?.(project).catch(() => undefined);
     const selector =
       requested.kind === "selected" ? selectedReviewSelector(project) : requested;
     const showGeneratedFiles = storage.getAppSettings().showGeneratedFiles;

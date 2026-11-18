@@ -114,6 +114,12 @@ import {
   type AdvanceLearnCursorResult
 } from "./learn-cursor-store.js";
 import {
+  listLearnHistoryRows,
+  listLearnReviewTargets,
+  type LearnHistoryQueryInput,
+  type LearnHistoryRows
+} from "./learn-history-store.js";
+import {
   getWorktreeLabel,
   listWorktreeLabels,
   resetWorktreeLabel,
@@ -206,6 +212,12 @@ export type {
   WorktreeLabelRecord
 } from "./worktree-label-store.js";
 export type { AdvanceLearnCursorResult } from "./learn-cursor-store.js";
+export type {
+  LearnHistoryProjectInput,
+  LearnHistoryQueryInput,
+  LearnHistoryRow,
+  LearnHistoryRows
+} from "./learn-history-store.js";
 
 export type VerifyAndMarkReviewedInput = {
   readonly contentFingerprint?: string;
@@ -302,6 +314,10 @@ export type DifftrayStorage = {
   ) => boolean;
   readonly listCompanionDevices: () => readonly CompanionDeviceRecord[];
   readonly listKnownProjects: () => readonly StoredProjectRecord[];
+  readonly listLearnHistoryRows: (input: LearnHistoryQueryInput) => LearnHistoryRows;
+  readonly listLearnReviewTargets: (
+    projectId: string
+  ) => readonly StoredReviewTargetRecord[];
   readonly listProjectsByCommonGitDir: (
     commonGitDir: string
   ) => readonly StoredProjectWithRepositoryKey[];
@@ -460,6 +476,8 @@ export function openStorage(filename: string): DifftrayStorage {
       isReviewed(db, reviewTargetId, filePath, currentDiffHash),
     listCompanionDevices: () => listCompanionDevices(db),
     listKnownProjects: () => listRecentProjects(db),
+    listLearnHistoryRows: (input) => listLearnHistoryRows(db, input),
+    listLearnReviewTargets: (projectId) => listLearnReviewTargets(db, projectId),
     listProjectsByCommonGitDir: (commonGitDir) =>
       listProjectsByCommonGitDir(db, commonGitDir),
     listProjectsMissingCommonGitDir: () => listProjectsMissingCommonGitDir(db),

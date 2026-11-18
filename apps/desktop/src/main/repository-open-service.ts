@@ -11,6 +11,8 @@ export type RepositoryOpenServiceDependencies = {
   readonly now: () => Date;
   readonly clearProjectWorktreeIdentity: (projectId: string) => void;
   readonly registerProject: (project: ProjectRecord) => void;
+  // Runs in the background: an open never waits for it or fails because of it.
+  readonly refreshProjectRepository: (project: ProjectRecord) => Promise<void>;
 };
 
 export type RepositoryOpenDuplicate = {
@@ -94,6 +96,7 @@ export function createRepositoryOpenService(
         } satisfies ProjectRecord;
 
         dependencies.registerProject(project);
+        void dependencies.refreshProjectRepository(project).catch(() => undefined);
         if (!isLinkedWorktree) {
           dependencies.clearProjectWorktreeIdentity(project.id);
         }

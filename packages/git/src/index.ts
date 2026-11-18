@@ -31,6 +31,16 @@ import {
 } from "./git-diff-content.js";
 
 export {
+  commitExists,
+  firstCommitTouchingPathSince,
+  listPathCommits,
+  readFileAtRef,
+  readPatchBetween,
+  readRootCommit,
+  type PathCommit
+} from "./file-at-ref.js";
+
+export {
   loadRasterImageSnapshot,
   rasterImageSnapshotWithinSizeLimit,
   maxRasterImageBytes,

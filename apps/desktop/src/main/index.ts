@@ -10,6 +10,7 @@ import {
 } from "./agent-app-lifecycle.js";
 import { startAgentControlServer } from "./agent-control-server.js";
 import { createAgentReviewService } from "./agent-review-service.js";
+import { refreshProjectRepository } from "./learn-history-service.js";
 import { createAgentExportService } from "./agent-export-service.js";
 import { createAgentFeedbackService } from "./agent-feedback-service.js";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../shared/agent-protocol.js";
 import { formatExplicitReviewReport } from "./review-feedback-service.js";
 import {
+  createReviewContextService,
   loadExplicitReviewState,
   loadExplicitReviewTarget,
   loadExplicitFileDiff,
@@ -1808,7 +1810,12 @@ const servicesReady = app.whenReady().then(async () => {
     flavor: runtime.flavor,
     executablePath: realpathSync(process.execPath)
   };
-  const agentReads = createAgentReviewService(getStorage());
+  const agentReads = createAgentReviewService(
+    getStorage(),
+    createReviewContextService(getStorage(), {
+      refreshProjectRepository: refreshStoredProjectRepository
+    })
+  );
   const agentExports = createAgentExportService(getStorage(), {
     contexts: agentReads.contexts
   });
@@ -3077,8 +3084,16 @@ function openRepositoryPaths(
     now: () => new Date(),
     clearProjectWorktreeIdentity: (projectId) =>
       getStorage().clearProjectWorktreeIdentity(projectId),
-    registerProject: upsertOpenedProject
+    registerProject: upsertOpenedProject,
+    refreshProjectRepository: refreshStoredProjectRepository
   }).openPaths(selectedPaths);
+}
+
+function refreshStoredProjectRepository(project: {
+  readonly id: string;
+  readonly path: string;
+}): Promise<void> {
+  return refreshProjectRepository({ storage: getStorage() }, project);
 }
 
 async function previewDroppedRepositoryPaths(droppedPaths: readonly string[]): Promise<

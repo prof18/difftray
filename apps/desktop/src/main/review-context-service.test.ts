@@ -58,6 +58,26 @@ describe("explicit review contexts", () => {
     expect((await service.validate(first.id)).snapshotHash).toBe(first.snapshotHash);
     expect(first.selector).toEqual({ kind: "working-tree" });
   });
+  it("refreshes the inspected project's repository key without awaiting it", async () => {
+    const { root, store } = fixture();
+    const refreshed: string[] = [];
+    const service = createReviewContextService(store, {
+      refreshProjectRepository: (project) => {
+        refreshed.push(project.id);
+        return new Promise<void>(() => undefined);
+      }
+    });
+    const failing = createReviewContextService(store, {
+      refreshProjectRepository: async () => {
+        throw new Error("git failed");
+      }
+    });
+
+    const context = await service.inspect(root, { kind: "working-tree" });
+    await failing.inspect(root, { kind: "working-tree" });
+
+    expect(refreshed).toEqual([context.projectId]);
+  });
   it("rejects content, HEAD and base-ref movement, including untracked files", async () => {
     const { root, service } = fixture();
     writeFileSync(path.join(root, "new.txt"), "one\n");

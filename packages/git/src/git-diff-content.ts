@@ -374,7 +374,7 @@ async function loadTextSnapshots(
   };
 }
 
-async function readCommittedTextSnapshot(
+export async function readCommittedTextSnapshot(
   repoPath: string,
   ref: string,
   relativePath: string
