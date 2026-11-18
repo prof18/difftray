@@ -1,10 +1,11 @@
-import type {
-  FileDiff,
-  FileReviewState,
-  ReviewCommentReportContext,
-  ReviewCommentReportTarget,
-  ReviewProgress,
-  ReviewTarget
+import {
+  buildLineExcerpt,
+  type FileDiff,
+  type FileReviewState,
+  type ReviewCommentReportContext,
+  type ReviewCommentReportTarget,
+  type ReviewProgress,
+  type ReviewTarget
 } from "@difftray/core";
 import type {
   ProjectReviewSummaryView,
@@ -409,37 +410,17 @@ export function commentReportContext(
     return undefined;
   }
 
-  const lines = textLines(text);
+  // Unlimited sizes keep the agent report output identical to before excerpts existed.
+  const excerpt = buildLineExcerpt({
+    lineEnd: comment.lineEnd,
+    lineStart: comment.lineStart,
+    maxLineChars: Number.POSITIVE_INFINITY,
+    maxLines: Number.POSITIVE_INFINITY,
+    side: comment.side,
+    text
+  });
 
-  if (comment.lineStart > lines.length) {
-    return undefined;
-  }
-
-  const contextRadius = 3;
-  const lineStart = Math.max(1, comment.lineStart - contextRadius);
-  const lineEnd = Math.min(lines.length, comment.lineEnd + contextRadius);
-
-  return {
-    lines: Array.from({ length: lineEnd - lineStart + 1 }, (_, index) => {
-      const lineNumber = lineStart + index;
-
-      return {
-        kind:
-          lineNumber >= comment.lineStart && lineNumber <= comment.lineEnd
-            ? "commented"
-            : "context",
-        lineNumber,
-        text: lines[lineNumber - 1] ?? ""
-      };
-    }),
-    side: comment.side
-  };
-}
-
-function textLines(text: string): readonly string[] {
-  const lines = text.split("\n");
-
-  return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
+  return excerpt ? { lines: excerpt.lines, side: comment.side } : undefined;
 }
 
 export function projectReviewSummaryView(

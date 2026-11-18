@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openStorage, type DifftrayStorage } from "@difftray/storage";
 import {
   createReviewContextService,
-  loadExplicitReviewState
+  loadExplicitReviewState,
+  loadTargetSummaries
 } from "./review-context-service.js";
 import { reviewMarkLineageFields } from "./review-mark-lineage.js";
 
@@ -314,5 +315,39 @@ describe("review progress across history rewrites", () => {
         reviewed: false
       });
     }
+  });
+});
+
+describe("loadTargetSummaries", () => {
+  it("returns the target and file summaries with counts without touching storage", async () => {
+    const { root } = fixture();
+    writeFileSync(path.join(root, "file.txt"), "changed\nsecond\n");
+    writeFileSync(path.join(root, "new.txt"), "one\ntwo\nthree\n");
+
+    const workingTree = await loadTargetSummaries(root, { kind: "working-tree" });
+    expect(workingTree.reviewTarget).toMatchObject({
+      kind: "working_tree",
+      projectId: root,
+      headRefName: "main"
+    });
+    expect(
+      workingTree.files.map(({ newPath, additions, deletions }) => ({
+        newPath,
+        additions,
+        deletions
+      }))
+    ).toEqual([
+      { newPath: "file.txt", additions: 2, deletions: 1 },
+      { newPath: "new.txt", additions: 3, deletions: 0 }
+    ]);
+
+    git(root, "add", ".");
+    git(root, "commit", "-m", "second");
+    const commit = await loadTargetSummaries(root, { kind: "commit", commit: "HEAD" });
+    expect(commit.reviewTarget.kind).toBe("commit");
+    expect(commit.files.map((file) => file.newPath)).toEqual(["file.txt", "new.txt"]);
+    const branch = await loadTargetSummaries(root, { kind: "branch", base: "HEAD~1" });
+    expect(branch.reviewTarget.kind).toBe("branch");
+    expect(branch.files).toHaveLength(2);
   });
 });

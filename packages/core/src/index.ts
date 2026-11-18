@@ -16,6 +16,24 @@ export {
   type InstalledEditorPresetInput
 } from "./editor-presets.js";
 export {
+  EXCERPT_CONTEXT_LINES,
+  EXCERPT_MAX_LINE_CHARS,
+  EXCERPT_MAX_LINES,
+  EXCERPT_VERSION,
+  NOTE_EXCERPT_MAX_PATHS,
+  buildFilesExcerpt,
+  buildLineExcerpt,
+  buildPatchExcerpt,
+  learnExcerptSources,
+  learnStatuses,
+  parseFeedbackExcerpt,
+  type BuildLineExcerptInput,
+  type FeedbackExcerpt,
+  type FeedbackExcerptFile,
+  type LearnExcerptSource,
+  type LearnStatus
+} from "./feedback-excerpt.js";
+export {
   defaultRepositoryDiscoveryExclusions,
   isPathInsideApprovedRoot,
   shouldTraverseRepositoryDirectory

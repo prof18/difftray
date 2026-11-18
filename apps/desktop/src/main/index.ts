@@ -23,8 +23,14 @@ import {
   loadExplicitReviewTarget,
   loadExplicitFileDiff,
   loadExplicitFileSummary,
+  loadTargetSummaries,
   selectedReviewSelector
 } from "./review-context-service.js";
+import {
+  captureCommentExcerpt,
+  captureFileCommentExcerpt,
+  captureNoteExcerpt
+} from "./feedback-excerpt-capture.js";
 import { KeyedSerialQueue } from "./keyed-serial-queue.js";
 import {
   invalidatedAfterUnmark,
@@ -3802,9 +3808,15 @@ async function createProjectReviewComment(
     throw new Error("Review comment body is required.");
   }
 
+  const excerptJson = await captureCommentExcerpt(
+    () => loadExplicitFileDiff(project.path, reviewTarget, pathName, input.previousPath),
+    { diffHash: file.diffHash, lineEnd, lineStart, side },
+    currentReviewFileDiffHash(project, reviewTarget, pathName, input.previousPath)
+  );
   const comment = getStorage().createReviewComment({
     body,
     diffHash: file.diffHash,
+    excerptJson,
     lineEnd,
     lineStart,
     path: pathName,
@@ -3895,9 +3907,15 @@ async function createProjectReviewFileComment(
     throw new Error("Review comment body is required.");
   }
 
+  const excerptJson = await captureFileCommentExcerpt(
+    () => loadExplicitFileDiff(project.path, reviewTarget, pathName, input.previousPath),
+    file.diffHash,
+    currentReviewFileDiffHash(project, reviewTarget, pathName, input.previousPath)
+  );
   const fileComment = getStorage().createReviewFileComment({
     body,
     diffHash: file.diffHash,
+    excerptJson,
     path: pathName,
     ...(file.previousPath ? { previousPath: file.previousPath } : {}),
     projectId,
@@ -3973,8 +3991,27 @@ async function saveProjectReviewNote(
     };
   }
 
+  const project = assertStoredProject(input.projectId);
+  const excerptJson = await captureNoteExcerpt(
+    async () => {
+      const summaries = await loadTargetSummaries(
+        project.path,
+        selectedReviewSelector(project)
+      );
+      if (createReviewTargetId(summaries.reviewTarget) !== input.reviewTargetId)
+        throw new Error("Review target changed while loading the note excerpt.");
+      return summaries.files.map((file) => ({
+        additions: file.additions,
+        deletions: file.deletions,
+        path: file.newPath
+      }));
+    },
+    scopeId,
+    () => currentReviewNoteScopeId(input)
+  );
   const reviewNote = getStorage().saveReviewNote({
     body,
+    excerptJson,
     projectId: input.projectId,
     scopeId
   });
@@ -4545,6 +4582,18 @@ async function loadCurrentReviewFile(
     lineageFields: reviewMarkLineageFields(reviewTarget, diff),
     ...(diff.oldPath ? { previousPath: diff.oldPath } : {})
   };
+}
+
+// The recheck half of the excerpt bracket: the file must still hash as validated.
+function currentReviewFileDiffHash(
+  project: StoredProjectRecord,
+  reviewTarget: ReviewTarget,
+  pathName: string,
+  previousPath?: string
+): () => Promise<string | undefined> {
+  return async () =>
+    (await loadCurrentReviewFile(project, reviewTarget, pathName, previousPath))
+      ?.diffHash;
 }
 
 async function loadCurrentProjectReviewTarget(

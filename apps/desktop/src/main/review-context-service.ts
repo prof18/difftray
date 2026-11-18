@@ -74,14 +74,8 @@ export async function loadExplicitReviewState(
   showGeneratedFiles: boolean,
   onProgress?: (progress: DiffLoadProgress) => void
 ) {
-  const options = onProgress ? { onProgress } : {};
   const loadStartedAt = new Date().toISOString();
-  const result =
-    selector.kind === "branch"
-      ? await loadBranchDiffSummaries(project.path, selector.base, options)
-      : selector.kind === "commit"
-        ? await loadCommitDiffSummaries(project.path, selector.commit, options)
-        : await loadWorkingTreeDiffSummaries(project.path, options);
+  const result = await loadSelectorSummaries(project.path, selector, onProgress);
   const reviewTarget = reviewTargetFromGit(result.reviewTarget);
   const reviewTargetId = createReviewTargetId(reviewTarget);
   storage.upsertReviewTarget(reviewTargetRecord(reviewTargetId, reviewTarget));
@@ -105,6 +99,26 @@ export async function loadExplicitReviewState(
     return { state, summary };
   });
   return { files, progress: calculateProgress(states), reviewTarget, reviewTargetId };
+}
+// Reads Git only, so excerpt capture can list the files of a target without storage writes.
+export async function loadTargetSummaries(
+  projectPath: string,
+  selector: ExplicitAgentSelector
+) {
+  const result = await loadSelectorSummaries(projectPath, selector);
+  return { reviewTarget: reviewTargetFromGit(result.reviewTarget), files: result.files };
+}
+function loadSelectorSummaries(
+  projectPath: string,
+  selector: ExplicitAgentSelector,
+  onProgress?: (progress: DiffLoadProgress) => void
+) {
+  const options = onProgress ? { onProgress } : {};
+  return selector.kind === "branch"
+    ? loadBranchDiffSummaries(projectPath, selector.base, options)
+    : selector.kind === "commit"
+      ? loadCommitDiffSummaries(projectPath, selector.commit, options)
+      : loadWorkingTreeDiffSummaries(projectPath, options);
 }
 export function loadExplicitFileDiff(
   repoPath: string,

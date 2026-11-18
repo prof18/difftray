@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { createReviewTargetId, parseFeedbackExcerpt } from "@difftray/core";
+import { loadWorkingTreeReviewTarget } from "@difftray/git";
 import { openStorage } from "@difftray/storage";
 import { _electron as electron } from "playwright";
 import { expectStableCommentTyping } from "./review-comment-typing.mjs";
@@ -400,6 +402,7 @@ try {
   if ((await savedReviewComment.textContent()) !== multilineReviewComment) {
     throw new Error("Command+Enter did not save the multiline review comment.");
   }
+  await expectStoredCommentExcerpt(userDataPath, repoPath, multilineReviewComment);
   await expectFileCommentCount(window, "tracked.txt", "1");
   await window.getByRole("button", { name: "Copy for agent" }).click();
   await window
@@ -591,6 +594,31 @@ async function createChangedRepository(name = "visual-repo") {
   );
 
   return realpath(repo);
+}
+
+async function expectStoredCommentExcerpt(userDataPath, repoPath, body) {
+  const { reviewTarget } = await loadWorkingTreeReviewTarget(repoPath);
+  const reviewTargetId = createReviewTargetId({
+    ...(reviewTarget.headRefName ? { headRefName: reviewTarget.headRefName } : {}),
+    headSha: reviewTarget.headSha,
+    kind: "working_tree",
+    projectId: reviewTarget.projectId
+  });
+  const storage = openStorage(path.join(userDataPath, "data", "difftray.sqlite"));
+
+  try {
+    const comment = storage
+      .listReviewComments(reviewTargetId)
+      .find((stored) => stored.body === body);
+    if (!comment) throw new Error("Saved review comment is not in storage.");
+    if (
+      typeof comment.excerptJson !== "string" ||
+      parseFeedbackExcerpt(comment.excerptJson)?.kind !== "lines"
+    )
+      throw new Error("Saved review comment has no parseable line excerpt.");
+  } finally {
+    storage.close();
+  }
 }
 
 async function seedRecentProject(userDataPath, repoPath) {

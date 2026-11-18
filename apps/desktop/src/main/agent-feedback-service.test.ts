@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { parseFeedbackExcerpt } from "@difftray/core";
 import { openStorage, type DifftrayStorage } from "@difftray/storage";
 import { createReviewContextService } from "./review-context-service.js";
 import { createAgentReviewService } from "./agent-review-service.js";
@@ -33,7 +34,8 @@ const context: AgentReviewContext = {
       kind: "text",
       visible: true
     },
-    { path: "binary", diffHash: "binaryhash", kind: "binary", visible: true }
+    { path: "binary", diffHash: "binaryhash", kind: "binary", visible: true },
+    { path: "plain", diffHash: "plainhash", kind: "text", visible: true }
   ],
   createdAt: 0,
   expiresAt: 100
@@ -117,11 +119,35 @@ function fixture() {
       })
     )
   };
+  const excerpts = {
+    fileDiff: vi.fn((_context: AgentReviewContext, file: { readonly path: string }) =>
+      Promise.resolve(
+        file.path === "binary"
+          ? { content: { kind: "binary" as const, byteSize: 1, digest: "d" } }
+          : {
+              content: {
+                kind: "text" as const,
+                patch: "@@ -1 +1 @@\n-plain old\n+plain new\n"
+              }
+            }
+      )
+    ),
+    targetSummaries: vi.fn(() =>
+      Promise.resolve({
+        reviewTarget: context.reviewTarget,
+        files: [
+          { newPath: "renamed", additions: 3, deletions: 2 },
+          { newPath: "binary", additions: 0, deletions: 0 }
+        ]
+      })
+    )
+  };
   const onCommitted = vi.fn();
   return {
     storage,
     contexts,
     reads,
+    excerpts,
     onCommitted,
     lookup,
     apply,
@@ -132,6 +158,7 @@ function fixture() {
         "withContext"
       >,
       reads,
+      excerpts,
       onCommitted
     })
   };
@@ -149,6 +176,135 @@ it("validates all scopes and writes only after final context validation", async 
     items: submission.items
   });
   expect(f.onCommitted).toHaveBeenCalledOnce();
+});
+const renamedText = {
+  path: "renamed",
+  diffHash: "hash",
+  content: {
+    kind: "text" as const,
+    oldText: "old 1\nold 2\nold 3\n",
+    newText: "new 1\nnew 2\nnew 3\n",
+    patch: "diff --git a/old b/renamed\n@@ -1,3 +1,3 @@\n-old 1\n+new 1\n"
+  },
+  selectableRanges: {
+    additions: [{ start: 1, end: 3 }],
+    deletions: [{ start: 1, end: 2 }]
+  }
+};
+function appliedExcerpts(f: ReturnType<typeof fixture>) {
+  const batch = f.apply.mock.calls[0]?.[0];
+  if (!batch) throw new Error("Batch was not applied");
+  return batch.items.map((item) => parseFeedbackExcerpt(item.excerptJson ?? null));
+}
+it("stores line, range, file and overall excerpts with the batch", async () => {
+  const f = fixture();
+  f.reads.file.mockResolvedValue(renamedText);
+  const fileItem = {
+    kind: "file" as const,
+    path: "renamed",
+    previousPath: "old",
+    diffHash: "hash",
+    body: "Renamed file"
+  };
+  await f.service.submit({
+    contextId: context.id,
+    submission: { ...submission, items: [...submission.items, fileItem] }
+  });
+  const [range, single, binary, overall, file] = appliedExcerpts(f);
+  expect(range).toMatchObject({
+    kind: "lines",
+    side: "deletions",
+    lines: [
+      { kind: "commented", lineNumber: 1, text: "old 1" },
+      { kind: "commented", lineNumber: 2, text: "old 2" },
+      { kind: "context", lineNumber: 3, text: "old 3" }
+    ]
+  });
+  expect(single).toMatchObject({
+    kind: "lines",
+    side: "additions",
+    lines: [{ kind: "commented", lineNumber: 1, text: "new 1" }, {}, {}]
+  });
+  expect(binary).toBeNull();
+  expect(overall).toEqual({
+    version: 1,
+    kind: "files",
+    files: [
+      { path: "binary", additions: 0, deletions: 0 },
+      { path: "renamed", additions: 3, deletions: 2 }
+    ],
+    omittedFiles: 0
+  });
+  expect(file).toEqual({
+    version: 1,
+    kind: "patch",
+    lines: ["@@ -1,3 +1,3 @@", "-old 1", "+new 1"],
+    truncated: false
+  });
+  expect(f.reads.file).toHaveBeenCalledOnce();
+  expect(f.excerpts.fileDiff).toHaveBeenCalledOnce();
+  expect(f.excerpts.fileDiff.mock.calls[0]?.[1]).toMatchObject({ path: "binary" });
+});
+it("loads one diff per path for file and line items", async () => {
+  const f = fixture();
+  f.reads.file.mockResolvedValue(renamedText);
+  const line = submission.items[1];
+  if (!line || line.kind !== "line") throw new Error("Missing line fixture");
+  const fileItems = Array.from({ length: 5 }, (_, index) => ({
+    kind: "file" as const,
+    path: "renamed",
+    previousPath: "old",
+    diffHash: "hash",
+    body: `File ${String(index)}`
+  }));
+  const plainItems = Array.from({ length: 5 }, (_, index) => ({
+    kind: "file" as const,
+    path: "plain",
+    diffHash: "plainhash",
+    body: `Plain ${String(index)}`
+  }));
+  await f.service.submit({
+    contextId: context.id,
+    submission: { ...submission, items: [...fileItems, ...plainItems, line] }
+  });
+  expect(f.reads.file).toHaveBeenCalledOnce();
+  expect(f.excerpts.fileDiff).toHaveBeenCalledOnce();
+  expect(f.excerpts.fileDiff.mock.calls[0]?.[1]).toMatchObject({ path: "plain" });
+  const stored = appliedExcerpts(f);
+  expect(stored.slice(0, 10).every((excerpt) => excerpt?.kind === "patch")).toBe(true);
+  expect(stored[10]?.kind).toBe("lines");
+});
+it("stores null excerpts for failed excerpt reads and still writes the batch", async () => {
+  const f = fixture();
+  f.reads.file.mockResolvedValue(renamedText);
+  f.excerpts.fileDiff.mockRejectedValue(new Error("git failed"));
+  f.excerpts.targetSummaries.mockRejectedValue(new Error("summaries failed"));
+  const plain = {
+    kind: "file" as const,
+    path: "plain",
+    diffHash: "plainhash",
+    body: "P"
+  };
+  const receipt = await f.service.submit({
+    contextId: context.id,
+    submission: { ...submission, items: [...submission.items, plain] }
+  });
+  expect(receipt.itemIds).toEqual(["id"]);
+  const [range, single, binary, overall, plainExcerpt] = appliedExcerpts(f);
+  expect(range?.kind).toBe("lines");
+  expect(single?.kind).toBe("lines");
+  expect(binary).toBeNull();
+  expect(overall).toBeNull();
+  expect(plainExcerpt).toBeNull();
+});
+it("stores no overall excerpt when the summaries describe another target", async () => {
+  const f = fixture();
+  f.excerpts.targetSummaries.mockResolvedValue({
+    reviewTarget: { ...context.reviewTarget, headSha: "moved" },
+    files: []
+  });
+  await f.service.submit({ contextId: context.id, submission });
+  expect(appliedExcerpts(f)[3]).toBeNull();
 });
 it("rejects unavailable anchors, mismatched rename paths and hashes without any write", async () => {
   for (const change of [
