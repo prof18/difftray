@@ -8,6 +8,7 @@ import {
   wantsJsonOutput,
   writeCliText,
   cliErrorResponse,
+  learnCompatibleResponse,
   worktreeLabelCompatibleResponse
 } from "./output.js";
 import { CLI_HELP } from "./help.js";
@@ -179,5 +180,104 @@ describe("worktree label output", () => {
     );
     expect(CLI_HELP).toContain("Labels are Difftray display names only");
     expect(CLI_HELP).toContain("repository access, feedback and label actions");
+  });
+
+  describe("learn commands", () => {
+    const reportResult = {
+      path: "/profile/learn-reports/report.md",
+      format: "markdown",
+      createdAt: "2026-11-18T10:00:00.000Z",
+      cursor: "2026-11-18T09:59:00.000Z",
+      lastLearnedAt: null,
+      newCount: 3,
+      earlierCount: 2,
+      authors: { human: 2, agent: 1 },
+      statuses: { active: 3, target_changed: 0, diff_changed: 0, dismissed: 0 },
+      excerpts: {
+        saved: 3,
+        recovered: 0,
+        approximate: 0,
+        unavailable: 0,
+        not_looked_up: 0
+      }
+    };
+    const report = { kind: "learn.report", json: false, reportFormat: "json" };
+    const mark = { kind: "learn.mark", json: false };
+
+    it("prints the report path and counts as text, even for a JSON report file", () => {
+      expect(formatCliResponse(report, { ok: true, result: reportResult })).toBe(
+        "/profile/learn-reports/report.md\nNew: 3 · Earlier: 2 · Cursor: 2026-11-18T09:59:00.000Z\n"
+      );
+      expect(
+        formatCliResponse(report, { ok: true, result: { ...reportResult, cursor: null } })
+      ).toBe("/profile/learn-reports/report.md\nNew: 3 · Earlier: 2 · Cursor: none\n");
+    });
+
+    it("prints the result envelope with --json", () => {
+      const response = { version: 1, id: "r", ok: true, result: reportResult };
+      expect(formatCliResponse({ ...report, json: true }, response)).toBe(
+        `${JSON.stringify(response)}\n`
+      );
+    });
+
+    it("says whether learn mark moved the cursor", () => {
+      expect(
+        formatCliResponse(mark, {
+          ok: true,
+          result: { cursor: "2026-11-18T09:59:00.000Z", moved: true }
+        })
+      ).toBe("Last learned point moved to 2026-11-18T09:59:00.000Z.\n");
+      expect(
+        formatCliResponse(mark, {
+          ok: true,
+          result: { cursor: "2026-11-18T09:59:00.000Z", moved: false }
+        })
+      ).toBe("Last learned point unchanged at 2026-11-18T09:59:00.000Z.\n");
+    });
+
+    it("explains that an older desktop app lacks the learn methods", () => {
+      const unsupported = {
+        version: 1 as const,
+        id: "r",
+        ok: false as const,
+        error: {
+          code: "invalid_request" as const,
+          message: "Invalid enum value",
+          retryable: false
+        }
+      };
+      expect(learnCompatibleResponse(unsupported)).toEqual({
+        ...unsupported,
+        error: {
+          ...unsupported.error,
+          code: "app_unavailable",
+          message:
+            "This Difftray app does not support learn reports. Use the CLI bundled with the same Difftray build."
+        }
+      });
+      const other = {
+        ...unsupported,
+        error: { ...unsupported.error, message: "The out path already exists." }
+      };
+      expect(learnCompatibleResponse(other)).toBe(other);
+    });
+
+    it("reads --format json of learn report as the file format, not JSON output", () => {
+      expect(wantsJsonOutput(["learn", "report", "--format", "json"])).toBe(false);
+      expect(wantsJsonOutput(["learn", "report", "--format=json"])).toBe(false);
+      expect(wantsJsonOutput(["learn", "report", "--format", "json", "--json"])).toBe(
+        true
+      );
+      expect(wantsJsonOutput(["review", "export", "--format", "json"])).toBe(true);
+    });
+
+    it("documents both learn commands in help", () => {
+      expect(CLI_HELP).toContain(
+        "difftray learn report [--repo PATH] [--since ISO | --all] [--out PATH] [--format markdown|json] [--json]"
+      );
+      expect(CLI_HELP).toContain(
+        "difftray learn mark --cursor ISO [--repo PATH] [--json]"
+      );
+    });
   });
 });

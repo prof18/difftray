@@ -4,7 +4,10 @@ import {
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   parseAgentRequest,
-  type AgentSelector
+  type AgentSelector,
+  type LearnMarkParams,
+  type LearnReportFormat,
+  type LearnReportParams
 } from "../shared/agent-protocol.js";
 
 export class CliUsageError extends Error {
@@ -60,7 +63,51 @@ export type CliCommand =
       /** `null` resets the label. */
       readonly label: string | null;
       readonly json: boolean;
+    }
+  | {
+      readonly kind: "learn.report";
+      readonly repoPath: string;
+      /** The report file format; --json alone selects JSON output. */
+      readonly reportFormat: LearnReportFormat;
+      readonly since?: string;
+      readonly all?: true;
+      readonly out?: string;
+      readonly json: boolean;
+    }
+  | {
+      readonly kind: "learn.mark";
+      readonly repoPath: string;
+      readonly cursor: string;
+      readonly json: boolean;
     };
+
+type LearnCommand = Extract<CliCommand, { kind: "learn.report" | "learn.mark" }>;
+
+/** The protocol params a learn command sends. */
+export function learnRequestParams(
+  command: Extract<CliCommand, { kind: "learn.report" }>
+): LearnReportParams;
+export function learnRequestParams(
+  command: Extract<CliCommand, { kind: "learn.mark" }>
+): LearnMarkParams;
+export function learnRequestParams(
+  command: CliCommand
+): LearnReportParams | LearnMarkParams;
+export function learnRequestParams(
+  command: CliCommand
+): LearnReportParams | LearnMarkParams {
+  if (command.kind === "learn.mark")
+    return { repoPath: command.repoPath, cursor: command.cursor };
+  if (command.kind !== "learn.report")
+    throw new CliUsageError(`Not a learn command: ${command.kind}`);
+  return {
+    repoPath: command.repoPath,
+    format: command.reportFormat,
+    ...(command.since !== undefined ? { since: command.since } : {}),
+    ...(command.all ? { all: true as const } : {}),
+    ...(command.out !== undefined ? { out: command.out } : {})
+  };
+}
 
 type OptionKind = "string" | "boolean";
 type ParsedOptions = {
@@ -352,6 +399,59 @@ function parseWorktree(args: readonly string[], cwd: string): CliCommand {
   };
 }
 
+function parseLearn(args: readonly string[], cwd: string): LearnCommand {
+  const [operation, ...rest] = args;
+  if (operation === "report") {
+    const { positionals, values } = parseOptions(rest, {
+      ...commonJson,
+      "--repo": "string",
+      "--since": "string",
+      "--all": "boolean",
+      "--out": "string",
+      "--format": "string"
+    });
+    assertNoPositionals(positionals);
+    const reportFormat = stringValue(values, "--format") ?? "markdown";
+    if (reportFormat !== "markdown" && reportFormat !== "json")
+      throw new CliUsageError("--format must be markdown or json.");
+    const since = stringValue(values, "--since");
+    const all = boolValue(values, "--all");
+    if (since !== undefined && all)
+      throw new CliUsageError("--since cannot be combined with --all.");
+    const out = stringValue(values, "--out");
+    return {
+      kind: "learn.report",
+      repoPath: path.resolve(cwd, stringValue(values, "--repo") ?? cwd),
+      reportFormat,
+      ...(since !== undefined ? { since } : {}),
+      ...(all ? { all: true as const } : {}),
+      ...(out !== undefined ? { out: path.resolve(cwd, out) } : {}),
+      json: boolValue(values, "--json")
+    };
+  }
+  if (operation === "mark") {
+    const { positionals, values } = parseOptions(rest, {
+      ...commonJson,
+      "--repo": "string",
+      "--cursor": "string"
+    });
+    assertNoPositionals(positionals);
+    const cursor = stringValue(values, "--cursor");
+    if (!cursor) throw new CliUsageError("--cursor is required.");
+    return {
+      kind: "learn.mark",
+      repoPath: path.resolve(cwd, stringValue(values, "--repo") ?? cwd),
+      cursor,
+      json: boolValue(values, "--json")
+    };
+  }
+  throw new CliUsageError(
+    operation
+      ? `Unknown learn operation: ${operation}`
+      : "Missing learn operation (report, mark)."
+  );
+}
+
 function parseCliArgumentsRaw(argv: readonly string[], cwd: string): CliCommand {
   if (argv.length === 0) return { kind: "help" };
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -384,6 +484,7 @@ function parseCliArgumentsRaw(argv: readonly string[], cwd: string): CliCommand 
   if (argv[0] === "open") return parseOpen(argv.slice(1), cwd);
   if (argv[0] === "review") return parseReview(argv.slice(1), cwd);
   if (argv[0] === "worktree") return parseWorktree(argv.slice(1), cwd);
+  if (argv[0] === "learn") return parseLearn(argv.slice(1), cwd);
   if (argv[0] === "feedback" && argv[1] === "submit") {
     const { positionals, values } = parseOptions(argv.slice(2), {
       ...commonJson,
@@ -470,6 +571,11 @@ function validateCommand(command: CliCommand): CliCommand {
     case "worktree.label.set":
       method = "worktree.label.set";
       params = { repoPath: command.repoPath, label: command.label };
+      break;
+    case "learn.report":
+    case "learn.mark":
+      method = command.kind;
+      params = learnRequestParams(command);
       break;
   }
 

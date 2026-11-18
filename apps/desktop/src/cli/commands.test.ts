@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CliUsageError, parseCliArguments } from "./commands.js";
+import { CliUsageError, learnRequestParams, parseCliArguments } from "./commands.js";
 
 const contextId = "ctx_0123456789abcdef0123456789abcdef";
 
@@ -195,5 +195,88 @@ describe("parseCliArguments", () => {
         "bad/cursor"
       ])
     ).toThrow(/Invalid cursor/);
+  });
+
+  it("sends learn report defaults for the working directory", () => {
+    const command = parseCliArguments(["learn", "report"], "/work/my repo");
+    expect(command).toEqual({
+      kind: "learn.report",
+      repoPath: "/work/my repo",
+      reportFormat: "markdown",
+      json: false
+    });
+    expect(learnRequestParams(command)).toEqual({
+      repoPath: "/work/my repo",
+      format: "markdown"
+    });
+  });
+
+  it("makes learn report --repo and --out absolute and keeps the other flags", () => {
+    const command = parseCliArguments(
+      [
+        "learn",
+        "report",
+        "--repo",
+        "app",
+        "--out",
+        "reports/learn.json",
+        "--format",
+        "json",
+        "--since",
+        "2026-11-01T10:00:00+02:00",
+        "--json"
+      ],
+      "/work"
+    );
+    expect(learnRequestParams(command)).toEqual({
+      repoPath: "/work/app",
+      format: "json",
+      since: "2026-11-01T10:00:00+02:00",
+      out: "/work/reports/learn.json"
+    });
+    expect(command).toMatchObject({ json: true });
+    expect(
+      learnRequestParams(parseCliArguments(["learn", "report", "--all"], "/work"))
+    ).toEqual({ repoPath: "/work", format: "markdown", all: true });
+  });
+
+  it("rejects invalid learn report flags before connecting", () => {
+    const exitCode = (args: string[]) => {
+      try {
+        parseCliArguments(args, "/work");
+      } catch (error) {
+        expect(error).toBeInstanceOf(CliUsageError);
+        return (error as CliUsageError).exitCode;
+      }
+      return 0;
+    };
+    expect(
+      exitCode(["learn", "report", "--since", "2026-11-01T00:00:00Z", "--all"])
+    ).toBe(2);
+    expect(exitCode(["learn", "report", "--since", "last week"])).toBe(2);
+    expect(exitCode(["learn", "report", "--format", "prompt"])).toBe(2);
+    expect(exitCode(["learn", "report", "--context", contextId])).toBe(2);
+    expect(exitCode(["learn", "report", "extra"])).toBe(2);
+    expect(exitCode(["learn", "mark"])).toBe(2);
+    expect(exitCode(["learn", "mark", "--cursor", "soon"])).toBe(2);
+    expect(exitCode(["learn", "forget"])).toBe(2);
+    expect(exitCode(["learn"])).toBe(2);
+  });
+
+  it("parses learn mark with a cursor and an optional repository", () => {
+    const command = parseCliArguments(
+      ["learn", "mark", "--cursor", "2026-11-18T10:00:00.000Z", "--repo", "app"],
+      "/work"
+    );
+    expect(command).toEqual({
+      kind: "learn.mark",
+      repoPath: "/work/app",
+      cursor: "2026-11-18T10:00:00.000Z",
+      json: false
+    });
+    expect(learnRequestParams(command)).toEqual({
+      repoPath: "/work/app",
+      cursor: "2026-11-18T10:00:00.000Z"
+    });
   });
 });

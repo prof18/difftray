@@ -10,8 +10,15 @@ import {
 } from "./agent-app-lifecycle.js";
 import { startAgentControlServer } from "./agent-control-server.js";
 import { createAgentReviewService } from "./agent-review-service.js";
-import { refreshProjectRepository } from "./learn-history-service.js";
-import { purgeExpiredLearnReports } from "./learn-report-service.js";
+import {
+  createLearnHistoryService,
+  refreshProjectRepository
+} from "./learn-history-service.js";
+import { createLearnMarkService } from "./learn-mark-service.js";
+import {
+  createLearnReportService,
+  purgeExpiredLearnReports
+} from "./learn-report-service.js";
 import { createAgentExportService } from "./agent-export-service.js";
 import { createAgentFeedbackService } from "./agent-feedback-service.js";
 import {
@@ -1827,6 +1834,11 @@ const servicesReady = app.whenReady().then(async () => {
     contexts: agentReads.contexts,
     onCommitted: notifyReviewFeedbackChanged
   });
+  const learnReports = createLearnReportService({
+    history: createLearnHistoryService({ storage: getStorage() }),
+    userDataPath: app.getPath("userData")
+  });
+  const learnMarks = createLearnMarkService({ storage: getStorage() });
   agentControlServer = await startAgentControlServer({
     identity,
     hasProfileLock: true,
@@ -1848,6 +1860,9 @@ const servicesReady = app.whenReady().then(async () => {
       if (request.method === "review.export") return agentExports.export(request.params);
       if (request.method === "feedback.submit")
         return agentFeedback.submit(request.params);
+      if (request.method === "learn.report")
+        return learnReports.write({ ...request.params, signal });
+      if (request.method === "learn.mark") return learnMarks.mark(request.params);
       if (request.method === "worktree.label.set")
         return setAgentWorktreeLabel(
           worktreeLabelService(),

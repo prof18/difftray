@@ -5,6 +5,8 @@ Usage: difftray open [PATH] [--target working-tree|branch|commit] [--base REF|--
        difftray feedback submit --context ID --input FILE_OR_STDIN [--request-id ID] [--json]
        difftray worktree label set --repo WORKTREE_ROOT --label TEXT [--json]
        difftray worktree label reset --repo WORKTREE_ROOT [--json]
+       difftray learn report [--repo PATH] [--since ISO | --all] [--out PATH] [--format markdown|json] [--json]
+       difftray learn mark --cursor ISO [--repo PATH] [--json]
        difftray doctor [--app OWN_BUNDLE_PATH] [--json]
        difftray --help | --version [--json]
 
@@ -27,6 +29,11 @@ the document requestId if present. Bodies are supplied only in JSON input.
 worktree label set/reset name the exact worktree root (main or linked, not a
 subdirectory). Labels are Difftray display names only: 1-80 characters, no Git
 branch, path or config change, no review context. reset restores the Git name.
+learn report writes this repository's past feedback, across its worktrees, to a
+private report file (24 hours, or --out PATH, which must not exist) and prints its
+path, counts and cursor. It lists feedback since the last learned point as new,
+unless --since or --all is given. --format sets the file format (default
+markdown). learn mark --cursor moves the last learned point forward, never back.
 Access is local-only using the current OS user's private desktop endpoint.
 This launcher always uses its own app bundle, including after relocation.
 doctor reports that bundle, profile, CLI version and startup/connection result.

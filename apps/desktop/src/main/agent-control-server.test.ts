@@ -126,6 +126,56 @@ describe("agent control socket", () => {
       expect.any(AbortSignal)
     );
   });
+  it("round-trips a learn report request with normalized params and validates its result", async () => {
+    const result: AgentResultMap["learn.report"] = {
+      authors: { agent: 1, human: 0 },
+      createdAt: "2026-11-18T10:00:00.000Z",
+      cursor: "2026-11-18T09:59:00.000Z",
+      earlierCount: 0,
+      excerpts: {
+        approximate: 0,
+        not_looked_up: 0,
+        recovered: 0,
+        saved: 1,
+        unavailable: 0
+      },
+      format: "json",
+      lastLearnedAt: null,
+      newCount: 1,
+      path: "/profile/learn-reports/report.json",
+      statuses: { active: 1, diff_changed: 0, dismissed: 0, target_changed: 0 }
+    };
+    const { server, dispatch } = await fixture(async () => result);
+    const raw = await exchange(server.endpoint.socketPath, [
+      Buffer.from(
+        `${JSON.stringify({
+          version: 1,
+          id: "req-1",
+          token: server.endpoint.token,
+          method: "learn.report",
+          params: {
+            repoPath: "/repo",
+            format: "json",
+            since: "2026-11-18T11:00:00+02:00"
+          }
+        })}\n`
+      )
+    ]);
+
+    expect(parseAgentResponse(raw, "learn.report", "req-1")).toEqual({
+      version: 1,
+      id: "req-1",
+      ok: true,
+      result
+    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "learn.report",
+        params: { repoPath: "/repo", format: "json", since: "2026-11-18T09:00:00.000Z" }
+      }),
+      expect.any(AbortSignal)
+    );
+  });
   it("preserves safe request IDs for unsupported-version replies without dispatch", async () => {
     const { server, dispatch } = await fixture();
     const frame = Buffer.from(

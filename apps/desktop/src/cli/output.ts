@@ -46,8 +46,10 @@ export function cliExitCode(error: unknown): number {
     : EXIT_INTERNAL;
 }
 export function wantsJsonOutput(argv: readonly string[]): boolean {
+  if (argv.includes("--json")) return true;
+  // learn report --format names the report file format, not the output.
+  if (argv[0] === "learn") return false;
   return (
-    argv.includes("--json") ||
     argv.includes("--format=json") ||
     argv.some((arg, index) => arg === "--format" && argv[index + 1] === "json")
   );
@@ -106,6 +108,20 @@ export function formatCliResponse(
     return options.terminal ? neutralizeTerminalControls(result.content) : result.content;
   if (command.kind === "open" && typeof result.repoPath === "string")
     return `Opened ${result.repoPath}\n`;
+  if (
+    command.kind === "learn.report" &&
+    typeof result.path === "string" &&
+    typeof result.newCount === "number" &&
+    typeof result.earlierCount === "number"
+  ) {
+    const cursor = typeof result.cursor === "string" ? result.cursor : "none";
+    const text = `${result.path}\nNew: ${String(result.newCount)} · Earlier: ${String(result.earlierCount)} · Cursor: ${cursor}\n`;
+    return options.terminal ? neutralizeTerminalControls(text) : text;
+  }
+  if (command.kind === "learn.mark" && typeof result.cursor === "string")
+    return result.moved === true
+      ? `Last learned point moved to ${result.cursor}.\n`
+      : `Last learned point unchanged at ${result.cursor}.\n`;
   if (command.kind === "worktree.label.set" && typeof result.repoPath === "string") {
     const worktree = result.worktree as { readonly displayName?: unknown } | undefined;
     if (typeof worktree?.displayName === "string") {
@@ -138,6 +154,18 @@ export async function writeCliText(stream: Writable, text: string): Promise<void
  * Say what to do instead of reporting a malformed request.
  */
 export function worktreeLabelCompatibleResponse<T extends AgentResponse>(response: T): T {
+  return featureCompatibleResponse(response, "worktree labels");
+}
+
+/** The same compatibility answer for learn report and learn mark. */
+export function learnCompatibleResponse<T extends AgentResponse>(response: T): T {
+  return featureCompatibleResponse(response, "learn reports");
+}
+
+function featureCompatibleResponse<T extends AgentResponse>(
+  response: T,
+  feature: string
+): T {
   if (
     response.ok ||
     response.error.code !== "invalid_request" ||
@@ -149,8 +177,7 @@ export function worktreeLabelCompatibleResponse<T extends AgentResponse>(respons
     error: {
       ...response.error,
       code: "app_unavailable",
-      message:
-        "This Difftray app does not support worktree labels. Use the CLI bundled with the same Difftray build."
+      message: `This Difftray app does not support ${feature}. Use the CLI bundled with the same Difftray build.`
     }
   };
 }

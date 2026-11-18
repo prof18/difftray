@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { normalizeWorktreeLabel } from "@difftray/companion-protocol";
-import { createReviewNoteScopeId } from "@difftray/core";
+import {
+  createReviewNoteScopeId,
+  learnExcerptSources,
+  learnStatuses
+} from "@difftray/core";
 import {
   AgentProtocolError,
+  LEARN_EXCERPT_SOURCES,
+  LEARN_STATUSES,
   parseAgentRequest,
   parseAgentResponse
 } from "./agent-protocol.js";
@@ -943,5 +949,141 @@ describe("worktree.label.set", () => {
         "worktree.label.set"
       )
     ).toThrow(AgentProtocolError);
+  });
+});
+
+describe("learn.report and learn.mark", () => {
+  const success = (result: unknown) =>
+    frame({ version: 1, id: "transport-1", ok: true, result });
+  const report = {
+    path: "/profile/learn-reports/report.md",
+    format: "markdown",
+    createdAt: "2026-11-18T10:00:00.000Z",
+    cursor: "2026-11-18T09:59:00.000Z",
+    lastLearnedAt: null,
+    newCount: 2,
+    earlierCount: 0,
+    authors: { human: 1, agent: 1 },
+    statuses: { active: 2, target_changed: 0, diff_changed: 0, dismissed: 0 },
+    excerpts: { saved: 1, recovered: 1, approximate: 0, unavailable: 0, not_looked_up: 0 }
+  };
+
+  it("mirrors the core status and excerpt source lists", () => {
+    expect(LEARN_STATUSES).toEqual(learnStatuses);
+    expect(LEARN_EXCERPT_SOURCES).toEqual(learnExcerptSources);
+  });
+
+  it.each([
+    ["markdown default", { repoPath: "/repo", format: "markdown" }],
+    [
+      "json with since",
+      { repoPath: "/repo", format: "json", since: "2026-11-01T00:00:00Z" }
+    ],
+    ["all", { repoPath: "/repo", format: "markdown", all: true }],
+    ["date-only since", { repoPath: "/repo", format: "markdown", since: "2026-11-01" }],
+    ["out", { repoPath: "/repo", format: "markdown", out: "/tmp/report.md" }]
+  ])("accepts a learn.report request: %s", (_name, params) => {
+    expect(() => parse(base("learn.report", params))).not.toThrow();
+  });
+
+  it("accepts a learn.mark request", () => {
+    expect(
+      parse(base("learn.mark", { repoPath: "/repo", cursor: "2026-11-01T00:00:00.000Z" }))
+        .params
+    ).toEqual({ repoPath: "/repo", cursor: "2026-11-01T00:00:00.000Z" });
+  });
+
+  it("normalizes since and cursor to UTC ISO timestamps", () => {
+    expect(
+      parse(
+        base("learn.report", {
+          repoPath: "/repo",
+          format: "json",
+          since: "2026-11-01T10:00:00+02:00"
+        })
+      ).params
+    ).toEqual({ repoPath: "/repo", format: "json", since: "2026-11-01T08:00:00.000Z" });
+    expect(
+      parse(
+        base("learn.mark", { repoPath: "/repo", cursor: "2026-11-01T10:00:00+02:00" })
+      ).params
+    ).toEqual({ repoPath: "/repo", cursor: "2026-11-01T08:00:00.000Z" });
+  });
+
+  it.each([
+    ["unknown key", { repoPath: "/repo", format: "markdown", contextId }],
+    ["missing format", { repoPath: "/repo" }],
+    ["invalid format", { repoPath: "/repo", format: "prompt" }],
+    [
+      "since with all",
+      { repoPath: "/repo", format: "markdown", since: "2026-11-01T00:00:00Z", all: true }
+    ],
+    ["unreadable since", { repoPath: "/repo", format: "markdown", since: "yesterday" }],
+    ["numeric since", { repoPath: "/repo", format: "markdown", since: 1 }],
+    ["all false", { repoPath: "/repo", format: "markdown", all: false }],
+    ["relative out", { repoPath: "/repo", format: "markdown", out: "report.md" }],
+    ["relative repository", { repoPath: "repo", format: "markdown" }]
+  ])("rejects an invalid learn.report request: %s", (_name, params) => {
+    expectCode(frame(base("learn.report", params)), "invalid_request");
+  });
+
+  it.each([
+    ["unknown key", { repoPath: "/repo", cursor: "2026-11-01T00:00:00Z", all: true }],
+    ["missing cursor", { repoPath: "/repo" }],
+    ["unreadable cursor", { repoPath: "/repo", cursor: "not a date" }],
+    ["relative repository", { repoPath: "repo", cursor: "2026-11-01T00:00:00Z" }]
+  ])("rejects an invalid learn.mark request: %s", (_name, params) => {
+    expectCode(frame(base("learn.mark", params)), "invalid_request");
+  });
+
+  it("accepts valid learn results", () => {
+    expect(parseAgentResponse(success(report), "learn.report")).toMatchObject({
+      ok: true
+    });
+    expect(
+      parseAgentResponse(
+        success({
+          ...report,
+          cursor: null,
+          lastLearnedAt: report.cursor,
+          format: "json"
+        }),
+        "learn.report"
+      )
+    ).toMatchObject({ ok: true });
+    expect(
+      parseAgentResponse(
+        success({ cursor: "2026-11-18T09:59:00.000Z", moved: true }),
+        "learn.mark"
+      )
+    ).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ["missing newCount", { ...report, newCount: undefined }],
+    ["negative earlierCount", { ...report, earlierCount: -1 }],
+    ["negative author count", { ...report, authors: { human: -1, agent: 0 } }],
+    ["missing status count", { ...report, statuses: { active: 2 } }],
+    [
+      "negative excerpt count",
+      { ...report, excerpts: { ...report.excerpts, saved: -2 } }
+    ],
+    ["extra key", { ...report, items: [] }],
+    ["bad format", { ...report, format: "prompt" }],
+    ["relative path", { ...report, path: "report.md" }]
+  ])("rejects an invalid learn.report result: %s", (_name, result) => {
+    expect(() => parseAgentResponse(success(result), "learn.report")).toThrow(
+      AgentProtocolError
+    );
+  });
+
+  it.each([
+    ["missing moved", { cursor: "2026-11-18T09:59:00.000Z" }],
+    ["non-boolean moved", { cursor: "2026-11-18T09:59:00.000Z", moved: "yes" }],
+    ["unreadable cursor", { cursor: "later", moved: false }]
+  ])("rejects an invalid learn.mark result: %s", (_name, result) => {
+    expect(() => parseAgentResponse(success(result), "learn.mark")).toThrow(
+      AgentProtocolError
+    );
   });
 });

@@ -1,5 +1,5 @@
 import type { FeedbackActor, RepositoryWorktreeView } from "@difftray/companion-protocol";
-import type { ReviewTarget } from "@difftray/core";
+import type { LearnExcerptSource, LearnStatus, ReviewTarget } from "@difftray/core";
 import type { AppFlavor } from "./app-flavor.js";
 
 export const CLI_PROTOCOL_VERSION = 1;
@@ -49,7 +49,9 @@ export const AGENT_OPERATION_NAMES = [
   "review.feedback",
   "review.export",
   "feedback.submit",
-  "worktree.label.set"
+  "worktree.label.set",
+  "learn.report",
+  "learn.mark"
 ] as const;
 export type AgentMethod = (typeof AGENT_OPERATION_NAMES)[number];
 export const AGENT_ERROR_CODES = [
@@ -76,6 +78,46 @@ export type AgentErrorCode = (typeof AGENT_ERROR_CODES)[number];
 export const FEEDBACK_KINDS = ["line", "file", "overall"] as const;
 export const LINE_SIDES = ["additions", "deletions"] as const;
 export const CLI_TARGETS = ["working-tree", "branch", "commit", "selected"] as const;
+export const LEARN_REPORT_FORMATS = ["markdown", "json"] as const;
+// Mirror the @difftray/core lists, which the CLI bundle does not load at runtime;
+// agent-protocol.test.ts asserts they stay equal.
+export const LEARN_STATUSES = [
+  "active",
+  "target_changed",
+  "diff_changed",
+  "dismissed"
+] as const satisfies readonly LearnStatus[];
+export const LEARN_EXCERPT_SOURCES = [
+  "saved",
+  "recovered",
+  "approximate",
+  "unavailable",
+  "not_looked_up"
+] as const satisfies readonly LearnExcerptSource[];
+export type LearnReportFormat = (typeof LEARN_REPORT_FORMATS)[number];
+export type LearnReportParams = {
+  readonly repoPath: string;
+  readonly format: LearnReportFormat;
+  /** ISO 8601, normalized to UTC by parseAgentRequest; rejected together with all. */
+  readonly since?: string;
+  readonly all?: true;
+  /** Absolute path of a file that must not exist yet. */
+  readonly out?: string;
+};
+export type LearnReportResult = {
+  readonly path: string;
+  readonly format: LearnReportFormat;
+  readonly createdAt: string;
+  readonly cursor: string | null;
+  readonly lastLearnedAt: string | null;
+  readonly newCount: number;
+  readonly earlierCount: number;
+  readonly authors: { readonly human: number; readonly agent: number };
+  readonly statuses: Readonly<Record<LearnStatus, number>>;
+  readonly excerpts: Readonly<Record<LearnExcerptSource, number>>;
+};
+export type LearnMarkParams = { readonly repoPath: string; readonly cursor: string };
+export type LearnMarkResult = { readonly cursor: string; readonly moved: boolean };
 
 export type ExplicitAgentSelector =
   | { readonly kind: "working-tree" }
@@ -189,6 +231,8 @@ export type AgentRequest = {
       /** `null` resets the label. */
       readonly params: { readonly repoPath: string; readonly label: string | null };
     }
+  | { readonly method: "learn.report"; readonly params: LearnReportParams }
+  | { readonly method: "learn.mark"; readonly params: LearnMarkParams }
 );
 export type AgentError = {
   readonly code: AgentErrorCode;
@@ -297,6 +341,8 @@ export type AgentResultMap = {
     readonly repoPath: string;
     readonly worktree: RepositoryWorktreeView;
   };
+  "learn.report": LearnReportResult;
+  "learn.mark": LearnMarkResult;
 };
 export type AgentExportMetadata = {
   readonly feedbackVersion: string;
@@ -579,6 +625,23 @@ export function parseAgentRequest(input: string | Uint8Array): AgentRequest {
       if (x.label !== null) worktreeLabel(x.label);
       break;
     }
+    case "learn.report": {
+      const x = object(p, ["repoPath", "format"], ["since", "all", "out"]);
+      absolutePath(x.repoPath, "Repository path");
+      enumValue(x.format, LEARN_REPORT_FORMATS);
+      if (x.since !== undefined && x.all !== undefined)
+        fail("Use either since or all, not both");
+      if (x.all !== undefined && x.all !== true) fail("Invalid all flag");
+      if (x.out !== undefined) absolutePath(x.out, "Out path");
+      if (x.since !== undefined) x.since = timestamp(x.since);
+      break;
+    }
+    case "learn.mark": {
+      const x = object(p, ["repoPath", "cursor"]);
+      absolutePath(x.repoPath, "Repository path");
+      x.cursor = timestamp(x.cursor);
+      break;
+    }
   }
   return r as AgentRequest;
 }
@@ -730,7 +793,56 @@ function result(value: unknown, method: AgentMethod): void {
       worktreeView(x.worktree);
       break;
     }
+    case "learn.report": {
+      const x = object(value, [
+        "path",
+        "format",
+        "createdAt",
+        "cursor",
+        "lastLearnedAt",
+        "newCount",
+        "earlierCount",
+        "authors",
+        "statuses",
+        "excerpts"
+      ]);
+      absolutePath(x.path, "Report path");
+      enumValue(x.format, LEARN_REPORT_FORMATS);
+      timestamp(x.createdAt);
+      if (x.cursor !== null) timestamp(x.cursor);
+      if (x.lastLearnedAt !== null) timestamp(x.lastLearnedAt);
+      count(x.newCount);
+      count(x.earlierCount);
+      counts(x.authors, ["human", "agent"]);
+      counts(x.statuses, LEARN_STATUSES);
+      counts(x.excerpts, LEARN_EXCERPT_SOURCES);
+      break;
+    }
+    case "learn.mark": {
+      const x = object(value, ["cursor", "moved"]);
+      timestamp(x.cursor);
+      if (typeof x.moved !== "boolean") fail("Invalid moved flag");
+      break;
+    }
   }
+}
+function absolutePath(value: unknown, label: string): string {
+  const s = nonempty(value, 4096);
+  if (!s.startsWith("/")) fail(`${label} must be absolute`);
+  return s;
+}
+/** Reads an ISO 8601 timestamp and returns it in the UTC form storage writes. */
+function timestamp(value: unknown): string {
+  const s = nonempty(value);
+  if (!/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(s)) return fail("Expected an ISO 8601 timestamp");
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) return fail("Expected an ISO 8601 timestamp");
+  return new Date(ms).toISOString();
+}
+const count = (value: unknown): number => integer(value, 0, Number.MAX_SAFE_INTEGER);
+function counts(value: unknown, keys: readonly string[]): void {
+  const x = object(value, keys);
+  for (const key of keys) count(x[key]);
 }
 // Mirrors normalizeWorktreeLabel in @difftray/companion-protocol, which the CLI
 // bundle does not load at runtime; the desktop re-validates with the shared one.

@@ -6,7 +6,7 @@ import {
   CLI_PROTOCOL_VERSION,
   type AgentResponse
 } from "../shared/agent-protocol.js";
-import { parseCliArguments, CliUsageError } from "./commands.js";
+import { learnRequestParams, parseCliArguments, CliUsageError } from "./commands.js";
 import { CLI_HELP as help } from "./help.js";
 import { resolveAgentRuntime } from "./agent-runtime.js";
 import { connectAgent } from "./agent-connection.js";
@@ -17,6 +17,7 @@ import {
   cliExitCode,
   cliErrorResponse,
   formatCliResponse,
+  learnCompatibleResponse,
   wantsJsonOutput,
   worktreeLabelCompatibleResponse,
   writeCliText
@@ -113,6 +114,16 @@ async function main() {
           repoPath: command.repoPath,
           label: command.label
         })
+      );
+      break;
+    case "learn.report":
+      response = learnCompatibleResponse(
+        await sendAgentRequest(endpoint, "learn.report", learnRequestParams(command))
+      );
+      break;
+    case "learn.mark":
+      response = learnCompatibleResponse(
+        await sendAgentRequest(endpoint, "learn.mark", learnRequestParams(command))
       );
       break;
     case "review.export": {
