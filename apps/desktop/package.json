@@ -39,7 +39,7 @@
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@pierre/diffs": "1.6.4",
-    "@radix-ui/react-tooltip": "^1.2.16",
+    "@radix-ui/react-tooltip": "^1.4.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
