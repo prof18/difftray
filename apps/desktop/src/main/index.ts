@@ -11,6 +11,7 @@ import {
 import { startAgentControlServer } from "./agent-control-server.js";
 import { createAgentReviewService } from "./agent-review-service.js";
 import { refreshProjectRepository } from "./learn-history-service.js";
+import { purgeExpiredLearnReports } from "./learn-report-service.js";
 import { createAgentExportService } from "./agent-export-service.js";
 import { createAgentFeedbackService } from "./agent-feedback-service.js";
 import {
@@ -1798,6 +1799,9 @@ const servicesReady = app.whenReady().then(async () => {
   installApplicationMenu();
   await bootstrapDevStorageFromProduction();
   getStorage();
+  void purgeExpiredLearnReports({ userDataPath: app.getPath("userData") }).catch(
+    (error: unknown) => console.error("Failed to purge expired learn reports", error)
+  );
   await syncCompanionLifecycleWithSettings();
   const runtime = resolvedAppRuntimeConfig;
   if (!runtime) throw new Error("Application runtime was not configured.");

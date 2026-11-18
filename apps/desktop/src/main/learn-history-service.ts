@@ -1,6 +1,7 @@
 import { access, realpath } from "node:fs/promises";
 
 import {
+  EARLIER_BODY_MAX_CHARS,
   EXCERPT_MAX_LINES,
   buildLineExcerpt,
   buildPatchExcerpt,
@@ -47,7 +48,8 @@ export const GIT_LOOKUP_CAP = 500;
 export const RECOVERY_BUDGET_MS = 45_000;
 export const EARLIER_MAX_AGE_DAYS = 183;
 export const EARLIER_MAX_ITEMS = 500;
-export const EARLIER_BODY_MAX_CHARS = 200;
+// The formatter cuts earlier bodies with the same limit.
+export { EARLIER_BODY_MAX_CHARS };
 
 const dayMs = 86_400_000;
 

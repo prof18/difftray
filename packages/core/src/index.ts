@@ -34,6 +34,18 @@ export {
   type LearnStatus
 } from "./feedback-excerpt.js";
 export {
+  EARLIER_BODY_MAX_CHARS,
+  LEARN_REPORT_TOP_PATHS,
+  formatLearnReport,
+  inlineCode,
+  summarizeLearnReport,
+  type LearnReportEarlierItem,
+  type LearnReportInput,
+  type LearnReportItem,
+  type LearnReportItemKind,
+  type LearnReportSummary
+} from "./learn-report-format.js";
+export {
   defaultRepositoryDiscoveryExclusions,
   isPathInsideApprovedRoot,
   shouldTraverseRepositoryDirectory
