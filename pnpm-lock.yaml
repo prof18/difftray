@@ -267,8 +267,8 @@ importers:
         specifier: ^6.3.0
         version: 6.3.0(vite@8.3.8(@types/node@22.20.5)(jiti@2.7.0))
       electron:
-        specifier: ^44.11.3
-        version: 44.11.3(supports-color@7.2.0)
+        specifier: ^44.11.6
+        version: 44.11.6(supports-color@7.2.0)
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3(@noble/hashes@2.4.0)
@@ -1678,8 +1678,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@44.11.3:
-    resolution: {integrity: sha512-yVzJBAM7hfK/gkD3LHvFD4gfHLj1f6cL3yYgzX8pHQyWyz8U9FTfTj9WOFdwzLj5ta+/oIKDD4BsBTLYiFa2Tg==}
+  electron@44.11.6:
+    resolution: {integrity: sha512-ntR909wtKzZhmxmJXONDfoEC0rzVm1LPtC8TKhwPgpY9dhaET1eS1If7HseDo6ALbd2jyWxqgJ1QcQ67dhZNfw==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -4403,7 +4403,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@44.11.3(supports-color@7.2.0):
+  electron@44.11.6(supports-color@7.2.0):
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0(supports-color@7.2.0)
