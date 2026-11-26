@@ -2,10 +2,23 @@
 
 ## Unreleased
 
+## 0.0.20 - 2026-11-26
+
+### Added
+
+- Learn from past review feedback: the new `/difftray-learn` agent command turns
+  a repository's past comments and review notes into proposed agent rules and
+  docs, and writes only the edits you approve.
+
 ### Improved
 
 - Keep review progress after a rebase or a commit: files the rebase did not touch
   stay reviewed, and files it changed show the changed-after-review marker.
+- New line and file comments save the code they point at, so agents still see it
+  after the file changes.
+- When fixing review feedback, the agent now checks each request against the code.
+  It declines changes that would introduce a bug, and its recap lists anything it
+  declined.
 
 ## 0.0.19 - 2026-11-10
 
